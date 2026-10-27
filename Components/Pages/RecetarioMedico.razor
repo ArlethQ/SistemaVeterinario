@@ -1,0 +1,385 @@
+@page "/consulta/recetario"
+@page "/consulta/recetario/{IdOrden:int}/{Nhcl:int}"
+@inject IConsultaExternaService ConsultaService
+@inject IKardexService KardexService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject IJSRuntime JS
+
+<PageTitle>HOSVET - Recetario Médico e Indicaciones</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- Encabezado -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-white p-3 rounded shadow-sm border-start border-4 border-success">
+        <div>
+            <h4 class="mb-0 text-primary fw-bold">
+                <i class="bi bi-prescription2 me-2"></i>Recetario Médico Veterinario & Buscador de Recetas
+            </h4>
+            <small class="text-muted">Emisión de recetas médicas veterinarias, posología e indicaciones generales para el propietario.</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
+            <div class="input-group input-group-sm" style="width: 260px;">
+                <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
+                <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
+                <input type="number" class="form-control" placeholder="NHCL" @bind="NhclInput" />
+                <button class="btn btn-primary" @onclick="CargarPorInputAsync">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+            <button class="btn btn-sm btn-danger" @onclick="ExportarRecetaPdfAsync" disabled="@(!ItemsReceta.Any())">
+                <i class="bi bi-file-earmark-pdf-fill me-1"></i>Descargar Receta PDF (Doble Columna + QR)
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(MensajeAlerta))
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2">
+            <i class="bi bi-check-circle-fill me-2"></i>@MensajeAlerta
+            <button type="button" class="btn-close py-2" @onclick="() => MensajeAlerta = null"></button>
+        </div>
+    }
+
+    @if (CargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando recetario médico e indicaciones...</span>
+        </div>
+    }
+
+    <div class="row g-3">
+        <!-- Columna Izquierda: Buscador Histórico de Recetas Emitidas -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white fw-bold text-primary">
+                    <i class="bi bi-search me-1"></i>Buscador de Recetas por Fechas
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Desde</label>
+                            <input type="date" class="form-control form-control-sm" @bind="FechaDesde" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Hasta</label>
+                            <input type="date" class="form-control form-control-sm" @bind="FechaHasta" />
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-sm btn-outline-primary w-100" @onclick="BuscarRecetasEmitidasAsync">
+                                <i class="bi bi-funnel-fill me-1"></i>Consultar Recetas Emitidas
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                        <table class="table table-sm table-hover align-middle small mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Orden</th>
+                                    <th>Fecha</th>
+                                    <th>Paciente / Cliente</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!ListadoRecetas.Any())
+                                {
+                                    <tr><td colspan="4" class="text-center text-muted py-3">Sin resultados en el rango seleccionado.</td></tr>
+                                }
+                                @foreach (var r in ListadoRecetas)
+                                {
+                                    <tr class="@(r.IdOrdenOFicha == IdOrden ? "table-primary" : "")">
+                                        <td class="fw-bold">#@r.IdOrdenOFicha</td>
+                                        <td>@r.FechaIngreso</td>
+                                        <td>
+                                            <strong>@r.Paciente</strong> <span class="text-muted">(NHCL #@r.Nhcl)</span>
+                                            <div class="text-muted" style="font-size: 0.72rem;">@r.Cliente</div>
+                                        </td>
+                                        <td class="text-end">
+                                            <button class="btn btn-xs btn-primary py-0 px-2" @onclick="() => SeleccionarRecetaListadoAsync(r)">
+                                                Ver
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Editor de Prescripción Farmacológica e Indicaciones -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                    <span>
+                        <i class="bi bi-capsule-pill me-1"></i>Prescripción Activa — Orden #@IdOrden
+                        @if (Paciente != null)
+                        {
+                            <span class="text-dark ms-2">(@Paciente.PacienteNombre — Propietario: @Paciente.PropietarioNombre)</span>
+                        }
+                    </span>
+                    <span class="badge bg-success">@ItemsReceta.Count medicamento(s)</span>
+                </div>
+                <div class="card-body">
+                    <!-- Formulario para agregar ítem a la receta -->
+                    <div class="row g-2 mb-3 p-2 bg-light rounded border">
+                        <div class="col-md-5">
+                            <label class="form-label small fw-semibold">Medicamento / Principio Activo / Presentación *</label>
+                            <input type="text" class="form-control form-control-sm" @bind="NuevoItem.Descripcionamento"
+                                   placeholder="Ej: Amoxicilina + Ácido Clavulánico 250mg Comprimidos" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold">Cantidad</label>
+                            <input type="number" min="1" step="1" class="form-control form-control-sm"
+                                   @bind="NuevoItem.Cantidad" @bind:after="ActualizarCantidadLetras" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Cantidad en Letras</label>
+                            <input type="text" class="form-control form-control-sm" @bind="NuevoItem.CantidadLetras" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold">Tipo</label>
+                            <select class="form-select form-select-sm" @bind="NuevoItem.Tipo">
+                                <option value="M">Receta (M)</option>
+                                <option value="I">Insumo (I)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-9">
+                            <label class="form-label small fw-semibold">Indicaciones Posológicas para el Propietario (Dosis, Frecuencia y Duración) *</label>
+                            <input type="text" class="form-control form-control-sm" @bind="NuevoItem.Indicaciones"
+                                   placeholder="Ej: Administrar 1 comprimido vía oral cada 12 horas con alimento durante 7 días." />
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button class="btn btn-sm btn-success w-100" @onclick="AgregarItemRecetaAsync">
+                                <i class="bi bi-plus-circle me-1"></i>Agregar a Receta
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Vista Previa Dual Estilo Receta HOSVET -->
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="border rounded p-2 h-100">
+                                <h6 class="fw-bold text-primary border-bottom pb-1 mb-2 small">
+                                    Rp. / MEDICAMENTOS E INSUMOS PRESCRITOS
+                                </h6>
+                                <table class="table table-sm align-middle small mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Medicamento</th>
+                                            <th class="text-center">Cant.</th>
+                                            <th>En Letras</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if (!ItemsReceta.Any())
+                                        {
+                                            <tr><td colspan="4" class="text-center text-muted py-3">Agregue medicamentos a la receta.</td></tr>
+                                        }
+                                        @foreach (var m in ItemsReceta)
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">@m.Descripcionamento</td>
+                                                <td class="text-center">@m.Cantidad.ToString("N0")</td>
+                                                <td>@m.CantidadLetras</td>
+                                                <td class="text-end">
+                                                    <button class="btn btn-sm btn-link text-danger p-0" @onclick="() => EliminarItemRecetaAsync(m.Sec)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="border rounded p-2 h-100">
+                                <h6 class="fw-bold text-primary border-bottom pb-1 mb-2 small">
+                                    INDICACIONES POSOLÓGICAS Y CUIDADOS GENERALES
+                                </h6>
+                                <div class="small mb-2" style="max-height: 180px; overflow-y: auto;">
+                                    @foreach (var m in ItemsReceta)
+                                    {
+                                        <div class="mb-2 pb-1 border-bottom">
+                                            <strong class="text-indigo">@m.Descripcionamento:</strong>
+                                            <div>@m.Indicaciones</div>
+                                        </div>
+                                    }
+                                </div>
+                                <label class="form-label small fw-bold text-secondary mb-1">Indicaciones Generales y Signos de Alarma</label>
+                                <textarea class="form-control form-control-sm mb-2" rows="3" @bind="IndicacionesGenerales"
+                                          placeholder="Cuidados adicionales en casa, dieta, collar isabelino, signos de alarma..."></textarea>
+                                <button class="btn btn-sm btn-outline-primary w-100" @onclick="GuardarIndicacionesGeneralesAsync">
+                                    <i class="bi bi-floppy me-1"></i>Guardar Indicaciones Generales
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private int IdOrdenInput { get; set; }
+    private int NhclInput { get; set; }
+    private DateTime FechaDesde { get; set; } = DateTime.Today.AddDays(-30);
+    private DateTime FechaHasta { get; set; } = DateTime.Today;
+    private bool CargandoInicial { get; set; } = true;
+    private string? MensajeAlerta { get; set; }
+
+    private PacienteHeaderDto? Paciente { get; set; }
+    private List<RecetaResumenListadoDto> ListadoRecetas { get; set; } = new();
+    private List<RecetaMedicamentoItemDto> ItemsReceta { get; set; } = new();
+    private List<DiagnosticoCie10Dto> DiagnosticosOrden { get; set; } = new();
+    private string IndicacionesGenerales { get; set; } = string.Empty;
+    private RecetaMedicamentoItemDto NuevoItem { get; set; } = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        CargandoInicial = true;
+        await Task.Yield();
+
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0)
+        {
+            var activas = await KardexService.ObtenerOrdenesActivasAsync();
+            if (activas.Count > 0)
+            {
+                IdOrden = activas[0].IdOrdenAtencion;
+                Nhcl = activas[0].Nhcl;
+            }
+        }
+
+        var tBuscar = BuscarRecetasEmitidasAsync();
+        if (IdOrden > 0)
+        {
+            IdOrdenInput = IdOrden;
+            NhclInput = Nhcl;
+            var tCargar = CargarRecetaOrdenAsync();
+            await Task.WhenAll(tBuscar, tCargar);
+        }
+        else
+        {
+            await tBuscar;
+        }
+        CargandoInicial = false;
+    }
+
+    private async Task CargarPorInputAsync()
+    {
+        if (IdOrdenInput > 0)
+        {
+            IdOrden = IdOrdenInput;
+            Nhcl = NhclInput;
+            await CargarRecetaOrdenAsync();
+        }
+    }
+
+    private async Task SeleccionarRecetaListadoAsync(RecetaResumenListadoDto item)
+    {
+        IdOrden = item.IdOrdenOFicha;
+        Nhcl = item.Nhcl;
+        IdOrdenInput = IdOrden;
+        NhclInput = Nhcl;
+        await CargarRecetaOrdenAsync();
+    }
+
+    private async Task BuscarRecetasEmitidasAsync()
+    {
+        ListadoRecetas = await ConsultaService.BuscarRecetasPorFechasAsync(FechaDesde, FechaHasta, Nhcl > 0 ? Nhcl : null);
+    }
+
+    private async Task CargarRecetaOrdenAsync()
+    {
+        Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
+        if (Paciente != null && Nhcl <= 0)
+        {
+            Nhcl = Paciente.Nhcl;
+            NhclInput = Nhcl;
+        }
+        Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
+
+        var tItems = ConsultaService.ObtenerRecetaOrdenAsync(IdOrden);
+        var tInd = ConsultaService.ObtenerIndicacionesGeneralesAsync(IdOrden);
+        var tDiag = ConsultaService.ObtenerDiagnosticosOrdenAsync(IdOrden);
+        await Task.WhenAll(tItems, tInd, tDiag);
+
+        ItemsReceta = await tItems;
+        IndicacionesGenerales = await tInd;
+        DiagnosticosOrden = await tDiag;
+    }
+
+    private void ActualizarCantidadLetras()
+    {
+        int n = (int)Math.Round(NuevoItem.Cantidad);
+        NuevoItem.CantidadLetras = NumeroALetras(n);
+    }
+
+    private static string NumeroALetras(int numero) => numero switch
+    {
+        1 => "UNO",
+        2 => "DOS",
+        3 => "TRES",
+        4 => "CUATRO",
+        5 => "CINCO",
+        6 => "SEIS",
+        7 => "SIETE",
+        8 => "OCHO",
+        9 => "NUEVE",
+        10 => "DIEZ",
+        12 => "DOCE",
+        14 => "CATORCE",
+        15 => "QUINCE",
+        20 => "VEINTE",
+        21 => "VEINTIUNO",
+        28 => "VEINTIOCHO",
+        30 => "TREINTA",
+        _ => numero.ToString()
+    };
+
+    private async Task AgregarItemRecetaAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NuevoItem.Descripcionamento)) return;
+        NuevoItem.IdOrden = IdOrden;
+        NuevoItem.Nhcl = Nhcl;
+        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        await ConsultaService.AgregarMedicamentoRecetaAsync(NuevoItem, idUser, 1);
+        NuevoItem = new RecetaMedicamentoItemDto();
+        ItemsReceta = await ConsultaService.ObtenerRecetaOrdenAsync(IdOrden);
+        MensajeAlerta = "Medicamento agregado a la receta.";
+    }
+
+    private async Task EliminarItemRecetaAsync(int sec)
+    {
+        await ConsultaService.EliminarMedicamentoRecetaAsync(sec);
+        ItemsReceta = await ConsultaService.ObtenerRecetaOrdenAsync(IdOrden);
+    }
+
+    private async Task GuardarIndicacionesGeneralesAsync()
+    {
+        await ConsultaService.GuardarIndicacionesGeneralesAsync(IdOrden, Nhcl, IndicacionesGenerales);
+        MensajeAlerta = "Indicaciones generales de receta actualizadas.";
+    }
+
+    private async Task ExportarRecetaPdfAsync()
+    {
+        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente HOSVET" };
+        var pdfBytes = ReportService.GenerarRecetaMedicaPdf(pac, ItemsReceta, DiagnosticosOrden, IndicacionesGenerales);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Receta_HOSVET_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+    }
+}

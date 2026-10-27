@@ -1,0 +1,634 @@
+@page "/admision/clientes-pacientes"
+@using HosvetKardex.Web.Models
+@using HosvetKardex.Web.Services
+@inject IAdmisionFacturacionService AdmisionService
+@inject SessionStateService SessionState
+@inject NavigationManager NavManager
+
+<PageTitle>HOSVET — Clientes y Pacientes (HDEV / TUERI)</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- Encabezado -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded-3 shadow-sm bg-white border-start border-4 border-primary">
+        <div>
+            <h4 class="mb-0 fw-bold text-primary">
+                <i class="bi bi-people-fill me-2"></i>Registro Maestro de Propietarios y Pacientes (HDEV / TUERI)
+            </h4>
+            <small class="text-muted">
+                Gestión integral de Clientes SRI/Business Central, Mascotas Domésticas (HDEV) y Fauna Silvestre (TUERI)
+            </small>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary btn-sm" @onclick="NuevoCliente">
+                <i class="bi bi-person-plus-fill me-1"></i>Nuevo Propietario
+            </button>
+            <button class="btn btn-primary btn-sm" @onclick="() => NuevaMascota( _clienteSeleccionado?.PaCodigo ?? 0 )">
+                <i class="bi bi-heart-pulse-fill me-1"></i>Nuevo Paciente (NHCL)
+            </button>
+            <a href="/admision/ordenes" class="btn btn-success btn-sm">
+                <i class="bi bi-clipboard2-plus me-1"></i>Ir a Recepción / Órdenes
+            </a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_mensajeAlerta))
+    {
+        <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2" role="alert">
+            <i class="bi @(_esError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@_mensajeAlerta
+            <button type="button" class="btn-close" @onclick="() => _mensajeAlerta = string.Empty"></button>
+        </div>
+    }
+
+    @if (_cargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando directorio de propietarios y pacientes...</span>
+        </div>
+    }
+
+    <div class="row g-3">
+        <!-- Columna Izquierda: Buscador de Propietarios y Mascotas -->
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark"><i class="bi bi-search me-1"></i>Directorio de Propietarios</span>
+                    <span class="badge bg-primary">@_clientes.Count</span>
+                </div>
+                <div class="card-body">
+                    <div class="input-group input-group-sm mb-2">
+                        <span class="input-group-text bg-white"><i class="bi bi-person-vcard"></i></span>
+                        <input type="text" class="form-control" placeholder="Buscar por apellidos, nombres o Cédula/RUC..."
+                               @bind="_filtroClientes" @bind:event="oninput" @onkeyup="BuscarClientesAsync" />
+                        <button class="btn btn-primary" @onclick="BuscarClientesAsync">Buscar</button>
+                    </div>
+
+                    <div class="table-responsive" style="max-height: 270px; overflow-y: auto;">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Cód.</th>
+                                    <th>Propietario / Razón Social</th>
+                                    <th>Cédula / RUC</th>
+                                    <th>Móvil</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var cli in _clientes)
+                                {
+                                    bool activo = _clienteSeleccionado?.PaCodigo == cli.PaCodigo;
+                                    <tr class="@(activo ? "table-primary fw-semibold" : "")" style="cursor:pointer" @onclick="() => SeleccionarClienteAsync(cli)">
+                                        <td>#@cli.PaCodigo</td>
+                                        <td>@cli.NombreCompleto</td>
+                                        <td><span class="badge bg-secondary">@cli.PaCedula</span></td>
+                                        <td>@cli.PaMovil</td>
+                                        <td class="text-end">
+                                            <button class="btn btn-sm btn-outline-primary py-0 px-2" title="Editar Cliente" @onclick:stopPropagation="true" @onclick="() => SeleccionarClienteAsync(cli)">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pacientes / Mascotas asociados -->
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark">
+                        <i class="bi bi-shield-plus me-1"></i>Pacientes Registrados
+                    </span>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn @(_filtroOrigen == "" ? "btn-dark" : "btn-outline-dark")" @onclick='() => FiltrarOrigenAsync("")'>Todos</button>
+                        <button class="btn @(_filtroOrigen == "M" ? "btn-primary" : "btn-outline-primary")" @onclick='() => FiltrarOrigenAsync("M")'>HDEV</button>
+                        <button class="btn @(_filtroOrigen == "T" ? "btn-success" : "btn-outline-success")" @onclick='() => FiltrarOrigenAsync("T")'>TUERI</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="input-group input-group-sm mb-2">
+                        <input type="text" class="form-control" placeholder="Filtrar por NHCL, nombre de mascota o propietario..."
+                               @bind="_filtroMascotas" @bind:event="oninput" @onkeyup="BuscarMascotasGlobalAsync" />
+                        <button class="btn btn-outline-secondary" @onclick="BuscarMascotasGlobalAsync">Filtrar</button>
+                    </div>
+
+                    <div class="table-responsive" style="max-height: 290px; overflow-y: auto;">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>NHCL</th>
+                                    <th>Paciente</th>
+                                    <th>Origen</th>
+                                    <th>Especie / Raza</th>
+                                    <th>Triaje</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var mas in _mascotas)
+                                {
+                                    <tr class="@(_mascotaEditando.MasNhcl == mas.MasNhcl ? "table-info" : "")" style="cursor:pointer" @onclick="() => SeleccionarMascota(mas)">
+                                        <td class="fw-bold text-primary">#@mas.MasNhcl</td>
+                                        <td class="fw-semibold">@mas.MasNombre</td>
+                                        <td>
+                                            @if (mas.MasOrigen == "T")
+                                            {
+                                                <span class="badge bg-success">TUERI</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-primary">HDEV</span>
+                                            }
+                                        </td>
+                                        <td><small>@mas.EspecieDescripcion - @mas.RazaDescripcion</small></td>
+                                        <td>
+                                            <span class="badge rounded-pill" style="background-color:@ObtenerColorHexTriaje(mas.MasColorTriaje); color:#fff;">
+                                                @ObtenerTextoTriaje(mas.MasColorTriaje)
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-xs btn-success py-0 px-2" title="Crear Orden de Atención"
+                                                    @onclick:stopPropagation="true"
+                                                    @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>
+                                                <i class="bi bi-box-arrow-in-right"></i> Orden
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Formularios de Edición de Cliente y Mascota (HDEV / TUERI) -->
+        <div class="col-lg-7">
+            <!-- Pestañas -->
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item">
+                    <button class="nav-link @(_tabActiva == "CLIENTE" ? "active fw-bold" : "")" @onclick='() => _tabActiva = "CLIENTE"'>
+                        <i class="bi bi-person-lines-fill me-1"></i>1. Ficha del Propietario / Facturación BC
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link @(_tabActiva == "MASCOTA" ? "active fw-bold" : "")" @onclick='() => _tabActiva = "MASCOTA"'>
+                        <i class="bi bi-heart-pulse me-1"></i>2. Ficha Clínica del Paciente (HDEV / TUERI)
+                    </button>
+                </li>
+            </ul>
+
+            @if (_tabActiva == "CLIENTE")
+            {
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-person-badge me-1"></i>
+                            @(_clienteEditando.PaCodigo == 0 ? "Nuevo Registro de Propietario" : $"Editando Propietario #{_clienteEditando.PaCodigo} — {_clienteEditando.NombreCompleto}")
+                        </span>
+                        <span class="badge bg-light text-primary">Sincronización Dynamics 365 BC</span>
+                    </div>
+                    <div class="card-body">
+                        <EditForm Model="_clienteEditando" OnValidSubmit="GuardarClienteAsync">
+                            <DataAnnotationsValidator />
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Tipo Documento SRI</label>
+                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaDocumento">
+                                        <option value="CEDULA">CÉDULA (10 dígitos)</option>
+                                        <option value="RUC">RUC (13 dígitos)</option>
+                                        <option value="PASAPORTE">PASAPORTE</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Número Cédula / RUC *</label>
+                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaCedula" />
+                                    <ValidationMessage For="() => _clienteEditando.PaCedula" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Tipo Persona</label>
+                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaTipoPersona">
+                                        <option value="NATURAL">PERSONA NATURAL</option>
+                                        <option value="JURIDICA">SOCIEDAD / JURÍDICA</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Apellidos / Razón Social *</label>
+                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaApellidos" />
+                                    <ValidationMessage For="() => _clienteEditando.PaApellidos" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Nombres *</label>
+                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaNombres" />
+                                    <ValidationMessage For="() => _clienteEditando.PaNombres" />
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Teléfono Móvil *</label>
+                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaMovil" />
+                                    <ValidationMessage For="() => _clienteEditando.PaMovil" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Teléfono Convencional</label>
+                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaTelefono" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Categoría Cliente</label>
+                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaTipoCli">
+                                        <option value="R">Regular / Particular</option>
+                                        <option value="C">Convenio Institucional / TUERI</option>
+                                        <option value="E">Comunidad USFQ / Empleado</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Correo Electrónico Personal</label>
+                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaEmail" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Correo Facturación Electrónica (BC)</label>
+                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaEmailFactura" />
+                                </div>
+
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold">Dirección Domiciliaria / Fiscal *</label>
+                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaDireccion" />
+                                    <ValidationMessage For="() => _clienteEditando.PaDireccion" />
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Grupo Contable BC</label>
+                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaGrupoCliente">
+                                        <option value="NAC">NACIONALES (NAC)</option>
+                                        <option value="EXT">EXTRANJEROS (EXT)</option>
+                                        <option value="REL">RELACIONADOS USFQ</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Términos de Pago</label>
+                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaTerminosPago">
+                                        <option value="CONTADO">CONTADO</option>
+                                        <option value="CREDITO">CRÉDITO 30 DÍAS</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Forma de Pago SRI</label>
+                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaFormaPago">
+                                        <option value="EFECTIVO">01 - SIN UTILIZACIÓN DEL SISTEMA FINANCIERO</option>
+                                        <option value="TARJETA">19 - TARJETA DE CRÉDITO / DÉBITO</option>
+                                        <option value="TRANSFERENCIA">20 - OTROS CON UTILIZACIÓN DEL SISTEMA FINANCIERO</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold">Observaciones / Alertas Administrativas</label>
+                                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_clienteEditando.PaObservaciones" />
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2 mt-3">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="NuevoCliente">Limpiar</button>
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="bi bi-save me-1"></i>Guardar Propietario
+                                </button>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="card shadow-sm border-0">
+                    <div class="card-header @(_mascotaEditando.MasOrigen == "T" ? "bg-success" : "bg-info") text-white d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-heart-pulse-fill me-1"></i>
+                            @(_mascotaEditando.MasNhcl == 0 ? "Nuevo Paciente" : $"Historia Clínica NHCL #{_mascotaEditando.MasNhcl} — {_mascotaEditando.MasNombre}")
+                        </span>
+                        <span class="badge bg-dark">
+                            @(_mascotaEditando.MasOrigen == "T" ? "FAUNA SILVESTRE (TUERI)" : "MASCOTA DOMÉSTICA (HDEV)")
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <EditForm Model="_mascotaEditando" OnValidSubmit="GuardarMascotaAsync">
+                            <DataAnnotationsValidator />
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Origen Institucional</label>
+                                    <select class="form-select form-select-sm fw-bold" @bind="_mascotaEditando.MasOrigen">
+                                        <option value="M">HDEV — Mascota Doméstica</option>
+                                        <option value="T">TUERI — Fauna Silvestre</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Nombre del Paciente / Ejemplar *</label>
+                                    <InputText class="form-control form-control-sm text-uppercase fw-bold" @bind-Value="_mascotaEditando.MasNombre" />
+                                    <ValidationMessage For="() => _mascotaEditando.MasNombre" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Propietario Asociado (ID #@_mascotaEditando.MasIdCliente)</label>
+                                    <input type="text" class="form-control form-control-sm bg-light" readonly value="@(_clienteSeleccionado?.NombreCompleto ?? _mascotaEditando.ClienteNombre)" />
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Especie</label>
+                                    <select class="form-select form-select-sm" value="@_mascotaEditando.MasEspecie" @onchange="CambiarEspecieAsync">
+                                        @foreach (var esp in _especies)
+                                        {
+                                            <option value="@esp.Id">@esp.Descripcion</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Raza / Familia</label>
+                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasRaza">
+                                        @foreach (var raz in _razas)
+                                        {
+                                            <option value="@raz.Id">@raz.Descripcion</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Sexo</label>
+                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasSexo">
+                                        @foreach (var s in _sexos)
+                                        {
+                                            <option value="@s.Id">@s.Descripcion</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold">Esterilizado / Castrado</label>
+                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasCastrado">
+                                        <option value="NO">NO</option>
+                                        <option value="SI">SÍ</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Fecha de Nacimiento Aprox.</label>
+                                    <InputDate class="form-control form-control-sm" @bind-Value="_mascotaEditando.MasFechaNace" />
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-bold">Semáforo de Temperamento / Triaje</label>
+                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasColorTriaje">
+                                        <option value="green">🟢 Verde — Dócil / Manejo Estándar</option>
+                                        <option value="yellow">🟡 Amarillo — Nervioso / Precaución</option>
+                                        <option value="red">🔴 Rojo — Agresivo / Riesgo / Braquicéfalo</option>
+                                    </select>
+                                </div>
+
+                                @if (_mascotaEditando.MasOrigen == "T")
+                                {
+                                    <div class="col-12 mt-2">
+                                        <div class="p-2 rounded bg-success bg-opacity-10 border border-success">
+                                            <h6 class="fw-bold text-success mb-2"><i class="bi bi-tree-fill me-1"></i>Datos Exclusivos Hospital de Fauna Silvestre (TUERI)</h6>
+                                            <div class="row g-2">
+                                                <div class="col-md-4">
+                                                    <label class="form-label small fw-bold">Clase Taxonómica</label>
+                                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.TueClase">
+                                                        @foreach (var cl in _clasesTueri)
+                                                        {
+                                                            <option value="@cl.Id">@cl.Descripcion</option>
+                                                        }
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label small fw-bold">Nombre Científico</label>
+                                                    <InputText class="form-control form-control-sm fst-italic" placeholder="Ej: Amazona farinosa" @bind-Value="_mascotaEditando.TueCientifico" />
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label small fw-bold">Peso Ingreso (g/kg)</label>
+                                                    <InputText class="form-control form-control-sm" placeholder="Ej: 620 g" @bind-Value="_mascotaEditando.TuePeso" />
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label small fw-bold">Procedencia / Sector de Rescate / Decomiso</label>
+                                                    <InputText class="form-control form-control-sm" @bind-Value="_mascotaEditando.TueSectorBarrio" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold">Antecedentes / Alergias / Observaciones del Paciente</label>
+                                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_mascotaEditando.MasObservacion" />
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <span class="small text-muted">Edad estimada: <strong>@_mascotaEditando.EdadCalculada</strong></span>
+                                <div class="d-flex gap-2">
+                                    @if (_mascotaEditando.MasNhcl > 0)
+                                    {
+                                        <a href="/admision/ordenes?nhcl=@_mascotaEditando.MasNhcl" class="btn btn-success btn-sm">
+                                            <i class="bi bi-clipboard2-plus me-1"></i>Generar Orden de Atención
+                                        </a>
+                                    }
+                                    <button type="submit" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-save me-1"></i>Guardar Paciente
+                                    </button>
+                                </div>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<ClienteDto> _clientes = new();
+    private List<PacienteMascotaDto> _mascotas = new();
+    private List<CatalogoItemGenericoDto> _especies = new();
+    private List<CatalogoItemGenericoDto> _razas = new();
+    private List<CatalogoItemGenericoDto> _sexos = new();
+    private List<CatalogoItemGenericoDto> _clasesTueri = new();
+
+    private ClienteDto? _clienteSeleccionado;
+    private ClienteDto _clienteEditando = new();
+    private PacienteMascotaDto _mascotaEditando = new();
+
+    private string _filtroClientes = string.Empty;
+    private string _filtroMascotas = string.Empty;
+    private string _filtroOrigen = string.Empty;
+    private string _tabActiva = "CLIENTE";
+    private bool _cargandoInicial = true;
+    private string _mensajeAlerta = string.Empty;
+    private bool _esError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cargandoInicial = true;
+        await Task.Yield();
+
+        var tEsp = AdmisionService.ObtenerEspeciesAsync();
+        var tSex = AdmisionService.ObtenerSexosAsync();
+        var tCla = AdmisionService.ObtenerClasesTueriAsync();
+        var tRaz = AdmisionService.ObtenerRazasPorEspecieAsync(1);
+        var tCli = BuscarClientesAsync();
+        await Task.WhenAll(tEsp, tSex, tCla, tRaz, tCli);
+
+        _especies = await tEsp;
+        _sexos = await tSex;
+        _clasesTueri = await tCla;
+        _razas = await tRaz;
+
+        if (_clientes.Count > 0)
+        {
+            await SeleccionarClienteAsync(_clientes[0]);
+        }
+        _cargandoInicial = false;
+    }
+
+    private async Task BuscarClientesAsync()
+    {
+        _clientes = await AdmisionService.BuscarClientesAsync(_filtroClientes);
+    }
+
+    private async Task SeleccionarClienteAsync(ClienteDto cli)
+    {
+        _clienteSeleccionado = cli;
+        _clienteEditando = new ClienteDto
+        {
+            PaCodigo = cli.PaCodigo,
+            PaNombres = cli.PaNombres,
+            PaApellidos = cli.PaApellidos,
+            PaCedula = cli.PaCedula,
+            PaTelefono = cli.PaTelefono,
+            PaMovil = cli.PaMovil,
+            PaEmail = cli.PaEmail,
+            PaEmailFactura = cli.PaEmailFactura,
+            PaDireccion = cli.PaDireccion,
+            PaObservaciones = cli.PaObservaciones,
+            PaTipoCli = cli.PaTipoCli,
+            PaDocumento = cli.PaDocumento,
+            PaGrupoCliente = cli.PaGrupoCliente,
+            PaTerminosPago = cli.PaTerminosPago,
+            PaTipoPersona = cli.PaTipoPersona,
+            PaFormaPago = cli.PaFormaPago
+        };
+
+        _mascotas = await AdmisionService.ObtenerMascotasPorClienteAsync(cli.PaCodigo);
+        if (_mascotas.Count > 0)
+        {
+            SeleccionarMascota(_mascotas[0]);
+        }
+    }
+
+    private void NuevoCliente()
+    {
+        _clienteSeleccionado = null;
+        _clienteEditando = new ClienteDto();
+        _tabActiva = "CLIENTE";
+    }
+
+    private async Task GuardarClienteAsync()
+    {
+        int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
+        int idGuardado = await AdmisionService.GuardarClienteAsync(_clienteEditando, idUser);
+        _clienteEditando.PaCodigo = idGuardado;
+        await BuscarClientesAsync();
+        _esError = false;
+        _mensajeAlerta = $"Propietario #{idGuardado} ({_clienteEditando.NombreCompleto}) guardado exitosamente.";
+    }
+
+    private async Task NuevaMascota(int idCliente)
+    {
+        int clienteId = idCliente > 0 ? idCliente : (_clientes.FirstOrDefault()?.PaCodigo ?? 101);
+        _mascotaEditando = new PacienteMascotaDto
+        {
+            MasIdCliente = clienteId,
+            MasOrigen = "M",
+            MasEspecie = 1,
+            MasSexo = 1,
+            MasColorTriaje = "green",
+            MasFechaNace = DateTime.Today.AddYears(-1)
+        };
+        _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(1);
+        _tabActiva = "MASCOTA";
+    }
+
+    private async void SeleccionarMascota(PacienteMascotaDto mas)
+    {
+        _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(mas.MasEspecie);
+        _mascotaEditando = new PacienteMascotaDto
+        {
+            MasNhcl = mas.MasNhcl,
+            MasIdCliente = mas.MasIdCliente,
+            ClienteNombre = mas.ClienteNombre,
+            ClienteCedula = mas.ClienteCedula,
+            ClienteTelefono = mas.ClienteTelefono,
+            MasNombre = mas.MasNombre,
+            MasOrigen = mas.MasOrigen,
+            MasSexo = mas.MasSexo,
+            MasCastrado = mas.MasCastrado,
+            MasEspecie = mas.MasEspecie,
+            EspecieDescripcion = mas.EspecieDescripcion,
+            MasRaza = mas.MasRaza,
+            RazaDescripcion = mas.RazaDescripcion,
+            MasFechaNace = mas.MasFechaNace,
+            MasObservacion = mas.MasObservacion,
+            MasColorTriaje = mas.MasColorTriaje,
+            TueClase = mas.TueClase,
+            TuePeso = mas.TuePeso,
+            TueCientifico = mas.TueCientifico,
+            TueSectorBarrio = mas.TueSectorBarrio
+        };
+        _tabActiva = "MASCOTA";
+        StateHasChanged();
+    }
+
+    private async Task CambiarEspecieAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int idEsp))
+        {
+            _mascotaEditando.MasEspecie = idEsp;
+            _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(idEsp);
+            _mascotaEditando.MasRaza = _razas.FirstOrDefault()?.Id ?? 1;
+        }
+    }
+
+    private async Task GuardarMascotaAsync()
+    {
+        int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
+        _mascotaEditando.EspecieDescripcion = _especies.FirstOrDefault(e => e.Id == _mascotaEditando.MasEspecie)?.Descripcion ?? "Canino";
+        _mascotaEditando.RazaDescripcion = _razas.FirstOrDefault(r => r.Id == _mascotaEditando.MasRaza)?.Descripcion ?? "Mestizo";
+        _mascotaEditando.SexoDescripcion = _sexos.FirstOrDefault(s => s.Id == _mascotaEditando.MasSexo)?.Descripcion ?? "Macho";
+
+        int nhcl = await AdmisionService.GuardarMascotaAsync(_mascotaEditando, idUser);
+        _mascotaEditando.MasNhcl = nhcl;
+        _mascotas = await AdmisionService.BuscarMascotasAsync(_filtroMascotas, _filtroOrigen);
+        _esError = false;
+        _mensajeAlerta = $"Paciente NHCL #{nhcl} ({_mascotaEditando.MasNombre}) guardado correctamente.";
+    }
+
+    private async Task FiltrarOrigenAsync(string origen)
+    {
+        _filtroOrigen = origen;
+        await BuscarMascotasGlobalAsync();
+    }
+
+    private async Task BuscarMascotasGlobalAsync()
+    {
+        _mascotas = await AdmisionService.BuscarMascotasAsync(_filtroMascotas, _filtroOrigen);
+    }
+
+    private static string ObtenerColorHexTriaje(string color) => color switch
+    {
+        "red" => "#dc2626",
+        "yellow" => "#d97706",
+        _ => "#16a34a"
+    };
+
+    private static string ObtenerTextoTriaje(string color) => color switch
+    {
+        "red" => "Crítico / Precaución",
+        "yellow" => "Nervioso",
+        _ => "Dócil"
+    };
+}

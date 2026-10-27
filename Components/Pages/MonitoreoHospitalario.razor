@@ -1,0 +1,640 @@
+@page "/hospitalizacion/monitoreo"
+@page "/hospitalizacion/monitoreo/{IdOrden:int}/{Nhcl:int}"
+@inject IKardexService KardexService
+@inject IHospitalizacionService HospService
+@inject IBusinessCentralService BcService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject IJSRuntime JS
+
+<PageTitle>Monitoreo Hospitalario 24h — HOSVET</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- BARRA DE SELECCIÓN DE PACIENTE Y ACCIONES -->
+    <div class="card shadow-sm border-0 mb-3 no-print">
+        <div class="card-body py-2 px-3 bg-light rounded">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold mb-1 text-primary">Buscar Paciente Hospitalizado (Pre-Monitoreo):</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" placeholder="Nombre mascota, propietario o NHCL..."
+                               @bind="_filtroOrden" @bind:event="oninput" />
+                        <button class="btn btn-outline-primary" @onclick="BuscarOrdenesAsync">Buscar</button>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold mb-1">Seleccionar Orden:</label>
+                    <select class="form-select form-select-sm" value="@IdOrden" @onchange="OnOrdenChangedAsync">
+                        <option value="0">-- Seleccione Paciente --</option>
+                        @foreach (var ord in _ordenesActivas)
+                        {
+                            <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-5 text-end pt-3">
+                    @if (_paciente is not null)
+                    {
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-primary fw-semibold" @onclick="GuardarMonitoreoAsync" disabled="@(_guardando || _sheet.Cerrada)">
+                                💾 @(_guardando ? "Guardando..." : "Guardar Monitoreo")
+                            </button>
+                            <button class="btn btn-outline-primary" @onclick="NuevaHojaAsync" disabled="@_sheet.Cerrada">
+                                ➕ Nueva Hoja
+                            </button>
+                            <button class="btn btn-outline-warning text-dark" @onclick="CerrarMonitoreoAsync" disabled="@_sheet.Cerrada">
+                                🔒 Cerrar Ficha
+                            </button>
+                            <button class="btn btn-danger" @onclick="ExportarPdfAsync">
+                                📄 PDF
+                            </button>
+                            <button class="btn btn-success" @onclick="ExportarExcelAsync">
+                                📊 Excel
+                            </button>
+                            <button class="btn btn-dark" @onclick="ImprimirVistaAsync">
+                                🖨️ Imprimir
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_mensajeAlerta))
+    {
+        <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small no-print">
+            @_mensajeAlerta
+            <button type="button" class="btn-close py-2" @onclick="() => _mensajeAlerta = null"></button>
+        </div>
+    }
+
+    @if (_cargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando Monitoreo Hospitalario 24h...</span>
+        </div>
+    }
+    else if (_paciente is null)
+    {
+        <div class="alert alert-info shadow-sm">
+            Seleccione un paciente en la barra superior para abrir su <strong>Sábana de Monitoreo Clínico 24 Horas</strong>.
+        </div>
+    }
+    else
+    {
+        <div id="area-impresion-monitoreo">
+            <!-- CABECERA DEL PACIENTE -->
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="fw-bold">🩺 MONITOREO DE PACIENTE HOSPITALIZADO (24 HORAS)</span>
+                        @if (_sheet.Cerrada)
+                        {
+                            <span class="badge bg-danger ms-2">MONITOREO CERRADO</span>
+                        }
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="small">N° Hoja:</span>
+                        <select class="form-select form-select-sm w-auto bg-white text-dark fw-bold"
+                                value="@_sheet.Hoja" @onchange="CambiarHojaAsync">
+                            @foreach (var h in _sheet.HojasDisponibles)
+                            {
+                                <option value="@h">Hoja #@h</option>
+                            }
+                        </select>
+                        <a href="/hospitalizacion/ficha/@IdOrden/@Nhcl" class="btn btn-sm btn-warning fw-semibold no-print">
+                            🏥 Ir a Ficha Hospitalización
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body py-2 px-3">
+                    <div class="row text-center small g-2 align-items-center">
+                        <div class="col-md-2 border-end">
+                            <div class="text-muted">Historia / Orden</div>
+                            <div class="fw-bold text-danger fs-6">@_paciente.Nhcl <span class="text-secondary">(#@_paciente.OrdenAtencionId)</span></div>
+                        </div>
+                        <div class="col-md-2 border-end">
+                            <div class="text-muted">Paciente / Especie</div>
+                            <div class="fw-bold">@_paciente.PacienteNombre <span class="text-success">(@_paciente.Especie - @_paciente.Sexo)</span></div>
+                        </div>
+                        <div class="col-md-2 border-end">
+                            <div class="text-muted">Edad</div>
+                            <div class="fw-semibold">@_paciente.Anios años, @_paciente.Meses meses</div>
+                        </div>
+                        <div class="col-md-2 border-end">
+                            <div class="text-muted">Propietario</div>
+                            <div class="fw-semibold">@_paciente.ClienteNombre</div>
+                        </div>
+                        <div class="col-md-2 border-end">
+                            <div class="text-muted">Médico Tratante</div>
+                            <div class="fw-semibold text-primary">@_sheet.MedicoResponsable</div>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="text-muted d-block">Fecha Hoja</label>
+                            <input type="date" class="form-control form-control-sm text-center"
+                                   @bind="_sheet.Fecha" disabled="@_sheet.Cerrada" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 1. MATRIZ DE MONITOREO CLÍNICO 24 FILAS X 24 HORAS (07:00 A 06:00) -->
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-dark text-white py-1 px-3 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold small">1. PARÁMETROS CLÍNICOS DE MONITOREO HORARIO (07:00 A 06:00)</span>
+                    <span class="small text-warning">Turno Diurno: 07h–18h | Turno Nocturno: 19h–06h</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.74rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-start" style="min-width:155px;">Parámetro Clínico</th>
+                                <th style="width:75px;">Unidad</th>
+                                @foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
+                                {
+                                    <th class="@(hr >= 19 || hr <= 6 ? "bg-dark text-white" : "bg-primary bg-opacity-25")" style="min-width:35px;">
+                                        @hr
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var f in _sheet.FilasMonitoreo)
+                            {
+                                <tr>
+                                    <td class="text-start fw-semibold bg-light px-2 py-0">
+                                        @if (f.Fila >= 23)
+                                        {
+                                            <input type="text" class="form-control form-control-sm px-1 py-0"
+                                                   placeholder="@f.ParametroLabel" @bind="f.Item" disabled="@_sheet.Cerrada" />
+                                        }
+                                        else
+                                        {
+                                            @f.ParametroLabel
+                                        }
+                                    </td>
+                                    <td class="text-muted small bg-light">@f.UnidadLabel</td>
+                                    @foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
+                                    {
+                                        int hLocal = hr;
+                                        <td class="p-0">
+                                            <input type="text" class="form-control form-control-sm border-0 px-0 py-1 text-center fw-bold"
+                                                   style="font-size:0.72rem;"
+                                                   value="@f.GetValorHora(hLocal)"
+                                                   @onchange="e => f.SetValorHora(hLocal, e.Value?.ToString())"
+                                                   disabled="@_sheet.Cerrada" />
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 2. REGISTRO DE MEDICAMENTOS DE MONITOREO (hvt_cabMonitoreoMedBC) -->
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-primary bg-opacity-10 py-1 px-3 fw-bold small text-primary">
+                    💊 2. REGISTRO DE MEDICAMENTOS E INSUMOS EN MONITOREO (CON DESCARGO DE STOCK BC)
+                </div>
+                <div class="card-body p-2">
+                    <div class="row g-2 align-items-end mb-2 no-print small">
+                        <div class="col-md-3">
+                            <label class="form-label mb-0 fw-semibold">Buscar en Bodega BC:</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" placeholder="Nombre fármaco..." @bind="_busquedaFarmaco" />
+                                <button class="btn btn-outline-primary" @onclick="BuscarFarmacosBcAsync">🔎</button>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label mb-0 fw-semibold">Producto Seleccionado:</label>
+                            <select class="form-select form-select-sm" @onchange="SeleccionarFarmacoBc">
+                                <option value="">-- Seleccione del resultado --</option>
+                                @foreach (var p in _farmacosBc)
+                                {
+                                    <option value="@p.Number">@p.DisplayName (Stock: @p.Inventory | $@p.UnitPrice)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label mb-0 fw-semibold">Indicaciones / Dosis:</label>
+                            <input type="text" class="form-control form-control-sm" @bind="_nuevoMed.Indicaciones" />
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label mb-0 fw-semibold">Cant.:</label>
+                            <input type="number" class="form-control form-control-sm text-center fw-bold text-danger" @bind="_nuevoMed.Cantidad" />
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label mb-0 fw-semibold">Vía:</label>
+                            <select class="form-select form-select-sm" @bind="_nuevoMed.Via">
+                                @foreach (var v in _vias)
+                                {
+                                    <option value="@v.Via">@v.Via</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label mb-0 fw-semibold">Iniciales:</label>
+                            <select class="form-select form-select-sm" @bind="_nuevoMed.Iniciales">
+                                @foreach (var u in _funcionarios)
+                                {
+                                    <option value="@u.UserIniciales">@u.UserIniciales (@u.UserNombre)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <button class="btn btn-sm btn-success w-100 fw-semibold" @onclick="AgregarMedicamentoMonitoreoAsync" disabled="@_sheet.Cerrada">
+                                ➕ Añadir
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped table-bordered small mb-0 text-center">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Código</th>
+                                    <th class="text-start">Producto</th>
+                                    <th>Cantidad</th>
+                                    <th class="text-start">Indicaciones</th>
+                                    <th>Vía</th>
+                                    <th>Fecha</th>
+                                    <th>Hora</th>
+                                    <th>Resp.</th>
+                                    <th class="no-print">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (_sheet.MedicamentosRegistrados.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="10" class="text-muted fst-italic">Sin medicamentos registrados en este monitoreo.</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var m in _sheet.MedicamentosRegistrados)
+                                    {
+                                        <tr>
+                                            <td>@m.Id</td>
+                                            <td>@m.Codigo</td>
+                                            <td class="text-start fw-semibold">@m.Producto</td>
+                                            <td class="fw-bold text-danger">@m.Cantidad</td>
+                                            <td class="text-start">@m.Indicaciones</td>
+                                            <td>@m.Via</td>
+                                            <td>@m.Fecha</td>
+                                            <td>@m.Hora</td>
+                                            <td>@m.Iniciales (@m.Funcion)</td>
+                                            <td class="no-print">
+                                                <button class="btn btn-link btn-sm text-danger p-0"
+                                                        @onclick="() => EliminarMedicamentoAsync(m.Id, m.Codigo)" disabled="@_sheet.Cerrada">
+                                                    🗑️ Eliminar
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. NOTAS DE CHEQUEO QUIRÚRGICO Y OBSERVACIONES HORARIAS -->
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-warning bg-opacity-25 py-1 px-3 fw-bold small text-dark">
+                            🔪 3. NOTAS DE CHEQUEO QUIRÚRGICO
+                        </div>
+                        <div class="card-body p-2">
+                            <div class="input-group input-group-sm mb-2 no-print">
+                                <input type="text" class="form-control" placeholder="Ingrese comentario de chequeo quirúrgico..."
+                                       @bind="_nuevaNotaChequeo" disabled="@_sheet.Cerrada" />
+                                <button class="btn btn-warning fw-semibold" @onclick="AgregarNotaChequeoAsync" disabled="@_sheet.Cerrada">
+                                    Agregar
+                                </button>
+                            </div>
+                            <table class="table table-sm table-striped small mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha / Hora</th>
+                                        <th>Nota</th>
+                                        <th class="no-print"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var n in _sheet.NotasChequeoQuirurgico)
+                                    {
+                                        <tr>
+                                            <td class="text-nowrap">@n.Fecha.ToString("yyyy-MM-dd") @n.Hora</td>
+                                            <td>@n.Observacion</td>
+                                            <td class="text-end no-print">
+                                                <button class="btn btn-link btn-sm text-danger p-0" @onclick="() => EliminarNotaChequeoAsync(n.Id)">✕</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-info bg-opacity-25 py-1 px-3 fw-bold small text-dark">
+                            🫁 4. OBSERVACIONES POR HORA: PALPACIÓN ABDOMINAL Y AUSCULTACIÓN TORÁCICA
+                        </div>
+                        <div class="card-body p-2">
+                            <div class="row g-1 mb-2 no-print">
+                                <div class="col-3">
+                                    <input type="time" class="form-control form-control-sm" @bind="_horaObs" disabled="@_sheet.Cerrada" />
+                                </div>
+                                <div class="col-7">
+                                    <input type="text" class="form-control form-control-sm" placeholder="Hallazgos palpación / auscultación..."
+                                           @bind="_textoObsHora" disabled="@_sheet.Cerrada" />
+                                </div>
+                                <div class="col-2">
+                                    <button class="btn btn-sm btn-info w-100 fw-semibold" @onclick="AgregarObsHoraAsync" disabled="@_sheet.Cerrada">
+                                        Agregar
+                                    </button>
+                                </div>
+                            </div>
+                            <table class="table table-sm table-striped small mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Hora</th>
+                                        <th>Observación Clínica</th>
+                                        <th class="no-print"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var o in _sheet.ObservacionesPorHora)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold text-primary">@o.Hora</td>
+                                            <td>@o.Observacion</td>
+                                            <td class="text-end no-print">
+                                                <button class="btn btn-link btn-sm text-danger p-0" @onclick="() => EliminarObsHoraAsync(o.Id)">✕</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private string _filtroOrden = string.Empty;
+    private List<OrdenActivaResumenDto> _ordenesActivas = [];
+    private PacienteHeaderDto? _paciente;
+    private MonitoreoHospitalarioSheetDto _sheet = new();
+
+    private List<ViaAdministracionDto> _vias = [];
+    private List<FuncionarioDto> _funcionarios = [];
+    private List<FarmacoStockDto> _farmacosBc = [];
+    private string _busquedaFarmaco = string.Empty;
+    private MonitoreoMedInputModel _nuevoMed = new();
+
+    private string _nuevaNotaChequeo = string.Empty;
+    private TimeOnly _horaObs = TimeOnly.FromDateTime(DateTime.Now);
+    private string _textoObsHora = string.Empty;
+
+    private bool _cargandoInicial = true;
+    private bool _guardando;
+    private string? _mensajeAlerta;
+    private bool _esError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cargandoInicial = true;
+        await Task.Yield();
+        var tVias = KardexService.ObtenerViasAdministracionAsync();
+        var tFunc = KardexService.ObtenerFuncionariosEnfermeriaAsync();
+        var tOrd = KardexService.ObtenerOrdenesActivasAsync();
+        await Task.WhenAll(tVias, tFunc, tOrd);
+
+        _vias = await tVias;
+        _funcionarios = await tFunc;
+        _ordenesActivas = await tOrd;
+
+        _nuevoMed.Via = _vias.FirstOrDefault()?.Via ?? "IV";
+        _nuevoMed.Iniciales = _funcionarios.FirstOrDefault()?.UserIniciales ?? "MED";
+        _nuevoMed.Funcion = "M";
+
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0 && _ordenesActivas.Count > 0)
+        {
+            var primera = _ordenesActivas[0];
+            IdOrden = primera.IdOrdenAtencion;
+            Nhcl = primera.Nhcl;
+        }
+
+        if (IdOrden > 0)
+        {
+            await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, 1);
+        }
+        _cargandoInicial = false;
+    }
+
+    private async Task BuscarOrdenesAsync()
+    {
+        _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(_filtroOrden);
+    }
+
+    private async Task OnOrdenChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int idOrd) && idOrd > 0)
+        {
+            var ord = _ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == idOrd);
+            if (ord is not null)
+            {
+                IdOrden = ord.IdOrdenAtencion;
+                Nhcl = ord.Nhcl;
+                await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, 1);
+            }
+        }
+    }
+
+    private async Task CargarMonitoreoCompletoAsync(int idOrden, int nhcl, int hoja)
+    {
+        var tPac = KardexService.ObtenerCabeceraPacienteAsync(idOrden, nhcl);
+        var tSheet = HospService.CargarMonitoreoHospitalarioAsync(idOrden, nhcl, hoja, Session.IdUser);
+        await Task.WhenAll(tPac, tSheet);
+
+        _paciente = await tPac;
+        if (_paciente is not null)
+        {
+            Nhcl = _paciente.Nhcl;
+            Session.SeleccionarOrden(idOrden, Nhcl, _paciente.PacienteNombre);
+            _sheet = await tSheet;
+        }
+    }
+
+    private async Task CambiarHojaAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int h))
+        {
+            await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, h);
+        }
+    }
+
+    private async Task GuardarMonitoreoAsync()
+    {
+        if (_paciente is null) return;
+        _guardando = true;
+        try
+        {
+            await HospService.GuardarMonitoreoHospitalarioAsync(_sheet, Session.IdUser);
+            _esError = false;
+            _mensajeAlerta = $"Hoja #{_sheet.Hoja} de Monitoreo Hospitalario guardada correctamente.";
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al guardar monitoreo: {ex.Message}";
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private async Task NuevaHojaAsync()
+    {
+        if (_paciente is null) return;
+        int nueva = await HospService.CrearNuevaHojaMonitoreoAsync(IdOrden, Nhcl, Session.IdUser);
+        await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, nueva);
+        _esError = false;
+        _mensajeAlerta = $"Se creó la Hoja #{nueva} de Monitoreo Hospitalario.";
+    }
+
+    private async Task CerrarMonitoreoAsync()
+    {
+        if (_paciente is null) return;
+        await HospService.CerrarMonitoreoHospitalarioAsync(IdOrden);
+        _sheet.Cerrada = true;
+        _esError = false;
+        _mensajeAlerta = "La ficha de Monitoreo Hospitalario ha sido cerrada.";
+    }
+
+    private async Task BuscarFarmacosBcAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_busquedaFarmaco)) return;
+        _farmacosBc = await BcService.BuscarMedicamentosConStockAsync(_busquedaFarmaco, Session.Localidad, Session.Apostrofe);
+    }
+
+    private void SeleccionarFarmacoBc(ChangeEventArgs e)
+    {
+        var num = e.Value?.ToString();
+        var item = _farmacosBc.FirstOrDefault(x => x.Number == num);
+        if (item is not null)
+        {
+            _nuevoMed.CodigoProducto = item.Number;
+            _nuevoMed.NombreProducto = item.DisplayName;
+            _nuevoMed.IdBC = item.Id;
+            _nuevoMed.Iva = item.TaxGroupCode;
+            _nuevoMed.StockDisponible = item.Inventory;
+            _nuevoMed.PrecioUnitario = item.UnitPrice;
+            _nuevoMed.Medida = item.BaseUnitOfMeasureCode;
+            _nuevoMed.Bodega = item.Location;
+        }
+    }
+
+    private async Task AgregarMedicamentoMonitoreoAsync()
+    {
+        if (_paciente is null || string.IsNullOrWhiteSpace(_nuevoMed.NombreProducto)) return;
+        _nuevoMed.OrdenId = IdOrden;
+        _nuevoMed.Nhcl = Nhcl;
+        _nuevoMed.Funcionario = _funcionarios.FirstOrDefault(f => f.UserIniciales == _nuevoMed.Iniciales)?.UserNombre ?? _nuevoMed.Iniciales;
+
+        var res = await HospService.RegistrarMedicamentoMonitoreoAsync(
+            _nuevoMed,
+            Session.IdUser,
+            Session.Localidad);
+
+        _esError = !res.Exito;
+        _mensajeAlerta = res.Mensaje;
+
+        if (res.Exito)
+        {
+            _nuevoMed.Indicaciones = string.Empty;
+            _nuevoMed.Cantidad = 1;
+            await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, _sheet.Hoja);
+        }
+    }
+
+    private async Task EliminarMedicamentoAsync(int idReg, string codigoProd)
+    {
+        await HospService.EliminarMedicamentoMonitoreoAsync(idReg, codigoProd, IdOrden);
+        await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, _sheet.Hoja);
+    }
+
+    private async Task AgregarNotaChequeoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nuevaNotaChequeo)) return;
+        await HospService.AgregarNotaImportanteAsync(
+            IdOrden, Nhcl, _nuevaNotaChequeo, "N",
+            Session.IdUser,
+            Session.Localidad);
+        _nuevaNotaChequeo = string.Empty;
+        await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, _sheet.Hoja);
+    }
+
+    private async Task EliminarNotaChequeoAsync(int idNota)
+    {
+        await HospService.EliminarNotaImportanteAsync(idNota);
+        await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, _sheet.Hoja);
+    }
+
+    private async Task AgregarObsHoraAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_textoObsHora)) return;
+        await HospService.AgregarObservacionHoraAsync(
+            IdOrden, Nhcl, _horaObs.ToString("HH:mm"), _textoObsHora,
+            Session.Iniciales,
+            Session.Localidad);
+        _textoObsHora = string.Empty;
+        await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, _sheet.Hoja);
+    }
+
+    private async Task EliminarObsHoraAsync(int idObs)
+    {
+        await HospService.EliminarObservacionHoraAsync(idObs);
+        await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, _sheet.Hoja);
+    }
+
+    private async Task ExportarPdfAsync()
+    {
+        if (_paciente is null) return;
+        var bytes = ReportService.GenerarMonitoreoHospitalarioPdf(_paciente, _sheet);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"Monitoreo24h_Orden{IdOrden}_Hoja{_sheet.Hoja}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+    }
+
+    private async Task ExportarExcelAsync()
+    {
+        if (_paciente is null) return;
+        var bytes = ReportService.GenerarMonitoreoHospitalarioExcel(_paciente, _sheet);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"Monitoreo24h_Orden{IdOrden}_Hoja{_sheet.Hoja}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+
+    private async Task ImprimirVistaAsync()
+    {
+        await JS.InvokeVoidAsync("hosvetPrintElement", "area-impresion-monitoreo");
+    }
+}

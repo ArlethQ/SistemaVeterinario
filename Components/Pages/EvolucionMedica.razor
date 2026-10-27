@@ -1,0 +1,365 @@
+@page "/consulta/evoluciones"
+@page "/consulta/evoluciones/{IdOrden:int}/{Nhcl:int}"
+@inject IConsultaExternaService ConsultaService
+@inject IKardexService KardexService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject IJSRuntime JS
+
+<PageTitle>HOSVET - Evoluciones Médicas y Órdenes Complementarias</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- Encabezado -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-white p-3 rounded shadow-sm border-start border-4 border-info">
+        <div>
+            <h4 class="mb-0 text-primary fw-bold">
+                <i class="bi bi-journal-plus me-2"></i>Hoja de Evolución Médica y Órdenes de Exámenes
+            </h4>
+            <small class="text-muted">Seguimiento clínico cronológico y solicitud de exámenes complementarios.</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
+            <div class="input-group input-group-sm" style="width: 270px;">
+                <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
+                <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
+                <input type="number" class="form-control" placeholder="NHCL" @bind="NhclInput" />
+                <button class="btn btn-primary" @onclick="CargarPorInputAsync">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+            <div class="form-check form-switch ms-2">
+                <input class="form-check-input" type="checkbox" id="chkSoloOrden" @bind="FiltrarSoloOrdenActual" @bind:after="RecargarEvolucionesAsync" />
+                <label class="form-check-label small fw-semibold" for="chkSoloOrden">Solo Orden #@IdOrden</label>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" @onclick="ExportarPdfAsync">
+                <i class="bi bi-file-earmark-pdf-fill me-1"></i>Imprimir Evoluciones PDF
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(MensajeAlerta))
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2">
+            <i class="bi bi-check-circle-fill me-2"></i>@MensajeAlerta
+            <button type="button" class="btn-close py-2" @onclick="() => MensajeAlerta = null"></button>
+        </div>
+    }
+
+    @if (CargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando evoluciones médicas y órdenes complementarias...</span>
+        </div>
+    }
+
+    @if (Paciente != null)
+    {
+        <div class="card shadow-sm border-0 mb-3 bg-info bg-opacity-10">
+            <div class="card-body py-2 px-3 small">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <strong>Paciente:</strong> @Paciente.PacienteNombre (@Paciente.Especie - @Paciente.Raza)
+                        <span class="badge bg-dark ms-1">NHCL #@Paciente.Nhcl</span>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Propietario:</strong> @Paciente.PropietarioNombre
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <strong>Médico Tratante:</strong> @Paciente.MedicoResponsable | <strong>Orden Activa:</strong> #@IdOrden
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="row g-3">
+        <!-- Columna Izquierda: Registro de Nueva Evolución y Solicitud de Exámenes -->
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                    <span>
+                        <i class="bi bi-pencil-square me-1"></i>
+                        @(EvolucionForm.IdEvolucion > 0 ? $"Editando Evolución #{EvolucionForm.IdEvolucion}" : "Nueva Nota de Evolución Médica")
+                    </span>
+                    @if (EvolucionForm.IdEvolucion > 0)
+                    {
+                        <button class="btn btn-xs btn-outline-secondary py-0" @onclick="LimpiarFormulario">Nueva</button>
+                    }
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Fecha de Evolución</label>
+                            <input type="date" class="form-control form-control-sm" @bind="EvolucionForm.Fecha" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Hora</label>
+                            <input type="text" class="form-control form-control-sm" @bind="EvolucionForm.Hora" placeholder="HH:mm" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Nota de Evolución Clínica (Subjetivo / Objetivo / Plan del Turno) *</label>
+                            <textarea class="form-control form-control-sm" rows="5" @bind="EvolucionForm.Descripcion"
+                                      placeholder="Describa el estado clínico actual del paciente, respuesta al tratamiento, constantes relevantes y ajustes terapéuticos..."></textarea>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-primary w-100" @onclick="GuardarEvolucionAsync">
+                        <i class="bi bi-floppy-fill me-1"></i>@(EvolucionForm.IdEvolucion > 0 ? "Actualizar Evolución" : "Registrar Nota de Evolución")
+                    </button>
+                </div>
+            </div>
+
+            <!-- Solicitud de Exámenes Complementarios asociados a Evolución -->
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold text-primary">
+                    <i class="bi bi-eyedropper me-1"></i>Solicitar Laboratorio / Imagenología en Evolución
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Área</label>
+                            <select class="form-select form-select-sm" @bind="NuevaOrdenExamen.TipoCategoria">
+                                <option value="LAB">Laboratorio Clínico</option>
+                                <option value="RX">Imagenología (RX/Eco)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Evolución #</label>
+                            <select class="form-select form-select-sm" @bind="NuevaOrdenExamen.IdEvolucion">
+                                <option value="0">General de la Orden</option>
+                                @foreach (var ev in Evoluciones)
+                                {
+                                    <option value="@ev.IdEvolucion">Evolución #@ev.IdEvolucion (@ev.Hora)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Cantidad</label>
+                            <input type="number" min="1" class="form-control form-control-sm" @bind="NuevaOrdenExamen.Cantidad" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Estudio / Examen Solicitado</label>
+                            <input type="text" class="form-control form-control-sm" @bind="NuevaOrdenExamen.DescripcionExamen" placeholder="Ej: Hemograma, Eco Abdominal..." />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Indicación Clínica / Muestra</label>
+                            <input type="text" class="form-control form-control-sm" @bind="NuevaOrdenExamen.Observaciones" placeholder="Ayuno, región anatómica..." />
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-sm btn-outline-primary w-100" @onclick="AgregarExamenEvolucionAsync">
+                                <i class="bi bi-plus-circle me-1"></i>Adjuntar Orden de Examen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Línea de Tiempo de Evoluciones del Paciente -->
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-clock-history me-1"></i>Cronología de Evoluciones Médicas (@Evoluciones.Count)</span>
+                    <span class="badge bg-secondary">NHCL #@Nhcl</span>
+                </div>
+                <div class="card-body" style="max-height: 680px; overflow-y: auto;">
+                    @if (!Evoluciones.Any())
+                    {
+                        <div class="text-center text-muted py-5">
+                            <i class="bi bi-journal-x fs-1 d-block mb-2"></i>
+                            No existen evoluciones médicas registradas para este filtro.
+                        </div>
+                    }
+                    @foreach (var ev in Evoluciones)
+                    {
+                        <div class="border rounded p-3 mb-3 shadow-xs bg-light bg-opacity-50">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                                <div>
+                                    <span class="badge bg-primary me-1">Evolución #@ev.IdEvolucion</span>
+                                    <span class="badge bg-dark me-1">Orden #@ev.IdOrden</span>
+                                    <strong class="small text-secondary">
+                                        <i class="bi bi-calendar3 me-1"></i>@ev.Fecha.ToString("yyyy-MM-dd")
+                                        <i class="bi bi-clock ms-2 me-1"></i>@ev.Hora
+                                    </strong>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-info text-dark"><i class="bi bi-person-badge me-1"></i>@ev.NombreMedico</span>
+                                    <button class="btn btn-sm btn-outline-secondary py-0 px-2" @onclick="() => SeleccionarParaEditar(ev)" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-2" @onclick="() => EliminarEvolucionAsync(ev.IdEvolucion)" title="Anular">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <p class="mb-2 small" style="white-space: pre-wrap;">@ev.Descripcion</p>
+
+                            @if (ev.ExamenesLabAsociados.Any() || ev.ExamenesImagenAsociados.Any())
+                            {
+                                <div class="mt-2 pt-2 border-top small">
+                                    <strong class="text-primary d-block mb-1"><i class="bi bi-clipboard2-check me-1"></i>Exámenes Solicitados en esta Evolución:</strong>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @foreach (var ex in ev.ExamenesLabAsociados.Concat(ev.ExamenesImagenAsociados))
+                                        {
+                                            <span class="badge @(ex.TipoCategoria == "LAB" ? "bg-success" : "bg-warning text-dark") d-inline-flex align-items-center gap-1">
+                                                [@ex.TipoCategoria] @ex.DescripcionExamen
+                                                <button type="button" class="btn-close btn-close-white" style="font-size: 0.55rem;"
+                                                        @onclick="() => EliminarOrdenExamenAsync(ex.Sec, ex.TipoCategoria)"></button>
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private int IdOrdenInput { get; set; }
+    private int NhclInput { get; set; }
+    private bool FiltrarSoloOrdenActual { get; set; }
+    private bool CargandoInicial { get; set; } = true;
+    private string? MensajeAlerta { get; set; }
+
+    private PacienteHeaderDto? Paciente { get; set; }
+    private List<EvolucionMedicaDto> Evoluciones { get; set; } = new();
+    private EvolucionMedicaDto EvolucionForm { get; set; } = new();
+    private OrdenExamenEvolucionDto NuevaOrdenExamen { get; set; } = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        CargandoInicial = true;
+        await Task.Yield();
+
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0 && Nhcl <= 0)
+        {
+            var activas = await KardexService.ObtenerOrdenesActivasAsync();
+            if (activas.Count > 0)
+            {
+                IdOrden = activas[0].IdOrdenAtencion;
+                Nhcl = activas[0].Nhcl;
+            }
+        }
+
+        if (IdOrden > 0 || Nhcl > 0)
+        {
+            IdOrdenInput = IdOrden;
+            NhclInput = Nhcl;
+            await CargarDatosAsync();
+        }
+        CargandoInicial = false;
+    }
+
+    private async Task CargarPorInputAsync()
+    {
+        IdOrden = IdOrdenInput;
+        Nhcl = NhclInput;
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        if (IdOrden > 0)
+        {
+            Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
+            if (Paciente != null && Nhcl <= 0)
+            {
+                Nhcl = Paciente.Nhcl;
+                NhclInput = Nhcl;
+            }
+            Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
+        }
+
+        await RecargarEvolucionesAsync();
+        LimpiarFormulario();
+    }
+
+    private async Task RecargarEvolucionesAsync()
+    {
+        if (Nhcl <= 0) return;
+        int? filtroOrden = FiltrarSoloOrdenActual && IdOrden > 0 ? IdOrden : null;
+        Evoluciones = await ConsultaService.ObtenerEvolucionesPacienteAsync(Nhcl, filtroOrden);
+    }
+
+    private void LimpiarFormulario()
+    {
+        EvolucionForm = new EvolucionMedicaDto
+        {
+            IdOrden = IdOrden,
+            Nhcl = Nhcl,
+            Fecha = DateTime.Today,
+            Hora = DateTime.Now.ToString("HH:mm")
+        };
+    }
+
+    private void SeleccionarParaEditar(EvolucionMedicaDto ev)
+    {
+        EvolucionForm = new EvolucionMedicaDto
+        {
+            IdEvolucion = ev.IdEvolucion,
+            IdOrden = ev.IdOrden,
+            Nhcl = ev.Nhcl,
+            Fecha = ev.Fecha,
+            Hora = ev.Hora,
+            Descripcion = ev.Descripcion,
+            IdEscogido = ev.IdEscogido
+        };
+    }
+
+    private async Task GuardarEvolucionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(EvolucionForm.Descripcion)) return;
+        EvolucionForm.IdOrden = IdOrden;
+        EvolucionForm.Nhcl = Nhcl;
+        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        int idCreado = await ConsultaService.GuardarEvolucionMedicaAsync(EvolucionForm, idUser);
+        MensajeAlerta = $"Evolución médica #{idCreado} guardada correctamente.";
+        await RecargarEvolucionesAsync();
+        LimpiarFormulario();
+    }
+
+    private async Task EliminarEvolucionAsync(int idEvolucion)
+    {
+        await ConsultaService.EliminarEvolucionMedicaAsync(idEvolucion);
+        await RecargarEvolucionesAsync();
+    }
+
+    private async Task AgregarExamenEvolucionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NuevaOrdenExamen.DescripcionExamen)) return;
+        NuevaOrdenExamen.IdOrden = IdOrden;
+        NuevaOrdenExamen.Nhcl = Nhcl;
+        if (NuevaOrdenExamen.IdEvolucion == 0 && Evoluciones.Any())
+        {
+            NuevaOrdenExamen.IdEvolucion = Evoluciones.First().IdEvolucion;
+        }
+        await ConsultaService.AgregarOrdenExamenAsync(NuevaOrdenExamen);
+        NuevaOrdenExamen = new OrdenExamenEvolucionDto { TipoCategoria = NuevaOrdenExamen.TipoCategoria, IdEvolucion = NuevaOrdenExamen.IdEvolucion };
+        await RecargarEvolucionesAsync();
+    }
+
+    private async Task EliminarOrdenExamenAsync(int sec, string categoria)
+    {
+        await ConsultaService.EliminarOrdenExamenAsync(sec, categoria);
+        await RecargarEvolucionesAsync();
+    }
+
+    private async Task ExportarPdfAsync()
+    {
+        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente HOSVET" };
+        var pdfBytes = ReportService.GenerarEvolucionesPdf(pac, Evoluciones);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Evoluciones_NHCL_{Nhcl}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+    }
+}

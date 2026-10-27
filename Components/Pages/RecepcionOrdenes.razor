@@ -1,0 +1,413 @@
+@page "/admision/ordenes"
+@using HosvetKardex.Web.Models
+@using HosvetKardex.Web.Services
+@inject IAdmisionFacturacionService AdmisionService
+@inject SessionStateService SessionState
+@inject NavigationManager NavManager
+
+<PageTitle>HOSVET — Recepción, Triaje y Órdenes de Atención</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- Encabezado -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded-3 shadow-sm bg-white border-start border-4 border-success">
+        <div>
+            <h4 class="mb-0 fw-bold text-success">
+                <i class="bi bi-clipboard2-pulse-fill me-2"></i>Recepción de Pacientes, Triaje y Órdenes de Atención
+            </h4>
+            <small class="text-muted">
+                Asignación de médico tratante, triaje clínico, cola de espera en vivo y despacho por área.
+            </small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/admision/clientes-pacientes" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-people me-1"></i>Clientes / Mascotas
+            </a>
+            <a href="/admision/citas" class="btn btn-outline-dark btn-sm">
+                <i class="bi bi-calendar-week me-1"></i>Agenda de Citas
+            </a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_mensajeAlerta))
+    {
+        <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2" role="alert">
+            <i class="bi @(_esError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@_mensajeAlerta
+            <button type="button" class="btn-close" @onclick="() => _mensajeAlerta = string.Empty"></button>
+        </div>
+    }
+
+    @if (_cargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando recepción, triaje y órdenes de atención...</span>
+        </div>
+    }
+
+    <!-- Fila Superior: Conteo de Médicos en Espera (Conteomedicos) -->
+    <div class="row g-2 mb-3">
+        @foreach (var med in _conteoMedicos)
+        {
+            <div class="col-md-3 col-sm-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-bold text-dark small">@med.Medico</div>
+                            <span class="badge bg-light text-secondary border">@med.Especialidad</span>
+                        </div>
+                        <div class="text-center">
+                            <span class="badge rounded-pill @(med.EnEspera >= 3 ? "bg-danger" : "bg-primary") fs-6 px-3">
+                                @med.EnEspera
+                            </span>
+                            <div class="text-muted" style="font-size:0.7rem;">En espera</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="row g-3">
+        <!-- Columna Izquierda: Emisión de Nueva Orden de Atención -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-success text-white fw-bold">
+                    <i class="bi bi-plus-circle me-1"></i>Generar Nueva Orden de Atención
+                </div>
+                <div class="card-body">
+                    <!-- Selector rápido de paciente -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">1. Buscar Paciente por NHCL, Nombre o Cédula</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" placeholder="Ej: 5001, MAX, Mendoza..."
+                                   @bind="_filtroPaciente" @bind:event="oninput" @onkeyup="BuscarPacientesAsync" />
+                            <button class="btn btn-outline-secondary" type="button" @onclick="BuscarPacientesAsync">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+
+                        <div class="list-group list-group-flush border rounded mt-1" style="max-height:155px; overflow-y:auto;">
+                            @foreach (var pac in _pacientesEncontrados)
+                            {
+                                bool sel = _nuevaOrden.Nhcl == pac.MasNhcl;
+                                <button type="button"
+                                        class="list-group-item list-group-item-action py-1 px-2 d-flex justify-content-between align-items-center @(sel ? "active" : "")"
+                                        @onclick="() => SeleccionarPacienteParaOrden(pac)">
+                                    <div>
+                                        <strong>#@pac.MasNhcl — @pac.MasNombre</strong>
+                                        <small class="d-block @(sel ? "text-light" : "text-muted")">@pac.ClienteNombre (@pac.EspecieDescripcion)</small>
+                                    </div>
+                                    <span class="badge @(pac.MasOrigen == "T" ? "bg-success" : "bg-info")">
+                                        @(pac.MasOrigen == "T" ? "TUERI" : "HDEV")
+                                    </span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <EditForm Model="_nuevaOrden" OnValidSubmit="CrearOrdenAtencionAsync">
+                        <DataAnnotationsValidator />
+
+                        <div class="p-2 rounded bg-light border mb-2 small">
+                            <div><strong>Paciente Seleccionado:</strong> @(_nuevaOrden.Nhcl > 0 ? $"#{_nuevaOrden.Nhcl} - {_nuevaOrden.NombreMascota}" : "Ninguno")</div>
+                            <div><strong>Propietario:</strong> @_nuevaOrden.NombrePropietario</div>
+                        </div>
+
+                        <div class="row g-2">
+                            <div class="col-md-12">
+                                <label class="form-label small fw-bold">2. Especialidad Requerida</label>
+                                <select class="form-select form-select-sm" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync">
+                                    @foreach (var esp in _especialidades)
+                                    {
+                                        <option value="@esp.Id">@esp.Descripcion</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="form-label small fw-bold">3. Médico Tratante Asignado</label>
+                                <select class="form-select form-select-sm" @bind="_nuevaOrden.IdMedico">
+                                    @foreach (var med in _medicosDisponibles)
+                                    {
+                                        <option value="@med.Id">@med.Descripcion</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">4. Destino / Despacho</label>
+                                <select class="form-select form-select-sm" @bind="_nuevaOrden.TipoDespacho">
+                                    <option value="0">0 — Consulta / Ambulatorio</option>
+                                    <option value="3">3 — Hospitalización Directa</option>
+                                    <option value="4">4 — Quirófano / Cirugía</option>
+                                    <option value="1">1 — Despacho Imagenología</option>
+                                    <option value="2">2 — Despacho Laboratorio</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">5. Semáforo Triaje</label>
+                                <select class="form-select form-select-sm" @bind="_nuevaOrden.ColorTriaje">
+                                    <option value="green">🟢 Verde — Estándar</option>
+                                    <option value="yellow">🟡 Amarillo — Prioritario</option>
+                                    <option value="red">🔴 Rojo — Emergencia</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Fecha Atención</label>
+                                <InputDate class="form-control form-control-sm" @bind-Value="_nuevaOrden.FechaOrden" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Hora Ingreso</label>
+                                <InputText class="form-control form-control-sm" @bind-Value="_nuevaOrden.HoraOrden" />
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100 mt-3 fw-bold" disabled="@(_nuevaOrden.Nhcl == 0)">
+                            <i class="bi bi-check2-circle me-1"></i>Registrar Orden y Enviar a Sala de Espera
+                        </button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Tablero de Órdenes Activas del Día y Ruteo Clínico -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span class="fw-bold text-dark">
+                        <i class="bi bi-list-check me-1"></i>Tablero de Órdenes de Atención en Curso (@_ordenes.Count)
+                    </span>
+                    <div class="d-flex gap-2 align-items-center">
+                        <input type="date" class="form-control form-control-sm" style="width:145px;"
+                               value="@_fechaConsulta.ToString("yyyy-MM-dd")"
+                               @onchange="CambiarFechaTableroAsync" />
+                        <select class="form-select form-select-sm" style="width:160px;" value="@_filtroEtapa" @onchange="CambiarEtapaFiltroAsync">
+                            <option value="">Todas las Etapas</option>
+                            <option value="Consulta">Consulta Externa</option>
+                            <option value="Hospitalización">Hospitalización</option>
+                            <option value="Quirófano">Quirófano</option>
+                            <option value="Imagenología">Imagenología</option>
+                            <option value="Laboratorio">Laboratorio</option>
+                        </select>
+                        <input type="text" class="form-control form-control-sm" style="width:180px;" placeholder="Filtrar orden o mascota..."
+                               @bind="_filtroOrdenTexto" @bind:event="oninput" @onkeyup="CargarOrdenesAsync" />
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>N° Orden</th>
+                                    <th>Hora</th>
+                                    <th>Paciente (NHCL)</th>
+                                    <th>Propietario</th>
+                                    <th>Especialidad / Médico</th>
+                                    <th>Etapa Actual</th>
+                                    <th>Proforma BC</th>
+                                    <th class="text-end">Accesos Clínicos Directos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var o in _ordenes)
+                                {
+                                    <tr>
+                                        <td class="fw-bold text-primary">
+                                            #@o.IdOrden
+                                            <span class="ms-1 badge rounded-pill" style="background-color:@ObtenerColorHexTriaje(o.ColorTriaje)">•</span>
+                                        </td>
+                                        <td>@o.Hora</td>
+                                        <td>
+                                            <div class="fw-bold">@o.Mascota <span class="text-muted">(#@o.Nhcl)</span></div>
+                                            <small class="text-muted">@o.Especie — @(o.TipoOrigen == "T" ? "TUERI" : "HDEV")</small>
+                                        </td>
+                                        <td>
+                                            <div>@o.Propietario</div>
+                                            <small class="text-muted">@o.Cedula</small>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold">@o.Medico</div>
+                                            <small class="text-muted">@o.Especialidad</small>
+                                        </td>
+                                        <td>
+                                            <span class="badge @ObtenerBadgeEtapa(o.Etapa)">@o.Etapa</span>
+                                        </td>
+                                        <td>
+                                            @if (o.Facturado == "S")
+                                            {
+                                                <span class="badge bg-success"><i class="bi bi-check-all me-1"></i>@o.NumFacturaBc</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning text-dark">Pendiente</span>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="btn-group btn-group-sm">
+                                                <a href="/consulta/fichamedica/@o.IdOrden/@o.Nhcl" class="btn btn-outline-primary" title="Ficha Médica SOAP">
+                                                    SOAP
+                                                </a>
+                                                <a href="/kardex/enfermeria?orden=@o.IdOrden&nhcl=@o.Nhcl" class="btn btn-outline-indigo" style="border-color:#4f46e5;color:#4f46e5;" title="Kardex Enfermería">
+                                                    Kardex
+                                                </a>
+                                                <a href="/hospitalizacion/ficha/@o.IdOrden/@o.Nhcl" class="btn btn-outline-info" title="Ficha Hospitalización 24h">
+                                                    Hosp
+                                                </a>
+                                                <a href="/quirofano/preanestesia/@o.IdOrden/@o.Nhcl" class="btn btn-outline-danger" title="Quirófano / Anestesia">
+                                                    Quir
+                                                </a>
+                                                <a href="/facturacion/proformas?ordenId=@o.IdOrden" class="btn btn-outline-success" title="Emitir Proforma Business Central">
+                                                    $ BC
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int? NhclPreseleccionado { get; set; }
+
+    private List<CatalogoItemGenericoDto> _especialidades = new();
+    private List<CatalogoItemGenericoDto> _medicosDisponibles = new();
+    private List<ConteoMedicoEsperaDto> _conteoMedicos = new();
+    private List<PacienteMascotaDto> _pacientesEncontrados = new();
+    private List<OrdenAtencionResumenDto> _ordenes = new();
+
+    private NuevaOrdenAtencionDto _nuevaOrden = new();
+    private string _filtroPaciente = string.Empty;
+    private string _filtroOrdenTexto = string.Empty;
+    private string _filtroEtapa = string.Empty;
+    private DateTime _fechaConsulta = DateTime.Today;
+    private bool _cargandoInicial = true;
+    private string _mensajeAlerta = string.Empty;
+    private bool _esError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cargandoInicial = true;
+        await Task.Yield();
+
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        if (!string.IsNullOrWhiteSpace(uri.Query))
+        {
+            var q = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            if (int.TryParse(q["nhcl"], out int qNhcl) && qNhcl > 0)
+                NhclPreseleccionado = qNhcl;
+        }
+
+        var tEsp = AdmisionService.ObtenerEspecialidadesAsync();
+        var tPac = BuscarPacientesAsync();
+        var tOrd = CargarOrdenesAsync();
+        await Task.WhenAll(tEsp, tPac, tOrd);
+
+        _especialidades = await tEsp;
+        int espInicial = _especialidades.FirstOrDefault()?.Id ?? 1;
+        _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(espInicial);
+
+        _nuevaOrden.IdEspecialidad = espInicial;
+        _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 1;
+
+        if (NhclPreseleccionado.HasValue && NhclPreseleccionado.Value > 0)
+        {
+            var encontrado = _pacientesEncontrados.FirstOrDefault(p => p.MasNhcl == NhclPreseleccionado.Value);
+            if (encontrado != null)
+            {
+                SeleccionarPacienteParaOrden(encontrado);
+            }
+        }
+        else if (_pacientesEncontrados.Count > 0)
+        {
+            SeleccionarPacienteParaOrden(_pacientesEncontrados[0]);
+        }
+        _cargandoInicial = false;
+    }
+
+    private async Task BuscarPacientesAsync()
+    {
+        _pacientesEncontrados = await AdmisionService.BuscarMascotasAsync(_filtroPaciente);
+    }
+
+    private void SeleccionarPacienteParaOrden(PacienteMascotaDto pac)
+    {
+        _nuevaOrden.Nhcl = pac.MasNhcl;
+        _nuevaOrden.IdCliente = pac.MasIdCliente;
+        _nuevaOrden.NombreMascota = pac.MasNombre;
+        _nuevaOrden.NombrePropietario = pac.ClienteNombre;
+        _nuevaOrden.TipoOrigen = pac.MasOrigen;
+        _nuevaOrden.ColorTriaje = pac.MasColorTriaje;
+    }
+
+    private async Task CambiarEspecialidadAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int idEsp))
+        {
+            _nuevaOrden.IdEspecialidad = idEsp;
+            _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(idEsp);
+            _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 1;
+        }
+    }
+
+    private async Task CrearOrdenAtencionAsync()
+    {
+        if (_nuevaOrden.Nhcl <= 0)
+        {
+            _esError = true;
+            _mensajeAlerta = "Seleccione primero un paciente (NHCL) de la lista.";
+            return;
+        }
+
+        int idUsuario = SessionState.UsuarioActual?.IdUsuario ?? 1;
+        int idCreada = await AdmisionService.CrearOrdenAtencionAsync(_nuevaOrden, idUsuario, "127.0.0.1");
+        await CargarOrdenesAsync();
+
+        _esError = false;
+        _mensajeAlerta = $"Orden de Atención #{idCreada} creada exitosamente para {_nuevaOrden.NombreMascota} (NHCL #{_nuevaOrden.Nhcl}).";
+    }
+
+    private async Task CambiarFechaTableroAsync(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var fec))
+        {
+            _fechaConsulta = fec;
+            await CargarOrdenesAsync();
+        }
+    }
+
+    private async Task CambiarEtapaFiltroAsync(ChangeEventArgs e)
+    {
+        _filtroEtapa = e.Value?.ToString() ?? string.Empty;
+        await CargarOrdenesAsync();
+    }
+
+    private async Task CargarOrdenesAsync()
+    {
+        _ordenes = await AdmisionService.ObtenerOrdenesDelDiaAsync(_fechaConsulta, _filtroOrdenTexto, _filtroEtapa);
+        _conteoMedicos = await AdmisionService.ObtenerConteoMedicosEsperaAsync(_fechaConsulta, 0);
+    }
+
+    private static string ObtenerColorHexTriaje(string color) => color switch
+    {
+        "red" => "#dc2626",
+        "yellow" => "#d97706",
+        _ => "#16a34a"
+    };
+
+    private static string ObtenerBadgeEtapa(string etapa) => etapa switch
+    {
+        "Hospitalización" => "bg-info text-dark",
+        "Quirófano" => "bg-danger",
+        "Imagenología" => "bg-primary",
+        "Laboratorio" => "bg-secondary",
+        _ => "bg-success"
+    };
+}

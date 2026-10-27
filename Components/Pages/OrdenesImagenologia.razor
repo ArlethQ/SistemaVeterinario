@@ -1,0 +1,363 @@
+@page "/diagnostico/imagenologia"
+@page "/diagnostico/imagenologia/{IdOrden:int}/{Nhcl:int}"
+@inject ILaboratorioImagenService LabService
+@inject IConsultaExternaService ConsultaService
+@inject IKardexService KardexService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>HOSVET - Órdenes de Imagenología (Rayos X y Ecografía)</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- Encabezado y Acciones -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-white p-3 rounded shadow-sm border-start border-4 border-info">
+        <div>
+            <h4 class="mb-0 text-primary fw-bold">
+                <i class="bi bi-lungs-fill me-2"></i>Órdenes y Despacho de Imagenología (Rayos X y Ecografía)
+            </h4>
+            <small class="text-muted">Solicitud y despacho de estudios de radiología digital y ecografía diagnóstica.</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
+            <div class="input-group input-group-sm" style="width: 260px;">
+                <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
+                <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
+                <input type="number" class="form-control" placeholder="NHCL" @bind="NhclInput" />
+                <button class="btn btn-primary" @onclick="CargarPorInputAsync">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+            <button class="btn btn-sm btn-success" @onclick="GuardarCambiosOrdenAsync" disabled="@(!OrdenesActuales.Any())">
+                <i class="bi bi-floppy-fill me-1"></i>Guardar Orden RX/Eco
+            </button>
+            <button class="btn btn-sm btn-danger" @onclick="ExportarPdfAsync" disabled="@(!OrdenesActuales.Any())">
+                <i class="bi bi-file-earmark-pdf-fill me-1"></i>Pedido Imagen PDF + QR
+            </button>
+            <button class="btn btn-sm btn-outline-dark" @onclick='() => Nav.NavigateTo($"/diagnostico/bandeja/{IdOrden}/{Nhcl}")'>
+                <i class="bi bi-inbox-fill me-1"></i>Bandeja e Informes
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(MensajeAlerta))
+    {
+        <div class="alert @(EsError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2">
+            <i class="bi @(EsError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@MensajeAlerta
+            <button type="button" class="btn-close py-2" @onclick="() => MensajeAlerta = null"></button>
+        </div>
+    }
+
+    @if (CargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando estudios de Rayos X y Ecografía...</span>
+        </div>
+    }
+
+    @if (Paciente != null)
+    {
+        <div class="card shadow-sm border-0 mb-3 bg-info bg-opacity-10">
+            <div class="card-body py-2 px-3 small">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <strong>Paciente:</strong> @Paciente.PacienteNombre (@Paciente.Especie - @Paciente.Raza - @Paciente.Sexo)
+                        <span class="badge bg-dark ms-1">NHCL #@Paciente.Nhcl</span>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Propietario:</strong> @Paciente.PropietarioNombre (C.I.: @Paciente.ClienteCedula)
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <strong>Médico Solicitante:</strong> @Paciente.MedicoResponsable | <strong>Orden:</strong> #@IdOrden
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="row g-3">
+        <!-- Columna Izquierda: Selector de Modalidad (Rayos X / Ecografía / Todos) -->
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-camera-reels-fill me-1"></i>Catálogo de Estudios Radiológicos y Ecográficos</span>
+                    <span class="badge bg-info text-dark">@CatalogoEstudios.Count estudios</span>
+                </div>
+                <div class="card-body">
+                    <!-- Selector de Modalidad (Reemplaza rbt_rayosx, rbt_ecografia, rbt_otrosRx) -->
+                    <div class="btn-group w-100 mb-3" role="group">
+                        <button type="button" class="btn btn-sm @(ModalidadSeleccionada == "RX" ? "btn-primary fw-bold" : "btn-outline-primary")"
+                                @onclick='() => SeleccionarModalidadAsync("RX")'>
+                            ☢️ Rayos X (RX)
+                        </button>
+                        <button type="button" class="btn btn-sm @(ModalidadSeleccionada == "ECOS" ? "btn-primary fw-bold" : "btn-outline-primary")"
+                                @onclick='() => SeleccionarModalidadAsync("ECOS")'>
+                            🔊 Ecografía (ECOS)
+                        </button>
+                        <button type="button" class="btn btn-sm @(ModalidadSeleccionada == "TODOS" ? "btn-primary fw-bold" : "btn-outline-primary")"
+                                @onclick='() => SeleccionarModalidadAsync("TODOS")'>
+                            📋 Todos los Estudios
+                        </button>
+                    </div>
+
+                    <div class="input-group input-group-sm mb-2">
+                        <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" placeholder="Filtrar estudio por descripción (ej: Tórax, Abdomen, Doppler)..."
+                               @bind="FiltroTexto" @bind:event="oninput" @bind:after="CargarCatalogoAsync" />
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold mb-1">Proyecciones / Región Anatómica / Indicación Clínica</label>
+                        <input type="text" class="form-control form-control-sm" @bind="ObservacionDefault"
+                               placeholder="Ej: Proyección LL derecha + VD de tórax, sospecha de metástasis / cuerpo extraño..." />
+                    </div>
+
+                    <div class="border rounded p-2 bg-light mb-2" style="max-height: 300px; overflow-y: auto;">
+                        @foreach (var est in CatalogoEstudios)
+                        {
+                            <div class="form-check py-1 border-bottom d-flex justify-content-between align-items-center small">
+                                <div>
+                                    <input class="form-check-input me-2" type="checkbox" id="chk_rx_@est.CodigoProd" @bind="est.Seleccionado" />
+                                    <label class="form-check-label fw-semibold" for="chk_rx_@est.CodigoProd">
+                                        <span class="badge @(est.Categoria == "ECOS" ? "bg-info text-dark" : "bg-secondary") me-1">@est.Categoria</span>
+                                        [@est.CodigoProd] @est.Descripcion
+                                    </label>
+                                </div>
+                                <span class="badge bg-white text-dark border">$@est.PrecioUnitario.ToString("N2")</span>
+                            </div>
+                        }
+                    </div>
+
+                    <button class="btn btn-sm btn-primary w-100" @onclick="AgregarEstudiosSeleccionadosAsync">
+                        <i class="bi bi-plus-circle-fill me-1"></i>Agregar Estudios Seleccionados (@CatalogoEstudios.Count(x => x.Seleccionado))
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Estudios Solicitados en la Orden -->
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-card-checklist me-1"></i>Estudios de Imagenología en la Orden #@IdOrden</span>
+                    <span class="badge bg-success fs-6">Total Estimado: $@OrdenesActuales.Sum(x => x.Precio * x.Cantidad).ToString("N2")</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Estudio Solicitado</th>
+                                    <th style="width: 80px;" class="text-center">Cant.</th>
+                                    <th style="width: 220px;">Proyecciones / Observaciones</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-end">Subtotal</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!OrdenesActuales.Any())
+                                {
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted py-4">
+                                            Seleccione uno o más estudios radiológicos o ecográficos del panel izquierdo.
+                                        </td>
+                                    </tr>
+                                }
+                                @foreach (var item in OrdenesActuales)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@item.CodigoProd</td>
+                                        <td class="fw-semibold">@item.DescripcionEstudio</td>
+                                        <td>
+                                            <input type="number" min="1" class="form-control form-control-sm py-0 text-center" @bind="item.Cantidad" />
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm py-0" @bind="item.Observaciones" />
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge @(item.Estado == "REALIZADO" ? "bg-success" : "bg-warning text-dark")">
+                                                @item.Estado
+                                            </span>
+                                        </td>
+                                        <td class="text-end fw-semibold">$@((item.Precio * item.Cantidad).ToString("N2"))</td>
+                                        <td class="text-end">
+                                            <button class="btn btn-sm btn-link text-danger p-0" @onclick="() => EliminarEstudioOrdenAsync(item.Sec)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @if (DiagnosticosOrden.Any())
+                    {
+                        <div class="mt-3 p-2 bg-light rounded border small">
+                            <strong class="text-primary d-block mb-1"><i class="bi bi-tags me-1"></i>Diagnósticos CIE-10 vinculados:</strong>
+                            @foreach (var d in DiagnosticosOrden)
+                            {
+                                <span class="badge bg-secondary me-1">[@d.CodigoDiag] @d.NombreCie10 (@d.TipoDiag)</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private int IdOrdenInput { get; set; }
+    private int NhclInput { get; set; }
+    private string ModalidadSeleccionada { get; set; } = "TODOS";
+    private string FiltroTexto { get; set; } = string.Empty;
+    private string ObservacionDefault { get; set; } = string.Empty;
+    private bool CargandoInicial { get; set; } = true;
+    private string? MensajeAlerta { get; set; }
+    private bool EsError { get; set; }
+
+    private PacienteHeaderDto? Paciente { get; set; }
+    private List<PruebaCatalogoDto> CatalogoEstudios { get; set; } = new();
+    private List<OrdenImagenItemDto> OrdenesActuales { get; set; } = new();
+    private List<DiagnosticoCie10Dto> DiagnosticosOrden { get; set; } = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        CargandoInicial = true;
+        await Task.Yield();
+
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0)
+        {
+            var activas = await KardexService.ObtenerOrdenesActivasAsync();
+            if (activas.Count > 0)
+            {
+                IdOrden = activas[0].IdOrdenAtencion;
+                Nhcl = activas[0].Nhcl;
+            }
+        }
+
+        var tCat = CargarCatalogoAsync();
+        if (IdOrden > 0)
+        {
+            IdOrdenInput = IdOrden;
+            NhclInput = Nhcl;
+            var tOrd = CargarDatosOrdenAsync();
+            await Task.WhenAll(tCat, tOrd);
+        }
+        else
+        {
+            await tCat;
+        }
+        CargandoInicial = false;
+    }
+
+    private async Task CargarPorInputAsync()
+    {
+        if (IdOrdenInput > 0)
+        {
+            IdOrden = IdOrdenInput;
+            Nhcl = NhclInput;
+            await CargarDatosOrdenAsync();
+        }
+    }
+
+    private async Task SeleccionarModalidadAsync(string modalidad)
+    {
+        ModalidadSeleccionada = modalidad;
+        await CargarCatalogoAsync();
+    }
+
+    private async Task CargarCatalogoAsync()
+    {
+        CatalogoEstudios = await LabService.ObtenerCatalogoImagenologiaAsync(ModalidadSeleccionada, FiltroTexto, Session.Apostrofe);
+    }
+
+    private async Task CargarDatosOrdenAsync()
+    {
+        Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
+        if (Paciente != null && Nhcl <= 0)
+        {
+            Nhcl = Paciente.Nhcl;
+            NhclInput = Nhcl;
+        }
+        Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
+
+        var tOrd = LabService.ObtenerOrdenesImagenAsync(IdOrden, Nhcl);
+        var tDiag = ConsultaService.ObtenerDiagnosticosOrdenAsync(IdOrden);
+        await Task.WhenAll(tOrd, tDiag);
+
+        OrdenesActuales = await tOrd;
+        DiagnosticosOrden = await tDiag;
+    }
+
+    private async Task AgregarEstudiosSeleccionadosAsync()
+    {
+        if (IdOrden <= 0)
+        {
+            EsError = true;
+            MensajeAlerta = "Seleccione primero una Orden de Atención válida.";
+            return;
+        }
+
+        var seleccionados = CatalogoEstudios.Where(x => x.Seleccionado).ToList();
+        if (!seleccionados.Any()) return;
+
+        foreach (var est in seleccionados)
+        {
+            await LabService.AgregarOrdenImagenAsync(new OrdenImagenItemDto
+            {
+                IdOrden = IdOrden,
+                Nhcl = Nhcl,
+                CodigoProd = est.CodigoProd,
+                DescripcionEstudio = est.Descripcion,
+                Observaciones = ObservacionDefault,
+                Cantidad = 1,
+                Estado = "Por Facturar",
+                Fecha = DateTime.Now,
+                Iva = est.GrupoIva,
+                IdDynamics = est.IdDynamics,
+                Medida = est.UnidadMedida,
+                Precio = est.PrecioUnitario
+            });
+            est.Seleccionado = false;
+        }
+
+        ObservacionDefault = string.Empty;
+        OrdenesActuales = await LabService.ObtenerOrdenesImagenAsync(IdOrden, Nhcl);
+        EsError = false;
+        MensajeAlerta = $"Se agregaron {seleccionados.Count} estudio(s) de imagen a la Orden #{IdOrden}.";
+    }
+
+    private async Task GuardarCambiosOrdenAsync()
+    {
+        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        await LabService.ActualizarOrdenesImagenAsync(IdOrden, OrdenesActuales, idUser);
+        EsError = false;
+        MensajeAlerta = $"Orden de Imagenología #{IdOrden} actualizada correctamente.";
+    }
+
+    private async Task EliminarEstudioOrdenAsync(int sec)
+    {
+        await LabService.EliminarOrdenImagenAsync(sec);
+        OrdenesActuales = await LabService.ObtenerOrdenesImagenAsync(IdOrden, Nhcl);
+    }
+
+    private async Task ExportarPdfAsync()
+    {
+        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente HOSVET" };
+        var pdfBytes = ReportService.GenerarOrdenImagenPdf(pac, OrdenesActuales, DiagnosticosOrden);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"PedidoImagenologia_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+    }
+}

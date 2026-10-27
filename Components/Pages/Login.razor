@@ -1,0 +1,83 @@
+@page "/login"
+@inject IAuthService AuthService
+@inject NavigationManager Nav
+
+<PageTitle>HOSVET - Iniciar Sesión</PageTitle>
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5 col-lg-4">
+        <div class="card shadow border-0">
+            <div class="card-header bg-primary text-white text-center py-3">
+                <h5 class="mb-0 fw-bold">HOSPITAL VETERINARIO USFQ</h5>
+                <small>Sistema de Gestión Clínica y Kardex</small>
+            </div>
+            <div class="card-body p-4">
+                @if (!string.IsNullOrWhiteSpace(_mensajeError))
+                {
+                    <div class="alert alert-danger py-2 small">@_mensajeError</div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Usuario:</label>
+                    <input class="form-control" @bind="_username" placeholder="Ingrese su usuario" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Contraseña:</label>
+                    <input type="password" class="form-control" @bind="_password" placeholder="••••••••" />
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Localidad / Sucursal:</label>
+                    <select class="form-select" @bind="_localidad">
+                        <option value="1">HDEV - Hospital de Especialidades Veterinarias (Cumbayá)</option>
+                        <option value="2">EQ - Clínica Equina / Fauna TUERI</option>
+                    </select>
+                </div>
+
+                <button class="btn btn-primary w-100 fw-semibold" @onclick="IngresarAsync" disabled="@_cargando">
+                    @if (_cargando)
+                    {
+                        <span>Validando credenciales...</span>
+                    }
+                    else
+                    {
+                        <span>Ingresar al Sistema</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _username = string.Empty;
+    private string _password = string.Empty;
+    private int _localidad = 1;
+    private string? _mensajeError;
+    private bool _cargando;
+
+    private async Task IngresarAsync()
+    {
+        _mensajeError = null;
+        _cargando = true;
+        try
+        {
+            var resultado = await AuthService.LoginAsync(_username, _password, _localidad);
+            if (!resultado.Exito)
+            {
+                _mensajeError = resultado.Mensaje;
+                return;
+            }
+            Nav.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            _mensajeError = $"Error al conectar con el servidor: {ex.Message}";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+}

@@ -1,0 +1,787 @@
+@page "/consulta/fichamedica"
+@page "/consulta/fichamedica/{IdOrden:int}/{Nhcl:int}"
+@inject IConsultaExternaService ConsultaService
+@inject IKardexService KardexService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>HOSVET - Historia Clínica SOAP y Ficha Médica</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- Encabezado y Acciones -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-white p-3 rounded shadow-sm border-start border-4 border-primary">
+        <div>
+            <h4 class="mb-0 text-primary fw-bold">
+                <i class="bi bi-clipboard2-pulse-fill me-2"></i>Historia Clínica Electrónica & Evaluación SOAP
+            </h4>
+            <small class="text-muted">Examen físico general, metodología clínica orientada a problemas (SOAP), diagnósticos CIE-10, antecedentes y vacunación.</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
+            <div class="input-group input-group-sm" style="width: 270px;">
+                <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
+                <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
+                <input type="number" class="form-control" placeholder="NHCL" @bind="NhclInput" />
+                <button class="btn btn-primary" @onclick="CargarPorInputAsync" title="Cargar Paciente">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+            <button class="btn btn-sm btn-success" @onclick="GuardarFichaCompletaAsync" disabled="@Guardando">
+                <i class="bi bi-floppy-fill me-1"></i>@(Guardando ? "Guardando..." : "Guardar Ficha SOAP")
+            </button>
+            <button class="btn btn-sm btn-outline-danger" @onclick="ExportarPdfAsync">
+                <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF Historia
+            </button>
+            <button class="btn btn-sm btn-outline-primary" @onclick='() => Nav.NavigateTo($"/consulta/recetario/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
+                <i class="bi bi-prescription2 me-1"></i>Ir a Recetario
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(MensajeAlerta))
+    {
+        <div class="alert @(EsError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2" role="alert">
+            <i class="bi @(EsError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@MensajeAlerta
+            <button type="button" class="btn-close py-2" @onclick="() => MensajeAlerta = null"></button>
+        </div>
+    }
+
+    @if (CargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando historia clínica SOAP y antecedentes...</span>
+        </div>
+    }
+
+    <!-- Cinta de Identificación del Paciente y Semáforo de Temperamento -->
+    @if (Paciente != null)
+    {
+        <div class="card shadow-sm border-0 mb-3 bg-primary bg-opacity-10">
+            <div class="card-body py-2 px-3">
+                <div class="row align-items-center g-2 small">
+                    <div class="col-md-3">
+                        <span class="text-muted d-block">PACIENTE / NHCL</span>
+                        <strong class="fs-6 text-primary">@Paciente.PacienteNombre</strong>
+                        <span class="badge bg-dark ms-1">NHCL #@Paciente.Nhcl</span>
+                        <span class="badge bg-secondary ms-1">Orden #@Ficha.MedOrden</span>
+                    </div>
+                    <div class="col-md-3">
+                        <span class="text-muted d-block">ESPECIE / RAZA / SEXO / EDAD</span>
+                        <strong>@Paciente.Especie — @Paciente.Raza (@Paciente.Sexo) | @Paciente.EdadTexto</strong>
+                    </div>
+                    <div class="col-md-3">
+                        <span class="text-muted d-block">PROPIETARIO / CONTACTO</span>
+                        <strong>@Paciente.PropietarioNombre (@Paciente.ClienteCedula)</strong>
+                    </div>
+                    <div class="col-md-3 text-md-end">
+                        <span class="text-muted d-block">TRIAJE TEMPERAMENTO / ESTERILIZADO</span>
+                        <span class="badge @ObtenerClaseBadgeTemperamento(Ficha.Temperamento) fs-6">
+                            <i class="bi bi-shield-fill-exclamation me-1"></i>@Ficha.Temperamento
+                        </span>
+                        <span class="badge @(Ficha.Esterilizado == "S" ? "bg-info text-dark" : "bg-light text-dark border") ms-1">
+                            @(Ficha.Esterilizado == "S" ? "Esterilizado: SÍ" : "Esterilizado: NO")
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Navegación por Pestañas Clínicas -->
+    <ul class="nav nav-tabs mb-3 fw-semibold">
+        <li class="nav-item">
+            <button class="nav-link @(TabActiva == 1 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => TabActiva = 1">
+                <i class="bi bi-heart-pulse me-1"></i>1. Examen Físico, Constantes y Temperamento
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(TabActiva == 2 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => TabActiva = 2">
+                <i class="bi bi-journal-medical me-1"></i>2. Evaluación Clínica SOAP & Plan
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(TabActiva == 3 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => TabActiva = 3">
+                <i class="bi bi-tags-fill me-1"></i>3. Diagnósticos CIE-10 (@Diagnosticos.Count) y Prescripción (@RecetaItems.Count)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(TabActiva == 4 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => TabActiva = 4">
+                <i class="bi bi-shield-plus me-1"></i>4. Antecedentes (@Antecedentes.Count) y Carnet Vacunas (@Vacunas.Count)
+            </button>
+        </li>
+    </ul>
+
+    <!-- TAB 1: EXAMEN FÍSICO, CONSTANTES FISIOLÓGICAS Y TRIAJE -->
+    @if (TabActiva == 1)
+    {
+        <div class="row g-3">
+            <!-- Panel Izquierdo: Constantes Vitales y Semáforo de Temperamento -->
+            <div class="col-lg-5">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        <i class="bi bi-thermometer-half me-1"></i>Constantes Fisiológicas y Triaje de Temperamento
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Tipo de Consulta</label>
+                                <select class="form-select form-select-sm" @bind="Ficha.MedTipoConsulta">
+                                    <option value="Consulta Externa">Consulta Externa</option>
+                                    <option value="Emergencia">Emergencia</option>
+                                    <option value="Control Médico">Control Médico</option>
+                                    <option value="Especialidad">Especialidad</option>
+                                    <option value="Chequeo Preventivo">Chequeo Preventivo</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Esterilizado</label>
+                                <select class="form-select form-select-sm" @bind="Ficha.Esterilizado">
+                                    <option value="S">SÍ</option>
+                                    <option value="N">NO</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Sede / Tipo</label>
+                                <select class="form-select form-select-sm" @bind="Ficha.MedTipo">
+                                    <option value="HDEV">HDEV (Mascotas)</option>
+                                    <option value="TUERI">TUERI (Fauna)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Selector Visual de Temperamento (Semáforo Legacy: blanco, verde, amarillo, rojo) -->
+                        <label class="form-label small fw-semibold d-block">Semáforo de Temperamento del Paciente</label>
+                        <div class="btn-group w-100 mb-3" role="group">
+                            <button type="button" class="btn btn-sm @(Ficha.Temperamento == "TRANQUILO" ? "btn-dark" : "btn-outline-secondary")"
+                                    @onclick='() => SeleccionarTemperamento("TRANQUILO", "imagenes/temperamento/blanco.png")'>
+                                ⚪ Tranquilo
+                            </button>
+                            <button type="button" class="btn btn-sm @(Ficha.Temperamento == "NERVIOSO" ? "btn-success" : "btn-outline-success")"
+                                    @onclick='() => SeleccionarTemperamento("NERVIOSO", "imagenes/temperamento/verde.png")'>
+                                🟢 Nervioso
+                            </button>
+                            <button type="button" class="btn btn-sm @(Ficha.Temperamento == "A LA DEFENSIVA" ? "btn-warning text-dark fw-bold" : "btn-outline-warning text-dark")"
+                                    @onclick='() => SeleccionarTemperamento("A LA DEFENSIVA", "imagenes/temperamento/amarillo.png")'>
+                                🟡 Defensivo
+                            </button>
+                            <button type="button" class="btn btn-sm @(Ficha.Temperamento == "AGRESIVO" ? "btn-danger" : "btn-outline-danger")"
+                                    @onclick='() => SeleccionarTemperamento("AGRESIVO", "imagenes/temperamento/rojo.png")'>
+                                🔴 Agresivo
+                            </button>
+                        </div>
+
+                        <div class="row g-2">
+                            <div class="col-4">
+                                <label class="form-label small fw-semibold">Peso (kg)</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm fw-bold text-primary" @bind="Ficha.Peso" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small fw-semibold">Temp (°C)</label>
+                                <input type="number" step="0.1" class="form-control form-control-sm" @bind="Ficha.Temperatura" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small fw-semibold">FC (lpm)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="Ficha.FrecuenciaCardiaca" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small fw-semibold">FR (rpm)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="Ficha.FrecuenciaRespiratoria" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small fw-semibold">TLLC (seg)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="Ficha.TiempoLlenadoCapilar" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small fw-semibold">Deshidratación (%)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="Ficha.Deshidratacion" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold">Condición Corporal (ICC 1-9)</label>
+                                <input type="range" class="form-range" min="1" max="9" @bind="Ficha.IndiceCondicionCorporal" />
+                                <div class="text-center small fw-bold text-primary">ICC: @Ficha.IndiceCondicionCorporal / 9</div>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold">Pulso / CP</label>
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Cp" placeholder="Fuerte, simétrico, concordante" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Derecho: Exploración Física Regional -->
+            <div class="col-lg-7">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        <i class="bi bi-bandaid me-1"></i>Exploración Clínica por Órganos y Sistemas
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Membranas Mucosas</label>
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Mucosas" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Reflejo Tusígeno / Traqueal</label>
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.ReflejoTusigeno" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Auscultación Cardiopulmonar</label>
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Auscultacion" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Linfonodos Superficiales</label>
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Linfonodos" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Palpación Abdominal</label>
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.PalpacionAbdominal" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Palpación Tiroides / Cuello</label>
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.PalpacionTiroides" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Piel, Pelaje y Anexos</label>
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.PielYAnexos" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Cavidad Oral y Piezas Dentales</label>
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.CavidadOral" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-semibold">Otros Hallazgos del Examen Físico</label>
+                                <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.Otros"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- TAB 2: EVALUACIÓN CLÍNICA SOAP Y PLAN -->
+    @if (TabActiva == 2)
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-file-medical-fill me-1"></i>Metodología Clínica Orientada a Problemas (SOAP)</span>
+                <span class="badge bg-primary bg-opacity-10 text-primary">Pronóstico: @Ficha.MedPronostico</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-primary">Motivo Principal de Consulta *</label>
+                        <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.MedMotivo" placeholder="Motivo por el que acude el propietario..."></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-primary">Antecedentes Médicos Relevantes de la Consulta</label>
+                        <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.MedAntecedente" placeholder="Enfermedades previas, alergias, cirugías..."></textarea>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-indigo">S — SUBJETIVO / ANAMNESIS</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedAnamnesis" placeholder="Relato cronológico de signos clínicos, apetito, consumo de agua, micción, defecación..."></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-indigo">O — OBJETIVO (Hallazgos Clínicos y Lista de Problemas)</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedObjetivo" placeholder="Alteraciones detectadas en el examen físico y lista depurada de problemas..."></textarea>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-indigo">A — ANÁLISIS (Diagnósticos Diferenciales)</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedAnalisis" placeholder="Diagnósticos diferenciales ordenados por probabilidad fisiopatológica..."></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-indigo">P — PLAN DIAGNÓSTICO (Pruebas Complementarias)</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedPlan" placeholder="Exámenes de laboratorio, citología, radiografía, ecografía, interconsultas..."></textarea>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-success">PLAN TERAPÉUTICO / TRATAMIENTO INSTAURADO</label>
+                        <textarea class="form-control form-control-sm" rows="3" @bind="Ficha.Tratamiento" placeholder="Terapia intrahospitalaria o ambulatoria..."></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-success">OBSERVACIONES, RECOMENDACIONES Y APUNTES</label>
+                        <textarea class="form-control form-control-sm" rows="3" @bind="Ficha.ObservacionesYRecomendaciones" placeholder="Recomendaciones generales y signos de alarma..."></textarea>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Pronóstico Clínico</label>
+                        <select class="form-select form-select-sm" @bind="Ficha.MedPronostico">
+                            <option value="Bueno">Bueno / Favorable</option>
+                            <option value="Reservado">Reservado</option>
+                            <option value="Grave">Grave / Desfavorable</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">¿Candidato a Procedimiento Quirúrgico?</label>
+                        <select class="form-select form-select-sm" @bind="Ficha.RequiereCirugia">
+                            <option value="N">No requiere cirugía</option>
+                            <option value="S">Sí requiere cirugía</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Próximo Control Sugerido</label>
+                        <input type="date" class="form-control form-control-sm" @bind="Ficha.MedFechaControl" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- TAB 3: DIAGNÓSTICOS CIE-10 Y PRESCRIPCIÓN RÁPIDA -->
+    @if (TabActiva == 3)
+    {
+        <div class="row g-3">
+            <!-- Diagnósticos CIE-10 -->
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        <i class="bi bi-journal-code me-1"></i>Codificación Diagnóstica CIE-10
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group input-group-sm mb-2">
+                            <input type="text" class="form-control" placeholder="Buscar código o patología CIE-10..." @bind="FiltroCie10" @bind:event="oninput" />
+                            <button class="btn btn-outline-primary" @onclick="BuscarCie10Async">
+                                <i class="bi bi-search"></i> Buscar
+                            </button>
+                        </div>
+
+                        @if (ResultadosCie10.Any())
+                        {
+                            <div class="border rounded p-2 mb-3 bg-light" style="max-height: 150px; overflow-y: auto;">
+                                @foreach (var item in ResultadosCie10)
+                                {
+                                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom small">
+                                        <span><strong>[@item.CieCodigo]</strong> @item.CieDiagnostico <em class="text-muted">(@item.GrupoDescripcion)</em></span>
+                                        <button class="btn btn-xs btn-primary py-0 px-2" @onclick="() => SeleccionarCie10(item)">Elegir</button>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <div class="row g-2 mb-3 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Código</label>
+                                <input type="text" class="form-control form-control-sm" @bind="NuevoDiagnostico.CodigoDiag" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Tipo</label>
+                                <select class="form-select form-select-sm" @bind="NuevoDiagnostico.TipoDiag">
+                                    <option value="Definitivo">Definitivo</option>
+                                    <option value="Presuntivo">Presuntivo</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Detalle / Observación</label>
+                                <input type="text" class="form-control form-control-sm" @bind="NuevoDiagnostico.DescripcionObservacion" />
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-sm btn-primary w-100" @onclick="AgregarDiagnosticoAsync">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle small mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Código</th>
+                                        <th>Diagnóstico CIE-10</th>
+                                        <th>Tipo</th>
+                                        <th>Observación</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!Diagnosticos.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center text-muted py-3">Sin diagnósticos registrados en esta orden.</td></tr>
+                                    }
+                                    @foreach (var d in Diagnosticos)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">@d.CodigoDiag</td>
+                                            <td>@d.NombreCie10</td>
+                                            <td>
+                                                <span class="badge @(d.TipoDiag == "Definitivo" ? "bg-success" : "bg-warning text-dark")">@d.TipoDiag</span>
+                                            </td>
+                                            <td>@d.DescripcionObservacion</td>
+                                            <td class="text-end">
+                                                <button class="btn btn-sm btn-link text-danger p-0" @onclick="() => EliminarDiagnosticoAsync(d.Sec)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resumen de Receta vinculada -->
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-capsule me-1"></i>Prescripción Farmacológica Vinculada</span>
+                        <button class="btn btn-xs btn-outline-primary py-0" @onclick='() => Nav.NavigateTo($"/consulta/recetario/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
+                            Abrir Recetario Completo
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold">Indicaciones Generales de Receta</label>
+                            <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.IndicacionesGeneralesReceta" placeholder="Cuidados generales para imprimir en la receta..."></textarea>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle small mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Medicamento</th>
+                                        <th class="text-center">Cant.</th>
+                                        <th>Indicaciones Posológicas</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!RecetaItems.Any())
+                                    {
+                                        <tr><td colspan="3" class="text-center text-muted py-3">Sin medicamentos en la receta actual.</td></tr>
+                                    }
+                                    @foreach (var m in RecetaItems)
+                                    {
+                                        <tr>
+                                            <td class="fw-semibold">@m.Descripcionamento</td>
+                                            <td class="text-center">@m.Cantidad.ToString("N0") (@m.CantidadLetras)</td>
+                                            <td>@m.Indicaciones</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- TAB 4: ANTECEDENTES CLÍNICOS Y CARNET DE VACUNACIÓN -->
+    @if (TabActiva == 4)
+    {
+        <div class="row g-3">
+            <!-- Antecedentes Clínicos -->
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        <i class="bi bi-clock-history me-1"></i>Historial de Antecedentes Clínicos
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Alimentación Habitual</label>
+                                <input type="text" class="form-control form-control-sm" @bind="NuevoAntecedente.Alimentacion" placeholder="Balanceado, dieta casera..." />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Convivencia con Otras Mascotas</label>
+                                <input type="text" class="form-control form-control-sm" @bind="NuevoAntecedente.ContactoMascotas" placeholder="Perros, gatos..." />
+                            </div>
+                            <div class="col-md-9">
+                                <label class="form-label small fw-semibold">Descripción de Antecedente</label>
+                                <input type="text" class="form-control form-control-sm" @bind="NuevoAntecedente.Descripcion" placeholder="Alergias, cirugías o patologías crónicas..." />
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <button class="btn btn-sm btn-primary w-100" @onclick="AgregarAntecedenteAsync">
+                                    <i class="bi bi-plus-circle me-1"></i>Agregar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover small mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Descripción</th>
+                                        <th>Dieta / Mascotas</th>
+                                        <th>Médico</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var a in Antecedentes)
+                                    {
+                                        <tr>
+                                            <td>@a.Fecha.ToString("yyyy-MM-dd")</td>
+                                            <td>@a.Descripcion</td>
+                                            <td>@a.Alimentacion / @a.ContactoMascotas</td>
+                                            <td>@a.NombreMedico</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Carnet de Vacunación y Desparasitación -->
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        <i class="bi bi-eyedropper me-1"></i>Carnet de Vacunación e Inmunización
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Tipo</label>
+                                <select class="form-select form-select-sm" @bind="NuevaVacuna.Tipo">
+                                    <option value="Vacunación">Vacunación</option>
+                                    <option value="Desparasitación">Desparasitación</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Biológico / Producto</label>
+                                <input type="text" class="form-control form-control-sm" @bind="NuevaVacuna.ObservacionVacuna" placeholder=" Séxtuple, Rabia, Bravecto..." />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Próx. Refuerzo</label>
+                                <input type="date" class="form-control form-control-sm" @bind="NuevaVacuna.FechaRevacunacion" />
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button class="btn btn-sm btn-success w-100" @onclick="AgregarVacunaAsync">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover small mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Aplicación</th>
+                                        <th>Tipo</th>
+                                        <th>Vacuna / Producto</th>
+                                        <th>Revacunación</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var v in Vacunas)
+                                    {
+                                        <tr>
+                                            <td>@v.Fecha.ToString("yyyy-MM-dd")</td>
+                                            <td><span class="badge bg-info text-dark">@v.Tipo</span></td>
+                                            <td class="fw-semibold">@v.ObservacionVacuna</td>
+                                            <td>@(v.FechaRevacunacion?.ToString("yyyy-MM-dd") ?? "-")</td>
+                                            <td class="text-end">
+                                                <button class="btn btn-sm btn-link text-danger p-0" @onclick="() => EliminarVacunaAsync(v.VacunaId)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private int IdOrdenInput { get; set; }
+    private int NhclInput { get; set; }
+    private int TabActiva { get; set; } = 1;
+    private bool CargandoInicial { get; set; } = true;
+    private bool Guardando { get; set; }
+    private string? MensajeAlerta { get; set; }
+    private bool EsError { get; set; }
+
+    private PacienteHeaderDto? Paciente { get; set; }
+    private FichaMedicaCompletaDto Ficha { get; set; } = new();
+    private List<DiagnosticoCie10Dto> Diagnosticos { get; set; } = new();
+    private List<CatalogoCie10ItemDto> ResultadosCie10 { get; set; } = new();
+    private List<RecetaMedicamentoItemDto> RecetaItems { get; set; } = new();
+    private List<AntecedenteClinicoDto> Antecedentes { get; set; } = new();
+    private List<VacunaPacienteDto> Vacunas { get; set; } = new();
+
+    private string FiltroCie10 { get; set; } = string.Empty;
+    private DiagnosticoCie10Dto NuevoDiagnostico { get; set; } = new();
+    private AntecedenteClinicoDto NuevoAntecedente { get; set; } = new();
+    private VacunaPacienteDto NuevaVacuna { get; set; } = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        CargandoInicial = true;
+        await Task.Yield();
+
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0)
+        {
+            var activas = await KardexService.ObtenerOrdenesActivasAsync();
+            if (activas.Count > 0)
+            {
+                IdOrden = activas[0].IdOrdenAtencion;
+                Nhcl = activas[0].Nhcl;
+            }
+        }
+
+        if (IdOrden > 0)
+        {
+            IdOrdenInput = IdOrden;
+            NhclInput = Nhcl;
+            await CargarDatosCompletosAsync();
+        }
+        CargandoInicial = false;
+    }
+
+    private async Task CargarPorInputAsync()
+    {
+        if (IdOrdenInput > 0)
+        {
+            IdOrden = IdOrdenInput;
+            Nhcl = NhclInput;
+            CargandoInicial = true;
+            await Task.Yield();
+            await CargarDatosCompletosAsync();
+            CargandoInicial = false;
+        }
+    }
+
+    private async Task CargarDatosCompletosAsync()
+    {
+        Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
+        if (Paciente != null && Nhcl <= 0)
+        {
+            Nhcl = Paciente.Nhcl;
+            NhclInput = Nhcl;
+        }
+        Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
+
+        var tFicha = ConsultaService.ObtenerFichaMedicaAsync(IdOrden, Nhcl);
+        var tDiag = ConsultaService.ObtenerDiagnosticosOrdenAsync(IdOrden);
+        var tRec = ConsultaService.ObtenerRecetaOrdenAsync(IdOrden);
+        var tAnt = ConsultaService.ObtenerAntecedentesPacienteAsync(Nhcl);
+        var tVac = ConsultaService.ObtenerVacunasPacienteAsync(Nhcl);
+        await Task.WhenAll(tFicha, tDiag, tRec, tAnt, tVac);
+
+        Ficha = await tFicha;
+        if (Ficha.MedOrden <= 0) Ficha.MedOrden = IdOrden;
+        if (Ficha.MedNhcl <= 0) Ficha.MedNhcl = Nhcl;
+        Diagnosticos = await tDiag;
+        RecetaItems = await tRec;
+        Antecedentes = await tAnt;
+        Vacunas = await tVac;
+    }
+
+    private void SeleccionarTemperamento(string temperamento, string rutaImagen)
+    {
+        Ficha.Temperamento = temperamento;
+        Ficha.ColorTriaje = rutaImagen;
+    }
+
+    private string ObtenerClaseBadgeTemperamento(string temp) => temp?.ToUpper() switch
+    {
+        "NERVIOSO" => "bg-success",
+        "A LA DEFENSIVA" => "bg-warning text-dark",
+        "AGRESIVO" => "bg-danger",
+        _ => "bg-secondary"
+    };
+
+    private async Task GuardarFichaCompletaAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Ficha.MedMotivo))
+        {
+            EsError = true;
+            MensajeAlerta = "Por favor ingrese el motivo principal de la consulta antes de guardar.";
+            return;
+        }
+
+        Guardando = true;
+        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        bool ok = await ConsultaService.GuardarFichaMedicaAsync(Ficha, idUser);
+        Guardando = false;
+
+        EsError = !ok;
+        MensajeAlerta = ok
+            ? $"Historia Clínica SOAP de la Orden #{Ficha.MedOrden} guardada exitosamente."
+            : "Ocurrió un error al guardar la Ficha Médica.";
+    }
+
+    private async Task BuscarCie10Async()
+    {
+        ResultadosCie10 = await ConsultaService.BuscarCatalogoCie10Async(FiltroCie10);
+    }
+
+    private void SeleccionarCie10(CatalogoCie10ItemDto item)
+    {
+        NuevoDiagnostico.CodigoDiag = item.CieCodigo.ToString();
+        NuevoDiagnostico.DescripcionObservacion = item.CieDiagnostico;
+        ResultadosCie10.Clear();
+    }
+
+    private async Task AgregarDiagnosticoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NuevoDiagnostico.CodigoDiag)) return;
+        NuevoDiagnostico.IdOrden = Ficha.MedOrden;
+        NuevoDiagnostico.Nhcl = Ficha.MedNhcl;
+        await ConsultaService.AgregarDiagnosticoOrdenAsync(NuevoDiagnostico);
+        NuevoDiagnostico = new DiagnosticoCie10Dto();
+        Diagnosticos = await ConsultaService.ObtenerDiagnosticosOrdenAsync(Ficha.MedOrden);
+    }
+
+    private async Task EliminarDiagnosticoAsync(int sec)
+    {
+        await ConsultaService.EliminarDiagnosticoOrdenAsync(sec);
+        Diagnosticos = await ConsultaService.ObtenerDiagnosticosOrdenAsync(Ficha.MedOrden);
+    }
+
+    private async Task AgregarAntecedenteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NuevoAntecedente.Descripcion)) return;
+        NuevoAntecedente.Nhcl = Ficha.MedNhcl;
+        NuevoAntecedente.Orden = Ficha.MedOrden;
+        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        await ConsultaService.AgregarAntecedenteAsync(NuevoAntecedente, idUser, Ficha.MedCliente);
+        NuevoAntecedente = new AntecedenteClinicoDto();
+        Antecedentes = await ConsultaService.ObtenerAntecedentesPacienteAsync(Ficha.MedNhcl);
+    }
+
+    private async Task AgregarVacunaAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NuevaVacuna.ObservacionVacuna)) return;
+        NuevaVacuna.Nhcl = Ficha.MedNhcl;
+        NuevaVacuna.Orden = Ficha.MedOrden;
+        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        await ConsultaService.AgregarVacunaAsync(NuevaVacuna, idUser, Ficha.MedCliente);
+        NuevaVacuna = new VacunaPacienteDto();
+        Vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(Ficha.MedNhcl);
+    }
+
+    private async Task EliminarVacunaAsync(int vacunaId)
+    {
+        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        await ConsultaService.EliminarVacunaAsync(vacunaId, idUser);
+        Vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(Ficha.MedNhcl);
+    }
+
+    private async Task ExportarPdfAsync()
+    {
+        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = Ficha.MedOrden, Nhcl = Ficha.MedNhcl, PacienteNombre = "Paciente HOSVET" };
+        var pdfBytes = ReportService.GenerarFichaMedicaPdf(pac, Ficha, Diagnosticos, RecetaItems);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"HistoriaClinica_Orden_{Ficha.MedOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+    }
+}

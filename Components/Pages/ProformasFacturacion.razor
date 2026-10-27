@@ -1,0 +1,413 @@
+@page "/facturacion/proformas"
+@using HosvetKardex.Web.Models
+@using HosvetKardex.Web.Services
+@inject IAdmisionFacturacionService AdmisionService
+@inject IReportExportService ReportService
+@inject SessionStateService SessionState
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+
+<PageTitle>HOSVET — Proformas Business Central, Usuarios y Auditoría</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- Encabezado -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded-3 shadow-sm bg-white border-start border-4 border-warning">
+        <div>
+            <h4 class="mb-0 fw-bold text-dark">
+                <i class="bi bi-receipt-cutoff me-2 text-warning"></i>Pre-Facturación ERP Business Central, Usuarios y Auditoría
+            </h4>
+            <small class="text-muted">
+                Consolidación de cargos hospitalarios, liquidación de proformas Business Central, gestión de usuarios y auditoría.
+            </small>
+        </div>
+        <div class="btn-group btn-group-sm">
+            <button class="btn @(_pestanaActiva == "PROFORMAS" ? "btn-dark" : "btn-outline-dark")" @onclick='() => _pestanaActiva = "PROFORMAS"'>
+                <i class="bi bi-cash-coin me-1"></i>Proformas Business Central
+            </button>
+            <button class="btn @(_pestanaActiva == "USUARIOS" ? "btn-dark" : "btn-outline-dark")" @onclick='() => _pestanaActiva = "USUARIOS"'>
+                <i class="bi bi-person-gear me-1"></i>Usuarios y Especialistas
+            </button>
+            <button class="btn @(_pestanaActiva == "BITACORA" ? "btn-dark" : "btn-outline-dark")" @onclick='() => _pestanaActiva = "BITACORA"'>
+                <i class="bi bi-shield-check me-1"></i>Bitácora de Auditoría
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_mensajeNotificacion))
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@_mensajeNotificacion
+            <button type="button" class="btn-close" @onclick="() => _mensajeNotificacion = string.Empty"></button>
+        </div>
+    }
+
+    @if (_cargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando proformas Business Central, usuarios y bitácora...</span>
+        </div>
+    }
+
+    @if (_pestanaActiva == "PROFORMAS")
+    {
+        <div class="row g-3">
+            <!-- Columna Izquierda: Órdenes con Cargos por Liquidar -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-folder2-open me-1"></i>Órdenes de Atención</span>
+                        <span class="badge bg-primary">@_ordenesProforma.Count</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group input-group-sm mb-2">
+                            <input type="text" class="form-control" placeholder="Buscar orden, NHCL, paciente..."
+                                   @bind="_filtroOrden" @bind:event="oninput" @onkeyup="CargarProformasAsync" />
+                            <button class="btn btn-outline-secondary" @onclick="CargarProformasAsync">Buscar</button>
+                        </div>
+
+                        <div class="list-group" style="max-height: 480px; overflow-y: auto;">
+                            @foreach (var op in _ordenesProforma)
+                            {
+                                bool activa = _proformaActual?.IdOrden == op.IdOrden;
+                                <button type="button"
+                                        class="list-group-item list-group-item-action @(activa ? "active" : "")"
+                                        @onclick="() => SeleccionarOrdenProforma(op)">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong>Orden #@op.IdOrden — @op.MascotaNombre</strong>
+                                        <span class="badge @(op.FacturadoBc == "S" ? "bg-success" : "bg-warning text-dark")">
+                                            @(op.FacturadoBc == "S" ? op.NumeroFacturaBc : "Pendiente BC")
+                                        </span>
+                                    </div>
+                                    <div class="small @(activa ? "text-light" : "text-muted")">
+                                        Cliente: @op.ClienteNombre (@op.ClienteCedula)
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mt-1 small">
+                                        <span>NHCL #@op.Nhcl | @op.EtapaActual</span>
+                                        <span class="fw-bold">$@op.TotalGeneral.ToString("N2")</span>
+                                    </div>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Detalle Consolidado Multi-Módulo -->
+            <div class="col-lg-8">
+                @if (_proformaActual != null)
+                {
+                    <!-- Resumen KPIs por Área -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-3">
+                            <div class="p-2 rounded bg-white shadow-sm border-start border-4 border-info">
+                                <div class="small text-muted">Hospitalización / Kardex</div>
+                                <div class="fs-5 fw-bold text-dark">$@_proformaActual.TotalHospitalizacion.ToString("N2")</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-2 rounded bg-white shadow-sm border-start border-4 border-danger">
+                                <div class="small text-muted">Quirófano / Anestesia</div>
+                                <div class="fs-5 fw-bold text-dark">$@_proformaActual.TotalQuirofano.ToString("N2")</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-2 rounded bg-white shadow-sm border-start border-4 border-primary">
+                                <div class="small text-muted">Laboratorio / Imagen</div>
+                                <div class="fs-5 fw-bold text-dark">$@((_proformaActual.TotalLaboratorio + _proformaActual.TotalImagen).ToString("N2"))</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-2 rounded bg-dark text-white shadow-sm">
+                                <div class="small text-warning">Total General Proforma</div>
+                                <div class="fs-5 fw-bold">$@_proformaActual.TotalGeneral.ToString("N2")</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <span class="fw-bold">Estado de Cuenta Consolidado — Orden #@_proformaActual.IdOrden (@_proformaActual.MascotaNombre)</span>
+                                <span class="ms-2 badge bg-secondary">@_proformaActual.NumeroFacturaBc</span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-outline-danger btn-sm" @onclick="ExportarProformaPdfAsync">
+                                    <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF Proforma
+                                </button>
+                                <button class="btn btn-outline-success btn-sm" @onclick="ExportarProformaExcelAsync">
+                                    <i class="bi bi-file-earmark-excel-fill me-1"></i>Excel BC
+                                </button>
+                                <button class="btn btn-primary btn-sm fw-bold" @onclick="EmitirProformaBcAsync">
+                                    <i class="bi bi-cloud-upload-fill me-1"></i>Sincronizar y Emitir en Business Central
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="card-body">
+                            <!-- Agregar ítem o insumo adicional -->
+                            <div class="row g-2 align-items-end mb-3 p-2 rounded bg-light border">
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-0">Módulo</label>
+                                    <select class="form-select form-select-sm" @bind="_nuevoCargo.OrigenModulo">
+                                        <option value="HOSPITALIZACION">HOSPITALIZACIÓN</option>
+                                        <option value="QUIROFANO">QUIRÓFANO</option>
+                                        <option value="LABORATORIO">LABORATORIO</option>
+                                        <option value="IMAGEN">IMAGENOLOGÍA</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-0">Código BC</label>
+                                    <input type="text" class="form-control form-control-sm" placeholder="SER-001" @bind="_nuevoCargo.CodigoItemBc" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold mb-0">Descripción Servicio / Insumo</label>
+                                    <input type="text" class="form-control form-control-sm" placeholder="Descripción..." @bind="_nuevoCargo.DescripcionItem" />
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label small fw-bold mb-0">Cant.</label>
+                                    <input type="number" step="0.5" class="form-control form-control-sm" @bind="_nuevoCargo.Cantidad" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold mb-0">P. Unit ($)</label>
+                                    <input type="number" step="0.01" class="form-control form-control-sm" @bind="_nuevoCargo.PrecioUnitario" />
+                                </div>
+                                <div class="col-md-1">
+                                    <button class="btn btn-sm btn-dark w-100" title="Añadir cargo" @onclick="AgregarCargoManual">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover align-middle mb-0 small">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="text-center">Incluir</th>
+                                            <th>Módulo Origen</th>
+                                            <th>Código BC</th>
+                                            <th>Descripción del Cargo</th>
+                                            <th class="text-end">Cantidad</th>
+                                            <th class="text-end">P. Unitario</th>
+                                            <th class="text-end">Subtotal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var item in _proformaActual.Items)
+                                        {
+                                            <tr class="@(!item.Seleccionado ? "text-muted text-decoration-line-through" : "")">
+                                                <td class="text-center">
+                                                    <input type="checkbox" class="form-check-input" @bind="item.Seleccionado" />
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-light text-dark border">@item.OrigenModulo</span>
+                                                </td>
+                                                <td class="font-monospace">@item.CodigoItemBc</td>
+                                                <td>@item.DescripcionItem</td>
+                                                <td class="text-end">
+                                                    <input type="number" step="0.5" class="form-control form-control-sm text-end d-inline-block" style="width:72px;"
+                                                           @bind="item.Cantidad" />
+                                                </td>
+                                                <td class="text-end">
+                                                    <input type="number" step="0.01" class="form-control form-control-sm text-end d-inline-block" style="width:85px;"
+                                                           @bind="item.PrecioUnitario" />
+                                                </td>
+                                                <td class="text-end fw-bold">$@item.Subtotal.ToString("N2")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else if (_pestanaActiva == "USUARIOS")
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="bi bi-people me-1"></i>Directorio de Usuarios y Especialistas</span>
+                <span class="badge bg-primary">@_usuarios.Count</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 small">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre Completo</th>
+                                <th>Login</th>
+                                <th>Iniciales</th>
+                                <th>Rol / Perfil</th>
+                                <th>Especialidad</th>
+                                <th>Modalidad</th>
+                                <th>Correo / Celular</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var u in _usuarios)
+                            {
+                                <tr>
+                                    <td>#@u.UserNumero</td>
+                                    <td class="fw-bold">@u.UserNombre</td>
+                                    <td><code>@u.UserLogin</code></td>
+                                    <td><span class="badge bg-dark">@u.UserIniciales</span></td>
+                                    <td>@u.TipoDescripcion</td>
+                                    <td>@u.EspecialidadDescripcion</td>
+                                    <td>@(u.UserTipoMedico == "P" ? "Médico de Planta" : "A Llamada")</td>
+                                    <td>@u.UserEmail / @u.UserCelular</td>
+                                    <td><span class="badge bg-success">Activo</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="bi bi-journal-code me-1"></i>Bitácora de Auditoría Institucional</span>
+                <span class="badge bg-secondary">Últimos Eventos</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 small">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID Evento</th>
+                                <th>Fecha / Hora</th>
+                                <th>Usuario</th>
+                                <th>Detalle de la Operación Auditada</th>
+                                <th>IP Origen</th>
+                                <th>Estación / Hostname</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var b in _bitacora)
+                            {
+                                <tr>
+                                    <td class="fw-bold">#@b.VitId</td>
+                                    <td>@b.VitFechaMod.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td><span class="badge bg-primary">@b.UserLogin</span></td>
+                                    <td>@b.VitDetalle</td>
+                                    <td class="font-monospace">@b.Ip</td>
+                                    <td>@b.Hostname</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private int? OrdenIdQuery { get; set; }
+
+    private string _pestanaActiva = "PROFORMAS";
+    private string _filtroOrden = string.Empty;
+    private bool _cargandoInicial = true;
+    private string _mensajeNotificacion = string.Empty;
+
+    private List<OrdenProformaResumenDto> _ordenesProforma = new();
+    private OrdenProformaResumenDto? _proformaActual;
+    private ItemFacturableProformaDto _nuevoCargo = new() { OrigenModulo = "HOSPITALIZACION", CodigoItemBc = "SER-HOSP-EXTRA", Cantidad = 1, PrecioUnitario = 15.00m };
+
+    private List<UsuarioSistemaDto> _usuarios = new();
+    private List<BitacoraAuditoriaDto> _bitacora = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cargandoInicial = true;
+        await Task.Yield();
+
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        if (!string.IsNullOrWhiteSpace(uri.Query))
+        {
+            var q = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            if (int.TryParse(q["ordenId"], out int qOrden) && qOrden > 0)
+                OrdenIdQuery = qOrden;
+        }
+
+        var tProf = CargarProformasAsync();
+        var tUsr = AdmisionService.ObtenerUsuariosAsync();
+        var tBit = AdmisionService.ObtenerBitacoraAsync(DateTime.Today.AddDays(-30), DateTime.Today);
+        await Task.WhenAll(tProf, tUsr, tBit);
+
+        _usuarios = await tUsr;
+        _bitacora = await tBit;
+        _cargandoInicial = false;
+    }
+
+    private async Task CargarProformasAsync()
+    {
+        _ordenesProforma = await AdmisionService.BuscarOrdenesParaProformaAsync(DateTime.Today.AddDays(-7), DateTime.Today, _filtroOrden);
+
+        if (OrdenIdQuery.HasValue && OrdenIdQuery.Value > 0)
+        {
+            _proformaActual = _ordenesProforma.FirstOrDefault(o => o.IdOrden == OrdenIdQuery.Value)
+                              ?? await AdmisionService.ObtenerDetalleProformaOrdenAsync(OrdenIdQuery.Value);
+        }
+        else if (_ordenesProforma.Count > 0 && _proformaActual == null)
+        {
+            _proformaActual = _ordenesProforma[0];
+        }
+    }
+
+    private void SeleccionarOrdenProforma(OrdenProformaResumenDto orden)
+    {
+        _proformaActual = orden;
+    }
+
+    private void AgregarCargoManual()
+    {
+        if (_proformaActual == null || string.IsNullOrWhiteSpace(_nuevoCargo.DescripcionItem)) return;
+
+        _proformaActual.Items.Add(new ItemFacturableProformaDto
+        {
+            IdRegistro = _proformaActual.Items.Count + 1,
+            IdOrden = _proformaActual.IdOrden,
+            OrigenModulo = _nuevoCargo.OrigenModulo,
+            CodigoItemBc = string.IsNullOrWhiteSpace(_nuevoCargo.CodigoItemBc) ? "SER-GEN-01" : _nuevoCargo.CodigoItemBc,
+            DescripcionItem = _nuevoCargo.DescripcionItem,
+            Cantidad = _nuevoCargo.Cantidad,
+            PrecioUnitario = _nuevoCargo.PrecioUnitario,
+            Seleccionado = true
+        });
+
+        _nuevoCargo = new ItemFacturableProformaDto { OrigenModulo = "HOSPITALIZACION", CodigoItemBc = "SER-HOSP-EXTRA", Cantidad = 1, PrecioUnitario = 15.00m };
+    }
+
+    private async Task EmitirProformaBcAsync()
+    {
+        if (_proformaActual == null) return;
+        int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
+        var res = await AdmisionService.EmitirProformaBusinessCentralAsync(_proformaActual.IdOrden, _proformaActual.Items, idUser);
+        _proformaActual.FacturadoBc = "S";
+        _proformaActual.NumeroFacturaBc = res.NumeroProformaBc;
+        _mensajeNotificacion = res.Mensaje;
+    }
+
+    private async Task ExportarProformaPdfAsync()
+    {
+        if (_proformaActual == null) return;
+        var bytes = ReportService.GenerarProformaConsolidadaPdf(_proformaActual);
+        var base64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("eval", $"{{ const a = document.createElement('a'); a.href = 'data:application/pdf;base64,{base64}'; a.download = 'Proforma_BC_{_proformaActual.IdOrden}.pdf'; a.click(); }}");
+    }
+
+    private async Task ExportarProformaExcelAsync()
+    {
+        if (_proformaActual == null) return;
+        var bytes = ReportService.GenerarProformaConsolidadaExcel(_proformaActual);
+        var base64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("eval", $"{{ const a = document.createElement('a'); a.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{base64}'; a.download = 'Proforma_BC_{_proformaActual.IdOrden}.xlsx'; a.click(); }}");
+    }
+}

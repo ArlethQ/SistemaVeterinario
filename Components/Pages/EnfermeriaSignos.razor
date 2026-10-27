@@ -1,0 +1,600 @@
+@page "/kardex/signos"
+@page "/kardex/signos/{IdOrden:int}/{Nhcl:int}"
+@inject IKardexService KardexService
+@inject IHospitalizacionService HospService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Signos Vitales y Balance Hídrico — HOSVET</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- BARRA SUPERIOR DE SELECCIÓN Y ACCIONES -->
+    <div class="card shadow-sm border-0 mb-3 no-print">
+        <div class="card-body py-2 px-3 bg-light rounded">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-5">
+                    <label class="form-label small fw-bold mb-1 text-primary">Paciente / Orden Activa:</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" placeholder="Filtrar paciente o historia..."
+                               @bind="_filtroOrden" @bind:event="oninput" />
+                        <button class="btn btn-outline-primary" @onclick="BuscarOrdenesAsync">Buscar</button>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold mb-1">Seleccionar Orden:</label>
+                    <select class="form-select form-select-sm" value="@IdOrden" @onchange="OnOrdenChangedAsync">
+                        <option value="0">-- Seleccione Paciente --</option>
+                        @foreach (var ord in _ordenesActivas)
+                        {
+                            <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4 text-end pt-3">
+                    @if (_paciente is not null)
+                    {
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-primary fw-semibold" @onclick="GuardarFormularioAsync" disabled="@_guardando">
+                                💾 @(_guardando ? "Guardando..." : "Guardar Formulario")
+                            </button>
+                            <button class="btn btn-outline-secondary" @onclick="CrearNuevoFormularioAsync">
+                                ➕ Nueva Hoja
+                            </button>
+                            <button class="btn btn-danger" @onclick="ExportarPdfAsync">
+                                📄 PDF
+                            </button>
+                            <button class="btn btn-success" @onclick="ExportarExcelAsync">
+                                📊 Excel
+                            </button>
+                            <button class="btn btn-dark" @onclick="ImprimirVistaAsync">
+                                🖨️ Imprimir
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_mensajeAlerta))
+    {
+        <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small no-print">
+            @_mensajeAlerta
+            <button type="button" class="btn-close py-2" @onclick="() => _mensajeAlerta = null"></button>
+        </div>
+    }
+
+    @if (_cargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando signos vitales y balance hídrico...</span>
+        </div>
+    }
+    else if (_paciente is null)
+    {
+        <div class="alert alert-info shadow-sm">
+            Seleccione un paciente hospitalizado en la barra superior para gestionar su <strong>Hoja de Signos Vitales, Gráfica Térmica/Pulso y Balance Hídrico (9 días)</strong>.
+        </div>
+    }
+    else
+    {
+        <div id="area-impresion-signos">
+            <!-- CABECERA DEL PACIENTE -->
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">📈 SIGNOS VITALES, BALANCE HÍDRICO Y CUIDADOS DE ENFERMERÍA</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="small">N° Formulario:</span>
+                        <select class="form-select form-select-sm w-auto bg-white text-dark fw-bold"
+                                value="@_form.NumFormulario" @onchange="CambiarFormularioAsync">
+                            @foreach (var nf in _form.FormulariosDisponibles)
+                            {
+                                <option value="@nf">Hoja #@nf</option>
+                            }
+                        </select>
+                        <a href="/kardex/enfermeria/@IdOrden/@Nhcl" class="btn btn-sm btn-warning fw-semibold no-print">
+                            💊 Ir a Kardex Medicación
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body py-2 px-3">
+                    <div class="row text-center small g-2">
+                        <div class="col-md-2 border-end">
+                            <div class="text-muted">Historia (NHCL) / Orden</div>
+                            <div class="fw-bold text-danger fs-6">@_paciente.Nhcl <span class="text-secondary">(#@_paciente.OrdenAtencionId)</span></div>
+                        </div>
+                        <div class="col-md-2 border-end">
+                            <div class="text-muted">Paciente</div>
+                            <div class="fw-bold fs-6">@_paciente.PacienteNombre</div>
+                        </div>
+                        <div class="col-md-2 border-end">
+                            <div class="text-muted">Especie / Sexo</div>
+                            <div class="fw-semibold text-success">@_paciente.Especie — @_paciente.Sexo</div>
+                        </div>
+                        <div class="col-md-2 border-end">
+                            <div class="text-muted">Edad</div>
+                            <div class="fw-semibold">@_paciente.Anios años, @_paciente.Meses meses</div>
+                        </div>
+                        <div class="col-md-3 border-end">
+                            <div class="text-muted">Propietario</div>
+                            <div class="fw-semibold">@_paciente.ClienteNombre</div>
+                        </div>
+                        <div class="col-md-1">
+                            <div class="text-muted">Origen</div>
+                            <span class="badge bg-danger">@_paciente.TipoOrigen</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GRÁFICA INTERACTIVA SVG DE PULSO Y TEMPERATURA (18 TURNOS) -->
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-light py-1 px-3 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold small text-uppercase text-secondary">Curva Clínica de Pulso (Rojo) y Temperatura (Azul) — 9 Días (AM/PM)</span>
+                    <div class="small">
+                        <span class="badge bg-danger me-2">● Pulso (lpm)</span>
+                        <span class="badge bg-primary">■ Temperatura (°C)</span>
+                    </div>
+                </div>
+                <div class="card-body p-2 text-center">
+                    <svg viewBox="0 0 900 190" style="width:100%; max-height:195px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
+                        @for (int g = 0; g <= 4; g++)
+                        {
+                            int y = 25 + (g * 32);
+                            int pulsoLabel = 160 - (g * 30);
+                            int tempLabel = 41 - g;
+                            <line x1="55" y1="@y" x2="855" y2="@y" stroke="#cbd5e1" stroke-dasharray="3,3" stroke-width="1" />
+                            <svg:text x="48" y="@(y + 4)" text-anchor="end" font-size="10" fill="#dc2626" font-weight="bold">@pulsoLabel</svg:text>
+                            <svg:text x="862" y="@(y + 4)" text-anchor="start" font-size="10" fill="#2563eb" font-weight="bold">@(tempLabel)°C</svg:text>
+                        }
+
+                        @{
+                            var puntosPulso = new List<string>();
+                            var puntosTemp = new List<string>();
+                            for (int i = 0; i < _form.SignosVitales.Count && i < 18; i++)
+                            {
+                                var slot = _form.SignosVitales[i];
+                                double x = 75 + (i * 44.5);
+                                <line x1="@x.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)" y1="20"
+                                      x2="@x.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)" y2="155"
+                                      stroke="#e2e8f0" stroke-width="1" />
+                                <svg:text x="@x.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)" y="175"
+                                          text-anchor="middle" font-size="9" fill="#475569">
+                                    D@(slot.DiaIndice)@(slot.Turno)
+                                </svg:text>
+
+                                if (slot.Pulso.HasValue && slot.Pulso.Value > 0)
+                                {
+                                    double yp = 153 - ((Math.Clamp(slot.Pulso.Value, 40, 160) - 40) / 120.0 * 128.0);
+                                    string pt = $"{x.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)},{yp.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}";
+                                    puntosPulso.Add(pt);
+                                    <circle cx="@x.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)"
+                                            cy="@yp.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)"
+                                            r="4" fill="#dc2626" />
+                                }
+
+                                if (slot.Temperatura.HasValue && slot.Temperatura.Value > 0)
+                                {
+                                    double yt = 153 - ((double)(Math.Clamp(slot.Temperatura.Value, 35m, 41m) - 35m) / 6.0 * 128.0);
+                                    string ptT = $"{x.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)},{yt.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}";
+                                    puntosTemp.Add(ptT);
+                                    <rect x="@((x - 3.5).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))"
+                                          y="@((yt - 3.5).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))"
+                                          width="7" height="7" fill="#2563eb" />
+                                }
+                            }
+                        }
+
+                        @if (puntosPulso.Count > 1)
+                        {
+                            <polyline fill="none" stroke="#dc2626" stroke-width="2.2" points="@string.Join(" ", puntosPulso)" />
+                        }
+                        @if (puntosTemp.Count > 1)
+                        {
+                            <polyline fill="none" stroke="#2563eb" stroke-width="2.2" points="@string.Join(" ", puntosTemp)" />
+                        }
+                    </svg>
+                </div>
+            </div>
+
+            <!-- 1. MATRIZ DE FECHAS Y SIGNOS VITALES (9 DÍAS / 18 TURNOS) -->
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-primary bg-opacity-10 py-1 px-3">
+                    <span class="fw-bold small text-primary">1. CUADRO DE SIGNOS VITALES (9 DÍAS — AM / PM)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.78rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-start bg-secondary bg-opacity-10" style="min-width:155px;">FECHAS (9 Días)</th>
+                                @foreach (var f in _form.Fechas)
+                                {
+                                    <th colspan="2" class="p-1">
+                                        <input type="date" class="form-control form-control-sm px-1 py-0 text-center"
+                                               style="font-size:0.74rem;" @bind="f.Fecha" />
+                                    </th>
+                                }
+                            </tr>
+                            <tr>
+                                <th class="text-start bg-secondary bg-opacity-10">Días Internación</th>
+                                @foreach (var f in _form.Fechas)
+                                {
+                                    <td colspan="2" class="p-1">
+                                        <input type="number" class="form-control form-control-sm px-1 py-0 text-center fw-bold"
+                                               @bind="f.DiasInternacion" />
+                                    </td>
+                                }
+                            </tr>
+                            <tr>
+                                <th class="text-start bg-secondary bg-opacity-10">Días PostQuirúrgico</th>
+                                @foreach (var f in _form.Fechas)
+                                {
+                                    <td colspan="2" class="p-1">
+                                        <input type="number" class="form-control form-control-sm px-1 py-0 text-center"
+                                               @bind="f.DiasPostQuirurgico" />
+                                    </td>
+                                }
+                            </tr>
+                            <tr class="table-primary">
+                                <th class="text-start">Turno (Mañana / Tarde)</th>
+                                @foreach (var s in _form.SignosVitales)
+                                {
+                                    <th class="@(s.Turno == "AM" ? "text-primary" : "text-danger")">@s.Turno</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="text-start fw-bold text-danger bg-light">Pulso (lpm)</td>
+                                @foreach (var s in _form.SignosVitales)
+                                {
+                                    <td class="p-1">
+                                        <input type="number" class="form-control form-control-sm px-1 py-0 text-center text-danger fw-semibold"
+                                               @bind="s.Pulso" />
+                                    </td>
+                                }
+                            </tr>
+                            <tr>
+                                <td class="text-start fw-bold text-primary bg-light">Temperatura (°C)</td>
+                                @foreach (var s in _form.SignosVitales)
+                                {
+                                    <td class="p-1">
+                                        <input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center text-primary fw-semibold"
+                                               @bind="s.Temperatura" />
+                                    </td>
+                                }
+                            </tr>
+                            <tr>
+                                <td class="text-start fw-semibold bg-light">Frec. Respiratoria (rpm)</td>
+                                @foreach (var s in _form.SignosVitales)
+                                {
+                                    <td class="p-1">
+                                        <input type="number" class="form-control form-control-sm px-1 py-0 text-center"
+                                               @bind="s.FrecuenciaRespiratoria" />
+                                    </td>
+                                }
+                            </tr>
+                            <tr>
+                                <td class="text-start fw-semibold bg-light">Presión Sistólica (mmHg)</td>
+                                @foreach (var s in _form.SignosVitales)
+                                {
+                                    <td class="p-1">
+                                        <input type="number" class="form-control form-control-sm px-1 py-0 text-center"
+                                               @bind="s.PresionSistolica" />
+                                    </td>
+                                }
+                            </tr>
+                            <tr>
+                                <td class="text-start fw-semibold bg-light">Presión Diastólica (mmHg)</td>
+                                @foreach (var s in _form.SignosVitales)
+                                {
+                                    <td class="p-1">
+                                        <input type="number" class="form-control form-control-sm px-1 py-0 text-center"
+                                               @bind="s.PresionDiastolica" />
+                                    </td>
+                                }
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 2. BALANCE HÍDRICO Y MEDICIONES (9 DÍAS) -->
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-success bg-opacity-10 py-1 px-3">
+                            <span class="fw-bold small text-success">2. BALANCE HÍDRICO DIARIO (cc / ml)</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.78rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-start" style="min-width:135px;">Concepto</th>
+                                        @for (int d = 1; d <= 9; d++)
+                                        {
+                                            <th>Día @d</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Parenteral (cc)</td>
+                                        @foreach (var b in _form.BalanceHidrico)
+                                        {
+                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Parenteral" @bind:event="oninput" /></td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Vía Oral (cc)</td>
+                                        @foreach (var b in _form.BalanceHidrico)
+                                        {
+                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.ViaOral" @bind:event="oninput" /></td>
+                                        }
+                                    </tr>
+                                    <tr class="table-success fw-bold">
+                                        <td class="text-start">Total Ingresos</td>
+                                        @foreach (var b in _form.BalanceHidrico)
+                                        {
+                                            <td>@b.TotalIngresos.ToString("N1")</td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Orina (cc)</td>
+                                        @foreach (var b in _form.BalanceHidrico)
+                                        {
+                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Orina" @bind:event="oninput" /></td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Drenaje (cc)</td>
+                                        @foreach (var b in _form.BalanceHidrico)
+                                        {
+                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Drenaje" @bind:event="oninput" /></td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Otros (cc)</td>
+                                        @foreach (var b in _form.BalanceHidrico)
+                                        {
+                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Otros" @bind:event="oninput" /></td>
+                                        }
+                                    </tr>
+                                    <tr class="table-warning fw-bold">
+                                        <td class="text-start">Total Eliminación</td>
+                                        @foreach (var b in _form.BalanceHidrico)
+                                        {
+                                            <td>@b.TotalEliminaciones.ToString("N1")</td>
+                                        }
+                                    </tr>
+                                    <tr class="table-info fw-bold">
+                                        <td class="text-start">Balance Neto</td>
+                                        @foreach (var b in _form.BalanceHidrico)
+                                        {
+                                            <td class="@(b.BalanceNeto < 0 ? "text-danger" : "text-primary")">@b.BalanceNeto.ToString("N1")</td>
+                                        }
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. MEDICIONES Y ACTIVIDADES DE ENFERMERÍA -->
+                <div class="col-lg-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-info bg-opacity-10 py-1 px-3">
+                            <span class="fw-bold small text-dark">3. MEDICIONES Y CUIDADOS DIARIOS (9 DÍAS)</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.78rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-start" style="min-width:135px;">Actividad / Medición</th>
+                                        @for (int d = 1; d <= 9; d++)
+                                        {
+                                            <th>Día @d</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Peso (kg)</td>
+                                        @foreach (var m in _form.Mediciones.Take(9))
+                                        {
+                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Peso" /></td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Dieta Indicada</td>
+                                        @foreach (var m in _form.Mediciones.Take(9))
+                                        {
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.DietaIndicada" /></td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">N° Comidas</td>
+                                        @foreach (var m in _form.Mediciones.Take(9))
+                                        {
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.NumeroComidas" /></td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Baño / Aseo</td>
+                                        @foreach (var m in _form.Mediciones.Take(9))
+                                        {
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Banio" /></td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Movilización</td>
+                                        @foreach (var m in _form.Mediciones.Take(9))
+                                        {
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Movilizacion" /></td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Vendajes / Curación</td>
+                                        @foreach (var m in _form.Mediciones.Take(9))
+                                        {
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Vendajes" /></td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Cambio de Sonda</td>
+                                        @foreach (var m in _form.Mediciones.Take(9))
+                                        {
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.CambioSonda" /></td>
+                                        }
+                                    </tr>
+                                    <tr>
+                                        <td class="text-start fw-semibold">Responsable (Inic.)</td>
+                                        @foreach (var m in _form.Mediciones.Take(9))
+                                        {
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center fw-bold" @bind="m.Responsable" /></td>
+                                        }
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private string _filtroOrden = string.Empty;
+    private List<OrdenActivaResumenDto> _ordenesActivas = [];
+    private PacienteHeaderDto? _paciente;
+    private FormularioSignosEnfermeriaDto _form = new();
+    private bool _cargandoInicial = true;
+    private bool _guardando;
+    private string? _mensajeAlerta;
+    private bool _esError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cargandoInicial = true;
+        await Task.Yield();
+        _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0 && _ordenesActivas.Count > 0)
+        {
+            var primera = _ordenesActivas[0];
+            IdOrden = primera.IdOrdenAtencion;
+            Nhcl = primera.Nhcl;
+        }
+
+        if (IdOrden > 0)
+        {
+            await CargarDatosPacienteAsync(IdOrden, Nhcl, 1);
+        }
+        _cargandoInicial = false;
+    }
+
+    private async Task BuscarOrdenesAsync()
+    {
+        _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(_filtroOrden);
+    }
+
+    private async Task OnOrdenChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int idOrd) && idOrd > 0)
+        {
+            var ord = _ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == idOrd);
+            if (ord is not null)
+            {
+                IdOrden = ord.IdOrdenAtencion;
+                Nhcl = ord.Nhcl;
+                await CargarDatosPacienteAsync(IdOrden, Nhcl, 1);
+            }
+        }
+    }
+
+    private async Task CargarDatosPacienteAsync(int idOrden, int nhcl, int numFormulario)
+    {
+        var tPac = KardexService.ObtenerCabeceraPacienteAsync(idOrden, nhcl);
+        var tForm = HospService.CargarSignosEnfermeriaAsync(idOrden, nhcl, numFormulario);
+        await Task.WhenAll(tPac, tForm);
+
+        _paciente = await tPac;
+        if (_paciente is not null)
+        {
+            Nhcl = _paciente.Nhcl;
+            Session.SeleccionarOrden(idOrden, Nhcl, _paciente.PacienteNombre);
+            _form = await tForm;
+        }
+    }
+
+    private async Task CambiarFormularioAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int numForm))
+        {
+            _form = await HospService.CargarSignosEnfermeriaAsync(IdOrden, Nhcl, numForm);
+        }
+    }
+
+    private async Task GuardarFormularioAsync()
+    {
+        if (_paciente is null) return;
+        _guardando = true;
+        try
+        {
+            await HospService.GuardarSignosEnfermeriaAsync(_form, Session.IdUser);
+            _esError = false;
+            _mensajeAlerta = $"Formulario #{_form.NumFormulario} de Signos Vitales y Balance Hídrico guardado correctamente.";
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al guardar: {ex.Message}";
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private async Task CrearNuevoFormularioAsync()
+    {
+        if (_paciente is null) return;
+        int nuevo = await HospService.CrearNuevoFormularioSignosAsync(IdOrden, Nhcl, Session.IdUser);
+        _form = await HospService.CargarSignosEnfermeriaAsync(IdOrden, Nhcl, nuevo);
+        _esError = false;
+        _mensajeAlerta = $"Se creó la Hoja #{nuevo} de Signos Vitales.";
+    }
+
+    private async Task ExportarPdfAsync()
+    {
+        if (_paciente is null) return;
+        var bytes = ReportService.GenerarSignosVitalesPdf(_paciente, _form);
+        var b64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"SignosVitales_Orden{IdOrden}_Hoja{_form.NumFormulario}.pdf", "application/pdf", b64);
+    }
+
+    private async Task ExportarExcelAsync()
+    {
+        if (_paciente is null) return;
+        var bytes = ReportService.GenerarSignosVitalesExcel(_paciente, _form);
+        var b64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"SignosVitales_Orden{IdOrden}_Hoja{_form.NumFormulario}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", b64);
+    }
+
+    private async Task ImprimirVistaAsync()
+    {
+        await JS.InvokeVoidAsync("hosvetPrintElement", "area-impresion-signos");
+    }
+}

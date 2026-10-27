@@ -1,0 +1,329 @@
+@page "/consulta/autorizaciones"
+@page "/consulta/autorizaciones/{IdOrden:int}/{Nhcl:int}"
+@inject IConsultaExternaService ConsultaService
+@inject IKardexService KardexService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject IJSRuntime JS
+
+<PageTitle>HOSVET - Autorizaciones, Consentimientos y Plan de Alta</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- Encabezado -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-white p-3 rounded shadow-sm border-start border-4 border-warning">
+        <div>
+            <h4 class="mb-0 text-primary fw-bold">
+                <i class="bi bi-file-earmark-check-fill me-2"></i>Consentimientos Informados, Autorizaciones y Plan de Alta
+            </h4>
+            <small class="text-muted">Emisión de consentimientos informados, documentos legales y plan de alta hospitalaria.</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
+            <div class="input-group input-group-sm" style="width: 260px;">
+                <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
+                <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
+                <input type="number" class="form-control" placeholder="NHCL" @bind="NhclInput" />
+                <button class="btn btn-primary" @onclick="CargarPorInputAsync">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+            <button class="btn btn-sm btn-danger" @onclick="ExportarAltaPdfAsync">
+                <i class="bi bi-file-earmark-pdf-fill me-1"></i>Descargar Plan de Alta PDF
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(MensajeAlerta))
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2">
+            <i class="bi bi-check-circle-fill me-2"></i>@MensajeAlerta
+            <button type="button" class="btn-close py-2" @onclick="() => MensajeAlerta = null"></button>
+        </div>
+    }
+
+    @if (CargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando consentimientos informados y plan de alta...</span>
+        </div>
+    }
+
+    @if (Paciente != null)
+    {
+        <div class="card shadow-sm border-0 mb-3 bg-warning bg-opacity-10">
+            <div class="card-body py-2 px-3 small">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <strong>Paciente:</strong> @Paciente.PacienteNombre (@Paciente.Especie - @Paciente.Raza)
+                        <span class="badge bg-dark ms-1">NHCL #@Paciente.Nhcl</span>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Propietario:</strong> @Paciente.PropietarioNombre (C.I.: @Paciente.ClienteCedula)
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <strong>Orden:</strong> #@IdOrden | <strong>Médico:</strong> @Paciente.MedicoResponsable
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="row g-3">
+        <!-- Columna Izquierda: Generador de Consentimientos Informados (vt_formatos -> vt_autorizaciones) -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white fw-bold text-primary">
+                    <i class="bi bi-file-earmark-richtext me-1"></i>1. Generación de Consentimientos y Autorizaciones Legales
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-8">
+                            <label class="form-label small fw-semibold">Seleccionar Plantilla Oficial</label>
+                            <select class="form-select form-select-sm" @bind="FormatoSeleccionadoId" @bind:after="CargarPlantillaFormatoAsync">
+                                <option value="0">-- Seleccione formato institucional --</option>
+                                @foreach (var f in Plantillas)
+                                {
+                                    <option value="@f.FormId">@f.FormNombre (@f.FormTipo)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button class="btn btn-sm btn-primary w-100" @onclick="GuardarAutorizacionAsync">
+                                <i class="bi bi-floppy-fill me-1"></i>Guardar Documento
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Título del Documento</label>
+                        <input type="text" class="form-control form-control-sm" @bind="NuevaAutorizacion.Documento" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold d-flex justify-content-between">
+                            <span>Contenido del Documento (Con Reemplazo Automático de Datos del Paciente/Propietario)</span>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" @onclick="() => ModoVistaPreviaHtml = !ModoVistaPreviaHtml">
+                                @(ModoVistaPreviaHtml ? "Editar HTML" : "Vista Previa Documento")
+                            </button>
+                        </label>
+                        @if (ModoVistaPreviaHtml)
+                        {
+                            <div class="border rounded p-3 bg-light small" style="min-height: 220px; max-height: 280px; overflow-y: auto;">
+                                @((MarkupString)NuevaAutorizacion.DetalleHtml)
+                            </div>
+                        }
+                        else
+                        {
+                            <textarea class="form-control form-control-sm font-monospace" rows="9" @bind="NuevaAutorizacion.DetalleHtml"></textarea>
+                        }
+                    </div>
+
+                    <h6 class="fw-bold text-secondary small border-bottom pb-1">Historial de Autorizaciones del Paciente (@AutorizacionesEmitidas.Count)</h6>
+                    <div class="table-responsive" style="max-height: 180px; overflow-y: auto;">
+                        <table class="table table-sm table-hover small mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Fecha</th>
+                                    <th>Documento</th>
+                                    <th>Médico</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var a in AutorizacionesEmitidas)
+                                {
+                                    <tr>
+                                        <td>#@a.AutorizacionId</td>
+                                        <td>@a.Fecha.ToString("yyyy-MM-dd")</td>
+                                        <td class="fw-semibold">@a.Documento</td>
+                                        <td>@a.NombreMedico</td>
+                                        <td class="text-end">
+                                            <button class="btn btn-xs btn-outline-primary py-0 px-2" @onclick="() => CargarAutorizacionExistente(a)">
+                                                Ver
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Plan de Alta Médica e Instrucciones en Domicilio (qvt_formulario_alta) -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-house-heart-fill me-1"></i>2. Plan de Alta Hospitalaria y Cuidados en Casa</span>
+                    <button class="btn btn-sm btn-success py-0" @onclick="GuardarFormularioAltaAsync">
+                        <i class="bi bi-floppy-fill me-1"></i>Guardar Plan de Alta
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-primary">1. Cuidados Generales en Domicilio (Herida, Collar Isabelino, Higiene)</label>
+                            <textarea class="form-control form-control-sm" rows="3" @bind="AltaForm.CuidadosGenerales"
+                                      placeholder="Mantener collar isabelino permanente, limpieza de herida quirúrgica, ambiente cálido y tranquilo..."></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-success">2. Actividades Permitidas</label>
+                            <textarea class="form-control form-control-sm" rows="3" @bind="AltaForm.Permitido"
+                                      placeholder="Caminatas cortas con correa para necesidades fisiológicas..."></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-danger">3. Actividades Restringidas / No Permitidas</label>
+                            <textarea class="form-control form-control-sm" rows="3" @bind="AltaForm.NoPermitido"
+                                      placeholder="No correr, no saltar, no subir escaleras, no bañar hasta retiro de puntos..."></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-primary">4. Manejo Nutricional y Dieta</label>
+                            <textarea class="form-control form-control-sm" rows="2" @bind="AltaForm.Dieta"
+                                      placeholder="Dieta blanda gastrointestinal fraccionada en 3-4 tomas diarias, agua fresca a libre disposición..."></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-primary">5. Esquema de Medicación y Próximo Control</label>
+                            <textarea class="form-control form-control-sm" rows="3" @bind="AltaForm.Medicacion"
+                                      placeholder="Resumen de analgésicos/antibióticos en casa y fecha de control o retiro de puntos..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private int IdOrdenInput { get; set; }
+    private int NhclInput { get; set; }
+    private int FormatoSeleccionadoId { get; set; }
+    private bool ModoVistaPreviaHtml { get; set; } = true;
+    private bool CargandoInicial { get; set; } = true;
+    private string? MensajeAlerta { get; set; }
+
+    private PacienteHeaderDto? Paciente { get; set; }
+    private List<FormatoPlantillaDto> Plantillas { get; set; } = new();
+    private List<AutorizacionClinicaDto> AutorizacionesEmitidas { get; set; } = new();
+    private AutorizacionClinicaDto NuevaAutorizacion { get; set; } = new();
+    private FormularioAltaMedicaDto AltaForm { get; set; } = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        CargandoInicial = true;
+        await Task.Yield();
+
+        var tPlantillas = ConsultaService.ObtenerPlantillasFormatosAsync();
+
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0 && Nhcl <= 0)
+        {
+            var activas = await KardexService.ObtenerOrdenesActivasAsync();
+            if (activas.Count > 0)
+            {
+                IdOrden = activas[0].IdOrdenAtencion;
+                Nhcl = activas[0].Nhcl;
+            }
+        }
+
+        Plantillas = await tPlantillas;
+
+        if (IdOrden > 0 || Nhcl > 0)
+        {
+            IdOrdenInput = IdOrden;
+            NhclInput = Nhcl;
+            await CargarDatosAsync();
+        }
+        CargandoInicial = false;
+    }
+
+    private async Task CargarPorInputAsync()
+    {
+        IdOrden = IdOrdenInput;
+        Nhcl = NhclInput;
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        if (IdOrden > 0)
+        {
+            Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
+            if (Paciente != null && Nhcl <= 0)
+            {
+                Nhcl = Paciente.Nhcl;
+                NhclInput = Nhcl;
+            }
+            Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
+        }
+
+        if (Nhcl > 0)
+        {
+            var tAut = ConsultaService.ObtenerAutorizacionesPacienteAsync(Nhcl);
+            var tAlta = ConsultaService.ObtenerFormularioAltaAsync(IdOrden, Nhcl);
+            var tFmt = CargarPlantillaFormatoAsync();
+            await Task.WhenAll(tAut, tAlta, tFmt);
+            AutorizacionesEmitidas = await tAut;
+            AltaForm = await tAlta;
+        }
+    }
+
+    private async Task CargarPlantillaFormatoAsync()
+    {
+        var plantilla = Plantillas.FirstOrDefault(p => p.FormId == FormatoSeleccionadoId);
+        if (plantilla != null)
+        {
+            NuevaAutorizacion.Documento = plantilla.FormNombre;
+            NuevaAutorizacion.Tipo = string.IsNullOrWhiteSpace(plantilla.FormTipo) ? "HDEV" : plantilla.FormTipo;
+        }
+        NuevaAutorizacion.DetalleHtml = await ConsultaService.ProcesarPlantillaConDatosPacienteAsync(FormatoSeleccionadoId, Nhcl);
+    }
+
+    private void CargarAutorizacionExistente(AutorizacionClinicaDto item)
+    {
+        NuevaAutorizacion = new AutorizacionClinicaDto
+        {
+            AutorizacionId = item.AutorizacionId,
+            Nhcl = item.Nhcl,
+            Orden = item.Orden,
+            Documento = item.Documento,
+            Tipo = item.Tipo,
+            DetalleHtml = item.DetalleHtml
+        };
+        ModoVistaPreviaHtml = true;
+    }
+
+    private async Task GuardarAutorizacionAsync()
+    {
+        NuevaAutorizacion.Nhcl = Nhcl;
+        NuevaAutorizacion.Orden = IdOrden;
+        NuevaAutorizacion.IdUser = Session.CurrentUser?.UserNumero ?? 1;
+        await ConsultaService.GuardarAutorizacionAsync(NuevaAutorizacion);
+        AutorizacionesEmitidas = await ConsultaService.ObtenerAutorizacionesPacienteAsync(Nhcl);
+        MensajeAlerta = $"Documento '{NuevaAutorizacion.Documento}' registrado en el historial del paciente.";
+    }
+
+    private async Task GuardarFormularioAltaAsync()
+    {
+        AltaForm.IdOrden = IdOrden;
+        AltaForm.Nhcl = Nhcl;
+        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        await ConsultaService.GuardarFormularioAltaAsync(AltaForm, idUser);
+        MensajeAlerta = "Plan de Alta Hospitalaria guardado correctamente.";
+    }
+
+    private async Task ExportarAltaPdfAsync()
+    {
+        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente HOSVET" };
+        var pdfBytes = ReportService.GenerarAltaMedicaPdf(pac, AltaForm);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"PlanAlta_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+    }
+}

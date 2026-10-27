@@ -1,0 +1,370 @@
+@page "/admision/citas"
+@using HosvetKardex.Web.Models
+@using HosvetKardex.Web.Services
+@inject IAdmisionFacturacionService AdmisionService
+@inject IReportExportService ReportService
+@inject SessionStateService SessionState
+@inject IJSRuntime JS
+
+<PageTitle>HOSVET — Agenda Médica y Calendarización de Citas</PageTitle>
+
+<div class="container-fluid py-3">
+    <!-- Encabezado -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded-3 shadow-sm bg-white border-start border-4 border-info">
+        <div>
+            <h4 class="mb-0 fw-bold text-info">
+                <i class="bi bi-calendar2-week-fill me-2"></i>Agenda Médica, Turnos y Calendarización
+            </h4>
+            <small class="text-muted">
+                Programación de turnos por especialista, disponibilidad horaria y confirmación de citas.
+            </small>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-danger btn-sm" @onclick="ExportarPdfAgendaAsync">
+                <i class="bi bi-file-earmark-pdf-fill me-1"></i>Exportar Agenda PDF
+            </button>
+            <a href="/admision/ordenes" class="btn btn-success btn-sm">
+                <i class="bi bi-clipboard2-pulse me-1"></i>Recepción / Órdenes
+            </a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_mensaje))
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@_mensaje
+            <button type="button" class="btn-close" @onclick="() => _mensaje = string.Empty"></button>
+        </div>
+    }
+
+    @if (_cargandoInicial)
+    {
+        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span class="fw-semibold small">Cargando agenda médica y turnos disponibles...</span>
+        </div>
+    }
+
+    <div class="row g-3">
+        <!-- Columna Izquierda: Grilla de Slots Horarios del Médico (08:00 a 17:30) -->
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold mb-0">Médico Veterinario</label>
+                            <select class="form-select form-select-sm" value="@_idMedicoFiltro" @onchange="CambiarMedicoAsync">
+                                @foreach (var m in _medicos)
+                                {
+                                    <option value="@m.Id">@m.Descripcion</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold mb-0">Fecha de Agenda</label>
+                            <input type="date" class="form-control form-control-sm"
+                                   value="@_fechaAgenda.ToString("yyyy-MM-dd")"
+                                   @onchange="CambiarFechaAsync" />
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-2">
+                    <div class="d-flex justify-content-between align-items-center px-2 mb-2 small text-muted">
+                        <span>Seleccione un bloque libre para agendar:</span>
+                        <span><span class="badge bg-success">Libre</span> <span class="badge bg-primary">Ocupado</span> <span class="badge bg-secondary">Receso</span></span>
+                    </div>
+
+                    <div class="list-group" style="max-height: 460px; overflow-y: auto;">
+                        @foreach (var slot in _slots)
+                        {
+                            string bgClass = slot.Bloqueado ? "list-group-item-secondary" : (slot.Disponible ? "list-group-item-action" : "list-group-item-primary");
+                            <div class="list-group-item @bgClass py-2 px-3 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="badge @(slot.Bloqueado ? "bg-secondary" : (slot.Disponible ? "bg-success" : "bg-primary")) me-2">
+                                        @slot.Hora
+                                    </span>
+                                    <span class="small fw-semibold">@slot.MotivoEstado</span>
+                                </div>
+                                @if (slot.Disponible)
+                                {
+                                    <button class="btn btn-xs btn-outline-success py-0 px-2" @onclick="() => SeleccionarHoraLibre(slot.Hora)">
+                                        <i class="bi bi-plus-lg"></i> Asignar
+                                    </button>
+                                }
+                                else if (slot.CitaExistente != null)
+                                {
+                                    <span class="badge bg-dark">NHCL #@slot.CitaExistente.CiNhcl</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Formulario de Reserva + Listado de Citas -->
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-info text-white fw-bold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-calendar-plus me-1"></i>Reservar Turno Médico</span>
+                    <span class="badge bg-dark">Hora Seleccionada: @_nuevaCita.CiHora</span>
+                </div>
+                <div class="card-body">
+                    <EditForm Model="_nuevaCita" OnValidSubmit="GuardarCitaAsync">
+                        <DataAnnotationsValidator />
+                        <div class="row g-2">
+                            <div class="col-md-5">
+                                <label class="form-label small fw-bold">Autocompletar desde Paciente Existente</label>
+                                <select class="form-select form-select-sm" @onchange="AutocompletarPacienteCita">
+                                    <option value="0">-- Seleccionar NHCL existente (Opcional) --</option>
+                                    @foreach (var p in _pacientes)
+                                    {
+                                        <option value="@p.MasNhcl">#@p.MasNhcl — @p.MasNombre (@p.ClienteNombre)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">Tipo de Consulta</label>
+                                <select class="form-select form-select-sm" @bind="_nuevaCita.CiTipoConsulta">
+                                    <option value="1">1 — Consulta General</option>
+                                    <option value="2">2 — Especialidad</option>
+                                    <option value="3">3 — Cirugía Programada</option>
+                                    <option value="4">4 — Control / Revisión</option>
+                                    <option value="5">5 — Estudio de Imagen / Eco</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold">Hora Cita *</label>
+                                <InputText class="form-control form-control-sm fw-bold text-center" @bind-Value="_nuevaCita.CiHora" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Nombre del Propietario *</label>
+                                <InputText class="form-control form-control-sm" @bind-Value="_nuevaCita.CiNombre" />
+                                <ValidationMessage For="() => _nuevaCita.CiNombre" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Nombre de la Mascota *</label>
+                                <InputText class="form-control form-control-sm text-uppercase" @bind-Value="_nuevaCita.CiNombreMas" />
+                                <ValidationMessage For="() => _nuevaCita.CiNombreMas" />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">Teléfono Contacto</label>
+                                <InputText class="form-control form-control-sm" @bind-Value="_nuevaCita.CiTelefono" />
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label small fw-bold">Correo Electrónico</label>
+                                <InputText class="form-control form-control-sm" @bind-Value="_nuevaCita.CiEmail" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold">Origen</label>
+                                <select class="form-select form-select-sm" @bind="_nuevaCita.CiTipo">
+                                    <option value="M">HDEV</option>
+                                    <option value="T">TUERI</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="form-label small fw-bold">Motivo de la Cita / Observaciones</label>
+                                <InputText class="form-control form-control-sm" placeholder="Ej: Vacunación anual, control post-operatorio, ecografía abdominal..." @bind-Value="_nuevaCita.CiObservacion" />
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end mt-3">
+                            <button type="submit" class="btn btn-info text-white btn-sm fw-bold">
+                                <i class="bi bi-calendar-check me-1"></i>Confirmar y Registrar Cita
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+
+            <!-- Tabla de Citas Programadas -->
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-card-checklist me-1"></i>Citas Programadas (@_citas.Count)</span>
+                    <span class="badge bg-info text-dark">@_fechaAgenda.ToString("yyyy-MM-dd")</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0 small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Hora</th>
+                                    <th>Mascota (NHCL)</th>
+                                    <th>Propietario / Tel.</th>
+                                    <th>Médico</th>
+                                    <th>Motivo</th>
+                                    <th>Estado</th>
+                                    <th class="text-end">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var c in _citas)
+                                {
+                                    <tr>
+                                        <td class="fw-bold text-primary">@c.CiHora</td>
+                                        <td>
+                                            <strong>@c.CiNombreMas</strong>
+                                            @if (c.CiNhcl > 0)
+                                            {
+                                                <span class="text-muted">(#@c.CiNhcl)</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div>@c.CiNombre</div>
+                                            <small class="text-muted">@c.CiTelefono</small>
+                                        </td>
+                                        <td>@c.NombreMedico</td>
+                                        <td>@c.CiObservacion</td>
+                                        <td>
+                                            @if (c.CiEstadoCita == "C")
+                                            {
+                                                <span class="badge bg-success">Confirmada</span>
+                                            }
+                                            else if (c.CiEstadoCita == "A")
+                                            {
+                                                <span class="badge bg-primary">Atendida</span>
+                                            }
+                                            else if (c.CiEstadoCita == "X")
+                                            {
+                                                <span class="badge bg-danger">Cancelada</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning text-dark">Agendada</span>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-outline-success py-0 px-2" title="Confirmar Asistencia"
+                                                        @onclick='() => CambiarEstadoCitaAsync(c.CiId, "C")'>
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                                <button class="btn btn-outline-danger py-0 px-2" title="Cancelar Cita"
+                                                        @onclick='() => CambiarEstadoCitaAsync(c.CiId, "X")'>
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<CatalogoItemGenericoDto> _medicos = new();
+    private List<PacienteMascotaDto> _pacientes = new();
+    private List<SlotHorarioMedicoDto> _slots = new();
+    private List<CitaMedicaDto> _citas = new();
+
+    private CitaMedicaDto _nuevaCita = new();
+    private int _idMedicoFiltro = 1;
+    private DateTime _fechaAgenda = DateTime.Today;
+    private bool _cargandoInicial = true;
+    private string _mensaje = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cargandoInicial = true;
+        await Task.Yield();
+
+        var tMed = AdmisionService.ObtenerMedicosPorEspecialidadAsync(0);
+        var tPac = AdmisionService.BuscarMascotasAsync(string.Empty);
+        await Task.WhenAll(tMed, tPac);
+
+        _medicos = await tMed;
+        _pacientes = await tPac;
+        _idMedicoFiltro = _medicos.FirstOrDefault()?.Id ?? 1;
+
+        await CargarAgendaAsync();
+        _cargandoInicial = false;
+    }
+
+    private async Task CargarAgendaAsync()
+    {
+        var tSlots = AdmisionService.ObtenerSlotsHorarioMedicoAsync(_idMedicoFiltro, _fechaAgenda, 1);
+        var tCitas = AdmisionService.ObtenerCitasPorFechaAsync(_fechaAgenda, _fechaAgenda, 0);
+        await Task.WhenAll(tSlots, tCitas);
+        _slots = await tSlots;
+        _citas = await tCitas;
+
+        var medicoObj = _medicos.FirstOrDefault(m => m.Id == _idMedicoFiltro);
+        _nuevaCita.CiUsuario = _idMedicoFiltro;
+        _nuevaCita.NombreMedico = medicoObj?.Descripcion ?? "Médico";
+        _nuevaCita.CiFecha = _fechaAgenda;
+    }
+
+    private async Task CambiarMedicoAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int idMed))
+        {
+            _idMedicoFiltro = idMed;
+            await CargarAgendaAsync();
+        }
+    }
+
+    private async Task CambiarFechaAsync(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var fec))
+        {
+            _fechaAgenda = fec;
+            await CargarAgendaAsync();
+        }
+    }
+
+    private void SeleccionarHoraLibre(string hora)
+    {
+        _nuevaCita.CiHora = hora;
+    }
+
+    private void AutocompletarPacienteCita(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int nhcl) && nhcl > 0)
+        {
+            var p = _pacientes.FirstOrDefault(x => x.MasNhcl == nhcl);
+            if (p != null)
+            {
+                _nuevaCita.CiNhcl = p.MasNhcl;
+                _nuevaCita.CiNombreMas = p.MasNombre;
+                _nuevaCita.CiNombre = p.ClienteNombre;
+                _nuevaCita.CiTelefono = p.ClienteTelefono;
+                _nuevaCita.CiTipo = p.MasOrigen;
+            }
+        }
+    }
+
+    private async Task GuardarCitaAsync()
+    {
+        int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
+        var medicoObj = _medicos.FirstOrDefault(m => m.Id == _idMedicoFiltro);
+        _nuevaCita.CiUsuario = _idMedicoFiltro;
+        _nuevaCita.NombreMedico = medicoObj?.Descripcion ?? "Médico";
+        _nuevaCita.CiFecha = _fechaAgenda;
+
+        int idCita = await AdmisionService.AgendarCitaAsync(_nuevaCita, idUser);
+        _mensaje = $"Cita #{idCita} agendada para {_nuevaCita.CiNombreMas} a las {_nuevaCita.CiHora} con {_nuevaCita.NombreMedico}.";
+        _nuevaCita = new CitaMedicaDto { CiFecha = _fechaAgenda, CiHora = "08:30", CiUsuario = _idMedicoFiltro };
+        await CargarAgendaAsync();
+    }
+
+    private async Task CambiarEstadoCitaAsync(int idCita, string nuevoEstado)
+    {
+        await AdmisionService.ActualizarEstadoCitaAsync(idCita, nuevoEstado);
+        await CargarAgendaAsync();
+    }
+
+    private async Task ExportarPdfAgendaAsync()
+    {
+        var bytes = ReportService.GenerarAgendaCitasPdf(_citas, _fechaAgenda, _fechaAgenda);
+        var base64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("eval", $"{{ const a = document.createElement('a'); a.href = 'data:application/pdf;base64,{base64}'; a.download = 'Agenda_Citas_{_fechaAgenda:yyyyMMdd}.pdf'; a.click(); }}");
+    }
+}

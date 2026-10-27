@@ -1,0 +1,535 @@
+@page "/quirofano/preanestesia"
+@page "/quirofano/preanestesia/{IdOrden:int}/{Nhcl:int}"
+@inject IKardexService KardexService
+@inject IQuirofanoService QuirofanoService
+@inject IBusinessCentralService BcService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject IJSRuntime JS
+
+<PageTitle>Evaluación Pre-Anestésica - HOSVET</PageTitle>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h4 class="mb-0 fw-bold text-primary">Evaluación Pre-Anestésica y Pre-Medicación</h4>
+        <small class="text-muted">Valoración de riesgo anestésico ASA, examen físico por sistemas y pre-medicación.</small>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <select class="form-select form-select-sm" style="width: 260px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+            <option value="0">-- Seleccionar Orden Activa --</option>
+            @foreach (var ord in ordenesActivas)
+            {
+                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente</option>
+            }
+        </select>
+
+        <div class="input-group input-group-sm" style="width: 210px;">
+            <span class="input-group-text">Orden #</span>
+            <input type="number" class="form-control" @bind="ordenInput" />
+            <button class="btn btn-primary" @onclick="CargarPorInputAsync">Cargar</button>
+        </div>
+
+        @if (paciente != null)
+        {
+            <button class="btn btn-sm btn-success fw-semibold" @onclick="GuardarPreAnestesiaAsync" disabled="@guardando">
+                @(guardando ? "Guardando..." : "Guardar Evaluación")
+            </button>
+            <button class="btn btn-sm btn-danger" @onclick="ExportarPdfAsync">Exportar PDF</button>
+            <a class="btn btn-sm btn-outline-primary" href="/quirofano/anestesia/@IdOrden/@Nhcl">Ir a Hoja Anestesia</a>
+            <a class="btn btn-sm btn-outline-secondary" href="/quirofano/protocolo/@IdOrden/@Nhcl">Protocolo</a>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(mensajeAlerta))
+{
+    <div class="alert @(esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small" role="alert">
+        @mensajeAlerta
+        <button type="button" class="btn-close py-2" @onclick="() => mensajeAlerta = string.Empty"></button>
+    </div>
+}
+
+@if (cargandoInicial)
+{
+    <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span class="fw-semibold small">Cargando evaluación pre-anestésica y pre-medicación...</span>
+    </div>
+}
+else if (paciente != null)
+{
+    <!-- Cabecera del Paciente -->
+    <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
+        <div class="card-body py-2 px-3">
+            <div class="row g-2 align-items-center small">
+                <div class="col-md-3">
+                    <span class="text-muted">Orden / NHCL:</span>
+                    <strong class="ms-1 text-primary">#@paciente.OrdenAtencionId / @paciente.Nhcl</strong>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Paciente:</span>
+                    <strong class="ms-1">@paciente.PacienteNombre</strong> (@paciente.Especie - @paciente.Raza)
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Edad / Sexo:</span>
+                    <strong class="ms-1">@paciente.EdadTexto / @paciente.Sexo</strong>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Propietario:</span>
+                    <strong class="ms-1">@paciente.PropietarioNombre</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <!-- Columna Izquierda: Clasificación ASA, Sistemas y Regiones -->
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white fw-bold text-primary">
+                    1. Clasificación de Riesgo Anestésico (ASA) y Estado Clínico
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Clasificación ASA (I a V)</label>
+                            <div class="btn-group w-100" role="group">
+                                @for (int asa = 1; asa <= 5; asa++)
+                                {
+                                    int currentAsa = asa;
+                                    <button type="button"
+                                            class="btn btn-sm @(preDto.Riesgo == currentAsa ? "btn-primary fw-bold" : "btn-outline-primary")"
+                                            @onclick="() => preDto.Riesgo = currentAsa">
+                                        ASA @currentAsa
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Estado General Pre-Operatorio</label>
+                            <div class="d-flex gap-3 pt-1 small">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="chkBueno"
+                                           checked="@(preDto.Ebueno == 1)"
+                                           @onchange="e => preDto.Ebueno = (bool)(e.Value ?? false) ? 1 : 0" />
+                                    <label class="form-check-label" for="chkBueno">Bueno</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="chkDeprimido"
+                                           checked="@(preDto.Edeprimido == 1)"
+                                           @onchange="e => preDto.Edeprimido = (bool)(e.Value ?? false) ? 1 : 0" />
+                                    <label class="form-check-label" for="chkDeprimido">Deprimido</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="chkInsuf"
+                                           checked="@(preDto.Einsuficiente == 1)"
+                                           @onchange="e => preDto.Einsuficiente = (bool)(e.Value ?? false) ? 1 : 0" />
+                                    <label class="form-check-label" for="chkInsuf">Insuficiente</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold mb-1">Grupo Sanguíneo</label>
+                            <input type="text" class="form-control form-control-sm" @bind="preDto.GrupoSanguineo" placeholder="Ej: DEA 1.1+ / Tipo A" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold mb-1">Última Ingestión</label>
+                            <input type="datetime-local" class="form-control form-control-sm" @bind="preDto.UltimaIngestion" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold mb-1">Anestesiólogo / Firma</label>
+                            <input type="text" class="form-control form-control-sm" @bind="preDto.Firma" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold mb-1">Información Especial / Alertas Alérgicas</label>
+                            <input type="text" class="form-control form-control-sm" @bind="preDto.InformacionEspecial" placeholder="Alergias, precauciones de vía aérea o hemodinámicas..." />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white fw-bold text-primary">
+                    2. Evaluación por Sistemas y Exámenes Pre-Quirúrgicos
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 small">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold mb-1">Hematológico</label>
+                            <textarea class="form-control form-control-sm" rows="2" @bind="preDto.Hematologico"></textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold mb-1">Química Sanguínea</label>
+                            <textarea class="form-control form-control-sm" rows="2" @bind="preDto.QuimicaSanguinea"></textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold mb-1">Uroanálisis</label>
+                            <textarea class="form-control form-control-sm" rows="2" @bind="preDto.Uroanalisis"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold mb-1">Sistema Respiratorio</label>
+                            <input type="text" class="form-control form-control-sm" @bind="preDto.SistemaRespiratorio" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold mb-1">Sistema Circulatorio / Cardiovascular</label>
+                            <input type="text" class="form-control form-control-sm" @bind="preDto.SistemaCirculatorio" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold mb-1">Sistema Nervioso</label>
+                            <input type="text" class="form-control form-control-sm" @bind="preDto.SistemaNervioso" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold mb-1">Otros Sistemas</label>
+                            <input type="text" class="form-control form-control-sm" @bind="preDto.SistemasOtros" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold mb-1">Anestesias Anteriores</label>
+                            <input type="text" class="form-control form-control-sm" @bind="preDto.AnestesiasAnteriores" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold mb-1">Terapia Farmacológica Previa</label>
+                            <input type="text" class="form-control form-control-sm" @bind="preDto.TerapiaAnterior" />
+                        </div>
+                    </div>
+
+                    <hr class="my-3" />
+                    <label class="form-label small fw-bold text-secondary mb-2">Regiones Anatómicas / Bloqueos Regionales Planificados</label>
+                    <div class="row g-2 small">
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckCabeza" /> Cabeza</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckSentidos" /> Órganos Sentidos</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckCuello" /> Cuello</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckEndoscopias" /> Endoscopías</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckIntratoraxica" /> Intratorácica</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckExtratoraxica" /> Extratorácica</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckAbdomen" /> Abdomen</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckExtremidades" /> Extremidades</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckIntradural" /> Intradural</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckExtradural" /> Extradural</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckObstetricas" /> Obstétricas</label></div>
+                        <div class="col-6 col-md-3"><label><input type="checkbox" class="form-check-input me-1" @bind="preDto.CheckPerineales" /> Perineales</label></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Medicación Pre-Anestésica y Stock BC -->
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white fw-bold text-primary">
+                    3. Medicación Pre-Anestésica (Stock Business Central)
+                </div>
+                <div class="card-body">
+                    <div class="input-group input-group-sm mb-2">
+                        <input type="text" class="form-control" placeholder="Buscar fármaco o insumo (mín. 3 letras)..." @bind="filtroProd" />
+                        <button class="btn btn-outline-primary" @onclick="BuscarStockBcAsync" disabled="@buscandoStock">
+                            @(buscandoStock ? "Buscando..." : "Buscar Stock")
+                        </button>
+                    </div>
+
+                    @if (resultadosStock.Any())
+                    {
+                        <div class="table-responsive mb-2 border rounded" style="max-height: 170px;">
+                            <table class="table table-sm table-hover mb-0 small">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Código</th>
+                                        <th>Producto</th>
+                                        <th>Bodega</th>
+                                        <th class="text-end">Disp.</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in resultadosStock)
+                                    {
+                                        <tr>
+                                            <td><code>@item.Number</code></td>
+                                            <td>@item.DisplayName</td>
+                                            <td>@item.Location</td>
+                                            <td class="text-end fw-bold">@item.Inventory.ToString("N0")</td>
+                                            <td class="text-end">
+                                                <button class="btn btn-xs btn-primary py-0 px-2" @onclick="() => SeleccionarProducto(item)">Elegir</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    <div class="row g-2 small bg-light p-2 rounded border mb-3">
+                        <div class="col-12">
+                            <label class="form-label mb-0 fw-semibold">Producto Seleccionado</label>
+                            <input type="text" class="form-control form-control-sm" @bind="nuevoProd.ProdDescripcion" placeholder="Seleccione de la lista o escriba..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label mb-0">Cantidad</label>
+                            <input type="number" step="0.5" class="form-control form-control-sm" @bind="nuevoProd.CantProd" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label mb-0">Vía</label>
+                            <select class="form-select form-select-sm" @bind="nuevoProd.Via">
+                                @foreach (var v in catalogoVias)
+                                {
+                                    <option value="@v.Via">@v.Via</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label mb-0">Hora</label>
+                            <input type="time" class="form-control form-control-sm"
+                                   value="@nuevoProd.Hora"
+                                   @onchange="e => nuevoProd.Hora = e.Value?.ToString() ?? string.Empty" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label mb-0">Indicaciones / Dosis Pre-Anestésica</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" @bind="nuevoProd.IndicacionesProd" placeholder="Ej: 0.02 mg/kg IM 20 min antes de inducción" />
+                                <button class="btn btn-primary" @onclick="AgregarProductoPreAnestesiaAsync">Agregar</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="small fw-bold text-secondary mb-2">Fármacos Administrados en Pre-Anestesia (@listaPremedicacion.Count)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0 small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Hora</th>
+                                    <th>Fármaco</th>
+                                    <th class="text-center">Cant.</th>
+                                    <th class="text-center">Vía</th>
+                                    <th>Dosis / Indicación</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!listaPremedicacion.Any())
+                                {
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-3">Sin pre-medicación registrada para esta orden.</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var p in listaPremedicacion)
+                                    {
+                                        <tr>
+                                            <td>@p.Hora</td>
+                                            <td class="fw-semibold">@p.ProdDescripcion</td>
+                                            <td class="text-center">@p.CantProd.ToString("N1")</td>
+                                            <td class="text-center"><span class="badge bg-info text-dark">@p.Via</span></td>
+                                            <td>@p.IndicacionesProd</td>
+                                            <td class="text-center">
+                                                <button class="btn btn-xs btn-outline-danger py-0 px-1"
+                                                        @onclick="() => EliminarProductoAsync(p)">×</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private int ordenInput;
+    private List<OrdenActivaResumenDto> ordenesActivas = new();
+    private PacienteHeaderDto? paciente;
+    private PreAnestesiaDto preDto = new();
+    private List<ProductoQuirofanoDto> listaPremedicacion = new();
+    private List<ViaAdministracionDto> catalogoVias = new();
+
+    private string filtroProd = string.Empty;
+    private bool buscandoStock;
+    private List<FarmacoStockDto> resultadosStock = new();
+    private ProductoQuirofanoDto nuevoProd = new() { Modulo = "PreAnestesia" };
+
+    private bool cargandoInicial = true;
+    private bool guardando;
+    private string mensajeAlerta = string.Empty;
+    private bool esError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        cargandoInicial = true;
+        await Task.Yield();
+
+        var tVias = KardexService.ObtenerViasAdministracionAsync();
+        var tOrdenes = KardexService.ObtenerOrdenesActivasAsync();
+        await Task.WhenAll(tVias, tOrdenes);
+
+        catalogoVias = await tVias;
+        ordenesActivas = await tOrdenes;
+
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0 && ordenesActivas.Count > 0)
+        {
+            IdOrden = ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = ordenesActivas[0].Nhcl;
+        }
+
+        if (IdOrden > 0)
+        {
+            ordenInput = IdOrden;
+            await CargarDatosAsync();
+        }
+        cargandoInicial = false;
+    }
+
+    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int selOrden) && selOrden > 0)
+        {
+            var ord = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == selOrden);
+            IdOrden = selOrden;
+            Nhcl = ord?.Nhcl ?? 0;
+            ordenInput = IdOrden;
+            await CargarDatosAsync();
+        }
+    }
+
+    private async Task CargarPorInputAsync()
+    {
+        if (ordenInput <= 0 && ordenesActivas.Count > 0)
+        {
+            ordenInput = ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = ordenesActivas[0].Nhcl;
+        }
+        if (ordenInput <= 0) return;
+        IdOrden = ordenInput;
+        var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
+        if (match != null) Nhcl = match.Nhcl;
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        var p = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
+        if (p != null)
+        {
+            Nhcl = p.Nhcl;
+            Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
+            var tPre = QuirofanoService.ObtenerPreAnestesiaAsync(IdOrden, Nhcl);
+            var tProd = QuirofanoService.ObtenerProductosQuirofanoAsync(IdOrden, "PreAnestesia");
+            await Task.WhenAll(tPre, tProd);
+
+            preDto = await tPre;
+            if (string.IsNullOrWhiteSpace(preDto.Firma))
+                preDto.Firma = Session.CurrentUser?.NombreCompleto ?? "Dr. Anestesiólogo";
+
+            listaPremedicacion = await tProd;
+            paciente = p;
+        }
+        else
+        {
+            paciente = null;
+            esError = true;
+            mensajeAlerta = $"No se encontró la Orden #{IdOrden}.";
+        }
+    }
+
+    private async Task GuardarPreAnestesiaAsync()
+    {
+        if (paciente == null) return;
+        guardando = true;
+        preDto.Orden = IdOrden;
+        preDto.Nhcl = Nhcl;
+
+        var ok = await QuirofanoService.GuardarPreAnestesiaAsync(
+            preDto,
+            Session.CurrentUser?.IdUsuario ?? 1,
+            Session.CurrentUser?.NombreCompleto ?? "Anestesiólogo");
+
+        guardando = false;
+        esError = !ok;
+        mensajeAlerta = ok
+            ? $"Evaluación Pre-Anestésica (ASA {preDto.Riesgo}) guardada exitosamente."
+            : "Ocurrió un error al guardar la Evaluación Pre-Anestésica.";
+    }
+
+    private async Task BuscarStockBcAsync()
+    {
+        if (string.IsNullOrWhiteSpace(filtroProd) || filtroProd.Trim().Length < 3)
+        {
+            esError = true;
+            mensajeAlerta = "Ingrese al menos 3 caracteres para buscar fármacos o insumos.";
+            return;
+        }
+        buscandoStock = true;
+        resultadosStock = await BcService.BuscarMedicamentosConStockAsync(
+            filtroProd.Trim(),
+            Session.CurrentUser?.IdLocalidad ?? 1,
+            Session.CurrentUser?.PrefijoLocalidad ?? "HV");
+        buscandoStock = false;
+    }
+
+    private void SeleccionarProducto(FarmacoStockDto item)
+    {
+        nuevoProd.CodigoProd = item.Number;
+        nuevoProd.ProdDescripcion = item.DisplayName;
+        nuevoProd.PrecioProd = item.UnitPrice;
+        nuevoProd.StockProd = (int)item.Inventory;
+        nuevoProd.MedBodega = item.Location;
+        nuevoProd.MedMedida = item.BaseUnitOfMeasureCode;
+        nuevoProd.MedIva = item.TaxGroupCode;
+        nuevoProd.MedIdDinamics = item.Id;
+        resultadosStock.Clear();
+    }
+
+    private async Task AgregarProductoPreAnestesiaAsync()
+    {
+        if (string.IsNullOrWhiteSpace(nuevoProd.ProdDescripcion))
+        {
+            esError = true;
+            mensajeAlerta = "Seleccione o ingrese el fármaco pre-anestésico.";
+            return;
+        }
+        nuevoProd.OrdenId = IdOrden;
+        nuevoProd.Nhcl = Nhcl;
+        nuevoProd.Modulo = "PreAnestesia";
+        nuevoProd.Iniciales = Session.CurrentUser?.Iniciales ?? "AN";
+        nuevoProd.Funcion = "Anestesiólogo";
+        nuevoProd.Funcionario = Session.CurrentUser?.NombreCompleto ?? "Anestesiólogo";
+
+        var ok = await QuirofanoService.AgregarProductoQuirofanoAsync(
+            nuevoProd,
+            Session.CurrentUser?.IdUsuario ?? 1,
+            Session.CurrentUser?.IdLocalidad ?? 1,
+            "PRE");
+
+        if (ok)
+        {
+            nuevoProd = new ProductoQuirofanoDto { Modulo = "PreAnestesia", Via = "IV" };
+            listaPremedicacion = await QuirofanoService.ObtenerProductosQuirofanoAsync(IdOrden, "PreAnestesia");
+            esError = false;
+            mensajeAlerta = "Pre-medicación registrada y reservada en inventario.";
+        }
+    }
+
+    private async Task EliminarProductoAsync(ProductoQuirofanoDto p)
+    {
+        await QuirofanoService.EliminarProductoQuirofanoAsync(p.Id, p.CodigoProd, IdOrden, "PRE");
+        listaPremedicacion = await QuirofanoService.ObtenerProductosQuirofanoAsync(IdOrden, "PreAnestesia");
+    }
+
+    private async Task ExportarPdfAsync()
+    {
+        if (paciente == null) return;
+        var bytes = ReportService.GenerarPreAnestesiaPdf(paciente, preDto, listaPremedicacion);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"PreAnestesia_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+    }
+}

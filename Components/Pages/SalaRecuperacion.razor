@@ -1,0 +1,741 @@
+@page "/quirofano/recuperacion"
+@page "/quirofano/recuperacion/{IdOrden:int}/{Nhcl:int}"
+@using System.Globalization
+@inject IKardexService KardexService
+@inject IQuirofanoService QuirofanoService
+@inject IBusinessCentralService BcService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject IJSRuntime JS
+
+<PageTitle>Sala de Recuperación y Post-Operatorio - HOSVET</PageTitle>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h4 class="mb-0 fw-bold text-primary">Sala de Recuperación Post-Anestésica y Entrega Post-Operatoria</h4>
+        <small class="text-muted">Monitoreo post-anestésico, control de líquidos, evolución y entrega post-operatoria.</small>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <select class="form-select form-select-sm" style="width: 260px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+            <option value="0">-- Seleccionar Orden Activa --</option>
+            @foreach (var ord in ordenesActivas)
+            {
+                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente</option>
+            }
+        </select>
+
+        <div class="input-group input-group-sm" style="width: 210px;">
+            <span class="input-group-text">Orden #</span>
+            <input type="number" class="form-control" @bind="ordenInput" />
+            <button class="btn btn-primary" @onclick="CargarPorInputAsync">Cargar</button>
+        </div>
+
+        @if (paciente != null)
+        {
+            <button class="btn btn-sm btn-danger" @onclick="ExportarPdfAsync">Exportar PDF</button>
+            <a class="btn btn-sm btn-outline-primary" href="/hospitalizacion/ficha/@IdOrden/@Nhcl">Pasar a Hospitalización 24h</a>
+            <a class="btn btn-sm btn-outline-secondary" href="/kardex/enfermeria/@IdOrden/@Nhcl">Kardex Enfermería</a>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(mensajeAlerta))
+{
+    <div class="alert @(esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small" role="alert">
+        @mensajeAlerta
+        <button type="button" class="btn-close py-2" @onclick="() => mensajeAlerta = string.Empty"></button>
+    </div>
+}
+
+@if (cargandoInicial)
+{
+    <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span class="fw-semibold small">Cargando sala de recuperación post-anestésica...</span>
+    </div>
+}
+else if (paciente != null)
+{
+    <!-- Cabecera del Paciente -->
+    <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
+        <div class="card-body py-2 px-3">
+            <div class="row g-2 align-items-center small">
+                <div class="col-md-3">
+                    <span class="text-muted">Orden / NHCL:</span>
+                    <strong class="ms-1 text-primary">#@paciente.OrdenAtencionId / @paciente.Nhcl</strong>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Paciente:</span>
+                    <strong class="ms-1">@paciente.PacienteNombre</strong> (@paciente.Especie - @paciente.Raza)
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Edad / Sexo:</span>
+                    <strong class="ms-1">@paciente.EdadTexto / @paciente.Sexo</strong>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Destino Post-Op:</span>
+                    <strong class="ms-1 text-success">@postChecklist.Destino</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pestañas de Sala de Recuperación -->
+    <ul class="nav nav-tabs mb-3 small fw-semibold">
+        <li class="nav-item">
+            <button class="nav-link @(tabActiva == 1 ? "active text-primary" : "text-secondary")" @onclick="() => tabActiva = 1">
+                1. Curva y Signos Vitales en Recuperación (@signosRecuperacion.Count)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(tabActiva == 2 ? "active text-primary" : "text-secondary")" @onclick="() => tabActiva = 2">
+                2. Fármacos, Líquidos Administrados/Eliminados y Notas
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(tabActiva == 3 ? "active text-primary" : "text-secondary")" @onclick="() => tabActiva = 3">
+                3. Checklist de Entrega Post-Operatoria
+            </button>
+        </li>
+    </ul>
+
+    @if (tabActiva == 1)
+    {
+        <div class="row g-3">
+            <!-- Formulario de Registro de Signo Vital en Recuperación -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        @(nuevoSigno.Id > 0 ? $"Editar Control #{nuevoSigno.Id}" : "Nuevo Control de Signos en Recuperación")
+                    </div>
+                    <div class="card-body small">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label mb-0 fw-semibold">Fecha</label>
+                                <input type="date" class="form-control form-control-sm" @bind="nuevoSigno.Fecha" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label mb-0 fw-semibold">Hora</label>
+                                <input type="text" class="form-control form-control-sm" @bind="nuevoSigno.Hora" placeholder="HH:mm" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label mb-0 fw-semibold text-danger">Pulso / FC (lpm)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.Pulso" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label mb-0 fw-semibold text-success">SpO2 (%)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.Saturacion" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label mb-0 fw-semibold text-primary">PAS (mmHg)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.Sistolica" @bind:after="RecalcularPam" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label mb-0 fw-semibold text-info">PAD (mmHg)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.Diastolica" @bind:after="RecalcularPam" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label mb-0 fw-semibold">PAM (mmHg)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.PresionMedia" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label mb-0 fw-semibold">Resp. (rpm)</label>
+                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.Respiracion" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label mb-0 fw-semibold">Temp. (°C)</label>
+                                <input type="number" step="0.1" class="form-control form-control-sm" @bind="nuevoSigno.Temperatura" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label mb-0 fw-semibold">O2 (L/min)</label>
+                                <input type="number" step="0.5" class="form-control form-control-sm" @bind="nuevoSigno.Oxigeno" />
+                            </div>
+                            <div class="col-12 d-flex gap-2 mt-2">
+                                <button class="btn btn-sm btn-primary flex-grow-1 fw-semibold" @onclick="GuardarSignoAsync">
+                                    @(nuevoSigno.Id > 0 ? "Actualizar Control" : "Registrar Control")
+                                </button>
+                                @if (nuevoSigno.Id > 0)
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="LimpiarSigno">Cancelar</button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráfica SVG y Tabla de Signos Vitales en Recuperación -->
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                        <span class="fw-bold text-primary small">Curva de Evolución en Sala de Recuperación</span>
+                        <div class="d-flex gap-2 small">
+                            <span><span class="badge bg-danger">●</span> Pulso</span>
+                            <span><span class="badge bg-primary">●</span> PAS</span>
+                            <span><span class="badge bg-info text-dark">●</span> PAD</span>
+                            <span><span class="badge bg-success">●</span> SpO2</span>
+                        </div>
+                    </div>
+                    <div class="card-body p-2">
+                        <svg viewBox="0 0 700 185" class="w-100 border rounded bg-light" style="max-height: 195px;">
+                            @for (int v = 0; v <= 200; v += 50)
+                            {
+                                double y = 160 - (v / 210.0 * 140);
+                                <line x1="45" y1="@y.ToString("F1", CultureInfo.InvariantCulture)" x2="680" y2="@y.ToString("F1", CultureInfo.InvariantCulture)" stroke="#e2e8f0" stroke-width="1" />
+                                @((MarkupString)$"<text x=\"40\" y=\"{(y + 3).ToString("F1", CultureInfo.InvariantCulture)}\" text-anchor=\"end\" font-size=\"9\" fill=\"#64748b\">{v}</text>")
+                            }
+
+                            @if (signosRecuperacion.Any())
+                            {
+                                <polyline fill="none" stroke="#dc2626" stroke-width="2" points="@ConstruirPuntosRecuperacion(s => s.Pulso)" />
+                                <polyline fill="none" stroke="#2563eb" stroke-width="2" points="@ConstruirPuntosRecuperacion(s => s.Sistolica)" />
+                                <polyline fill="none" stroke="#0284c7" stroke-width="1.8" stroke-dasharray="3,2" points="@ConstruirPuntosRecuperacion(s => s.Diastolica)" />
+                                <polyline fill="none" stroke="#16a34a" stroke-width="1.8" points="@ConstruirPuntosRecuperacion(s => s.Saturacion)" />
+
+                                int total = signosRecuperacion.Count;
+                                double step = total > 1 ? 600.0 / (total - 1) : 0;
+                                for (int i = 0; i < total; i++)
+                                {
+                                    double x = 65 + (total > 1 ? i * step : 280);
+                                    var item = signosRecuperacion[i];
+                                    @((MarkupString)$"<text x=\"{x.ToString("F1", CultureInfo.InvariantCulture)}\" y=\"176\" text-anchor=\"middle\" font-size=\"9\" fill=\"#334155\">{item.Hora}</text>")
+                                }
+                            }
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-0">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover table-bordered align-middle mb-0 small">
+                                <thead class="table-light text-center">
+                                    <tr>
+                                        <th>Fecha / Hora</th>
+                                        <th>Pulso</th>
+                                        <th>P. Arterial</th>
+                                        <th>PAM</th>
+                                        <th>Resp.</th>
+                                        <th>Temp.</th>
+                                        <th>O2 L/m</th>
+                                        <th>SpO2</th>
+                                        <th>Responsable</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!signosRecuperacion.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="10" class="text-center text-muted py-3">No existen controles de signos vitales registrados en recuperación.</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var s in signosRecuperacion)
+                                        {
+                                            <tr class="text-center">
+                                                <td>@s.Fecha.ToString("dd/MM") <strong>@s.Hora</strong></td>
+                                                <td class="fw-bold text-danger">@s.Pulso</td>
+                                                <td class="fw-bold text-primary">@s.Sistolica / @s.Diastolica</td>
+                                                <td>@s.PresionMedia</td>
+                                                <td>@s.Respiracion</td>
+                                                <td>@s.Temperatura.ToString("N1") °C</td>
+                                                <td>@s.Oxigeno.ToString("N1")</td>
+                                                <td><span class="badge bg-success">@s.Saturacion%</span></td>
+                                                <td class="text-start">@s.NombreUsuario</td>
+                                                <td>
+                                                    <button class="btn btn-xs btn-outline-primary py-0 px-1 me-1" @onclick="() => EditarSigno(s)">✎</button>
+                                                    <button class="btn btn-xs btn-outline-danger py-0 px-1" @onclick="() => EliminarSignoAsync(s.Id)">×</button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (tabActiva == 2)
+    {
+        <div class="row g-3">
+            <!-- Líquidos Administrados y Eliminados (qvt_ingliqadm) -->
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        Líquidos Administrados y Eliminados en Recuperación
+                    </div>
+                    <div class="card-body small">
+                        <div class="row g-2 mb-3 bg-light p-2 rounded border">
+                            <div class="col-md-3">
+                                <label class="form-label mb-0 fw-semibold">Tipo</label>
+                                <select class="form-select form-select-sm" @bind="nuevoLiquido.Tipo">
+                                    <option value="I">Administrado (Ingreso)</option>
+                                    <option value="E">Eliminado (Egreso)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label mb-0 fw-semibold">Hora</label>
+                                <input type="text" class="form-control form-control-sm" @bind="nuevoLiquido.Hora" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label mb-0 fw-semibold">Descripción Fluido / Egreso</label>
+                                <input type="text" class="form-control form-control-sm" @bind="nuevoLiquido.Descripcion" placeholder="Ej: Lactato Ringer 150 ml / Diuresis 80 ml" />
+                            </div>
+                            <div class="col-md-9">
+                                <input type="text" class="form-control form-control-sm" @bind="nuevoLiquido.Observaciones" placeholder="Observaciones adicionales..." />
+                            </div>
+                            <div class="col-md-3 d-grid">
+                                <button class="btn btn-sm btn-primary" @onclick="AgregarLiquidoAsync">Registrar</button>
+                            </div>
+                        </div>
+
+                        <h6 class="small fw-bold text-success mb-1">Líquidos Administrados (@liquidosIngresados.Count)</h6>
+                        <table class="table table-sm table-bordered small mb-3">
+                            <thead class="table-light">
+                                <tr><th>Hora</th><th>Líquido Administrado</th><th>Observaciones</th><th></th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var l in liquidosIngresados)
+                                {
+                                    <tr>
+                                        <td>@l.Hora</td>
+                                        <td class="fw-semibold">@l.Descripcion</td>
+                                        <td>@l.Observaciones</td>
+                                        <td class="text-center">
+                                            <button class="btn btn-xs btn-outline-danger py-0 px-1" @onclick="() => EliminarLiquidoAsync(l)">×</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+
+                        <h6 class="small fw-bold text-danger mb-1">Líquidos Eliminados (@liquidosEliminados.Count)</h6>
+                        <table class="table table-sm table-bordered small mb-0">
+                            <thead class="table-light">
+                                <tr><th>Hora</th><th>Líquido Eliminado</th><th>Observaciones</th><th></th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var l in liquidosEliminados)
+                                {
+                                    <tr>
+                                        <td>@l.Hora</td>
+                                        <td class="fw-semibold">@l.Descripcion</td>
+                                        <td>@l.Observaciones</td>
+                                        <td class="text-center">
+                                            <button class="btn btn-xs btn-outline-danger py-0 px-1" @onclick="() => EliminarLiquidoAsync(l)">×</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notas de Evolución en Sala de Recuperación (qvt_observaciones_recuperacion) -->
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        Notas y Evolución en Sala de Recuperación
+                    </div>
+                    <div class="card-body small">
+                        <div class="input-group input-group-sm mb-3">
+                            <input type="text" class="form-control" @bind="nuevaObservacion" placeholder="Escribir nota clínica de evolución en recuperación (reflejo deglutorio, extubación, dolor)..." />
+                            <button class="btn btn-primary" @onclick="AgregarObservacionAsync">Guardar Nota</button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 110px;">Fecha / Hora</th>
+                                        <th>Observación Clínica</th>
+                                        <th style="width: 130px;">Responsable</th>
+                                        <th style="width: 35px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!observacionesRecuperacion.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="4" class="text-center text-muted py-3">Sin notas registradas en recuperación.</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var n in observacionesRecuperacion)
+                                        {
+                                            <tr>
+                                                <td>@n.Fecha.ToString("dd/MM") @n.Hora</td>
+                                                <td>@n.Observacion</td>
+                                                <td>@n.NombreUsuario</td>
+                                                <td class="text-center">
+                                                    <button class="btn btn-xs btn-outline-danger py-0 px-1" @onclick="() => EliminarObservacionAsync(n.Id)">×</button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (tabActiva == 3)
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-primary">Checklist de Entrega y Alta de Sala de Recuperación</span>
+                <button class="btn btn-sm btn-success fw-semibold" @onclick="GuardarChecklistPostOpAsync">
+                    Guardar Checklist Post-Operatorio
+                </button>
+            </div>
+            <div class="card-body small">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold mb-1">Fecha y Hora de Salida de Recuperación</label>
+                        <input type="datetime-local" class="form-control form-control-sm" @bind="postChecklist.FechaHoraSalida" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold mb-1">Destino del Paciente</label>
+                        <select class="form-select form-select-sm" @bind="postChecklist.Destino">
+                            <option value="Hospitalización">Hospitalización General</option>
+                            <option value="UCI / Cuidados Intensivos">UCI / Cuidados Intensivos</option>
+                            <option value="Alta a Domicilio">Alta a Domicilio</option>
+                            <option value="Aislamiento">Aislamiento</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 240px;">Ítem de Verificación Post-Quirúrgica</th>
+                                <th style="width: 140px;" class="text-center">Estado</th>
+                                <th>Detalle / Observaciones de Entrega</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="fw-semibold">1. Indicaciones Médicas Escritas</td>
+                                <td class="text-center">
+                                    <select class="form-select form-select-sm" @bind="postChecklist.Ind"><option value="SI">SÍ</option><option value="NO">NO</option></select>
+                                </td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="postChecklist.ObsInd" /></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-semibold">2. Signos Vitales Estables</td>
+                                <td class="text-center">
+                                    <select class="form-select form-select-sm" @bind="postChecklist.Sig"><option value="SI">SÍ</option><option value="NO">NO</option></select>
+                                </td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="postChecklist.ObsSig" /></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-semibold">3. Apósitos y Herida Quirúrgica Limpia</td>
+                                <td class="text-center">
+                                    <select class="form-select form-select-sm" @bind="postChecklist.Apo"><option value="SI">SÍ</option><option value="NO">NO</option></select>
+                                </td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="postChecklist.ObsApo" /></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-semibold">4. Líquidos Parenterales Permeables</td>
+                                <td class="text-center">
+                                    <select class="form-select form-select-sm" @bind="postChecklist.Liq"><option value="SI">SÍ</option><option value="NO">NO</option></select>
+                                </td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="postChecklist.ObsLiq" /></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-semibold">5. Sonda Vesical</td>
+                                <td class="text-center">
+                                    <select class="form-select form-select-sm" @bind="postChecklist.Son"><option value="SI">SÍ</option><option value="NO">NO</option></select>
+                                </td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="postChecklist.ObsSon" /></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-semibold">6. Drenes Quirúrgicos</td>
+                                <td class="text-center">
+                                    <select class="form-select form-select-sm" @bind="postChecklist.Drenes"><option value="SI">SÍ</option><option value="NO">NO</option></select>
+                                </td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="postChecklist.ObsDrenes" /></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-semibold">7. Sonda Nasogástrica / Esofágica</td>
+                                <td class="text-center">
+                                    <select class="form-select form-select-sm" @bind="postChecklist.Sng"><option value="SI">SÍ</option><option value="NO">NO</option></select>
+                                </td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="postChecklist.ObsSng" /></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-semibold">8. Otros Dispositivos / Collar Isabelino</td>
+                                <td class="text-center">
+                                    <select class="form-select form-select-sm" @bind="postChecklist.Otros"><option value="SI">SÍ</option><option value="NO">NO</option></select>
+                                </td>
+                                <td><input type="text" class="form-control form-control-sm" @bind="postChecklist.ObsOtros" /></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private int ordenInput;
+    private List<OrdenActivaResumenDto> ordenesActivas = new();
+    private int tabActiva = 1;
+    private PacienteHeaderDto? paciente;
+
+    private List<RecuperacionSignoVitalDto> signosRecuperacion = new();
+    private RecuperacionSignoVitalDto nuevoSigno = new();
+
+    private PostOperatorioChecklistDto postChecklist = new();
+    private List<LiquidoRecuperacionDto> liquidosIngresados = new();
+    private List<LiquidoRecuperacionDto> liquidosEliminados = new();
+    private LiquidoRecuperacionDto nuevoLiquido = new() { Tipo = "I" };
+
+    private List<ObservacionRecuperacionDto> observacionesRecuperacion = new();
+    private string nuevaObservacion = string.Empty;
+
+    private bool cargandoInicial = true;
+    private string mensajeAlerta = string.Empty;
+    private bool esError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        cargandoInicial = true;
+        await Task.Yield();
+
+        ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0 && ordenesActivas.Count > 0)
+        {
+            IdOrden = ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = ordenesActivas[0].Nhcl;
+        }
+
+        if (IdOrden > 0)
+        {
+            ordenInput = IdOrden;
+            await CargarDatosAsync();
+        }
+        cargandoInicial = false;
+    }
+
+    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int selOrden) && selOrden > 0)
+        {
+            var ord = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == selOrden);
+            IdOrden = selOrden;
+            Nhcl = ord?.Nhcl ?? 0;
+            ordenInput = IdOrden;
+            await CargarDatosAsync();
+        }
+    }
+
+    private async Task CargarPorInputAsync()
+    {
+        if (ordenInput <= 0 && ordenesActivas.Count > 0)
+        {
+            ordenInput = ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = ordenesActivas[0].Nhcl;
+        }
+        if (ordenInput <= 0) return;
+        IdOrden = ordenInput;
+        var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
+        if (match != null) Nhcl = match.Nhcl;
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        var p = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
+        if (p != null)
+        {
+            Nhcl = p.Nhcl;
+            Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
+
+            var tSig = QuirofanoService.ObtenerSignosRecuperacionAsync(IdOrden);
+            var tPost = QuirofanoService.ObtenerPostOperatorioChecklistAsync(IdOrden, Nhcl);
+            var tLiqI = QuirofanoService.ObtenerLiquidosRecuperacionAsync(IdOrden, "I");
+            var tLiqE = QuirofanoService.ObtenerLiquidosRecuperacionAsync(IdOrden, "E");
+            var tObs = QuirofanoService.ObtenerObservacionesRecuperacionAsync(IdOrden);
+            await Task.WhenAll(tSig, tPost, tLiqI, tLiqE, tObs);
+
+            signosRecuperacion = await tSig;
+            postChecklist = await tPost;
+            liquidosIngresados = await tLiqI;
+            liquidosEliminados = await tLiqE;
+            observacionesRecuperacion = await tObs;
+            LimpiarSigno();
+            paciente = p;
+        }
+        else
+        {
+            paciente = null;
+            esError = true;
+            mensajeAlerta = $"No se encontró la Orden #{IdOrden}.";
+        }
+    }
+
+    private void RecalcularPam()
+    {
+        if (nuevoSigno.Sistolica > 0 && nuevoSigno.Diastolica > 0)
+        {
+            nuevoSigno.PresionMedia = (nuevoSigno.Sistolica + 2 * nuevoSigno.Diastolica) / 3;
+        }
+    }
+
+    private void EditarSigno(RecuperacionSignoVitalDto s)
+    {
+        nuevoSigno = new RecuperacionSignoVitalDto
+        {
+            Id = s.Id,
+            IdOrden = s.IdOrden,
+            Nhcl = s.Nhcl,
+            Fecha = s.Fecha,
+            Hora = s.Hora,
+            Pulso = s.Pulso,
+            Sistolica = s.Sistolica,
+            Diastolica = s.Diastolica,
+            PresionMedia = s.PresionMedia,
+            Respiracion = s.Respiracion,
+            Temperatura = s.Temperatura,
+            Oxigeno = s.Oxigeno,
+            Saturacion = s.Saturacion
+        };
+    }
+
+    private void LimpiarSigno()
+    {
+        nuevoSigno = new RecuperacionSignoVitalDto
+        {
+            IdOrden = IdOrden,
+            Nhcl = Nhcl,
+            Hora = DateTime.Now.ToString("HH:mm"),
+            Fecha = DateTime.Today
+        };
+    }
+
+    private async Task GuardarSignoAsync()
+    {
+        nuevoSigno.IdOrden = IdOrden;
+        nuevoSigno.Nhcl = Nhcl;
+        nuevoSigno.Usuario = Session.CurrentUser?.IdUsuario ?? 1;
+
+        var ok = await QuirofanoService.GuardarSignoRecuperacionAsync(
+            nuevoSigno,
+            Session.CurrentUser?.IdLocalidad ?? 1);
+
+        if (ok)
+        {
+            signosRecuperacion = await QuirofanoService.ObtenerSignosRecuperacionAsync(IdOrden);
+            LimpiarSigno();
+            esError = false;
+            mensajeAlerta = "Control de signos vitales guardado en Sala de Recuperación.";
+        }
+    }
+
+    private async Task EliminarSignoAsync(int id)
+    {
+        await QuirofanoService.EliminarSignoRecuperacionAsync(id);
+        signosRecuperacion = await QuirofanoService.ObtenerSignosRecuperacionAsync(IdOrden);
+    }
+
+    private string ConstruirPuntosRecuperacion(Func<RecuperacionSignoVitalDto, int> selector)
+    {
+        if (!signosRecuperacion.Any()) return string.Empty;
+        var pts = new List<string>();
+        int total = signosRecuperacion.Count;
+        double step = total > 1 ? 600.0 / (total - 1) : 0;
+
+        for (int i = 0; i < total; i++)
+        {
+            int val = selector(signosRecuperacion[i]);
+            double x = 65 + (total > 1 ? i * step : 280);
+            double y = 160 - (Math.Clamp(val, 0, 210) / 210.0 * 140);
+            pts.Add($"{x.ToString("F1", CultureInfo.InvariantCulture)},{y.ToString("F1", CultureInfo.InvariantCulture)}");
+        }
+        return string.Join(" ", pts);
+    }
+
+    private async Task AgregarLiquidoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(nuevoLiquido.Descripcion)) return;
+        nuevoLiquido.IdOrden = IdOrden;
+        nuevoLiquido.Nhcl = Nhcl;
+
+        await QuirofanoService.AgregarLiquidoRecuperacionAsync(
+            nuevoLiquido,
+            Session.CurrentUser?.IdUsuario ?? 1,
+            Session.CurrentUser?.IdLocalidad ?? 1);
+
+        nuevoLiquido = new LiquidoRecuperacionDto { Tipo = nuevoLiquido.Tipo, Hora = DateTime.Now.ToString("HH:mm") };
+        liquidosIngresados = await QuirofanoService.ObtenerLiquidosRecuperacionAsync(IdOrden, "I");
+        liquidosEliminados = await QuirofanoService.ObtenerLiquidosRecuperacionAsync(IdOrden, "E");
+    }
+
+    private async Task EliminarLiquidoAsync(LiquidoRecuperacionDto l)
+    {
+        await QuirofanoService.EliminarLiquidoRecuperacionAsync(l.Id, l.MedIdProdu, IdOrden, Nhcl);
+        liquidosIngresados = await QuirofanoService.ObtenerLiquidosRecuperacionAsync(IdOrden, "I");
+        liquidosEliminados = await QuirofanoService.ObtenerLiquidosRecuperacionAsync(IdOrden, "E");
+    }
+
+    private async Task AgregarObservacionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(nuevaObservacion)) return;
+        await QuirofanoService.AgregarObservacionRecuperacionAsync(
+            IdOrden, Nhcl, nuevaObservacion,
+            Session.CurrentUser?.IdUsuario ?? 1,
+            Session.CurrentUser?.IdLocalidad ?? 1);
+
+        nuevaObservacion = string.Empty;
+        observacionesRecuperacion = await QuirofanoService.ObtenerObservacionesRecuperacionAsync(IdOrden);
+    }
+
+    private async Task EliminarObservacionAsync(int id)
+    {
+        await QuirofanoService.EliminarObservacionRecuperacionAsync(id);
+        observacionesRecuperacion = await QuirofanoService.ObtenerObservacionesRecuperacionAsync(IdOrden);
+    }
+
+    private async Task GuardarChecklistPostOpAsync()
+    {
+        postChecklist.IdOrden = IdOrden;
+        postChecklist.Nhcl = Nhcl;
+        var ok = await QuirofanoService.GuardarPostOperatorioChecklistAsync(
+            postChecklist,
+            Session.CurrentUser?.IdUsuario ?? 1,
+            Session.CurrentUser?.IdLocalidad ?? 1);
+
+        esError = !ok;
+        mensajeAlerta = ok
+            ? "Checklist de entrega post-operatoria guardado exitosamente."
+            : "Error al guardar el checklist post-operatorio.";
+    }
+
+    private async Task ExportarPdfAsync()
+    {
+        if (paciente == null) return;
+        var bytes = ReportService.GenerarRecuperacionPdf(
+            paciente, signosRecuperacion, postChecklist, liquidosIngresados, liquidosEliminados, observacionesRecuperacion);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"SalaRecuperacion_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+    }
+}
