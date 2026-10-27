@@ -19,6 +19,15 @@ public interface IAdministracionClinicaService
     Task<(bool Exito, string Mensaje)> GuardarLocalidadAsync(LocalidadAdministrativaDto localidad, int idUsuario);
     Task<List<EspecialidadLocalidadDto>> ObtenerEspecialidadesLocalidadAsync();
     Task<(bool Exito, string Mensaje)> GuardarEspecialidadLocalidadAsync(EspecialidadLocalidadDto relacion, int idUsuario);
+    Task<IngresoCirugiaDto> ObtenerIngresoCirugiaAsync(int idOrden, int nhcl);
+    Task<bool> GuardarIngresoCirugiaAsync(IngresoCirugiaDto ingreso, int idUsuario);
+    Task<List<DespachoClinicoDto>> ObtenerDespachosAsync(DateTime desde, DateTime hasta, int tipo = 0);
+    Task<bool> MarcarDespachoProcesadoAsync(int idOrden);
+    Task<List<FisioterapiaOrdenDto>> ObtenerFisioterapiaAsync(int idOrden, int nhcl);
+    Task<bool> GuardarFisioterapiaAsync(FisioterapiaOrdenDto orden);
+    Task<List<IStatDto>> ObtenerIStatAsync(int nhcl);
+    Task<bool> GuardarIStatAsync(IStatDto resultado, int idUsuario);
+    Task<bool> EliminarIStatAsync(int id, int idUsuario);
 }
 
 public sealed class AdministracionClinicaService : IAdministracionClinicaService
@@ -101,21 +110,21 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
 
     public async Task<List<RecordatorioVacunaDto>> ObtenerRecordatoriosAsync(DateTime desde, DateTime hasta, bool porFechaRevision)
     {
-        string campoFecha = porFechaRevision ? "v.fecharevision" : "v.fechaenvio";
+        string campoFecha = porFechaRevision ? "v.vacuna_revacunacion" : "v.vacuna_fecha";
         string sql = $@"
-            SELECT v.nhcl AS Nhcl, RTRIM(p.mas_nombre) AS Paciente,
+            SELECT v.vacuna_nhcl AS Nhcl, RTRIM(p.mas_nombre) AS Paciente,
                 RTRIM(c.pa_apellidos + ' ' + c.pa_nombres) AS Propietario,
                 RTRIM(u.user_nombre) AS QuienManda,
                 RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad,
-                RTRIM(ISNULL(v.correoenvio, '')) AS CorreoEnviado,
-                v.fechaenvio AS FechaEnvio, v.fecharevision AS ProximaRevision,
+                RTRIM(ISNULL(c.pa_email, '')) AS CorreoEnviado,
+                v.vacuna_fecha AS FechaEnvio, v.vacuna_revacunacion AS ProximaRevision,
                 RTRIM(COALESCE(NULLIF(c.pa_movil,''), c.pa_telefono, '')) AS Telefono
-            FROM vt_vitacoravacuna v
-            INNER JOIN vt_usuarios u ON v.quienmanda=u.user_numero
-            INNER JOIN vt_pacientes p ON v.nhcl=p.mas_nhcl
+            FROM vt_vacunas v
+            INNER JOIN vt_usuarios u ON v.vacuna_iduser=u.user_numero
+            INNER JOIN vt_pacientes p ON v.vacuna_nhcl=p.mas_nhcl
             INNER JOIN vt_clientes c ON p.mas_idcliente=c.pa_codigo
             LEFT JOIN vt_especialidades e ON e.es_id=u.user_esp_numero
-            WHERE {campoFecha} >= @Desde AND {campoFecha} < DATEADD(day,1,@Hasta)
+            WHERE v.vacuna_estado='A' AND {campoFecha} >= @Desde AND {campoFecha} < DATEADD(day,1,@Hasta)
             ORDER BY {campoFecha}";
         return (await _db.QueryAsync<RecordatorioVacunaDto>(sql, new { Desde = desde.Date, Hasta = hasta.Date })).ToList();
     }
@@ -127,7 +136,7 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
                 RTRIM(ISNULL(u.user_nombre,'')) AS Medico,
                 RTRIM(c.pa_apellidos + ' ' + c.pa_nombres) AS Cliente,
                 RTRIM(p.mas_nombre) AS Paciente, RTRIM(ISNULL(e.es_descripcion,'')) AS Especialidad,
-                RTRIM(ISNULL(f.med_pronostico,'')) AS Pronostico,
+                RTRIM(ISNULL(f.med_analisis,'')) AS Pronostico,
                 RTRIM(ISNULL(f.estadoparte,'')) AS Estado,
                 RTRIM(COALESCE(NULLIF(c.pa_movil,''), c.pa_telefono, '')) AS Telefono
             FROM vt_fichamedica f
@@ -247,6 +256,33 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
         await _db.RegistrarBitacoraAsync("Asignación de especialidad a localidad", idUsuario);
         return (true, "Asignación guardada correctamente.");
     }
+
+    public async Task<IngresoCirugiaDto> ObtenerIngresoCirugiaAsync(int idOrden, int nhcl) =>
+        await _db.QueryFirstOrDefaultAsync<IngresoCirugiaDto>(@"SELECT TOP 1 sec AS Sec,nhcl AS Nhcl,id_orden AS IdOrden,fecha AS Fecha,RTRIM(ISNULL(sala,'')) AS Sala,RTRIM(ISNULL(entra,'')) AS Entra,RTRIM(ISNULL(sale,'')) AS Sale,RTRIM(ISNULL(transporte,'')) AS Transporte,RTRIM(ISNULL(posicion,'')) AS Posicion,RTRIM(ISNULL(observaciones1,'')) AS Observaciones FROM qvt_ingresocirugia WHERE id_orden=@IdOrden AND nhcl=@Nhcl ORDER BY sec DESC", new { IdOrden=idOrden,Nhcl=nhcl }) ?? new(){IdOrden=idOrden,Nhcl=nhcl};
+
+    public async Task<bool> GuardarIngresoCirugiaAsync(IngresoCirugiaDto x, int idUsuario)
+    {
+        const string ins=@"INSERT INTO qvt_ingresocirugia(nhcl,id_orden,fecha,sala,entra,sale,transporte,posicion,observaciones1,iduser) VALUES(@Nhcl,@IdOrden,@Fecha,@Sala,@Entra,@Sale,@Transporte,@Posicion,@Observaciones,@IdUsuario)";
+        const string upd=@"UPDATE qvt_ingresocirugia SET fecha=@Fecha,sala=@Sala,entra=@Entra,sale=@Sale,transporte=@Transporte,posicion=@Posicion,observaciones1=@Observaciones,iduser=@IdUsuario WHERE sec=@Sec";
+        return await _db.ExecuteAsync(x.Sec>0?upd:ins,new{x.Nhcl,x.IdOrden,x.Fecha,x.Sala,x.Entra,x.Sale,x.Transporte,x.Posicion,x.Observaciones,IdUsuario=idUsuario,x.Sec})>0;
+    }
+
+    public async Task<List<DespachoClinicoDto>> ObtenerDespachosAsync(DateTime desde,DateTime hasta,int tipo=0) =>
+        (await _db.QueryAsync<DespachoClinicoDto>(@"SELECT o.ordenAten_id AS IdOrden,o.ordenAten_nhcl AS Nhcl,RTRIM(p.mas_nombre) AS Paciente,RTRIM(c.pa_apellidos+' '+c.pa_nombres) AS Propietario,o.ordenAten_fecha AS Fecha,o.ordenAten_Despacho AS TipoDespacho,RTRIM(ISNULL(o.ordenAten_etapa,'')) AS Etapa FROM vt_ordenAtencion o INNER JOIN vt_pacientes p ON o.ordenAten_nhcl=p.mas_nhcl INNER JOIN vt_clientes c ON p.mas_idcliente=c.pa_codigo WHERE o.ordenAten_fecha>=@Desde AND o.ordenAten_fecha<DATEADD(day,1,@Hasta) AND o.ordenAten_Despacho IN(1,2) AND (@Tipo=0 OR o.ordenAten_Despacho=@Tipo) ORDER BY o.ordenAten_fecha DESC",new{Desde=desde.Date,Hasta=hasta.Date,Tipo=tipo})).ToList();
+
+    public async Task<bool> MarcarDespachoProcesadoAsync(int idOrden) => await _db.ExecuteAsync("UPDATE vt_ordenAtencion SET ordenAten_etapa='Procesado',ordenAten_fechaProcesado=GETDATE() WHERE ordenAten_id=@IdOrden",new{IdOrden=idOrden})>0;
+
+    public async Task<List<FisioterapiaOrdenDto>> ObtenerFisioterapiaAsync(int idOrden,int nhcl) =>
+        (await _db.QueryAsync<FisioterapiaOrdenDto>(@"SELECT f.sec AS Sec,f.fisioO_nhcl AS Nhcl,f.fisioO_id_orden AS IdOrden,f.fisioO_idProdu AS IdProducto,RTRIM(ISNULL(p.prod_descripcion,'')) AS Descripcion,RTRIM(ISNULL(f.fisoO_observaciones,'')) AS Observaciones,TRY_CAST(f.fisioO_cantidad AS decimal(18,2)) AS Cantidad,f.fisioO_fecha AS Fecha FROM vt_fisioterapia_ordenes f LEFT JOIN vt_productos p ON f.fisioO_idProdu=p.prod_id WHERE f.fisioO_id_orden=@IdOrden AND f.fisioO_nhcl=@Nhcl AND ISNULL(f.fisioO_estado,'A')='A' ORDER BY f.fisioO_fecha DESC",new{IdOrden=idOrden,Nhcl=nhcl})).ToList();
+
+    public async Task<bool> GuardarFisioterapiaAsync(FisioterapiaOrdenDto x) => await _db.ExecuteAsync(@"INSERT INTO vt_fisioterapia_ordenes(fisioO_nhcl,fisioO_idProdu,fisoO_observaciones,fisioO_cantidad,fisioO_id_orden,fisioO_estado,fisioO_fecha) VALUES(@Nhcl,@IdProducto,@Observaciones,@Cantidad,@IdOrden,'A',@Fecha)",x)>0;
+
+    public async Task<List<IStatDto>> ObtenerIStatAsync(int nhcl) =>
+        (await _db.QueryAsync<IStatDto>(@"SELECT sec AS Id,is_nhcl AS Nhcl,is_fecha AS Fecha,RTRIM(ISNULL(hematocrito,'')) AS Hematocrito,RTRIM(ISNULL(hemoglobina,'')) AS Hemoglobina,RTRIM(ISNULL(urea,'')) AS Urea,RTRIM(ISNULL(creatinina,'')) AS Creatinina,RTRIM(ISNULL(glucosa,'')) AS Glucosa,RTRIM(ISNULL(sodio,'')) AS Sodio,RTRIM(ISNULL(potasio,'')) AS Potasio,RTRIM(ISNULL(ph,'')) AS Ph,RTRIM(ISNULL(lactato,'')) AS Lactato FROM vt_istat WHERE is_nhcl=@Nhcl AND is_estado='A' ORDER BY is_fecha DESC",new{Nhcl=nhcl})).ToList();
+
+    public async Task<bool> GuardarIStatAsync(IStatDto x,int idUsuario) => await _db.ExecuteAsync(@"INSERT INTO vt_istat(is_nhcl,is_fecha,is_iduser,is_cliente,is_estado,is_tipo,hematocrito,hemoglobina,urea,creatinina,glucosa,sodio,potasio,ph,lactato) VALUES(@Nhcl,@Fecha,@IdUsuario,0,'A','ISTAT',@Hematocrito,@Hemoglobina,@Urea,@Creatinina,@Glucosa,@Sodio,@Potasio,@Ph,@Lactato)",new{x.Nhcl,x.Fecha,IdUsuario=idUsuario,x.Hematocrito,x.Hemoglobina,x.Urea,x.Creatinina,x.Glucosa,x.Sodio,x.Potasio,x.Ph,x.Lactato})>0;
+
+    public async Task<bool> EliminarIStatAsync(int id,int idUsuario) => await _db.ExecuteAsync("UPDATE vt_istat SET is_estado='I',is_elimina=@IdUsuario,is_fechadelete=GETDATE() WHERE sec=@Id",new{Id=id,IdUsuario=idUsuario})>0;
 
     private static CatalogoSql ObtenerConfiguracion(string tipo) =>
         Catalogos.TryGetValue(tipo, out var config)

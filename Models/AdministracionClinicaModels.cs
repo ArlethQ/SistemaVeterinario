@@ -92,3 +92,8 @@ public sealed class EspecialidadLocalidadDto
     public string Estado { get; set; } = "A";
 }
 
+public sealed class IngresoCirugiaDto { public int Sec { get; set; } public int Nhcl { get; set; } public int IdOrden { get; set; } public DateTime Fecha { get; set; }=DateTime.Now; public string Sala { get; set; }=""; public string Entra { get; set; }=""; public string Sale { get; set; }=""; public string Transporte { get; set; }=""; public string Posicion { get; set; }=""; public string Observaciones { get; set; }=""; }
+public sealed class DespachoClinicoDto { public int IdOrden { get; set; } public int Nhcl { get; set; } public string Paciente { get; set; }=""; public string Propietario { get; set; }=""; public DateTime Fecha { get; set; } public int TipoDespacho { get; set; } public string Etapa { get; set; }=""; public string Tipo => TipoDespacho==1?"Imagenología":"Laboratorio"; }
+public sealed class FisioterapiaOrdenDto { public int Sec { get; set; } public int Nhcl { get; set; } public int IdOrden { get; set; } public int IdProducto { get; set; } public string Descripcion { get; set; }=""; public string Observaciones { get; set; }=""; public decimal Cantidad { get; set; }=1; public DateTime Fecha { get; set; }=DateTime.Today; }
+public sealed class IStatDto { public int Id { get; set; } public int Nhcl { get; set; } public DateTime Fecha { get; set; }=DateTime.Now; public string Hematocrito { get; set; }=""; public string Hemoglobina { get; set; }=""; public string Urea { get; set; }=""; public string Creatinina { get; set; }=""; public string Glucosa { get; set; }=""; public string Sodio { get; set; }=""; public string Potasio { get; set; }=""; public string Ph { get; set; }=""; public string Lactato { get; set; }=""; }
+

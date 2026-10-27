@@ -58,6 +58,7 @@ public class FichaMedicaCompletaDto
     public string Esterilizado { get; set; } = "N";
     public string MedPronostico { get; set; } = "Bueno";
     public string RequiereCirugia { get; set; } = "N"; // med_pregunta
+    public string EstadoParte { get; set; } = "PENDIENTE";
     public string EsEmergencia { get; set; } = "N"; // S = genera control médico
     public DateTime? MedFechaControl { get; set; }
     public string IndicacionesGeneralesReceta { get; set; } = string.Empty;
