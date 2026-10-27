@@ -68,8 +68,11 @@ public interface IAuthService
     Task<List<MenuItemModel>> ObtenerMenuUsuarioAsync(int idUser, int tipoUser);
     Task<List<RolUsuarioModel>> ObtenerRolesAsync();
     Task<List<UsuarioModel>> ObtenerUsuariosParaPermisosAsync();
+    Task<List<MenuItemModel>> ObtenerMenusAdministracionAsync();
     Task<HashSet<int>> ObtenerAccesosUsuarioAsync(int idUser);
     Task<bool> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId);
+    Task<bool> GuardarRolAsync(RolUsuarioModel rol, int adminId);
+    Task<bool> GuardarMenuAsync(MenuItemModel menu, int adminId);
 }
 
 public class AuthService : IAuthService
@@ -169,6 +172,18 @@ public class AuthService : IAuthService
         catch { return []; }
     }
 
+    public async Task<List<MenuItemModel>> ObtenerMenusAdministracionAsync()
+    {
+        const string sql = @"SELECT id AS Id, RTRIM(ISNULL(secNuevoMenu, '')) AS SecNuevoMenu,
+                                    RTRIM(ISNULL(Descripcion, '')) AS Descripcion,
+                                    RTRIM(ISNULL(PadreNuevoMenu, '')) AS PadreNuevoMenu,
+                                    ISNULL(Habilitado, 0) AS Habilitado, RTRIM(ISNULL(Url, '')) AS Url
+                             FROM vt_menuDinamico
+                             ORDER BY CASE WHEN PadreNuevoMenu IS NULL OR PadreNuevoMenu = '' THEN 0 ELSE 1 END, secNuevoMenu, Descripcion";
+        try { return (await _sql.QueryAsync<MenuItemModel>(sql)).ToList(); }
+        catch { return []; }
+    }
+
     public async Task<HashSet<int>> ObtenerAccesosUsuarioAsync(int idUser)
     {
         const string sql = "SELECT ac_modulo FROM vt_accesos WHERE ac_idusuario = @IdUser";
@@ -201,6 +216,33 @@ public class AuthService : IAuthService
         var result = await _sql.ExecuteAsync(sql, new { IdUser = idUser, TipoUser = tipoUser, MenuIds = ids });
         if (result < 0) return false;
         await _sql.RegistrarBitacoraAsync($"Actualiza rol y permisos del usuario {idUser}", adminId);
+        return true;
+    }
+
+    public async Task<bool> GuardarRolAsync(RolUsuarioModel rol, int adminId)
+    {
+        if (!_session.IsAuthenticated || _session.TipoUser != 1 || _session.IdUser != adminId || string.IsNullOrWhiteSpace(rol.Descripcion)) return false;
+        var sql = rol.Id > 0
+            ? "UPDATE vt_tipos_usuarios SET tipuser_descripcion = @Descripcion WHERE tipuser_numero = @Id"
+            : @"INSERT INTO vt_tipos_usuarios (tipuser_numero, tipuser_descripcion)
+                VALUES ((SELECT ISNULL(MAX(tipuser_numero), 0) + 1 FROM vt_tipos_usuarios WITH (UPDLOCK, HOLDLOCK)), @Descripcion)";
+        var result = await _sql.ExecuteAsync(sql, new { rol.Id, Descripcion = rol.Descripcion.Trim() });
+        if (result < 0) return false;
+        await _sql.RegistrarBitacoraAsync($"{(rol.Id > 0 ? "Actualiza" : "Crea")} rol: {rol.Descripcion.Trim()}", adminId);
+        return true;
+    }
+
+    public async Task<bool> GuardarMenuAsync(MenuItemModel menu, int adminId)
+    {
+        if (!_session.IsAuthenticated || _session.TipoUser != 1 || _session.IdUser != adminId || string.IsNullOrWhiteSpace(menu.Descripcion)) return false;
+        var sql = menu.Id > 0
+            ? @"UPDATE vt_menuDinamico SET secNuevoMenu = @Seccion, Descripcion = @Descripcion,
+                    PadreNuevoMenu = @Padre, Habilitado = @Habilitado, Url = @Url WHERE id = @Id"
+            : @"INSERT INTO vt_menuDinamico (id, secNuevoMenu, Descripcion, PadreNuevoMenu, Habilitado, Url)
+                VALUES ((SELECT ISNULL(MAX(id), 0) + 1 FROM vt_menuDinamico WITH (UPDLOCK, HOLDLOCK)), @Seccion, @Descripcion, @Padre, @Habilitado, @Url)";
+        var result = await _sql.ExecuteAsync(sql, new { menu.Id, Seccion = menu.SecNuevoMenu?.Trim() ?? string.Empty, Descripcion = menu.Descripcion.Trim(), Padre = menu.PadreNuevoMenu?.Trim() ?? string.Empty, menu.Habilitado, Url = menu.Url?.Trim() ?? string.Empty });
+        if (result < 0) return false;
+        await _sql.RegistrarBitacoraAsync($"{(menu.Id > 0 ? "Actualiza" : "Crea")} menú: {menu.Descripcion.Trim()}", adminId);
         return true;
     }
 }

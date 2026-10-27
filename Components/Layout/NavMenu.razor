@@ -1,4 +1,5 @@
 @inject SessionStateService Session
+@inject IAuthService AuthService
 
 <div class="nav-shell">
     <input id="menu-toggle" type="checkbox" class="menu-toggle" />
@@ -67,11 +68,44 @@
 
             <span class="menu-section-label">Administración</span>
             <NavLink class="menu-link" href="facturacion/proformas"><MenuIcon Name="billing" /><span>Proformas y facturación</span></NavLink>
+            @if (_menusAdicionales.Count > 0)
+            {
+                <span class="menu-section-label">Módulos configurados</span>
+                @foreach (var menu in _menusAdicionales)
+                {
+                    <NavLink class="menu-link" href="@NormalizarRuta(menu.Url!)"><MenuIcon Name="kardex" /><span>@menu.Descripcion</span></NavLink>
+                }
+            }
             @if (Session.TipoUser == 1)
             {
                 <span class="menu-section-label">Sistema</span>
-                <NavLink class="menu-link" href="administracion/roles-permisos"><MenuIcon Name="security" /><span>Roles y permisos</span></NavLink>
+                <details>
+                    <summary><MenuIcon Name="security" /><span>Seguridad</span><i>⌄</i></summary>
+                    <div class="submenu"><NavLink href="administracion/usuarios">Usuarios</NavLink><NavLink href="administracion/roles">Roles</NavLink><NavLink href="administracion/menus">Menús</NavLink><NavLink href="administracion/roles-permisos">Asignar permisos</NavLink></div>
+                </details>
             }
         </nav>
     </div>
 </div>
+
+@code {
+    private List<MenuItemModel> _menusAdicionales = [];
+    private static readonly HashSet<string> RutasFijas = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "dashboard", "admision/clientes-pacientes", "admision/ordenes", "admision/citas",
+        "kardex/ordenes", "kardex/enfermeria", "kardex/signos", "hospitalizacion/ficha",
+        "hospitalizacion/monitoreo", "quirofano/preanestesia", "quirofano/anestesia",
+        "quirofano/protocolo", "quirofano/recuperacion", "consulta/fichamedica",
+        "consulta/evoluciones", "consulta/recetario", "consulta/autorizaciones",
+        "diagnostico/laboratorio", "diagnostico/imagenologia", "diagnostico/bandeja", "facturacion/proformas"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated) return;
+        var menus = await AuthService.ObtenerMenuUsuarioAsync(Session.IdUser, Session.TipoUser);
+        _menusAdicionales = menus.Where(m => !string.IsNullOrWhiteSpace(m.Url) && !RutasFijas.Contains(NormalizarRuta(m.Url!))).ToList();
+    }
+
+    private static string NormalizarRuta(string ruta) => ruta.Trim().TrimStart('/');
+}

@@ -1,0 +1,16 @@
+@page "/administracion/usuarios"
+@using HosvetKardex.Web.Components.Layout
+@inject SessionStateService Session
+@inject IAuthService AuthService
+@inject NavigationManager Nav
+<PageTitle>Usuarios | e-ForVets</PageTitle>
+
+@if (_autorizado)
+{
+<div class="admin-page"><SecurityNav /><header><div><span>Seguridad</span><h1>Usuarios</h1><p>Consulta las cuentas activas y administra su rol y permisos.</p></div><label>Buscar<input type="search" @bind="_filtro" @bind:event="oninput" placeholder="Nombre o usuario" /></label></header>
+@if (_cargando){<div class="state">Cargando usuarios...</div>}else if(_usuarios.Count==0){<div class="state">No fue posible obtener usuarios desde la base de datos.</div>}else{
+<div class="users-table"><div class="table-head"><span>Usuario</span><span>Login</span><span>Rol</span><span>Estado</span><span></span></div>@foreach(var u in Filtrados){<div class="table-row"><span class="person"><b>@Iniciales(u)</b><strong>@u.UserNombre</strong></span><span>@@@u.UserLogin</span><span><em>@Rol(u.UserTipoUserNumero)</em></span><span><i class="status-dot"></i>@u.UserEstado</span><span><a href="@($"/administracion/roles-permisos?usuario={u.UserNumero}")">Administrar acceso</a></span></div>}</div>}
+</div>}
+
+@code{private bool _autorizado,_cargando=true;private string _filtro="";private List<UsuarioModel>_usuarios=[];private List<RolUsuarioModel>_roles=[];private IEnumerable<UsuarioModel>Filtrados=>_usuarios.Where(u=>string.IsNullOrWhiteSpace(_filtro)||u.UserNombre.Contains(_filtro,StringComparison.OrdinalIgnoreCase)||u.UserLogin.Contains(_filtro,StringComparison.OrdinalIgnoreCase));protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated||Session.TipoUser!=1){Nav.NavigateTo("/dashboard");return;}_autorizado=true;var a=AuthService.ObtenerUsuariosParaPermisosAsync();var b=AuthService.ObtenerRolesAsync();await Task.WhenAll(a,b);_usuarios=a.Result;_roles=b.Result;_cargando=false;}private string Rol(int id)=>_roles.FirstOrDefault(x=>x.Id==id)?.Descripcion??$"Rol {id}";private static string Iniciales(UsuarioModel u)=>!string.IsNullOrWhiteSpace(u.UserIniciales)?u.UserIniciales:string.Concat(u.UserNombre.Split(' ',StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x=>x[0])).ToUpperInvariant();}
+

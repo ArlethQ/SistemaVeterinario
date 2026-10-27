@@ -9,6 +9,7 @@
 @if (_autorizado)
 {
     <div class="permissions-page">
+        <SecurityNav />
         <header class="page-heading"><div><span>Administración</span><h1>Roles y permisos</h1><p>Asigna un rol y define los módulos disponibles para cada usuario.</p></div><div class="security-badge"><MenuIcon Name="security" /><span>Solo administradores</span></div></header>
 
         @if (!string.IsNullOrWhiteSpace(_mensaje)) { <div class="status-message @(_esError ? "is-error" : "is-success")" role="status">@_mensaje</div> }
@@ -53,6 +54,7 @@
 }
 
 @code {
+    [SupplyParameterFromQuery(Name = "usuario")] public int? UsuarioQuery { get; set; }
     private bool _autorizado, _cargando = true, _guardando, _esError;
     private string _filtro = "", _mensaje = "";
     private int _usuarioId, _tipoUser;
@@ -69,7 +71,8 @@
         _autorizado = true;
         var usuariosTask = AuthService.ObtenerUsuariosParaPermisosAsync(); var rolesTask = AuthService.ObtenerRolesAsync(); var menusTask = AuthService.ObtenerMenuUsuarioAsync(Session.IdUser, 1);
         await Task.WhenAll(usuariosTask, rolesTask, menusTask); _usuarios = usuariosTask.Result; _roles = rolesTask.Result; _menus = menusTask.Result;
-        if (_usuarios.Count > 0) await SeleccionarUsuarioAsync(_usuarios[0]);
+        var inicial = UsuarioQuery.HasValue ? _usuarios.FirstOrDefault(x => x.UserNumero == UsuarioQuery.Value) : _usuarios.FirstOrDefault();
+        if (inicial is not null) await SeleccionarUsuarioAsync(inicial);
         _cargando = false;
     }
 
