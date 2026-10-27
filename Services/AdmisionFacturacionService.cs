@@ -9,6 +9,7 @@ public interface IAdmisionFacturacionService
     Task<List<ClienteDto>> BuscarClientesAsync(string filtro);
     Task<ClienteDto?> ObtenerClientePorIdAsync(int idCliente);
     Task<int> GuardarClienteAsync(ClienteDto cliente, int idUsuario);
+    Task<int> BuscarDuplicadoClienteAsync(string campo, string valor, int codigoExcluir);
     Task<List<PacienteMascotaDto>> ObtenerMascotasPorClienteAsync(int idCliente);
     Task<List<PacienteMascotaDto>> BuscarMascotasAsync(string filtro, string origen = "");
     Task<int> GuardarMascotaAsync(PacienteMascotaDto mascota, int idUsuario);
@@ -149,6 +150,31 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         return lista.FirstOrDefault(c => c.PaCodigo == idCliente);
     }
 
+    public async Task<int> BuscarDuplicadoClienteAsync(string campo, string valor, int codigoExcluir)
+    {
+        valor = valor?.Trim() ?? string.Empty;
+        if (valor.Length == 0) return 0;
+
+        string sql = campo switch
+        {
+            "DOCUMENTO" => "SELECT TOP 1 pa_codigo FROM vt_clientes WHERE RTRIM(pa_cedula) = @Valor AND pa_codigo <> @Codigo;",
+            "MOVIL" => "SELECT TOP 1 pa_codigo FROM vt_clientes WHERE LEFT(RTRIM(pa_movil), 10) = @Valor AND pa_codigo <> @Codigo;",
+            "EMAIL" => "SELECT TOP 1 pa_codigo FROM vt_clientes WHERE LOWER(RTRIM(pa_email)) = LOWER(@Valor) AND pa_codigo <> @Codigo;",
+            _ => string.Empty
+        };
+        if (sql.Length == 0) return 0;
+
+        try
+        {
+            return await _db.ExecuteScalarAsync<int>(sql, new { Valor = valor, Codigo = codigoExcluir });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo verificar duplicado ({Campo})", campo);
+            return 0;
+        }
+    }
+
     public async Task<int> GuardarClienteAsync(ClienteDto cliente, int idUsuario)
     {
         var valDoc = EcuadorDocumentoValidador.Validar(cliente.PaDocumento, cliente.PaCedula);
@@ -168,6 +194,33 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
         try
         {
+            const string dupSql = @"
+                SELECT TOP 1 pa_codigo FROM vt_clientes
+                WHERE RTRIM(pa_cedula) = @Cedula AND pa_codigo <> @Codigo;";
+            int existente = await _db.ExecuteScalarAsync<int>(dupSql, new { Cedula = cliente.PaCedula?.Trim() ?? string.Empty, Codigo = cliente.PaCodigo });
+            if (existente > 0)
+                throw new DocumentoDuplicadoException($"El documento {cliente.PaCedula} ya está registrado en el propietario #{existente}.", "DOCUMENTO");
+
+            string movilDup = cliente.PaMovil?.Trim() ?? string.Empty;
+            if (movilDup.Length > 0)
+            {
+                int idMovil = await _db.ExecuteScalarAsync<int>(
+                    "SELECT TOP 1 pa_codigo FROM vt_clientes WHERE LEFT(RTRIM(pa_movil), 10) = @Movil AND pa_codigo <> @Codigo;",
+                    new { Movil = movilDup, Codigo = cliente.PaCodigo });
+                if (idMovil > 0)
+                    throw new DocumentoDuplicadoException($"El celular {movilDup} ya está registrado en el propietario #{idMovil}.", "MOVIL");
+            }
+
+            string emailDup = cliente.PaEmail?.Trim() ?? string.Empty;
+            if (emailDup.Length > 0)
+            {
+                int idEmail = await _db.ExecuteScalarAsync<int>(
+                    "SELECT TOP 1 pa_codigo FROM vt_clientes WHERE LOWER(RTRIM(pa_email)) = LOWER(@Email) AND pa_codigo <> @Codigo;",
+                    new { Email = emailDup, Codigo = cliente.PaCodigo });
+                if (idEmail > 0)
+                    throw new DocumentoDuplicadoException($"El correo {emailDup} ya está registrado en el propietario #{idEmail}.", "EMAIL");
+            }
+
             if (cliente.PaCodigo == 0)
             {
                 const string insertSql = @"
@@ -235,6 +288,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 });
                 if (rows > 0) return cliente.PaCodigo;
             }
+        }
+        catch (DocumentoDuplicadoException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -1213,4 +1270,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             new() { VitId = 9801, VitDetalle = "Admisión de Paciente Fauna Silvestre TUERI #9001 (Amazona farinosa)", UserLogin = "cpaez", VitFechaMod = DateTime.Now.AddHours(-4), Ip = "10.10.24.90", Hostname = "TUERI-ADM-01" }
         };
     }
+}
+
+public class DocumentoDuplicadoException : Exception
+{
+    public string Campo { get; }
+    public DocumentoDuplicadoException(string message, string campo = "DOCUMENTO") : base(message) { Campo = campo; }
 }

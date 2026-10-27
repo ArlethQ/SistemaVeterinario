@@ -24,7 +24,7 @@
                 <i class="bi bi-person-plus-fill me-1"></i>Nuevo Propietario
             </button>
             <button class="btn btn-primary btn-sm" @onclick="() => NuevaMascota( _clienteSeleccionado?.PaCodigo ?? 0 )">
-                <i class="bi bi-heart-pulse-fill me-1"></i>Nuevo Paciente (NHCL)
+                <i class="bi bi-heart-pulse-fill me-1"></i>Nuevo Paciente
             </button>
             <a href="/admision/ordenes" class="btn btn-success btn-sm">
                 <i class="bi bi-clipboard2-plus me-1"></i>Ir a Recepción / Órdenes
@@ -105,8 +105,8 @@
                     </span>
                     <div class="btn-group btn-group-sm">
                         <button class="btn @(_filtroOrigen == "" ? "btn-dark" : "btn-outline-dark")" @onclick='() => FiltrarOrigenAsync("")'>Todos</button>
-                        <button class="btn @(_filtroOrigen == "M" ? "btn-primary" : "btn-outline-primary")" @onclick='() => FiltrarOrigenAsync("M")'>HDEV</button>
-                        <button class="btn @(_filtroOrigen == "T" ? "btn-success" : "btn-outline-success")" @onclick='() => FiltrarOrigenAsync("T")'>TUERI</button>
+                        <button class="btn @(_filtroOrigen == "M" ? "btn-primary" : "btn-outline-primary")" @onclick='() => FiltrarOrigenAsync("M")'>Domésticos</button>
+                        <button class="btn @(_filtroOrigen == "T" ? "btn-success" : "btn-outline-success")" @onclick='() => FiltrarOrigenAsync("T")'>Silvestres</button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -137,11 +137,11 @@
                                         <td>
                                             @if (mas.MasOrigen == "T")
                                             {
-                                                <span class="badge bg-success">TUERI</span>
+                                                <span class="badge bg-success">Silvestre</span>
                                             }
                                             else
                                             {
-                                                <span class="badge bg-primary">HDEV</span>
+                                                <span class="badge bg-primary">Doméstico</span>
                                             }
                                         </td>
                                         <td><small>@mas.EspecieDescripcion - @mas.RazaDescripcion</small></td>
@@ -182,7 +182,7 @@
                 </li>
                 <li class="nav-item">
                     <button class="nav-link @(_tabActiva == "MASCOTA" ? "active fw-bold" : "")" @onclick='() => _tabActiva = "MASCOTA"'>
-                        <i class="bi bi-heart-pulse me-1"></i>2. Ficha Clínica del Paciente (HDEV / TUERI)
+                        <i class="bi bi-heart-pulse me-1"></i>2. Ficha Clínica del Paciente (Domésticos / Silvestres)
                     </button>
                 </li>
             </ul>
@@ -321,7 +321,13 @@
                                 </div>
                                 <div class="col-md-12">
                                     <label class="form-label small fw-bold">Correo Electrónico</label>
-                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaEmail" />
+                                    <input type="text" class="@ClaseEmail" value="@_clienteEditando.PaEmail" @oninput="OnInputEmailAsync" />
+                                    @if (!string.IsNullOrEmpty(_errorEmail))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorEmail
+                                        </div>
+                                    }
                                 </div>
 
                                 <div class="col-md-12">
@@ -355,7 +361,7 @@
                             @(_mascotaEditando.MasNhcl == 0 ? "Nuevo Paciente" : $"Historia Clínica NHCL #{_mascotaEditando.MasNhcl} — {_mascotaEditando.MasNombre}")
                         </span>
                         <span class="badge bg-dark">
-                            @(_mascotaEditando.MasOrigen == "T" ? "FAUNA SILVESTRE (TUERI)" : "MASCOTA DOMÉSTICA (HDEV)")
+                            @(_mascotaEditando.MasOrigen == "T" ? "FAUNA SILVESTRE" : "MASCOTA DOMÉSTICA")
                         </span>
                     </div>
                     <div class="card-body">
@@ -365,8 +371,8 @@
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold">Origen Institucional</label>
                                     <select class="form-select form-select-sm fw-bold" @bind="_mascotaEditando.MasOrigen">
-                                        <option value="M">HDEV — Mascota Doméstica</option>
-                                        <option value="T">TUERI — Fauna Silvestre</option>
+                                        <option value="M">Mascota Doméstica</option>
+                                        <option value="T">Fauna Silvestre</option>
                                     </select>
                                 </div>
                                 <div class="col-md-4">
@@ -427,38 +433,6 @@
                                     </select>
                                 </div>
 
-                                @if (_mascotaEditando.MasOrigen == "T")
-                                {
-                                    <div class="col-12 mt-2">
-                                        <div class="p-2 rounded bg-success bg-opacity-10 border border-success">
-                                            <h6 class="fw-bold text-success mb-2"><i class="bi bi-tree-fill me-1"></i>Datos Exclusivos Hospital de Fauna Silvestre (TUERI)</h6>
-                                            <div class="row g-2">
-                                                <div class="col-md-4">
-                                                    <label class="form-label small fw-bold">Clase Taxonómica</label>
-                                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.TueClase">
-                                                        @foreach (var cl in _clasesTueri)
-                                                        {
-                                                            <option value="@cl.Id">@cl.Descripcion</option>
-                                                        }
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label small fw-bold">Nombre Científico</label>
-                                                    <InputText class="form-control form-control-sm fst-italic" placeholder="Ej: Amazona farinosa" @bind-Value="_mascotaEditando.TueCientifico" />
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label small fw-bold">Peso Ingreso (g/kg)</label>
-                                                    <InputText class="form-control form-control-sm" placeholder="Ej: 620 g" @bind-Value="_mascotaEditando.TuePeso" />
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <label class="form-label small fw-bold">Procedencia / Sector de Rescate / Decomiso</label>
-                                                    <InputText class="form-control form-control-sm" @bind-Value="_mascotaEditando.TueSectorBarrio" />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-
                                 <div class="col-md-12">
                                     <label class="form-label small fw-bold">Antecedentes / Alergias / Observaciones del Paciente</label>
                                     <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_mascotaEditando.MasObservacion" />
@@ -511,6 +485,7 @@
     private string? _errorApellidos;
     private string? _errorNombres;
     private string? _errorMovil;
+    private string? _errorEmail;
     private bool _esMovilValido;
     private string? _errorTelefono;
     private bool _esTelefonoValido;
@@ -573,6 +548,7 @@
         ValidarApellidosEnVivo(_clienteEditando.PaApellidos);
         ValidarNombresEnVivo(_clienteEditando.PaNombres);
         ValidarMovilEnVivo(_clienteEditando.PaMovil);
+        _errorEmail = null;
         ValidarTelefonoEnVivo(_clienteEditando.PaTelefono);
 
 
@@ -591,6 +567,7 @@
         _errorDocumento = null;
         _errorApellidos = null;
         _errorNombres = null;
+        _errorEmail = null;
         _errorMovil = null;
         _esMovilValido = false;
         _errorTelefono = null;
@@ -648,7 +625,7 @@
         ValidarDocumentoEnVivo(_clienteEditando.PaCedula);
     }
 
-    private void OnInputDocumento(ChangeEventArgs e)
+    private async Task OnInputDocumento(ChangeEventArgs e)
     {
         string raw = e.Value?.ToString() ?? string.Empty;
         if (_clienteEditando.PaDocumento == "PASAPORTE")
@@ -664,6 +641,42 @@
         }
         _clienteEditando.PaCedula = raw;
         ValidarDocumentoEnVivo(raw);
+        await VerificarDuplicadoDocumentoAsync();
+    }
+
+    private async Task VerificarDuplicadoDocumentoAsync()
+    {
+        if (!_esDocValido) return;
+        int id = await AdmisionService.BuscarDuplicadoClienteAsync("DOCUMENTO", _clienteEditando.PaCedula, _clienteEditando.PaCodigo);
+        if (id > 0)
+        {
+            _errorDocumento = $"El documento {_clienteEditando.PaCedula} ya está registrado en el propietario #{id}.";
+            _esDocValido = false;
+        }
+    }
+
+    private async Task VerificarDuplicadoMovilAsync()
+    {
+        if (!_esMovilValido) return;
+        int id = await AdmisionService.BuscarDuplicadoClienteAsync("MOVIL", _clienteEditando.PaMovil, _clienteEditando.PaCodigo);
+        if (id > 0)
+        {
+            _errorMovil = $"El celular {_clienteEditando.PaMovil} ya está registrado en el propietario #{id}.";
+            _esMovilValido = false;
+        }
+    }
+
+    private string ClaseEmail => _errorEmail != null ? "form-control form-control-sm is-invalid border-danger" : "form-control form-control-sm";
+
+    private async Task OnInputEmailAsync(ChangeEventArgs e)
+    {
+        _clienteEditando.PaEmail = e.Value?.ToString() ?? string.Empty;
+        string email = _clienteEditando.PaEmail?.Trim() ?? string.Empty;
+        _errorEmail = null;
+        if (email.Length == 0) return;
+        int id = await AdmisionService.BuscarDuplicadoClienteAsync("EMAIL", email, _clienteEditando.PaCodigo);
+        if (id > 0)
+            _errorEmail = $"El correo {email} ya está registrado en el propietario #{id}.";
     }
 
     private void ValidarDocumentoEnVivo(string valor)
@@ -727,13 +740,14 @@
         var res = NombreValidador.Validar(val, "Los nombres");
         _errorNombres = res.MensajeError;
     }
-    private void OnInputMovil(ChangeEventArgs e)
+    private async Task OnInputMovil(ChangeEventArgs e)
     {
         string raw = e.Value?.ToString() ?? string.Empty;
         raw = new string(raw.Where(char.IsDigit).ToArray());
         if (raw.Length > 10) raw = raw[..10];
         _clienteEditando.PaMovil = raw;
         ValidarMovilEnVivo(raw);
+        await VerificarDuplicadoMovilAsync();
     }
 
     private void ValidarMovilEnVivo(string val)
@@ -831,6 +845,13 @@
             return;
         }
 
+        if (!string.IsNullOrEmpty(_errorEmail))
+        {
+            _esError = true;
+            _mensajeAlerta = _errorEmail;
+            return;
+        }
+
         // Validar Teléfono Convencional (opcional)
         string tel = _clienteEditando.PaTelefono?.Trim() ?? string.Empty;
         if (!string.IsNullOrEmpty(tel))
@@ -853,6 +874,14 @@
             await BuscarClientesAsync();
             _esError = false;
             _mensajeAlerta = $"Propietario #{idGuardado} ({_clienteEditando.NombreCompleto}) guardado exitosamente en la base de datos.";
+        }
+        catch (DocumentoDuplicadoException ex)
+        {
+            _esError = true;
+            if (ex.Campo == "MOVIL") { _errorMovil = ex.Message; _esMovilValido = false; }
+            else if (ex.Campo == "EMAIL") { _errorEmail = ex.Message; }
+            else { _errorDocumento = ex.Message; _esDocValido = false; }
+            _mensajeAlerta = ex.Message;
         }
         catch (Exception ex)
         {
