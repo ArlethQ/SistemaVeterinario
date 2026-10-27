@@ -108,8 +108,12 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 RTRIM(ISNULL(pa_observaciones, '')) AS PaObservaciones,
                 ISNULL(pa_fechaingreso, GETDATE()) AS PaFechaIngreso,
                 RTRIM(ISNULL(pa_estado, 'A')) AS PaEstado,
-                RTRIM(ISNULL(pa_tipocli, 'R')) AS PaTipoCli,
-                RTRIM(ISNULL(pa_documento, 'CEDULA')) AS PaDocumento,
+                RTRIM(ISNULL(pa_tipocli, '1')) AS PaTipoCli,
+                CASE RTRIM(ISNULL(pa_documento, 'C'))
+                    WHEN 'R' THEN 'RUC'
+                    WHEN 'P' THEN 'PASAPORTE'
+                    ELSE 'CEDULA'
+                END AS PaDocumento,
                 RTRIM(ISNULL(pa_notas, '')) AS PaNotas,
                 'NAC' AS PaGrupoCliente,
                 'CONTADO' AS PaTerminosPago,
@@ -155,6 +159,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         cliente.PaApellidos = NombreValidador.Sanitizar(cliente.PaApellidos);
         cliente.PaNombres = NombreValidador.Sanitizar(cliente.PaNombres);
 
+        string docChar = cliente.PaDocumento?.Trim().ToUpperInvariant() switch
+        {
+            "RUC" or "R" => "R",
+            "PASAPORTE" or "P" => "P",
+            _ => "C"
+        };
+
         try
         {
             if (cliente.PaCodigo == 0)
@@ -162,17 +173,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 const string insertSql = @"
                     INSERT INTO vt_clientes (
                         pa_nombres, pa_apellidos, pa_cedula, pa_telefono, pa_movil,
-                        pa_email, pa_emailfactura, pa_direccion, pa_observaciones,
+                        pa_email, pa_direccion, pa_observaciones,
                         pa_fechaingreso, pa_fechaMod, pa_estado, pa_usuarioModifico,
-                        pa_tipocli, pa_documento, pa_notas, pa_grupocliente,
-                        pa_terminospago, pa_tipopersona, pa_genero, pa_formapago, pa_estadocivil
+                        pa_tipocli, pa_documento, pa_notas
                     )
                     VALUES (
                         @PaNombres, @PaApellidos, @PaCedula, @PaTelefono, @PaMovil,
-                        @PaEmail, @PaEmailFactura, @PaDireccion, @PaObservaciones,
+                        @PaEmail, @PaDireccion, @PaObservaciones,
                         GETDATE(), GETDATE(), 'A', @IdUsuario,
-                        @PaTipoCli, @PaDocumento, @PaNotas, @PaGrupoCliente,
-                        @PaTerminosPago, @PaTipoPersona, @PaGenero, @PaFormaPago, @PaEstadoCivil
+                        @PaTipoCli, @DocChar, @PaNotas
                     );
                     SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -184,19 +193,12 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     cliente.PaTelefono,
                     cliente.PaMovil,
                     cliente.PaEmail,
-                    cliente.PaEmailFactura,
                     cliente.PaDireccion,
                     cliente.PaObservaciones,
-                    IdUsuario = idUsuario,
-                    cliente.PaTipoCli,
-                    cliente.PaDocumento,
-                    cliente.PaNotas,
-                    cliente.PaGrupoCliente,
-                    cliente.PaTerminosPago,
-                    cliente.PaTipoPersona,
-                    cliente.PaGenero,
-                    cliente.PaFormaPago,
-                    cliente.PaEstadoCivil
+                    IdUsuario = idUsuario.ToString(),
+                    PaTipoCli = string.IsNullOrWhiteSpace(cliente.PaTipoCli) ? "1" : (cliente.PaTipoCli.Length > 3 ? cliente.PaTipoCli[..3] : cliente.PaTipoCli),
+                    DocChar = docChar,
+                    PaNotas = string.IsNullOrWhiteSpace(cliente.PaNotas) ? "1" : (cliente.PaNotas.Length > 1 ? cliente.PaNotas[..1] : cliente.PaNotas)
                 });
                 if (nuevoId > 0) return nuevoId;
             }
@@ -210,20 +212,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         pa_telefono = @PaTelefono,
                         pa_movil = @PaMovil,
                         pa_email = @PaEmail,
-                        pa_emailfactura = @PaEmailFactura,
                         pa_direccion = @PaDireccion,
                         pa_observaciones = @PaObservaciones,
                         pa_fechaMod = GETDATE(),
                         pa_usuarioModifico = @IdUsuario,
-                        pa_tipocli = @PaTipoCli,
-                        pa_documento = @PaDocumento,
-                        pa_notas = @PaNotas,
-                        pa_grupocliente = @PaGrupoCliente,
-                        pa_terminospago = @PaTerminosPago,
-                        pa_tipopersona = @PaTipoPersona,
-                        pa_genero = @PaGenero,
-                        pa_formapago = @PaFormaPago,
-                        pa_estadocivil = @PaEstadoCivil
+                        pa_documento = @DocChar
                     WHERE pa_codigo = @PaCodigo;";
 
                 int rows = await _db.ExecuteAsync(updateSql, new
@@ -235,26 +228,18 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     cliente.PaTelefono,
                     cliente.PaMovil,
                     cliente.PaEmail,
-                    cliente.PaEmailFactura,
                     cliente.PaDireccion,
                     cliente.PaObservaciones,
-                    IdUsuario = idUsuario,
-                    cliente.PaTipoCli,
-                    cliente.PaDocumento,
-                    cliente.PaNotas,
-                    cliente.PaGrupoCliente,
-                    cliente.PaTerminosPago,
-                    cliente.PaTipoPersona,
-                    cliente.PaGenero,
-                    cliente.PaFormaPago,
-                    cliente.PaEstadoCivil
+                    IdUsuario = idUsuario.ToString(),
+                    DocChar = docChar
                 });
                 if (rows > 0) return cliente.PaCodigo;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Fallback en memoria para GuardarClienteAsync");
+            _logger.LogError(ex, "Error al guardar cliente en SQL Server");
+            throw;
         }
 
         if (cliente.PaCodigo == 0)
@@ -283,7 +268,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 RTRIM(ISNULL(p.mas_origen, 'M')) AS MasOrigen,
                 CASE WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'H' THEN 2 WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 1 ELSE 3 END AS MasSexo,
                 RTRIM(ISNULL(s.sexo, CASE WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'H' THEN 'Hembra' WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 'Macho' ELSE 'Indeterminado' END)) AS SexoDescripcion,
-                RTRIM(ISNULL(p.mas_castrado, 'NO')) AS MasCastrado,
+                CASE WHEN RTRIM(ISNULL(p.mas_castrado, 'N')) = 'S' THEN 'SI' ELSE 'NO' END AS MasCastrado,
                 ISNULL(p.mas_especie, 1) AS MasEspecie,
                 RTRIM(ISNULL(e.especie_descripcion, '')) AS EspecieDescripcion,
                 ISNULL(p.mas_raza, 1) AS MasRaza,
@@ -331,7 +316,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 RTRIM(ISNULL(p.mas_origen, 'M')) AS MasOrigen,
                 CASE WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'H' THEN 2 WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 1 ELSE 3 END AS MasSexo,
                 RTRIM(ISNULL(s.sexo, CASE WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'H' THEN 'Hembra' WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 'Macho' ELSE 'Indeterminado' END)) AS SexoDescripcion,
-                RTRIM(ISNULL(p.mas_castrado, 'NO')) AS MasCastrado,
+                CASE WHEN RTRIM(ISNULL(p.mas_castrado, 'N')) = 'S' THEN 'SI' ELSE 'NO' END AS MasCastrado,
                 ISNULL(p.mas_especie, 1) AS MasEspecie,
                 RTRIM(ISNULL(e.especie_descripcion, '')) AS EspecieDescripcion,
                 ISNULL(p.mas_raza, 1) AS MasRaza,
@@ -386,6 +371,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         try
         {
             string sexoChar = mascota.MasSexo == 2 ? "H" : (mascota.MasSexo == 1 ? "M" : "I");
+            string castradoChar = mascota.MasCastrado?.Trim().ToUpperInvariant().StartsWith("S") == true ? "S" : "N";
+            decimal? tuePesoVal = decimal.TryParse(mascota.TuePeso, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var p) ? p : null;
+            int? tueCientificoVal = int.TryParse(mascota.TueCientifico, out var c) ? c : null;
 
             if (mascota.MasNhcl == 0)
             {
@@ -393,13 +381,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     INSERT INTO vt_pacientes (
                         mas_idcliente, mas_nombre, mas_sexo, mas_castrado, mas_especie,
                         mas_raza, mas_otros, mas_fechanace, mas_observacion, mas_estado,
-                        mas_fechaMod, mas_usuarioMod, mas_origen, mas_colortriaje,
+                        mas_fechaingreso, mas_ultimamodi, mas_usuariomodi, mas_origen, mas_colortriaje,
                         tue_clase, tue_peso, tue_cientifico, tue_sectorbarrio
                     )
                     VALUES (
                         @MasIdCliente, @MasNombre, @MasSexo, @MasCastrado, @MasEspecie,
                         @MasRaza, @MasOtros, @MasFechaNace, @MasObservacion, 'A',
-                        GETDATE(), @IdUsuario, @MasOrigen, @MasColorTriaje,
+                        GETDATE(), GETDATE(), @IdUsuario, @MasOrigen, @MasColorTriaje,
                         @TueClase, @TuePeso, @TueCientifico, @TueSectorBarrio
                     );
                     SELECT CAST(SCOPE_IDENTITY() AS INT);";
@@ -409,18 +397,18 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     mascota.MasIdCliente,
                     mascota.MasNombre,
                     MasSexo = sexoChar,
-                    mascota.MasCastrado,
+                    MasCastrado = castradoChar,
                     mascota.MasEspecie,
                     mascota.MasRaza,
                     mascota.MasOtros,
                     mascota.MasFechaNace,
                     mascota.MasObservacion,
-                    IdUsuario = idUsuario,
+                    IdUsuario = idUsuario.ToString(),
                     mascota.MasOrigen,
                     mascota.MasColorTriaje,
                     mascota.TueClase,
-                    mascota.TuePeso,
-                    mascota.TueCientifico,
+                    TuePeso = tuePesoVal,
+                    TueCientifico = tueCientificoVal,
                     mascota.TueSectorBarrio
                 });
                 if (nuevoNhcl > 0) return nuevoNhcl;
@@ -437,8 +425,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         mas_otros = @MasOtros,
                         mas_fechanace = @MasFechaNace,
                         mas_observacion = @MasObservacion,
-                        mas_fechaMod = GETDATE(),
-                        mas_usuarioMod = @IdUsuario,
+                        mas_ultimamodi = GETDATE(),
+                        mas_usuariomodi = @IdUsuario,
                         mas_origen = @MasOrigen,
                         mas_colortriaje = @MasColorTriaje,
                         tue_clase = @TueClase,
@@ -452,18 +440,18 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     mascota.MasNhcl,
                     mascota.MasNombre,
                     MasSexo = sexoChar,
-                    mascota.MasCastrado,
+                    MasCastrado = castradoChar,
                     mascota.MasEspecie,
                     mascota.MasRaza,
                     mascota.MasOtros,
                     mascota.MasFechaNace,
                     mascota.MasObservacion,
-                    IdUsuario = idUsuario,
+                    IdUsuario = idUsuario.ToString(),
                     mascota.MasOrigen,
                     mascota.MasColorTriaje,
                     mascota.TueClase,
-                    mascota.TuePeso,
-                    mascota.TueCientifico,
+                    TuePeso = tuePesoVal,
+                    TueCientifico = tueCientificoVal,
                     mascota.TueSectorBarrio
                 });
                 if (rows > 0) return mascota.MasNhcl;
@@ -471,15 +459,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Fallback en memoria para GuardarMascotaAsync");
-        }
-
-        var cliente = _clientesDemo.FirstOrDefault(c => c.PaCodigo == mascota.MasIdCliente);
-        if (cliente != null)
-        {
-            mascota.ClienteNombre = cliente.NombreCompleto;
-            mascota.ClienteCedula = cliente.PaCedula;
-            mascota.ClienteTelefono = cliente.PaMovil;
+            _logger.LogError(ex, "Error al guardar paciente/mascota en SQL Server");
+            throw;
         }
 
         if (mascota.MasNhcl == 0)

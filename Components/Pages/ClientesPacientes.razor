@@ -198,8 +198,8 @@
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">Tipo Documento SRI</label>
                                     <select class="form-select form-select-sm" value="@_clienteEditando.PaDocumento" @onchange="OnCambiarTipoDocumento">
-                                        <option value="CEDULA">CÉDULA (10 dígitos)</option>
-                                        <option value="RUC">RUC (13 dígitos)</option>
+                                        <option value="CEDULA">CÉDULA (máx. 10 dígitos)</option>
+                                        <option value="RUC">RUC (máx. 13 dígitos)</option>
                                         <option value="PASAPORTE">PASAPORTE (6-15 caracteres)</option>
                                     </select>
                                 </div>
@@ -542,6 +542,9 @@
     private async Task SeleccionarClienteAsync(ClienteDto cli)
     {
         _clienteSeleccionado = cli;
+        string rawMovil = new string((cli.PaMovil ?? string.Empty).Where(char.IsDigit).ToArray());
+        if (rawMovil.Length > 10) rawMovil = rawMovil[..10];
+
         _clienteEditando = new ClienteDto
         {
             PaCodigo = cli.PaCodigo,
@@ -549,7 +552,7 @@
             PaApellidos = cli.PaApellidos,
             PaCedula = cli.PaCedula,
             PaTelefono = cli.PaTelefono,
-            PaMovil = cli.PaMovil,
+            PaMovil = rawMovil,
             PaEmail = cli.PaEmail,
             PaEmailFactura = cli.PaEmailFactura,
             PaDireccion = cli.PaDireccion,
@@ -571,7 +574,8 @@
         _mascotas = await AdmisionService.ObtenerMascotasPorClienteAsync(cli.PaCodigo);
         if (_mascotas.Count > 0)
         {
-            SeleccionarMascota(_mascotas[0]);
+            _tabActiva = "CLIENTE";
+            await CargarDatosMascotaAsync(_mascotas[0], cambiarTab: false);
         }
     }
 
@@ -617,8 +621,8 @@
 
     private string ObtenerPlaceholderDocumento() => _clienteEditando.PaDocumento switch
     {
-        "CEDULA" => "10 dígitos numéricos",
-        "RUC" => "13 dígitos numéricos",
+        "CEDULA" => "Máx. 10 dígitos numéricos",
+        "RUC" => "Máx. 13 dígitos numéricos",
         _ => "6 a 15 caracteres alfanuméricos"
     };
 
@@ -836,12 +840,20 @@
         }
 
 
-        int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
-        int idGuardado = await AdmisionService.GuardarClienteAsync(_clienteEditando, idUser);
-        _clienteEditando.PaCodigo = idGuardado;
-        await BuscarClientesAsync();
-        _esError = false;
-        _mensajeAlerta = $"Propietario #{idGuardado} ({_clienteEditando.NombreCompleto}) guardado exitosamente.";
+        try
+        {
+            int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
+            int idGuardado = await AdmisionService.GuardarClienteAsync(_clienteEditando, idUser);
+            _clienteEditando.PaCodigo = idGuardado;
+            await BuscarClientesAsync();
+            _esError = false;
+            _mensajeAlerta = $"Propietario #{idGuardado} ({_clienteEditando.NombreCompleto}) guardado exitosamente en la base de datos.";
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al guardar propietario en base de datos: {ex.Message}";
+        }
     }
 
     private async Task NuevaMascota(int idCliente)
@@ -860,7 +872,12 @@
         _tabActiva = "MASCOTA";
     }
 
-    private async void SeleccionarMascota(PacienteMascotaDto mas)
+    private async Task SeleccionarMascota(PacienteMascotaDto mas)
+    {
+        await CargarDatosMascotaAsync(mas, cambiarTab: true);
+    }
+
+    private async Task CargarDatosMascotaAsync(PacienteMascotaDto mas, bool cambiarTab = true)
     {
         _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(mas.MasEspecie);
         _mascotaEditando = new PacienteMascotaDto
@@ -886,7 +903,10 @@
             TueCientifico = mas.TueCientifico,
             TueSectorBarrio = mas.TueSectorBarrio
         };
-        _tabActiva = "MASCOTA";
+        if (cambiarTab)
+        {
+            _tabActiva = "MASCOTA";
+        }
         StateHasChanged();
     }
 
@@ -902,16 +922,24 @@
 
     private async Task GuardarMascotaAsync()
     {
-        int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
-        _mascotaEditando.EspecieDescripcion = _especies.FirstOrDefault(e => e.Id == _mascotaEditando.MasEspecie)?.Descripcion ?? "Canino";
-        _mascotaEditando.RazaDescripcion = _razas.FirstOrDefault(r => r.Id == _mascotaEditando.MasRaza)?.Descripcion ?? "Mestizo";
-        _mascotaEditando.SexoDescripcion = _sexos.FirstOrDefault(s => s.Id == _mascotaEditando.MasSexo)?.Descripcion ?? "Macho";
+        try
+        {
+            int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
+            _mascotaEditando.EspecieDescripcion = _especies.FirstOrDefault(e => e.Id == _mascotaEditando.MasEspecie)?.Descripcion ?? "Canino";
+            _mascotaEditando.RazaDescripcion = _razas.FirstOrDefault(r => r.Id == _mascotaEditando.MasRaza)?.Descripcion ?? "Mestizo";
+            _mascotaEditando.SexoDescripcion = _sexos.FirstOrDefault(s => s.Id == _mascotaEditando.MasSexo)?.Descripcion ?? "Macho";
 
-        int nhcl = await AdmisionService.GuardarMascotaAsync(_mascotaEditando, idUser);
-        _mascotaEditando.MasNhcl = nhcl;
-        _mascotas = await AdmisionService.BuscarMascotasAsync(_filtroMascotas, _filtroOrigen);
-        _esError = false;
-        _mensajeAlerta = $"Paciente NHCL #{nhcl} ({_mascotaEditando.MasNombre}) guardado correctamente.";
+            int nhcl = await AdmisionService.GuardarMascotaAsync(_mascotaEditando, idUser);
+            _mascotaEditando.MasNhcl = nhcl;
+            _mascotas = await AdmisionService.BuscarMascotasAsync(_filtroMascotas, _filtroOrigen);
+            _esError = false;
+            _mensajeAlerta = $"Paciente NHCL #{nhcl} ({_mascotaEditando.MasNombre}) guardado correctamente en la base de datos.";
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al guardar paciente en base de datos: {ex.Message}";
+        }
     }
 
     private async Task FiltrarOrigenAsync(string origen)
