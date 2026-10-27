@@ -27,6 +27,7 @@ builder.Services.AddScoped<IQuirofanoService, QuirofanoService>();
 builder.Services.AddScoped<IConsultaExternaService, ConsultaExternaService>();
 builder.Services.AddScoped<ILaboratorioImagenService, LaboratorioImagenService>();
 builder.Services.AddScoped<IAdmisionFacturacionService, AdmisionFacturacionService>();
+builder.Services.AddScoped<IAdministracionClinicaService, AdministracionClinicaService>();
 builder.Services.AddSingleton<IReportExportService, ReportExportService>();
 
 var app = builder.Build();
