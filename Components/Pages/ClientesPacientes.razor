@@ -265,14 +265,55 @@
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">Teléfono Móvil *</label>
-                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaMovil" />
-                                    <ValidationMessage For="() => _clienteEditando.PaMovil" />
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-light text-muted fw-bold border-end-0">+593</span>
+                                        <input type="text"
+                                               class="form-control form-control-sm @(_errorMovil != null ? "is-invalid border-danger" : (_esMovilValido ? "is-valid border-success" : ""))"
+                                               value="@_clienteEditando.PaMovil"
+                                               maxlength="10"
+                                               inputmode="numeric"
+                                               placeholder="09XXXXXXXX (10 dígitos)"
+                                               onkeypress="if (event.which < 48 || event.which > 57) return false;"
+                                               @oninput="OnInputMovil" />
+                                        @if (_esMovilValido)
+                                        {
+                                            <span class="input-group-text bg-success text-white py-0 px-2" title="Móvil válido">
+                                                <i class="bi bi-check-circle-fill"></i>
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(_errorMovil))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorMovil
+                                        </div>
+                                    }
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Teléfono Convencional</label>
-                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaTelefono" />
+                                    <label class="form-label small fw-bold">Teléfono Convencional <small class="text-muted fw-normal">(Opcional)</small></label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text"
+                                               class="form-control form-control-sm @(_errorTelefono != null ? "is-invalid border-danger" : (_esTelefonoValido ? "is-valid border-success" : ""))"
+                                               value="@_clienteEditando.PaTelefono"
+                                               maxlength="7"
+                                               inputmode="numeric"
+                                               placeholder="7 dígitos (no iniciar en 0)"
+                                               onkeypress="if (event.which < 48 || event.which > 57) return false;"
+                                               @oninput="OnInputTelefono" />
+                                        @if (_esTelefonoValido)
+                                        {
+                                            <span class="input-group-text bg-success text-white py-0 px-2" title="Teléfono válido">
+                                                <i class="bi bi-check-circle-fill"></i>
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(_errorTelefono))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorTelefono
+                                        </div>
+                                    }
                                 </div>
-
                                 <div class="col-md-12">
                                     <label class="form-label small fw-bold">Correo Electrónico</label>
                                     <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaEmail" />
@@ -464,6 +505,10 @@
     private bool _esDocValido;
     private string? _errorApellidos;
     private string? _errorNombres;
+    private string? _errorMovil;
+    private bool _esMovilValido;
+    private string? _errorTelefono;
+    private bool _esTelefonoValido;
 
     protected override async Task OnInitializedAsync()
     {
@@ -519,6 +564,8 @@
         ValidarDocumentoEnVivo(_clienteEditando.PaCedula);
         ValidarApellidosEnVivo(_clienteEditando.PaApellidos);
         ValidarNombresEnVivo(_clienteEditando.PaNombres);
+        ValidarMovilEnVivo(_clienteEditando.PaMovil);
+        ValidarTelefonoEnVivo(_clienteEditando.PaTelefono);
 
 
         _mascotas = await AdmisionService.ObtenerMascotasPorClienteAsync(cli.PaCodigo);
@@ -535,6 +582,10 @@
         _errorDocumento = null;
         _errorApellidos = null;
         _errorNombres = null;
+        _errorMovil = null;
+        _esMovilValido = false;
+        _errorTelefono = null;
+        _esTelefonoValido = false;
         _esDocValido = false;
         _tabActiva = "CLIENTE";
     }
@@ -667,6 +718,65 @@
         var res = NombreValidador.Validar(val, "Los nombres");
         _errorNombres = res.MensajeError;
     }
+    private void OnInputMovil(ChangeEventArgs e)
+    {
+        string raw = e.Value?.ToString() ?? string.Empty;
+        raw = new string(raw.Where(char.IsDigit).ToArray());
+        if (raw.Length > 10) raw = raw[..10];
+        _clienteEditando.PaMovil = raw;
+        ValidarMovilEnVivo(raw);
+    }
+
+    private void ValidarMovilEnVivo(string val)
+    {
+        if (string.IsNullOrWhiteSpace(val))
+        {
+            _errorMovil = null;
+            _esMovilValido = false;
+            return;
+        }
+
+        if (val.Length != 10 || !val.StartsWith("0"))
+        {
+            _errorMovil = "El número celular debe tener 10 dígitos y empezar con 0";
+            _esMovilValido = false;
+        }
+        else
+        {
+            _errorMovil = null;
+            _esMovilValido = true;
+        }
+    }
+
+    private void OnInputTelefono(ChangeEventArgs e)
+    {
+        string raw = e.Value?.ToString() ?? string.Empty;
+        raw = new string(raw.Where(char.IsDigit).ToArray());
+        if (raw.Length > 7) raw = raw[..7];
+        _clienteEditando.PaTelefono = raw;
+        ValidarTelefonoEnVivo(raw);
+    }
+
+    private void ValidarTelefonoEnVivo(string val)
+    {
+        if (string.IsNullOrWhiteSpace(val))
+        {
+            _errorTelefono = null;
+            _esTelefonoValido = false;
+            return;
+        }
+
+        if (val.Length != 7 || val.StartsWith("0"))
+        {
+            _errorTelefono = "El teléfono convencional debe tener exactamente 7 dígitos y no iniciar en 0";
+            _esTelefonoValido = false;
+        }
+        else
+        {
+            _errorTelefono = null;
+            _esTelefonoValido = true;
+        }
+    }
     private async Task GuardarClienteAsync()
     {
         var resVal = EcuadorDocumentoValidador.Validar(_clienteEditando.PaDocumento, _clienteEditando.PaCedula);
@@ -701,6 +811,31 @@
             _mensajeAlerta = valNom.MensajeError!;
             return;
         }
+
+        // Validar Teléfono Móvil
+        string movil = _clienteEditando.PaMovil?.Trim() ?? string.Empty;
+        if (movil.Length != 10 || !movil.StartsWith("0"))
+        {
+            _esError = true;
+            _errorMovil = "El número celular debe tener 10 dígitos y empezar con 0";
+            _mensajeAlerta = _errorMovil;
+            return;
+        }
+
+        // Validar Teléfono Convencional (opcional)
+        string tel = _clienteEditando.PaTelefono?.Trim() ?? string.Empty;
+        if (!string.IsNullOrEmpty(tel))
+        {
+            if (tel.Length != 7 || tel.StartsWith("0"))
+            {
+                _esError = true;
+                _errorTelefono = "El teléfono convencional debe tener exactamente 7 dígitos y no iniciar en 0";
+                _mensajeAlerta = _errorTelefono;
+                return;
+            }
+        }
+
+
         int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
         int idGuardado = await AdmisionService.GuardarClienteAsync(_clienteEditando, idUser);
         _clienteEditando.PaCodigo = idGuardado;
