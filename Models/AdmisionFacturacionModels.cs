@@ -236,7 +236,7 @@ public class SlotHorarioMedicoDto
 }
 
 // =========================================================================
-// 4. FACTURACIÓN CONSOLIDADA / PROFORMAS BUSINESS CENTRAL
+// 4. FACTURACIÓN CONSOLIDADA / PROFORMAS
 // Reemplaza: Hosp_PreProformas.aspx.vb, vt_QuirProformas.aspx.vb, vt_UniProformas.aspx.vb
 // =========================================================================
 

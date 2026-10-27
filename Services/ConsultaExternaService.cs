@@ -50,16 +50,13 @@ public interface IConsultaExternaService
 public class ConsultaExternaService : IConsultaExternaService
 {
     private readonly ISqlDataService _db;
-    private readonly IBusinessCentralService _bcService;
     private readonly ILogger<ConsultaExternaService> _logger;
 
     public ConsultaExternaService(
         ISqlDataService db,
-        IBusinessCentralService bcService,
         ILogger<ConsultaExternaService> logger)
     {
         _db = db;
-        _bcService = bcService;
         _logger = logger;
     }
 

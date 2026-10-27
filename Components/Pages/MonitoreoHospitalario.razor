@@ -2,7 +2,7 @@
 @page "/hospitalizacion/monitoreo/{IdOrden:int}/{Nhcl:int}"
 @inject IKardexService KardexService
 @inject IHospitalizacionService HospService
-@inject IBusinessCentralService BcService
+@inject IInventarioService InventarioService
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject IJSRuntime JS
@@ -197,12 +197,12 @@
             <!-- 2. REGISTRO DE MEDICAMENTOS DE MONITOREO (hvt_cabMonitoreoMedBC) -->
             <div class="card shadow-sm border-0 mb-3">
                 <div class="card-header bg-primary bg-opacity-10 py-1 px-3 fw-bold small text-primary">
-                    💊 2. REGISTRO DE MEDICAMENTOS E INSUMOS EN MONITOREO (CON DESCARGO DE STOCK BC)
+                    💊 2. REGISTRO DE MEDICAMENTOS E INSUMOS EN MONITOREO (CON DESCARGO DE STOCK)
                 </div>
                 <div class="card-body p-2">
                     <div class="row g-2 align-items-end mb-2 no-print small">
                         <div class="col-md-3">
-                            <label class="form-label mb-0 fw-semibold">Buscar en Bodega BC:</label>
+                            <label class="form-label mb-0 fw-semibold">Buscar en bodega:</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control" placeholder="Nombre fármaco..." @bind="_busquedaFarmaco" />
                                 <button class="btn btn-outline-primary" @onclick="BuscarFarmacosBcAsync">🔎</button>
@@ -536,7 +536,7 @@
     private async Task BuscarFarmacosBcAsync()
     {
         if (string.IsNullOrWhiteSpace(_busquedaFarmaco)) return;
-        _farmacosBc = await BcService.BuscarMedicamentosConStockAsync(_busquedaFarmaco, Session.Localidad, Session.Apostrofe);
+        _farmacosBc = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaFarmaco, Session.Localidad, Session.Apostrofe);
     }
 
     private void SeleccionarFarmacoBc(ChangeEventArgs e)

@@ -40,16 +40,13 @@ public interface ILaboratorioImagenService
 public class LaboratorioImagenService : ILaboratorioImagenService
 {
     private readonly ISqlDataService _db;
-    private readonly IBusinessCentralService _bcService;
     private readonly ILogger<LaboratorioImagenService> _logger;
 
     public LaboratorioImagenService(
         ISqlDataService db,
-        IBusinessCentralService bcService,
         ILogger<LaboratorioImagenService> logger)
     {
         _db = db;
-        _bcService = bcService;
         _logger = logger;
     }
 

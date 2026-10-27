@@ -16,11 +16,11 @@ QuestPDF.Settings.ThrowOnMissingFontFamilies = false;
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Servicios de Datos, Negocio, Integración BC y Reportería PDF/Excel
+// Servicios de datos, negocio, inventario y reportería PDF/Excel
 builder.Services.AddScoped<ISqlDataService, SqlDataService>();
 builder.Services.AddScoped<SessionStateService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddHttpClient<IBusinessCentralService, BusinessCentralService>();
+builder.Services.AddScoped<IInventarioService, InventarioService>();
 builder.Services.AddScoped<IKardexService, KardexService>();
 builder.Services.AddScoped<IHospitalizacionService, HospitalizacionService>();
 builder.Services.AddScoped<IQuirofanoService, QuirofanoService>();

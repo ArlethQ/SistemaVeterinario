@@ -22,7 +22,7 @@ public interface IKardexService
 public class KardexService : IKardexService
 {
     private readonly ISqlDataService _sql;
-    private readonly IBusinessCentralService _bcService;
+    private readonly IInventarioService _inventarioService;
     private readonly ILogger<KardexService> _logger;
 
     // Caché en memoria para acelerar la navegación entre pestañas sin repetir consultas pesadas a SQL Server
@@ -50,10 +50,10 @@ public class KardexService : IKardexService
         new() { Id = 5, Orden = 24001, Nhcl = 5001, Codigo = "MED-MEL-05", Producto = "MELOXICAM INYECTABLE 0.5% 10ML", Cantidad = 1, Precio = 8.40m, Indicaciones = "0.1 mg/kg cada 24 horas control dolor", Via = "SUBCUTANEA (SC)", Fecha = DateTime.Today.ToString("yyyy-MM-dd"), FechaRaw = DateTime.Today, Hora = "10:00", Iniciales = "SC", Funcion = "MEDICO", Funcionario = "Dr. Sebastián Cordero", Bodega = "HOSP" }
     ];
 
-    public KardexService(ISqlDataService sql, IBusinessCentralService bcService, ILogger<KardexService> logger)
+    public KardexService(ISqlDataService sql, IInventarioService inventarioService, ILogger<KardexService> logger)
     {
         _sql = sql;
-        _bcService = bcService;
+        _inventarioService = inventarioService;
         _logger = logger;
     }
 
@@ -420,7 +420,7 @@ public class KardexService : IKardexService
 
             if (idCreado.HasValue && idCreado.Value > 0)
             {
-                await _bcService.GuardarReservaStockAsync(
+                await _inventarioService.GuardarReservaStockAsync(
                     input.CodigoProd.Trim(),
                     idUsuarioSesion,
                     input.CantProd,
@@ -471,7 +471,7 @@ public class KardexService : IKardexService
             int res = await _sql.ExecuteAsync(deleteSql, new { Id = idRegistro });
             if (res > 0)
             {
-                await _bcService.EliminarReservaStockAsync(codigoProd, ordenId, idRegistro, "QUI");
+                await _inventarioService.EliminarReservaStockAsync(codigoProd, ordenId, idRegistro, "QUI");
                 return (true, "Registro eliminado y reserva de stock liberada con éxito.");
             }
         }

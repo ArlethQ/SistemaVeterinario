@@ -1912,7 +1912,7 @@ public class ReportExportService : IReportExportService
     }
 
     // ========================================================================
-    // 17. PROFORMA CONSOLIDADA MULTI-MÓDULO BUSINESS CENTRAL (PDF & EXCEL)
+    // 17. PROFORMA CONSOLIDADA MULTI-MÓDULO (PDF & EXCEL)
     // ========================================================================
     public byte[] GenerarProformaConsolidadaPdf(OrdenProformaResumenDto proforma)
     {
@@ -1935,7 +1935,7 @@ public class ReportExportService : IReportExportService
                         {
                             c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"ESTADO DE CUENTA / PROFORMA CONSOLIDADA — {proforma.NumeroFacturaBc}").Bold().FontSize(10);
-                            c.Item().Text($"Integración ERP Microsoft Dynamics 365 Business Central | Fecha: {DateTime.Now:yyyy-MM-dd HH:mm}").FontSize(8).FontColor(Colors.Grey.Darken2);
+                            c.Item().Text($"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm}").FontSize(8).FontColor(Colors.Grey.Darken2);
                         });
                         row.ConstantItem(48).Image(qrBytes);
                     });
@@ -1972,7 +1972,7 @@ public class ReportExportService : IReportExportService
                         t.Header(h =>
                         {
                             h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(3).Text("Módulo Origen").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(3).Text("Código BC").Bold();
+                            h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(3).Text("Código").Bold();
                             h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(3).Text("Descripción del Servicio / Insumo").Bold();
                             h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(3).AlignRight().Text("Cant.").Bold();
                             h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(3).AlignRight().Text("P. Unit.").Bold();
@@ -2005,7 +2005,7 @@ public class ReportExportService : IReportExportService
                     });
                 });
 
-                page.Footer().AlignCenter().Text($"e-ForVets — Documento de pre-facturación ERP Business Central ({proforma.NumeroFacturaBc})");
+                page.Footer().AlignCenter().Text($"e-ForVets — Documento de pre-facturación ({proforma.NumeroFacturaBc})");
             });
         }).GeneratePdf();
     }
@@ -2015,13 +2015,13 @@ public class ReportExportService : IReportExportService
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add($"Proforma_{proforma.IdOrden}");
 
-        ws.Cell(1, 1).Value = $"e-ForVets - PROFORMA CONSOLIDADA BUSINESS CENTRAL ({proforma.NumeroFacturaBc})";
+        ws.Cell(1, 1).Value = $"e-ForVets - PROFORMA CONSOLIDADA ({proforma.NumeroFacturaBc})";
         ws.Range(1, 1, 1, 6).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
 
         ws.Cell(2, 1).Value = $"Orden: #{proforma.IdOrden} | NHCL: #{proforma.Nhcl} | Paciente: {proforma.MascotaNombre} | Cliente: {proforma.ClienteNombre} ({proforma.ClienteCedula})";
         ws.Range(2, 1, 2, 6).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#DBEAFE"));
 
-        string[] headers = ["Módulo Origen", "Código BC", "Descripción Servicio / Insumo", "Cantidad", "Precio Unitario", "Subtotal USD"];
+        string[] headers = ["Módulo Origen", "Código", "Descripción Servicio / Insumo", "Cantidad", "Precio Unitario", "Subtotal USD"];
         for (int i = 0; i < headers.Length; i++)
             ws.Cell(4, i + 1).Value = headers[i];
         ws.Range(4, 1, 4, 6).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#E2E8F0"));

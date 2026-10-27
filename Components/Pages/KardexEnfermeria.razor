@@ -1,7 +1,7 @@
 @page "/kardex/enfermeria"
 @page "/kardex/enfermeria/{Orden:int}/{Nhcl:int}"
 @inject IKardexService KardexService
-@inject IBusinessCentralService BcService
+@inject IInventarioService InventarioService
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject NavigationManager Nav
@@ -95,10 +95,10 @@
 
 @if (_tabActiva == 0)
 {
-    <!-- BUSCADOR DE FÁRMACOS / STOCK BUSINESS CENTRAL -->
+    <!-- BUSCADOR DE FÁRMACOS / STOCK LOCAL -->
     <div class="card shadow-sm border-0 mb-3">
         <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
-            <span class="fw-bold small">BÚSQUEDA DE FÁRMACOS Y CONTROL DE STOCK (BUSINESS CENTRAL / BODEGA)</span>
+            <span class="fw-bold small">BÚSQUEDA DE FÁRMACOS Y CONTROL DE STOCK (BODEGA)</span>
             @if (!string.IsNullOrWhiteSpace(_formInput.CodigoProd))
             {
                 <span class="badge bg-warning text-dark">
@@ -566,7 +566,7 @@ else
         _buscandoProd = true;
         try
         {
-            _productosEncontrados = await BcService.BuscarMedicamentosConStockAsync(
+            _productosEncontrados = await InventarioService.BuscarMedicamentosConStockAsync(
                 _textoBusquedaProd.Trim(), Session.Localidad, Session.Apostrofe);
             _mostrarModalProductos = true;
             if (_productosEncontrados.Count == 0)

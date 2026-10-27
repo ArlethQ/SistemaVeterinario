@@ -2,7 +2,7 @@
 @page "/quirofano/preanestesia/{IdOrden:int}/{Nhcl:int}"
 @inject IKardexService KardexService
 @inject IQuirofanoService QuirofanoService
-@inject IBusinessCentralService BcService
+@inject IInventarioService InventarioService
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject IJSRuntime JS
@@ -214,11 +214,11 @@ else if (paciente != null)
             </div>
         </div>
 
-        <!-- Columna Derecha: Medicación Pre-Anestésica y Stock BC -->
+        <!-- Columna Derecha: Medicación Pre-Anestésica y stock -->
         <div class="col-lg-5">
             <div class="card shadow-sm border-0 mb-3">
                 <div class="card-header bg-white fw-bold text-primary">
-                    3. Medicación Pre-Anestésica (Stock Business Central)
+                    3. Medicación Pre-Anestésica (Stock de bodega)
                 </div>
                 <div class="card-body">
                     <div class="input-group input-group-sm mb-2">
@@ -470,7 +470,7 @@ else if (paciente != null)
             return;
         }
         buscandoStock = true;
-        resultadosStock = await BcService.BuscarMedicamentosConStockAsync(
+        resultadosStock = await InventarioService.BuscarMedicamentosConStockAsync(
             filtroProd.Trim(),
             Session.CurrentUser?.IdLocalidad ?? 1,
             Session.CurrentUser?.PrefijoLocalidad ?? "HV");
