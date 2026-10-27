@@ -65,7 +65,7 @@ public class ReportExportService : IReportExportService
         var fechas = sabana.FirstOrDefault()?.FechasColumnas
                      ?? Enumerable.Range(0, 5).Select(i => DateTime.Today.AddDays(i)).ToList();
 
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-ORDEN:{paciente.OrdenAtencionId}|NHCL:{paciente.Nhcl}|PAC:{paciente.PacienteNombre}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-ORDEN:{paciente.OrdenAtencionId}|NHCL:{paciente.Nhcl}|PAC:{paciente.PacienteNombre}");
 
         var document = Document.Create(container =>
         {
@@ -81,7 +81,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(13).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(13).FontColor(Colors.Blue.Darken3);
                             c.Item().Text("HOJA DE KARDEX DE ENFERMERÍA — ADMINISTRACIÓN DE MEDICAMENTOS").Bold().FontSize(10).FontColor(Colors.Grey.Darken3);
                             c.Item().Text($"Fecha de Emisión: {DateTime.Now:yyyy-MM-dd HH:mm}").FontSize(8).FontColor(Colors.Grey.Darken1);
                         });
@@ -196,7 +196,7 @@ public class ReportExportService : IReportExportService
 
                 page.Footer().AlignCenter().Text(x =>
                 {
-                    x.Span("HOSVET Kardex Modernizado (.NET) — Página ");
+                    x.Span("e-ForVets Kardex — Página ");
                     x.CurrentPageNumber();
                     x.Span(" de ");
                     x.TotalPages();
@@ -333,7 +333,7 @@ public class ReportExportService : IReportExportService
 
     public byte[] GenerarSignosVitalesPdf(PacienteHeaderDto paciente, FormularioSignosEnfermeriaDto form)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-SIGNOS|ORDEN:{paciente.OrdenAtencionId}|NHCL:{paciente.Nhcl}|FORM:{form.NumFormulario}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-SIGNOS|ORDEN:{paciente.OrdenAtencionId}|NHCL:{paciente.Nhcl}|FORM:{form.NumFormulario}");
 
         var doc = Document.Create(container =>
         {
@@ -349,7 +349,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"SIGNOS VITALES, BALANCE HÍDRICO Y MEDICIONES — FORMULARIO #{form.NumFormulario}").Bold().FontSize(9.5f);
                         });
                         row.ConstantItem(46).Image(qrBytes);
@@ -449,7 +449,7 @@ public class ReportExportService : IReportExportService
 
                 page.Footer().AlignCenter().Text(x =>
                 {
-                    x.Span("HOSVET Signos Vitales — Página ");
+                    x.Span("e-ForVets Signos Vitales — Página ");
                     x.CurrentPageNumber();
                     x.Span(" de ");
                     x.TotalPages();
@@ -465,7 +465,7 @@ public class ReportExportService : IReportExportService
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add($"Signos Form {form.NumFormulario}");
 
-        ws.Cell(1, 1).Value = $"HOSVET - SIGNOS VITALES Y BALANCE HÍDRICO (Formulario #{form.NumFormulario})";
+        ws.Cell(1, 1).Value = $"e-ForVets - SIGNOS VITALES Y BALANCE HÍDRICO (Formulario #{form.NumFormulario})";
         ws.Range(1, 1, 1, 19).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
         ws.Cell(2, 1).Value = $"Orden: {paciente.OrdenAtencionId} | NHCL: {paciente.Nhcl} | Paciente: {paciente.PacienteNombre} | Cliente: {paciente.ClienteNombre}";
         ws.Range(2, 1, 2, 19).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#DBEAFE"));
@@ -536,7 +536,7 @@ public class ReportExportService : IReportExportService
         List<ViaAdministracionDto> vias,
         List<RitmoHorarioDto> ritmos)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-FICHA|ORDEN:{sheet.IdOrden}|NHCL:{sheet.Nhcl}|HOJA:{sheet.Hoja}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-FICHA|ORDEN:{sheet.IdOrden}|NHCL:{sheet.Nhcl}|HOJA:{sheet.Hoja}");
         var viasMap = vias.ToDictionary(v => v.Id, v => v.Via);
         var ritmosMap = ritmos.ToDictionary(r => r.Id, r => r.Des_Ritmo);
 
@@ -554,7 +554,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"FICHA DE HOSPITALIZACIÓN 24 HORAS — HOJA #{sheet.Hoja} | FECHA: {sheet.Fecha:yyyy-MM-dd}").Bold().FontSize(9);
                         });
                         row.ConstantItem(42).Image(qrBytes);
@@ -681,7 +681,7 @@ public class ReportExportService : IReportExportService
 
                 page.Footer().AlignCenter().Text(x =>
                 {
-                    x.Span("HOSVET Ficha de Hospitalización — Página ");
+                    x.Span("e-ForVets Ficha de Hospitalización — Página ");
                     x.CurrentPageNumber();
                     x.Span(" de ");
                     x.TotalPages();
@@ -701,7 +701,7 @@ public class ReportExportService : IReportExportService
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add($"Ficha Hoja {sheet.Hoja}");
 
-        ws.Cell(1, 1).Value = $"HOSVET - FICHA DE HOSPITALIZACIÓN (Hoja #{sheet.Hoja} - Fecha: {sheet.Fecha:yyyy-MM-dd})";
+        ws.Cell(1, 1).Value = $"e-ForVets - FICHA DE HOSPITALIZACIÓN (Hoja #{sheet.Hoja} - Fecha: {sheet.Fecha:yyyy-MM-dd})";
         ws.Range(1, 1, 1, 29).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
         ws.Cell(2, 1).Value = $"Orden: {sheet.IdOrden} | NHCL: {sheet.Nhcl} | Paciente: {paciente.PacienteNombre} | Peso: {sheet.Peso ?? 0:N2} kg | Médico: {sheet.MedicoResponsable}";
         ws.Range(2, 1, 2, 29).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#DBEAFE"));
@@ -787,7 +787,7 @@ public class ReportExportService : IReportExportService
 
     public byte[] GenerarMonitoreoHospitalarioPdf(PacienteHeaderDto paciente, MonitoreoHospitalarioSheetDto sheet)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-MONITOREO|ORDEN:{sheet.IdOrden}|NHCL:{sheet.Nhcl}|HOJA:{sheet.Hoja}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-MONITOREO|ORDEN:{sheet.IdOrden}|NHCL:{sheet.Nhcl}|HOJA:{sheet.Hoja}");
 
         var doc = Document.Create(container =>
         {
@@ -803,7 +803,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"MONITOREO PACIENTE HOSPITALIZADO 24 HORAS — HOJA #{sheet.Hoja} | FECHA: {sheet.Fecha:yyyy-MM-dd}").Bold().FontSize(9);
                         });
                         row.ConstantItem(42).Image(qrBytes);
@@ -849,7 +849,7 @@ public class ReportExportService : IReportExportService
 
                 page.Footer().AlignCenter().Text(x =>
                 {
-                    x.Span("HOSVET Monitoreo Hospitalario 24h — Página ");
+                    x.Span("e-ForVets Monitoreo Hospitalario 24h — Página ");
                     x.CurrentPageNumber();
                     x.Span(" de ");
                     x.TotalPages();
@@ -865,7 +865,7 @@ public class ReportExportService : IReportExportService
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add($"Monitoreo Hoja {sheet.Hoja}");
 
-        ws.Cell(1, 1).Value = $"HOSVET - MONITOREO PACIENTE HOSPITALIZADO 24H (Hoja #{sheet.Hoja} - Fecha: {sheet.Fecha:yyyy-MM-dd})";
+        ws.Cell(1, 1).Value = $"e-ForVets - MONITOREO PACIENTE HOSPITALIZADO 24H (Hoja #{sheet.Hoja} - Fecha: {sheet.Fecha:yyyy-MM-dd})";
         ws.Range(1, 1, 1, 26).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
         ws.Cell(2, 1).Value = $"Orden: {sheet.IdOrden} | NHCL: {sheet.Nhcl} | Paciente: {paciente.PacienteNombre} | Médico: {sheet.MedicoResponsable}";
         ws.Range(2, 1, 2, 26).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#DBEAFE"));
@@ -897,7 +897,7 @@ public class ReportExportService : IReportExportService
     // ========================================================================
     public byte[] GenerarPreAnestesiaPdf(PacienteHeaderDto paciente, PreAnestesiaDto pre, List<ProductoQuirofanoDto> premedicacion)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-PREANESTESIA|ORDEN:{pre.Orden}|NHCL:{pre.Nhcl}|ASA:{pre.Riesgo}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-PREANESTESIA|ORDEN:{pre.Orden}|NHCL:{pre.Nhcl}|ASA:{pre.Riesgo}");
 
         return Document.Create(container =>
         {
@@ -913,7 +913,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"EVALUACIÓN PRE-ANESTÉSICA — RIESGO ASA {pre.Riesgo} | FECHA: {pre.FechaIngreso:yyyy-MM-dd HH:mm}").Bold().FontSize(9.5f);
                         });
                         row.ConstantItem(45).Image(qrBytes);
@@ -988,7 +988,7 @@ public class ReportExportService : IReportExportService
                     col.Item().PaddingTop(14).Text($"Anestesiólogo / Responsable: {pre.Firma}").Bold();
                 });
 
-                page.Footer().AlignCenter().Text("HOSVET — Evaluación Pre-Anestésica");
+                page.Footer().AlignCenter().Text("e-ForVets — Evaluación Pre-Anestésica");
             });
         }).GeneratePdf();
     }
@@ -998,7 +998,7 @@ public class ReportExportService : IReportExportService
     // ========================================================================
     public byte[] GenerarHojaAnestesiaPdf(PacienteHeaderDto paciente, HojaAnestesiaCompletaDto hoja)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-ANESTESIA|ORDEN:{hoja.IdOrden}|NHCL:{hoja.Nhcl}|REG:{hoja.IdRegistro}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-ANESTESIA|ORDEN:{hoja.IdOrden}|NHCL:{hoja.Nhcl}|REG:{hoja.IdRegistro}");
 
         return Document.Create(container =>
         {
@@ -1014,7 +1014,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"REGISTRO INTRAOPERATORIO DE ANESTESIA — ASA {hoja.Asa} | FECHA: {hoja.Fecha:yyyy-MM-dd} ({hoja.HoraInicio} - {hoja.HoraFin})").Bold().FontSize(9);
                         });
                         row.ConstantItem(42).Image(qrBytes);
@@ -1073,7 +1073,7 @@ public class ReportExportService : IReportExportService
                     col.Item().PaddingTop(4).Text($"Observaciones / Incidentes Intraoperatorios: {hoja.Comentarios} | Anestesiólogo: {hoja.Firma}");
                 });
 
-                page.Footer().AlignCenter().Text("HOSVET — Hoja de Anestesia Intraoperatoria");
+                page.Footer().AlignCenter().Text("e-ForVets — Hoja de Anestesia Intraoperatoria");
             });
         }).GeneratePdf();
     }
@@ -1083,7 +1083,7 @@ public class ReportExportService : IReportExportService
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add("Hoja Anestesia");
 
-        ws.Cell(1, 1).Value = $"HOSVET - HOJA DE ANESTESIA INTRAOPERATORIA (Orden #{hoja.IdOrden} - {hoja.Fecha:yyyy-MM-dd})";
+        ws.Cell(1, 1).Value = $"e-ForVets - HOJA DE ANESTESIA INTRAOPERATORIA (Orden #{hoja.IdOrden} - {hoja.Fecha:yyyy-MM-dd})";
         ws.Range(1, 1, 1, 17).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
         ws.Cell(2, 1).Value = $"Paciente: {paciente.PacienteNombre} | ASA: {hoja.Asa} | Inicio: {hoja.HoraInicio} | Fin: {hoja.HoraFin} | Balance: {hoja.BalanceTotal:N0} ml";
         ws.Range(2, 1, 2, 17).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#DBEAFE"));
@@ -1127,7 +1127,7 @@ public class ReportExportService : IReportExportService
     // ========================================================================
     public byte[] GenerarProtocoloQuirurgicoPdf(PacienteHeaderDto paciente, ProtocoloQuirurgicoCompletoDto prot)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-PROTOCOLO|ORDEN:{prot.IdOrden}|NHCL:{prot.Nhcl}|FECHA:{prot.Fecha:yyyyMMdd}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-PROTOCOLO|ORDEN:{prot.IdOrden}|NHCL:{prot.Nhcl}|FECHA:{prot.Fecha:yyyyMMdd}");
 
         return Document.Create(container =>
         {
@@ -1143,7 +1143,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"PROTOCOLO OPERATORIO Y CHEQUEO DE CIRUGÍA | FECHA: {prot.Fecha:yyyy-MM-dd}").Bold().FontSize(10);
                         });
                         row.ConstantItem(46).Image(qrBytes);
@@ -1204,7 +1204,7 @@ public class ReportExportService : IReportExportService
                     });
                 });
 
-                page.Footer().AlignCenter().Text("HOSVET — Protocolo Operatorio");
+                page.Footer().AlignCenter().Text("e-ForVets — Protocolo Operatorio");
             });
         }).GeneratePdf();
     }
@@ -1220,7 +1220,7 @@ public class ReportExportService : IReportExportService
         List<LiquidoRecuperacionDto> egr,
         List<ObservacionRecuperacionDto> obs)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-RECUPERACION|ORDEN:{paciente.OrdenAtencionId}|NHCL:{paciente.Nhcl}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-RECUPERACION|ORDEN:{paciente.OrdenAtencionId}|NHCL:{paciente.Nhcl}");
 
         return Document.Create(container =>
         {
@@ -1236,7 +1236,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"SALA DE RECUPERACIÓN POST-ANESTÉSICA Y ENTREGA DE PACIENTE").Bold().FontSize(9.5f);
                         });
                         row.ConstantItem(42).Image(qrBytes);
@@ -1306,7 +1306,7 @@ public class ReportExportService : IReportExportService
                     }
                 });
 
-                page.Footer().AlignCenter().Text("HOSVET — Sala de Recuperación Post-Anestésica");
+                page.Footer().AlignCenter().Text("e-ForVets — Sala de Recuperación Post-Anestésica");
             });
         }).GeneratePdf();
     }
@@ -1320,7 +1320,7 @@ public class ReportExportService : IReportExportService
         List<DiagnosticoCie10Dto> diagnosticos,
         List<RecetaMedicamentoItemDto> receta)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-FICHAMEDICA|ORDEN:{ficha.MedOrden}|NHCL:{ficha.MedNhcl}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-FICHAMEDICA|ORDEN:{ficha.MedOrden}|NHCL:{ficha.MedNhcl}");
 
         return Document.Create(container =>
         {
@@ -1336,7 +1336,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"HISTORIA CLÍNICA Y EVALUACIÓN SOAP — {ficha.MedTipoConsulta.ToUpper()} | FECHA: {ficha.MedFecha:yyyy-MM-dd HH:mm}").Bold().FontSize(9.5f);
                         });
                         row.ConstantItem(45).Image(qrBytes);
@@ -1398,13 +1398,13 @@ public class ReportExportService : IReportExportService
                     }
                 });
 
-                page.Footer().AlignCenter().Text("HOSVET — Historia Clínica Electrónica");
+                page.Footer().AlignCenter().Text("e-ForVets — Historia Clínica Electrónica");
             });
         }).GeneratePdf();
     }
 
     // ========================================================================
-    // 10. RECETA MÉDICA HOSVET (PDF - Reemplaza RptrecetaHDEV.rpt)
+    // 10. RECETA MÉDICA e-ForVets (PDF - Reemplaza RptrecetaHDEV.rpt)
     // ========================================================================
     public byte[] GenerarRecetaMedicaPdf(
         PacienteHeaderDto paciente,
@@ -1428,7 +1428,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(13).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(13).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"RECETA MÉDICA VETERINARIA E INDICACIONES AL PROPIETARIO — ORDEN #{paciente.OrdenAtencionId}").Bold().FontSize(10);
                         });
                         row.ConstantItem(48).Image(qrBytes);
@@ -1504,7 +1504,7 @@ public class ReportExportService : IReportExportService
                     });
                 });
 
-                page.Footer().AlignCenter().Text($"Firma y Sello Médico Tratante: {paciente.MedicoResponsable} — HOSVET USFQ");
+                page.Footer().AlignCenter().Text($"Firma y sello médico tratante: {paciente.MedicoResponsable} — e-ForVets");
             });
         }).GeneratePdf();
     }
@@ -1514,7 +1514,7 @@ public class ReportExportService : IReportExportService
     // ========================================================================
     public byte[] GenerarEvolucionesPdf(PacienteHeaderDto paciente, List<EvolucionMedicaDto> evoluciones)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-EVOLUCION|ORDEN:{paciente.OrdenAtencionId}|NHCL:{paciente.Nhcl}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-EVOLUCION|ORDEN:{paciente.OrdenAtencionId}|NHCL:{paciente.Nhcl}");
 
         return Document.Create(container =>
         {
@@ -1530,7 +1530,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"HOJA DE EVOLUCIÓN MÉDICA Y ÓRDENES COMPLEMENTARIAS").Bold().FontSize(10);
                         });
                         row.ConstantItem(45).Image(qrBytes);
@@ -1569,7 +1569,7 @@ public class ReportExportService : IReportExportService
                     }
                 });
 
-                page.Footer().AlignCenter().Text("HOSVET — Registro de Evoluciones Médicas");
+                page.Footer().AlignCenter().Text("e-ForVets — Registro de Evoluciones Médicas");
             });
         }).GeneratePdf();
     }
@@ -1579,7 +1579,7 @@ public class ReportExportService : IReportExportService
     // ========================================================================
     public byte[] GenerarAltaMedicaPdf(PacienteHeaderDto paciente, FormularioAltaMedicaDto alta)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-ALTA|ORDEN:{alta.IdOrden}|NHCL:{alta.Nhcl}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-ALTA|ORDEN:{alta.IdOrden}|NHCL:{alta.Nhcl}");
 
         return Document.Create(container =>
         {
@@ -1595,7 +1595,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"PLAN DE ALTA HOSPITALARIA Y CUIDADOS EN CASA | FECHA: {alta.FechaIng:yyyy-MM-dd}").Bold().FontSize(10);
                         });
                         row.ConstantItem(45).Image(qrBytes);
@@ -1624,7 +1624,7 @@ public class ReportExportService : IReportExportService
                     AddBlock("5. ESQUEMA DE MEDICACIÓN EN CASA", alta.Medicacion);
                 });
 
-                page.Footer().AlignCenter().Text($"Médico Responsable del Alta: {paciente.MedicoResponsable} — HOSVET USFQ");
+                page.Footer().AlignCenter().Text($"Médico responsable del alta: {paciente.MedicoResponsable} — e-ForVets");
             });
         }).GeneratePdf();
     }
@@ -1653,7 +1653,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"ORDEN DE PRUEBAS DE LABORATORIO CLÍNICO — ORDEN #{paciente.OrdenAtencionId}").Bold().FontSize(10);
                             c.Item().Text($"Fecha de Solicitud: {DateTime.Now:yyyy-MM-dd HH:mm}").FontSize(8).FontColor(Colors.Grey.Darken1);
                         });
@@ -1718,7 +1718,7 @@ public class ReportExportService : IReportExportService
                     });
                 });
 
-                page.Footer().AlignCenter().Text($"Firma Médico Solicitante: {paciente.MedicoResponsable} — Laboratorio Clínico HOSVET USFQ");
+                page.Footer().AlignCenter().Text($"Firma médico solicitante: {paciente.MedicoResponsable} — Laboratorio clínico e-ForVets");
             });
         }).GeneratePdf();
     }
@@ -1747,7 +1747,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"ORDEN DE ESTUDIOS DE IMAGENOLOGÍA (RAYOS X / ECOGRAFÍA) — ORDEN #{paciente.OrdenAtencionId}").Bold().FontSize(10);
                             c.Item().Text($"Fecha de Solicitud: {DateTime.Now:yyyy-MM-dd HH:mm}").FontSize(8).FontColor(Colors.Grey.Darken1);
                         });
@@ -1808,7 +1808,7 @@ public class ReportExportService : IReportExportService
                     });
                 });
 
-                page.Footer().AlignCenter().Text($"Firma Médico Solicitante: {paciente.MedicoResponsable} — Servicio de Imagenología HOSVET USFQ");
+                page.Footer().AlignCenter().Text($"Firma médico solicitante: {paciente.MedicoResponsable} — Servicio de imagenología e-ForVets");
             });
         }).GeneratePdf();
     }
@@ -1818,7 +1818,7 @@ public class ReportExportService : IReportExportService
     // ========================================================================
     public byte[] GenerarInformeDiagnosticoPdf(PacienteHeaderDto paciente, InformeDiagnosticoDto informe)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-INFORME:{informe.TipoInforme}|ID:{informe.IdInforme}|NHCL:{informe.Nhcl}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-INFORME:{informe.TipoInforme}|ID:{informe.IdInforme}|NHCL:{informe.Nhcl}");
         string textoPlano = System.Text.RegularExpressions.Regex.Replace(
             (informe.ContenidoHtml ?? "")
                 .Replace("<br>", "\n").Replace("<br/>", "\n").Replace("</p>", "\n\n").Replace("</h4>", "\n").Replace("</h5>", "\n"),
@@ -1839,7 +1839,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"INFORME OFICIAL DE {informe.TipoInforme.ToUpper()} — {informe.NombreFormato}").Bold().FontSize(10);
                             c.Item().Text($"Fecha de Emisión: {informe.FechaMod:yyyy-MM-dd HH:mm}").FontSize(8);
                         });
@@ -1866,7 +1866,7 @@ public class ReportExportService : IReportExportService
                         .Text(string.IsNullOrWhiteSpace(textoPlano) ? "Ver documento adjunto asociado al informe." : textoPlano);
                 });
 
-                page.Footer().AlignCenter().Text($"Validado por: {informe.NombreUsuario} — HOSVET USFQ");
+                page.Footer().AlignCenter().Text($"Validado por: {informe.NombreUsuario} — e-ForVets");
             });
         }).GeneratePdf();
     }
@@ -1879,7 +1879,7 @@ public class ReportExportService : IReportExportService
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add("Bandeja Diagnóstica");
 
-        ws.Cell(1, 1).Value = $"HOSVET - BANDEJA CENTRAL DE LABORATORIO E IMAGENOLOGÍA ({desde:yyyy-MM-dd} al {hasta:yyyy-MM-dd})";
+        ws.Cell(1, 1).Value = $"e-ForVets - BANDEJA CENTRAL DE LABORATORIO E IMAGENOLOGÍA ({desde:yyyy-MM-dd} al {hasta:yyyy-MM-dd})";
         ws.Range(1, 1, 1, 10).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
 
         string[] headers = ["Sec", "Área", "Fecha", "Orden", "NHCL", "Paciente", "Propietario", "Examen / Estudio", "Prioridad", "Estado", "Médico Solicitante", "Observaciones"];
@@ -1916,7 +1916,7 @@ public class ReportExportService : IReportExportService
     // ========================================================================
     public byte[] GenerarProformaConsolidadaPdf(OrdenProformaResumenDto proforma)
     {
-        var qrBytes = GenerarCodigoQrPng($"HOSVET-PROFORMA:{proforma.NumeroFacturaBc}|ORDEN:{proforma.IdOrden}|NHCL:{proforma.Nhcl}|TOTAL:{proforma.TotalGeneral:F2}");
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-PROFORMA:{proforma.NumeroFacturaBc}|ORDEN:{proforma.IdOrden}|NHCL:{proforma.Nhcl}|TOTAL:{proforma.TotalGeneral:F2}");
         var itemsActivos = proforma.Items.Where(i => i.Seleccionado).ToList();
 
         return Document.Create(container =>
@@ -1933,7 +1933,7 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                             c.Item().Text($"ESTADO DE CUENTA / PROFORMA CONSOLIDADA — {proforma.NumeroFacturaBc}").Bold().FontSize(10);
                             c.Item().Text($"Integración ERP Microsoft Dynamics 365 Business Central | Fecha: {DateTime.Now:yyyy-MM-dd HH:mm}").FontSize(8).FontColor(Colors.Grey.Darken2);
                         });
@@ -2005,7 +2005,7 @@ public class ReportExportService : IReportExportService
                     });
                 });
 
-                page.Footer().AlignCenter().Text($"HOSVET USFQ — Documento de Pre-Facturación ERP Business Central ({proforma.NumeroFacturaBc})");
+                page.Footer().AlignCenter().Text($"e-ForVets — Documento de pre-facturación ERP Business Central ({proforma.NumeroFacturaBc})");
             });
         }).GeneratePdf();
     }
@@ -2015,7 +2015,7 @@ public class ReportExportService : IReportExportService
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add($"Proforma_{proforma.IdOrden}");
 
-        ws.Cell(1, 1).Value = $"HOSVET USFQ - PROFORMA CONSOLIDADA BUSINESS CENTRAL ({proforma.NumeroFacturaBc})";
+        ws.Cell(1, 1).Value = $"e-ForVets - PROFORMA CONSOLIDADA BUSINESS CENTRAL ({proforma.NumeroFacturaBc})";
         ws.Range(1, 1, 1, 6).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
 
         ws.Cell(2, 1).Value = $"Orden: #{proforma.IdOrden} | NHCL: #{proforma.Nhcl} | Paciente: {proforma.MascotaNombre} | Cliente: {proforma.ClienteNombre} ({proforma.ClienteCedula})";
@@ -2064,7 +2064,7 @@ public class ReportExportService : IReportExportService
 
                 page.Header().Column(col =>
                 {
-                    col.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ (HOSVET)").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                    col.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
                     col.Item().Text($"REPORTE DE AGENDA DE CITAS MÉDICAS ({desde:yyyy-MM-dd} al {hasta:yyyy-MM-dd})").Bold().FontSize(10);
                     col.Item().PaddingVertical(3).LineHorizontal(1).LineColor(Colors.Blue.Darken2);
                 });
@@ -2109,7 +2109,7 @@ public class ReportExportService : IReportExportService
                     }
                 });
 
-                page.Footer().AlignCenter().Text("HOSVET USFQ — Agenda Médica Institucional");
+                page.Footer().AlignCenter().Text("e-ForVets — Agenda médica institucional");
             });
         }).GeneratePdf();
     }

@@ -8,7 +8,7 @@
 @inject IWebHostEnvironment Env
 @inject IJSRuntime JS
 
-<PageTitle>HOSVET - Bandeja Central de Resultados e Informes Diagnósticos</PageTitle>
+<PageTitle>e-ForVets - Bandeja Central de Resultados e Informes Diagnósticos</PageTitle>
 
 <div class="container-fluid py-3">
     <!-- Encabezado -->
@@ -229,7 +229,7 @@
                             <div class="col-md-7">
                                 <label class="form-label small fw-semibold">Plantilla de Formato</label>
                                 <select class="form-select form-select-sm" @bind="NuevoInforme.IdFormato" @bind:after="AplicarPlantillaSeleccionadaAsync">
-                                    <option value="0">-- Plantilla Estándar HOSVET --</option>
+                                    <option value="0">-- Plantilla estándar e-ForVets --</option>
                                     @foreach (var f in PlantillasDisponibles)
                                     {
                                         <option value="@f.FormId">@f.FormNombre</option>
@@ -564,7 +564,7 @@
 
     private async Task ExportarInformePdfAsync(InformeDiagnosticoDto inf)
     {
-        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = inf.Nhcl, PacienteNombre = "Paciente HOSVET" };
+        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = inf.Nhcl, PacienteNombre = "Paciente e-ForVets" };
         var pdfBytes = ReportService.GenerarInformeDiagnosticoPdf(pac, inf);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"Informe_{inf.TipoInforme}_{inf.IdInforme}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }

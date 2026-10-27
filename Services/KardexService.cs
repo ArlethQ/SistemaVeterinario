@@ -369,7 +369,7 @@ public class KardexService : IKardexService
             return (false, $"La cantidad no debe superar el stock disponible ({input.StockDisponible:N2} uds).");
 
         string iniciales = "GV";
-        string nombreFuncionario = "Personal HOSVET";
+        string nombreFuncionario = "Personal e-ForVets";
         string horaStr = input.Hora.ToString("HH:mm");
 
         try
@@ -379,7 +379,7 @@ public class KardexService : IKardexService
                 new { Id = input.FuncionarioId });
 
             iniciales = func?.UserIniciales ?? "HV";
-            nombreFuncionario = func?.UserNombre ?? "Personal HOSVET";
+            nombreFuncionario = func?.UserNombre ?? "Personal e-ForVets";
 
             const string insertSql = @"
                 INSERT INTO qvt_productosUtilizados (
