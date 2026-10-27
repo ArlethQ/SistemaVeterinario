@@ -18,7 +18,7 @@ public class ClienteDto
     public string PaApellidos { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El número de Cédula/RUC/Pasaporte es obligatorio.")]
-    public string PaCedula { get; set; } = string.Empty
+    public string PaCedula { get; set; } = string.Empty;
 
     public string PaTelefono { get; set; } = string.Empty;
 
