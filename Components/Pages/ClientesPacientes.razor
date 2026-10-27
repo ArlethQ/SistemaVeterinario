@@ -1,6 +1,7 @@
 @page "/admision/clientes-pacientes"
 @using HosvetKardex.Web.Models
 @using HosvetKardex.Web.Services
+@using HosvetKardex.Web.Data
 @inject IAdmisionFacturacionService AdmisionService
 @inject SessionStateService SessionState
 @inject NavigationManager NavManager
@@ -197,16 +198,38 @@
                             <div class="row g-2">
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold">Tipo Documento SRI</label>
-                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaDocumento">
+                                    <select class="form-select form-select-sm" value="@_clienteEditando.PaDocumento" @onchange="OnCambiarTipoDocumento">
                                         <option value="CEDULA">CÉDULA (10 dígitos)</option>
                                         <option value="RUC">RUC (13 dígitos)</option>
-                                        <option value="PASAPORTE">PASAPORTE</option>
+                                        <option value="PASAPORTE">PASAPORTE (6-15 caracteres)</option>
                                     </select>
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Número Cédula / RUC *</label>
-                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaCedula" />
-                                    <ValidationMessage For="() => _clienteEditando.PaCedula" />
+                                    <label class="form-label small fw-bold">Número de Documento *</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text"
+                                               class="form-control form-control-sm @(_errorDocumento != null ? (_esDocValido ? "is-valid border-success" : "is-invalid border-danger") : "")"
+                                               value="@_clienteEditando.PaCedula"
+                                               inputmode="@InputModeDocumento"
+                                               data-doc-type="@_clienteEditando.PaDocumento"
+                                               data-numeric="@EsDocumentoNumerico"
+                                               onkeypress="if (this.dataset.docType !== 'PASAPORTE' && (event.which < 48 || event.which > 57)) return false;"
+                                               maxlength="@ObtenerMaximoDocumento()"
+                                               placeholder="@ObtenerPlaceholderDocumento()"
+                                               @oninput="OnInputDocumento" />
+                                        @if (_esDocValido)
+                                        {
+                                            <span class="input-group-text bg-success text-white py-0 px-2" title="Documento válido">
+                                                <i class="bi bi-check-circle-fill"></i>
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(_errorDocumento))
+                                    {
+                                        <div class="@(_esDocValido ? "text-success" : "text-danger") small mt-1 fw-semibold">
+                                            <i class="bi @(_esDocValido ? "bi-check-circle-fill" : "bi-exclamation-triangle-fill") me-1"></i>@_errorDocumento
+                                        </div>
+                                    }
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold">Tipo Persona</label>
@@ -450,7 +473,7 @@
     private List<CatalogoItemGenericoDto> _clasesTueri = new();
 
     private ClienteDto? _clienteSeleccionado;
-    private ClienteDto _clienteEditando = new();
+    private ClienteDto _clienteEditando = new() { PaDocumento = "CEDULA" };
     private PacienteMascotaDto _mascotaEditando = new();
 
     private string _filtroClientes = string.Empty;
@@ -460,6 +483,8 @@
     private bool _cargandoInicial = true;
     private string _mensajeAlerta = string.Empty;
     private bool _esError;
+    private string? _errorDocumento;
+    private bool _esDocValido;
 
     protected override async Task OnInitializedAsync()
     {
@@ -506,12 +531,14 @@
             PaDireccion = cli.PaDireccion,
             PaObservaciones = cli.PaObservaciones,
             PaTipoCli = cli.PaTipoCli,
-            PaDocumento = cli.PaDocumento,
+            PaDocumento = NormalizarTipoDocumento(cli.PaDocumento, cli.PaCedula),
             PaGrupoCliente = cli.PaGrupoCliente,
             PaTerminosPago = cli.PaTerminosPago,
             PaTipoPersona = cli.PaTipoPersona,
             PaFormaPago = cli.PaFormaPago
         };
+        ValidarDocumentoEnVivo(_clienteEditando.PaCedula);
+
 
         _mascotas = await AdmisionService.ObtenerMascotasPorClienteAsync(cli.PaCodigo);
         if (_mascotas.Count > 0)
@@ -523,12 +550,106 @@
     private void NuevoCliente()
     {
         _clienteSeleccionado = null;
-        _clienteEditando = new ClienteDto();
+        _clienteEditando = new ClienteDto { PaDocumento = "CEDULA" };
+        _errorDocumento = null;
+        _esDocValido = false;
         _tabActiva = "CLIENTE";
+    }
+
+    private static string NormalizarTipoDocumento(string? tipoDoc, string? cedula)
+    {
+        if (!string.IsNullOrWhiteSpace(tipoDoc))
+        {
+            var t = tipoDoc.Trim().ToUpperInvariant();
+            if (t.StartsWith("RUC") || t == "R") return "RUC";
+            if (t.StartsWith("PAS") || t == "P") return "PASAPORTE";
+            if (t.StartsWith("CED") || t == "C") return "CEDULA";
+        }
+        if (!string.IsNullOrWhiteSpace(cedula) && cedula.Trim().Length == 13)
+        {
+            return "RUC";
+        }
+        return "CEDULA";
+    }
+    private bool EsDocumentoNumerico => _clienteEditando.PaDocumento != "PASAPORTE";
+    private string InputModeDocumento => EsDocumentoNumerico ? "numeric" : "text";
+
+        private int ObtenerMaximoDocumento() => _clienteEditando.PaDocumento switch
+    {
+        "CEDULA" => 10,
+        "RUC" => 13,
+        _ => 15
+    };
+
+    private string ObtenerPlaceholderDocumento() => _clienteEditando.PaDocumento switch
+    {
+        "CEDULA" => "10 dígitos numéricos",
+        "RUC" => "13 dígitos numéricos",
+        _ => "6 a 15 caracteres alfanuméricos"
+    };
+
+    private void OnCambiarTipoDocumento(ChangeEventArgs e)
+    {
+        _clienteEditando.PaDocumento = e.Value?.ToString() ?? "CEDULA";
+        if (_clienteEditando.PaDocumento == "PASAPORTE")
+        {
+            _clienteEditando.PaCedula = EcuadorDocumentoValidador.LimpiarPasaporte(_clienteEditando.PaCedula);
+        }
+        else
+        {
+            var digitos = new string((_clienteEditando.PaCedula ?? string.Empty).Where(char.IsDigit).ToArray());
+            int max = ObtenerMaximoDocumento();
+            if (digitos.Length > max) digitos = digitos[..max];
+            _clienteEditando.PaCedula = digitos;
+        }
+        ValidarDocumentoEnVivo(_clienteEditando.PaCedula);
+    }
+
+    private void OnInputDocumento(ChangeEventArgs e)
+    {
+        string raw = e.Value?.ToString() ?? string.Empty;
+        if (_clienteEditando.PaDocumento == "PASAPORTE")
+        {
+            raw = EcuadorDocumentoValidador.LimpiarPasaporte(raw);
+            if (raw.Length > 15) raw = raw[..15];
+        }
+        else
+        {
+            raw = new string(raw.Where(char.IsDigit).ToArray());
+            int max = ObtenerMaximoDocumento();
+            if (raw.Length > max) raw = raw[..max];
+        }
+        _clienteEditando.PaCedula = raw;
+        ValidarDocumentoEnVivo(raw);
+    }
+
+    private void ValidarDocumentoEnVivo(string valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+        {
+            _errorDocumento = null;
+            _esDocValido = false;
+            return;
+        }
+
+        var res = EcuadorDocumentoValidador.Validar(_clienteEditando.PaDocumento, valor);
+        _esDocValido = res.EsValido;
+        _errorDocumento = res.Mensaje;
     }
 
     private async Task GuardarClienteAsync()
     {
+        var resVal = EcuadorDocumentoValidador.Validar(_clienteEditando.PaDocumento, _clienteEditando.PaCedula);
+        if (!resVal.EsValido)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Documento inválido: {resVal.Mensaje}";
+            _errorDocumento = resVal.Mensaje;
+            _esDocValido = false;
+            return;
+        }
+
+        _clienteEditando.PaCedula = resVal.ValorLimpio;
         int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
         int idGuardado = await AdmisionService.GuardarClienteAsync(_clienteEditando, idUser);
         _clienteEditando.PaCodigo = idGuardado;

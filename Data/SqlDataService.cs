@@ -154,26 +154,7 @@ public class SqlDataService : ISqlDataService
     public bool ValidarCedulaRuc(string identificacion)
     {
         if (string.IsNullOrWhiteSpace(identificacion)) return false;
-        identificacion = identificacion.Trim();
-        if (identificacion.Length != 10 && identificacion.Length != 13) return false;
-        if (!identificacion.All(char.IsDigit)) return false;
-
-        int provincia = int.Parse(identificacion[..2]);
-        if (provincia < 1 || provincia > 24) return false;
-
-        if (identificacion.Length == 10)
-        {
-            int[] coef = [2, 1, 2, 1, 2, 1, 2, 1, 2];
-            int suma = 0;
-            for (int i = 0; i < 9; i++)
-            {
-                int val = (identificacion[i] - '0') * coef[i];
-                if (val > 9) val -= 9;
-                suma += val;
-            }
-            int digitoVerificador = (suma % 10 == 0) ? 0 : 10 - (suma % 10);
-            return digitoVerificador == (identificacion[9] - '0');
-        }
-        return true;
+        string tipo = identificacion.Trim().Length == 13 ? "RUC" : "CEDULA";
+        return EcuadorDocumentoValidador.Validar(tipo, identificacion).EsValido;
     }
 }

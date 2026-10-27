@@ -1,4 +1,4 @@
-using HosvetKardex.Web.Data;
+﻿using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Models;
 
 namespace HosvetKardex.Web.Services;
@@ -149,6 +149,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<int> GuardarClienteAsync(ClienteDto cliente, int idUsuario)
     {
+        var valDoc = EcuadorDocumentoValidador.Validar(cliente.PaDocumento, cliente.PaCedula);
+        if (valDoc.EsValido)
+        {
+            cliente.PaCedula = valDoc.ValorLimpio;
+        }
         try
         {
             if (cliente.PaCodigo == 0)
