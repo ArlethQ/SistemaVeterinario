@@ -1,3 +1,5 @@
+@inject SessionStateService Session
+
 <div class="nav-shell">
     <input id="menu-toggle" type="checkbox" class="menu-toggle" />
     <label for="menu-toggle" class="menu-toggle-label" aria-label="Abrir o cerrar menú">☰ <span>Menú</span></label>
@@ -65,6 +67,11 @@
 
             <span class="menu-section-label">Administración</span>
             <NavLink class="menu-link" href="facturacion/proformas"><MenuIcon Name="billing" /><span>Proformas y facturación</span></NavLink>
+            @if (Session.TipoUser == 1)
+            {
+                <span class="menu-section-label">Sistema</span>
+                <NavLink class="menu-link" href="administracion/roles-permisos"><MenuIcon Name="security" /><span>Roles y permisos</span></NavLink>
+            }
         </nav>
     </div>
 </div>

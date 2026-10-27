@@ -1,0 +1,81 @@
+@page "/administracion/roles-permisos"
+@using HosvetKardex.Web.Components.Layout
+@inject SessionStateService Session
+@inject IAuthService AuthService
+@inject NavigationManager Nav
+
+<PageTitle>Roles y permisos | e-ForVets</PageTitle>
+
+@if (_autorizado)
+{
+    <div class="permissions-page">
+        <header class="page-heading"><div><span>Administración</span><h1>Roles y permisos</h1><p>Asigna un rol y define los módulos disponibles para cada usuario.</p></div><div class="security-badge"><MenuIcon Name="security" /><span>Solo administradores</span></div></header>
+
+        @if (!string.IsNullOrWhiteSpace(_mensaje)) { <div class="status-message @(_esError ? "is-error" : "is-success")" role="status">@_mensaje</div> }
+
+        @if (_cargando)
+        {
+            <div class="loading-state"><span class="spinner-border spinner-border-sm"></span> Cargando configuración...</div>
+        }
+        else if (_usuarios.Count == 0)
+        {
+            <div class="empty-state">No fue posible obtener usuarios desde la base de datos.</div>
+        }
+        else
+        {
+            <div class="permissions-layout">
+                <aside class="users-panel"><label>Buscar usuario<input type="search" @bind="_filtro" @bind:event="oninput" placeholder="Nombre o usuario" /></label><div class="users-list">
+                    @foreach (var usuario in UsuariosFiltrados)
+                    {
+                        <button type="button" class="user-row @(usuario.UserNumero == _usuarioId ? "is-selected" : "")" @onclick="() => SeleccionarUsuarioAsync(usuario)"><span class="avatar">@ObtenerIniciales(usuario)</span><span><strong>@usuario.UserNombre</strong><small>@@@usuario.UserLogin</small></span></button>
+                    }
+                </div></aside>
+
+                <section class="access-panel">
+                    @if (_usuarioActual is not null)
+                    {
+                        <div class="selected-user"><span class="avatar large">@ObtenerIniciales(_usuarioActual)</span><div><small>Configurando acceso de</small><h2>@_usuarioActual.UserNombre</h2></div></div>
+                        <label class="role-field">Rol<select @bind="_tipoUser"><option value="0">Seleccione un rol</option>@foreach (var rol in _roles){<option value="@rol.Id">@rol.Descripcion</option>}</select></label>
+                        @if (_tipoUser == 1) { <div class="admin-note">Los administradores tienen acceso automático a todos los módulos.</div> }
+                        <div class="modules-header"><div><h3>Permisos por módulo</h3><p>Selecciona las opciones disponibles para este usuario.</p></div><button type="button" class="link-button" disabled="@(_tipoUser == 1)" @onclick="AlternarTodos">@(_seleccion.Count == _menus.Count ? "Desmarcar todos" : "Seleccionar todos")</button></div>
+                        <div class="modules-grid">
+                            @foreach (var menu in _menus)
+                            {
+                                <label class="module-option @(_seleccion.Contains(menu.Id) || _tipoUser == 1 ? "is-checked" : "")"><input type="checkbox" checked="@(_seleccion.Contains(menu.Id) || _tipoUser == 1)" disabled="@(_tipoUser == 1)" @onchange="e => CambiarPermiso(menu.Id, e.Value as bool? == true)" /><span><strong>@menu.Descripcion</strong><small>@(string.IsNullOrWhiteSpace(menu.Url) ? "Módulo principal" : menu.Url)</small></span></label>
+                            }
+                        </div>
+                        <div class="form-actions"><button type="button" class="save-button" disabled="@_guardando" @onclick="GuardarAsync">@(_guardando ? "Guardando..." : "Guardar cambios")</button></div>
+                    }
+                </section>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool _autorizado, _cargando = true, _guardando, _esError;
+    private string _filtro = "", _mensaje = "";
+    private int _usuarioId, _tipoUser;
+    private UsuarioModel? _usuarioActual;
+    private List<UsuarioModel> _usuarios = [];
+    private List<RolUsuarioModel> _roles = [];
+    private List<MenuItemModel> _menus = [];
+    private HashSet<int> _seleccion = [];
+    private IEnumerable<UsuarioModel> UsuariosFiltrados => _usuarios.Where(u => string.IsNullOrWhiteSpace(_filtro) || u.UserNombre.Contains(_filtro, StringComparison.OrdinalIgnoreCase) || u.UserLogin.Contains(_filtro, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated || Session.TipoUser != 1) { Nav.NavigateTo("/dashboard"); return; }
+        _autorizado = true;
+        var usuariosTask = AuthService.ObtenerUsuariosParaPermisosAsync(); var rolesTask = AuthService.ObtenerRolesAsync(); var menusTask = AuthService.ObtenerMenuUsuarioAsync(Session.IdUser, 1);
+        await Task.WhenAll(usuariosTask, rolesTask, menusTask); _usuarios = usuariosTask.Result; _roles = rolesTask.Result; _menus = menusTask.Result;
+        if (_usuarios.Count > 0) await SeleccionarUsuarioAsync(_usuarios[0]);
+        _cargando = false;
+    }
+
+    private async Task SeleccionarUsuarioAsync(UsuarioModel usuario) { _usuarioActual = usuario; _usuarioId = usuario.UserNumero; _tipoUser = usuario.UserTipoUserNumero; _seleccion = await AuthService.ObtenerAccesosUsuarioAsync(_usuarioId); _mensaje = ""; }
+    private void CambiarPermiso(int id, bool marcado) { if (marcado) _seleccion.Add(id); else _seleccion.Remove(id); }
+    private void AlternarTodos() { if (_seleccion.Count == _menus.Count) _seleccion.Clear(); else _seleccion = _menus.Select(m => m.Id).ToHashSet(); }
+    private async Task GuardarAsync() { if (_usuarioId <= 0 || _tipoUser <= 0) { _mensaje = "Selecciona un usuario y un rol."; _esError = true; return; } _guardando = true; var ok = await AuthService.GuardarRolYAccesosAsync(_usuarioId, _tipoUser, _tipoUser == 1 ? [] : _seleccion, Session.IdUser); _guardando = false; _esError = !ok; _mensaje = ok ? "Rol y permisos actualizados correctamente." : "No se pudieron guardar los cambios. Verifica la conexión con la base de datos."; }
+    private static string ObtenerIniciales(UsuarioModel usuario) => !string.IsNullOrWhiteSpace(usuario.UserIniciales) ? usuario.UserIniciales : string.Concat(usuario.UserNombre.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x => x[0])).ToUpperInvariant();
+}

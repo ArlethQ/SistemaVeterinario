@@ -67,6 +67,7 @@ public interface IAuthService
     Task<(bool Exito, string Mensaje, UsuarioModel? Usuario, bool RequiereCambioClave)> LoginAsync(string username, string password, int localidad = 1);
     Task<List<MenuItemModel>> ObtenerMenuUsuarioAsync(int idUser, int tipoUser);
     Task<List<RolUsuarioModel>> ObtenerRolesAsync();
+    Task<List<UsuarioModel>> ObtenerUsuariosParaPermisosAsync();
     Task<HashSet<int>> ObtenerAccesosUsuarioAsync(int idUser);
     Task<bool> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId);
 }
@@ -153,6 +154,21 @@ public class AuthService : IAuthService
         catch { return []; }
     }
 
+    public async Task<List<UsuarioModel>> ObtenerUsuariosParaPermisosAsync()
+    {
+        const string sql = @"SELECT user_numero AS UserNumero,
+                                    RTRIM(ISNULL(user_login, '')) AS UserLogin,
+                                    RTRIM(ISNULL(user_nombre, '')) AS UserNombre,
+                                    RTRIM(ISNULL(user_iniciales, '')) AS UserIniciales,
+                                    ISNULL(user_tipouser_numero, 2) AS UserTipoUserNumero,
+                                    RTRIM(ISNULL(user_estado, 'A')) AS UserEstado
+                             FROM vt_usuarios
+                             WHERE user_estado = 'A'
+                             ORDER BY user_nombre";
+        try { return (await _sql.QueryAsync<UsuarioModel>(sql)).ToList(); }
+        catch { return []; }
+    }
+
     public async Task<HashSet<int>> ObtenerAccesosUsuarioAsync(int idUser)
     {
         const string sql = "SELECT ac_modulo FROM vt_accesos WHERE ac_idusuario = @IdUser";
@@ -162,6 +178,9 @@ public class AuthService : IAuthService
 
     public async Task<bool> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId)
     {
+        if (!_session.IsAuthenticated || _session.TipoUser != 1 || _session.IdUser != adminId)
+            return false;
+
         var ids = menuIds.Distinct().ToArray();
         var insert = ids.Length == 0
             ? string.Empty
