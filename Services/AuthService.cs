@@ -73,6 +73,10 @@ public interface IAuthService
     Task<bool> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId);
     Task<bool> GuardarRolAsync(RolUsuarioModel rol, int adminId);
     Task<bool> GuardarMenuAsync(MenuItemModel menu, int adminId);
+    Task<List<UsuarioAdministracionModel>> ObtenerUsuariosAdministracionAsync();
+    Task<(bool Exito, string Mensaje)> GuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId);
+    Task<(bool Exito, string Mensaje)> CambiarEstadoUsuarioAsync(int idUser, bool activo, int adminId);
+    Task<(bool Exito, string Mensaje)> RestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId);
 }
 
 public class AuthService : IAuthService
@@ -244,5 +248,68 @@ public class AuthService : IAuthService
         if (result < 0) return false;
         await _sql.RegistrarBitacoraAsync($"{(menu.Id > 0 ? "Actualiza" : "Crea")} menú: {menu.Descripcion.Trim()}", adminId);
         return true;
+    }
+
+    public async Task<List<UsuarioAdministracionModel>> ObtenerUsuariosAdministracionAsync()
+    {
+        if (!_session.IsAuthenticated || _session.TipoUser != 1) return [];
+        const string sql = @"SELECT user_numero AS Id, RTRIM(ISNULL(user_nombre, '')) AS Nombre,
+                                    RTRIM(ISNULL(user_login, '')) AS Login, RTRIM(ISNULL(user_iniciales, '')) AS Iniciales,
+                                    RTRIM(ISNULL(user_email, '')) AS Email, RTRIM(ISNULL(user_celular, '')) AS Celular,
+                                    ISNULL(user_tipouser_numero, 2) AS RolId, RTRIM(ISNULL(user_estado, 'A')) AS Estado
+                             FROM vt_usuarios ORDER BY user_nombre";
+        try { return (await _sql.QueryAsync<UsuarioAdministracionModel>(sql)).ToList(); }
+        catch { return []; }
+    }
+
+    public async Task<(bool Exito, string Mensaje)> GuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId)
+    {
+        if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
+        if (string.IsNullOrWhiteSpace(usuario.Nombre) || string.IsNullOrWhiteSpace(usuario.Login) || usuario.RolId <= 0) return (false, "Nombre, usuario y rol son obligatorios.");
+        var duplicado = await _sql.ExecuteScalarAsync<int>("SELECT COUNT(1) FROM vt_usuarios WHERE user_login = @Login AND user_numero <> @Id", new { Login = usuario.Login.Trim(), usuario.Id });
+        if (duplicado > 0) return (false, "El nombre de usuario ya está registrado.");
+        if (usuario.Id == _session.IdUser && usuario.RolId != 1) return (false, "No puedes quitarte tu propio rol de administrador.");
+        if (usuario.Id > 0 && usuario.RolId != 1 && !await PuedeReducirAdministradoresAsync(usuario.Id)) return (false, "No se puede cambiar el rol del último administrador activo.");
+
+        if (usuario.Id == 0 && (string.IsNullOrWhiteSpace(claveTemporal) || claveTemporal.Length < 8)) return (false, "La contraseña temporal debe tener al menos 8 caracteres.");
+        var sql = usuario.Id > 0
+            ? @"UPDATE vt_usuarios SET user_nombre=@Nombre, user_login=@Login, user_iniciales=@Iniciales,
+                    user_email=@Email, user_celular=@Celular, user_tipouser_numero=@RolId WHERE user_numero=@Id"
+            : @"INSERT INTO vt_usuarios (user_numero,user_nombre,user_login,user_clave,user_iniciales,user_email,user_celular,user_tipouser_numero,user_esp_numero,user_estado,user_fechacambio)
+                VALUES ((SELECT ISNULL(MAX(user_numero),0)+1 FROM vt_usuarios WITH (UPDLOCK,HOLDLOCK)),@Nombre,@Login,@Clave,@Iniciales,@Email,@Celular,@RolId,1,'A',GETDATE())";
+        var result = await _sql.ExecuteAsync(sql, new { usuario.Id, Nombre=usuario.Nombre.Trim(), Login=usuario.Login.Trim(), Iniciales=usuario.Iniciales.Trim(), Email=usuario.Email.Trim(), Celular=usuario.Celular.Trim(), usuario.RolId, Clave=_sql.HashPasswordSha1(claveTemporal ?? string.Empty) });
+        if (result < 0) return (false, "No se pudo guardar el usuario.");
+        await _sql.RegistrarBitacoraAsync($"{(usuario.Id > 0 ? "Actualiza" : "Crea")} usuario: {usuario.Login.Trim()}", adminId);
+        return (true, "Usuario guardado correctamente.");
+    }
+
+    public async Task<(bool Exito, string Mensaje)> CambiarEstadoUsuarioAsync(int idUser, bool activo, int adminId)
+    {
+        if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
+        if (idUser == _session.IdUser && !activo) return (false, "No puedes desactivar tu propia cuenta.");
+        if (!activo && !await PuedeReducirAdministradoresAsync(idUser)) return (false, "No se puede desactivar al último administrador activo.");
+        var result = await _sql.ExecuteAsync("UPDATE vt_usuarios SET user_estado=@Estado WHERE user_numero=@IdUser", new { Estado=activo?"A":"I", IdUser=idUser });
+        if (result < 0) return (false, "No se pudo actualizar el estado.");
+        await _sql.RegistrarBitacoraAsync($"{(activo ? "Activa" : "Desactiva")} usuario {idUser}", adminId);
+        return (true, activo ? "Usuario activado." : "Usuario desactivado.");
+    }
+
+    public async Task<(bool Exito, string Mensaje)> RestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId)
+    {
+        if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
+        if (string.IsNullOrWhiteSpace(nuevaClave) || nuevaClave.Length < 8) return (false, "La contraseña debe tener al menos 8 caracteres.");
+        var result = await _sql.ExecuteAsync("UPDATE vt_usuarios SET user_clave=@Clave,user_fechacambio=GETDATE() WHERE user_numero=@IdUser", new { Clave=_sql.HashPasswordSha1(nuevaClave), IdUser=idUser });
+        if (result < 0) return (false, "No se pudo restablecer la contraseña.");
+        await _sql.RegistrarBitacoraAsync($"Restablece contraseña del usuario {idUser}", adminId);
+        return (true, "Contraseña restablecida correctamente.");
+    }
+
+    private bool EsAdministradorValido(int adminId) => _session.IsAuthenticated && _session.TipoUser == 1 && _session.IdUser == adminId;
+    private async Task<bool> PuedeReducirAdministradoresAsync(int idUser)
+    {
+        var objetivoEsAdmin = await _sql.ExecuteScalarAsync<int>("SELECT COUNT(1) FROM vt_usuarios WHERE user_numero=@IdUser AND user_tipouser_numero=1 AND user_estado='A'", new { IdUser=idUser });
+        if (objetivoEsAdmin == 0) return true;
+        var total = await _sql.ExecuteScalarAsync<int>("SELECT COUNT(1) FROM vt_usuarios WHERE user_tipouser_numero=1 AND user_estado='A'");
+        return total > 1;
     }
 }

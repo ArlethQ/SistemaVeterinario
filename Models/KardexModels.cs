@@ -33,6 +33,18 @@ public class RolUsuarioModel
     public string Descripcion { get; set; } = string.Empty;
 }
 
+public class UsuarioAdministracionModel
+{
+    public int Id { get; set; }
+    public string Nombre { get; set; } = string.Empty;
+    public string Login { get; set; } = string.Empty;
+    public string Iniciales { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Celular { get; set; } = string.Empty;
+    public int RolId { get; set; } = 2;
+    public string Estado { get; set; } = "A";
+}
+
 public class PacienteHeaderDto
 {
     public int Nhcl { get; set; }
