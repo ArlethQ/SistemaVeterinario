@@ -69,7 +69,7 @@
                             <thead class="table-light sticky-top">
                                 <tr>
                                     <th>Cód.</th>
-                                    <th>Propietario / Razón Social</th>
+                                    <th>Propietario</th>
                                     <th>Cédula / RUC</th>
                                     <th>Móvil</th>
                                     <th></th>
@@ -172,7 +172,7 @@
             <ul class="nav nav-tabs mb-3">
                 <li class="nav-item">
                     <button class="nav-link @(_tabActiva == "CLIENTE" ? "active fw-bold" : "")" @onclick='() => _tabActiva = "CLIENTE"'>
-                        <i class="bi bi-person-lines-fill me-1"></i>1. Ficha del Propietario / Facturación BC
+                        <i class="bi bi-person-lines-fill me-1"></i>1. Ficha del Propietario
                     </button>
                 </li>
                 <li class="nav-item">
@@ -190,13 +190,12 @@
                             <i class="bi bi-person-badge me-1"></i>
                             @(_clienteEditando.PaCodigo == 0 ? "Nuevo Registro de Propietario" : $"Editando Propietario #{_clienteEditando.PaCodigo} — {_clienteEditando.NombreCompleto}")
                         </span>
-                        <span class="badge bg-light text-primary">Sincronización Dynamics 365 BC</span>
                     </div>
                     <div class="card-body">
                         <EditForm Model="_clienteEditando" OnValidSubmit="GuardarClienteAsync">
                             <DataAnnotationsValidator />
                             <div class="row g-2">
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="form-label small fw-bold">Tipo Documento SRI</label>
                                     <select class="form-select form-select-sm" value="@_clienteEditando.PaDocumento" @onchange="OnCambiarTipoDocumento">
                                         <option value="CEDULA">CÉDULA (10 dígitos)</option>
@@ -204,7 +203,7 @@
                                         <option value="PASAPORTE">PASAPORTE (6-15 caracteres)</option>
                                     </select>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="form-label small fw-bold">Número de Documento *</label>
                                     <div class="input-group input-group-sm">
                                         <input type="text"
@@ -231,16 +230,9 @@
                                         </div>
                                     }
                                 </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Tipo Persona</label>
-                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaTipoPersona">
-                                        <option value="NATURAL">PERSONA NATURAL</option>
-                                        <option value="JURIDICA">SOCIEDAD / JURÍDICA</option>
-                                    </select>
-                                </div>
 
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Apellidos / Razón Social *</label>
+                                    <label class="form-label small fw-bold">Apellidos *</label>
                                     <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaApellidos" />
                                     <ValidationMessage For="() => _clienteEditando.PaApellidos" />
                                 </div>
@@ -250,65 +242,29 @@
                                     <ValidationMessage For="() => _clienteEditando.PaNombres" />
                                 </div>
 
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="form-label small fw-bold">Teléfono Móvil *</label>
                                     <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaMovil" />
                                     <ValidationMessage For="() => _clienteEditando.PaMovil" />
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="form-label small fw-bold">Teléfono Convencional</label>
                                     <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaTelefono" />
                                 </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Categoría Cliente</label>
-                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaTipoCli">
-                                        <option value="R">Regular / Particular</option>
-                                        <option value="C">Convenio Institucional / TUERI</option>
-                                        <option value="E">Comunidad USFQ / Empleado</option>
-                                    </select>
-                                </div>
 
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Correo Electrónico Personal</label>
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold">Correo Electrónico</label>
                                     <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaEmail" />
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Correo Facturación Electrónica (BC)</label>
-                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaEmailFactura" />
                                 </div>
 
                                 <div class="col-md-12">
-                                    <label class="form-label small fw-bold">Dirección Domiciliaria / Fiscal *</label>
+                                    <label class="form-label small fw-bold">Dirección Domiciliaria *</label>
                                     <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaDireccion" />
                                     <ValidationMessage For="() => _clienteEditando.PaDireccion" />
                                 </div>
 
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Grupo Contable BC</label>
-                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaGrupoCliente">
-                                        <option value="NAC">NACIONALES (NAC)</option>
-                                        <option value="EXT">EXTRANJEROS (EXT)</option>
-                                        <option value="REL">RELACIONADOS USFQ</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Términos de Pago</label>
-                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaTerminosPago">
-                                        <option value="CONTADO">CONTADO</option>
-                                        <option value="CREDITO">CRÉDITO 30 DÍAS</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Forma de Pago SRI</label>
-                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaFormaPago">
-                                        <option value="EFECTIVO">01 - SIN UTILIZACIÓN DEL SISTEMA FINANCIERO</option>
-                                        <option value="TARJETA">19 - TARJETA DE CRÉDITO / DÉBITO</option>
-                                        <option value="TRANSFERENCIA">20 - OTROS CON UTILIZACIÓN DEL SISTEMA FINANCIERO</option>
-                                    </select>
-                                </div>
-
                                 <div class="col-md-12">
-                                    <label class="form-label small fw-bold">Observaciones / Alertas Administrativas</label>
+                                    <label class="form-label small fw-bold">Observaciones</label>
                                     <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_clienteEditando.PaObservaciones" />
                                 </div>
                             </div>
