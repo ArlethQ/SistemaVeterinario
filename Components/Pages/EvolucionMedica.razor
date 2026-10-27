@@ -6,7 +6,7 @@
 @inject SessionStateService Session
 @inject IJSRuntime JS
 
-<PageTitle>HOSVET - Evoluciones Médicas y Órdenes Complementarias</PageTitle>
+<PageTitle>e-ForVets - Evoluciones Médicas y Órdenes Complementarias</PageTitle>
 
 <div class="container-fluid py-3">
     <!-- Encabezado -->
@@ -358,7 +358,7 @@
 
     private async Task ExportarPdfAsync()
     {
-        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente HOSVET" };
+        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente e-ForVets" };
         var pdfBytes = ReportService.GenerarEvolucionesPdf(pac, Evoluciones);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"Evoluciones_NHCL_{Nhcl}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }

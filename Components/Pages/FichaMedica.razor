@@ -7,7 +7,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 
-<PageTitle>HOSVET - Historia Clínica SOAP y Ficha Médica</PageTitle>
+<PageTitle>e-ForVets - Historia Clínica SOAP y Ficha Médica</PageTitle>
 
 <div class="container-fluid py-3">
     <!-- Encabezado y Acciones -->
@@ -780,7 +780,7 @@
 
     private async Task ExportarPdfAsync()
     {
-        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = Ficha.MedOrden, Nhcl = Ficha.MedNhcl, PacienteNombre = "Paciente HOSVET" };
+        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = Ficha.MedOrden, Nhcl = Ficha.MedNhcl, PacienteNombre = "Paciente e-ForVets" };
         var pdfBytes = ReportService.GenerarFichaMedicaPdf(pac, Ficha, Diagnosticos, RecetaItems);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"HistoriaClinica_Orden_{Ficha.MedOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }

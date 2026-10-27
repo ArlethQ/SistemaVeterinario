@@ -727,7 +727,7 @@ public class ConsultaExternaService : IConsultaExternaService
 
         if (string.IsNullOrWhiteSpace(plantilla))
         {
-            plantilla = @"<h4>CONSENTIMIENTO INFORMADO HOSVET</h4>
+            plantilla = @"<h4>CONSENTIMIENTO INFORMADO e-ForVets</h4>
 <p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cédula de identidad N° <strong>[CEDULA]</strong>, en calidad de propietario/responsable del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL]), autorizo al equipo médico del Hospital de Especialidades Veterinarias USFQ la realización de los procedimientos diagnósticos, anestésicos, quirúrgicos o terapéuticos explicados.</p>
 <p>Fecha: [FECHAPIE] | Teléfono: [TELEFONOPIE]</p>";
         }

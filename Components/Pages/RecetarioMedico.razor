@@ -6,7 +6,7 @@
 @inject SessionStateService Session
 @inject IJSRuntime JS
 
-<PageTitle>HOSVET - Recetario Médico e Indicaciones</PageTitle>
+<PageTitle>e-ForVets - Recetario Médico e Indicaciones</PageTitle>
 
 <div class="container-fluid py-3">
     <!-- Encabezado -->
@@ -159,7 +159,7 @@
                         </div>
                     </div>
 
-                    <!-- Vista Previa Dual Estilo Receta HOSVET -->
+                    <!-- Vista previa dual de receta e-ForVets -->
                     <div class="row g-3">
                         <div class="col-md-6">
                             <div class="border rounded p-2 h-100">
@@ -378,8 +378,8 @@
 
     private async Task ExportarRecetaPdfAsync()
     {
-        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente HOSVET" };
+        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente e-ForVets" };
         var pdfBytes = ReportService.GenerarRecetaMedicaPdf(pac, ItemsReceta, DiagnosticosOrden, IndicacionesGenerales);
-        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Receta_HOSVET_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Receta_e-ForVets_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }
 }

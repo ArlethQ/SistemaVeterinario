@@ -12,7 +12,7 @@ public class SessionStateService
     public string LocalidadDescripcion { get; private set; } = "HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ";
     public string Apostrofe { get; private set; } = "HV";
     public string LoginUser { get; private set; } = "admin";
-    public string NombreUsuario { get; private set; } = "Médico / Enfermería HOSVET";
+    public string NombreUsuario { get; private set; } = "Médico / Enfermería e-ForVets";
     public string Iniciales { get; private set; } = "HV";
     public bool IsAuthenticated { get; private set; } = true;
     public int? OrdenActiva { get; private set; }

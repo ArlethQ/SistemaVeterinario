@@ -114,7 +114,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
             new() { CodigoProd = "HV-LAB010", Descripcion = "Coproparasitario Seriado + Flotación", GrupoId = 8, PrecioUnitario = 12.00m },
             new() { CodigoProd = "HV-LAB011", Descripcion = "Citología por Punción de Aguja Fina (PAF) / Impronta", GrupoId = 9, PrecioUnitario = 25.00m },
             new() { CodigoProd = "HV-LAB012", Descripcion = "Perfil Tiroideo (T4 Total, T4 Libre, TSH)", GrupoId = 10, PrecioUnitario = 42.00m },
-            new() { CodigoProd = "HV-LAB013", Descripcion = "Perfil Prequirúrgico Integral HOSVET", GrupoId = 11, PrecioUnitario = 45.00m },
+            new() { CodigoProd = "HV-LAB013", Descripcion = "Perfil Prequirúrgico Integral e-ForVets", GrupoId = 11, PrecioUnitario = 45.00m },
             new() { CodigoProd = "HV-LAB014", Descripcion = "Análisis de Líquido de Efusión (Torácico / Abdominal / LCR)", GrupoId = 12, PrecioUnitario = 30.00m },
             new() { CodigoProd = "HV-LAB015", Descripcion = "Panel Química Seca Urgencias", GrupoId = 13, PrecioUnitario = 22.00m },
             new() { CodigoProd = "HV-LAB016", Descripcion = "Gasometría Arterial / Venosa + Lactato", GrupoId = 14, PrecioUnitario = 32.00m },
@@ -578,7 +578,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
 
         if (string.IsNullOrWhiteSpace(html))
         {
-            html = @"<h4>INFORME DE RESULTADOS DIAGNÓSTICOS — HOSVET USFQ</h4>
+            html = @"<h4>INFORME DE RESULTADOS DIAGNÓSTICOS — e-ForVets</h4>
 <p><strong>Paciente:</strong> [NOMBREMASCOTA] (NHCL #[NHCL]) | <strong>Especie/Raza:</strong> [ESPECIE] / [RAZA] | <strong>Sexo:</strong> [SEXO]</p>
 <p><strong>Propietario:</strong> [NOMBRECLIENTE] | <strong>Fecha:</strong> [FECHADIA] | <strong>Especialista:</strong> [USUARIO]</p>
 <hr/>
