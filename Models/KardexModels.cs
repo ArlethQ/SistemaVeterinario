@@ -27,6 +27,12 @@ public class MenuItemModel
     public List<MenuItemModel> Children { get; set; } = [];
 }
 
+public class RolUsuarioModel
+{
+    public int Id { get; set; }
+    public string Descripcion { get; set; } = string.Empty;
+}
+
 public class PacienteHeaderDto
 {
     public int Nhcl { get; set; }

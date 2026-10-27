@@ -4,10 +4,13 @@
 
 <div class="page">
     <aside class="sidebar">
-        <a class="sidebar-brand" href="/dashboard"><span class="brand-mark">eF</span><span><strong>e-ForVets</strong><small>Gestión veterinaria</small></span></a>
+        <a class="sidebar-brand" href="/dashboard"><img class="brand-logo" src="/favicon.png" alt="" /><span><strong>e-ForVets</strong><small>Gestión veterinaria</small></span></a>
         <div class="clinic-pill"><span>●</span><div><small>Sucursal activa</small><strong>@Session.Apostrofe</strong></div></div>
         <NavMenu />
-        <div class="sidebar-footer"><span>🐾</span><div><strong>Cuidado conectado</strong><small>Versión clínica</small></div></div>
+        @if (Session.IsAuthenticated)
+        {
+            <div class="sidebar-footer"><div class="user-avatar">@Session.Iniciales</div><div><strong>@Session.NombreUsuario</strong><small>@Session.LoginUser</small></div><button type="button" title="Cerrar sesión" aria-label="Cerrar sesión" @onclick="CerrarSesion">↪</button></div>
+        }
     </aside>
     <main class="workspace">
         <header class="workspace-header">

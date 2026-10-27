@@ -66,6 +66,9 @@ public interface IAuthService
 {
     Task<(bool Exito, string Mensaje, UsuarioModel? Usuario, bool RequiereCambioClave)> LoginAsync(string username, string password, int localidad = 1);
     Task<List<MenuItemModel>> ObtenerMenuUsuarioAsync(int idUser, int tipoUser);
+    Task<List<RolUsuarioModel>> ObtenerRolesAsync();
+    Task<HashSet<int>> ObtenerAccesosUsuarioAsync(int idUser);
+    Task<bool> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId);
 }
 
 public class AuthService : IAuthService
@@ -140,5 +143,45 @@ public class AuthService : IAuthService
         {
             return [];
         }
+    }
+
+    public async Task<List<RolUsuarioModel>> ObtenerRolesAsync()
+    {
+        const string sql = @"SELECT tipuser_numero AS Id, RTRIM(ISNULL(tipuser_descripcion, '')) AS Descripcion
+                             FROM vt_tipos_usuarios ORDER BY tipuser_descripcion";
+        try { return (await _sql.QueryAsync<RolUsuarioModel>(sql)).ToList(); }
+        catch { return []; }
+    }
+
+    public async Task<HashSet<int>> ObtenerAccesosUsuarioAsync(int idUser)
+    {
+        const string sql = "SELECT ac_modulo FROM vt_accesos WHERE ac_idusuario = @IdUser";
+        try { return (await _sql.QueryAsync<int>(sql, new { IdUser = idUser })).ToHashSet(); }
+        catch { return []; }
+    }
+
+    public async Task<bool> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId)
+    {
+        var ids = menuIds.Distinct().ToArray();
+        var insert = ids.Length == 0
+            ? string.Empty
+            : "INSERT INTO vt_accesos (ac_idusuario, ac_modulo) SELECT @IdUser, id FROM vt_menuDinamico WHERE id IN @MenuIds;";
+        var sql = $@"
+            BEGIN TRY
+                BEGIN TRANSACTION;
+                UPDATE vt_usuarios SET user_tipouser_numero = @TipoUser WHERE user_numero = @IdUser;
+                DELETE FROM vt_accesos WHERE ac_idusuario = @IdUser;
+                {insert}
+                COMMIT TRANSACTION;
+            END TRY
+            BEGIN CATCH
+                IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+                THROW;
+            END CATCH";
+
+        var result = await _sql.ExecuteAsync(sql, new { IdUser = idUser, TipoUser = tipoUser, MenuIds = ids });
+        if (result < 0) return false;
+        await _sql.RegistrarBitacoraAsync($"Actualiza rol y permisos del usuario {idUser}", adminId);
+        return true;
     }
 }

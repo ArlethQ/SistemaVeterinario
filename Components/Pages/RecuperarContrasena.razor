@@ -1,14 +1,7 @@
 @page "/recuperar-contrasena"
-@page "/olvide-contrasena"
 @layout Layout.PublicLayout
-<PageTitle>e-ForVets - Recuperar contraseña</PageTitle>
-<div class="account-page">
-    <a class="account-brand" href="/"><span>eF</span><strong>e-ForVets</strong></a>
-    <section class="account-card compact">
-        <div class="recovery-icon">🔐</div><div class="account-heading"><span>Recuperación de acceso</span><h1>¿Olvidaste tu contraseña?</h1><p>Ingresa el correo asociado a tu cuenta. Te enviaremos las instrucciones para recuperarla.</p></div>
-        @if (_enviado) { <div class="success-message"><strong>Revisa tu correo</strong><span>Si existe una cuenta asociada, recibirás las instrucciones de recuperación.</span></div> }
-        else { <form @onsubmit="Enviar" @onsubmit:preventDefault><label>Correo electrónico<input required type="email" @bind="_correo" placeholder="nombre@correo.com" /></label><button type="submit">Enviar instrucciones</button></form> }
-        <p class="account-footer"><a href="/login">← Volver a iniciar sesión</a></p>
-    </section>
-</div>
-@code { private string _correo=string.Empty; private bool _enviado; private void Enviar()=>_enviado=true; }
+<PageTitle>Nueva contraseña | e-ForVets</PageTitle>
+<div class="account-page"><a class="account-brand" href="/"><img src="/favicon.png" alt="" /><strong>e-ForVets</strong></a><section class="account-card compact"><div class="recovery-icon">⌁</div><div class="account-heading"><span>Restablecer acceso</span><h1>Crea una nueva contraseña</h1><p>Esta pantalla requiere un token válido emitido por el servidor.</p></div>
+    <div class="warning-message" role="alert">No se recibió un token de recuperación válido o el servicio aún no está configurado.</div>
+    <form><label>Nueva contraseña<input type="password" disabled autocomplete="new-password" /></label><label>Confirmar nueva contraseña<input type="password" disabled autocomplete="new-password" /></label><button class="submit-button" type="button" disabled>Guardar nueva contraseña</button></form><p class="account-footer"><a href="/login">← Volver a iniciar sesión</a></p>
+</section></div>

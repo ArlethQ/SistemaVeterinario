@@ -1,18 +1,13 @@
 @page "/registro"
 @layout Layout.PublicLayout
-<PageTitle>e-ForVets - Registro</PageTitle>
-<div class="account-page">
-    <a class="account-brand" href="/"><span>eF</span><strong>e-ForVets</strong></a>
-    <section class="account-card">
-        <div class="account-heading"><span>Nuevo acceso</span><h1>Crear una cuenta</h1><p>Completa tus datos para solicitar acceso al sistema veterinario.</p></div>
-        @if (_enviado) { <div class="success-message"><strong>Solicitud recibida</strong><span>El administrador de e-ForVets revisará tus datos y habilitará tu acceso.</span></div> }
-        else {
-            <form @onsubmit="Enviar" @onsubmit:preventDefault>
-                <div class="form-grid"><label>Nombre completo<input required @bind="_nombre" /></label><label>Correo electrónico<input required type="email" @bind="_correo" /></label><label>Teléfono<input required type="tel" @bind="_telefono" /></label><label>Rol solicitado<select @bind="_rol"><option>Médico veterinario</option><option>Enfermería</option><option>Recepción</option><option>Administración</option></select></label></div>
-                <label class="terms"><input type="checkbox" required /> Acepto el tratamiento de mis datos para gestionar esta solicitud.</label><button type="submit">Solicitar registro</button>
-            </form>
-        }
-        <p class="account-footer">¿Ya tienes una cuenta? <a href="/login">Inicia sesión</a></p>
-    </section>
-</div>
-@code { private string _nombre=string.Empty,_correo=string.Empty,_telefono=string.Empty,_rol="Médico veterinario"; private bool _enviado; private void Enviar()=>_enviado=true; }
+<PageTitle>Crear cuenta | e-ForVets</PageTitle>
+<div class="account-page"><a class="account-brand" href="/"><img src="/favicon.png" alt="" /><strong>e-ForVets</strong></a><section class="account-card">
+    <div class="account-heading"><span>Nuevo acceso</span><h1>Crear una cuenta</h1><p>Deja listo tu registro para cuando el servicio de cuentas esté conectado.</p></div>
+    @if (!string.IsNullOrEmpty(_mensaje)) { <div class="info-message" role="status">@_mensaje</div> }
+    <form @onsubmit="Enviar" @onsubmit:preventDefault>
+        <div class="form-grid"><label>Nombre completo<input required autocomplete="name" @bind="_nombre" /></label><label>Correo electrónico<input required type="email" autocomplete="email" @bind="_correo" /></label><label>Contraseña<span class="password-wrap"><input required minlength="8" type="@(_verClave ? "text" : "password")" autocomplete="new-password" @bind="_clave" /><button type="button" @onclick="() => _verClave = !_verClave">@(_verClave ? "Ocultar" : "Mostrar")</button></span></label><label>Confirmar contraseña<span class="password-wrap"><input required minlength="8" type="@(_verConfirmacion ? "text" : "password")" autocomplete="new-password" @bind="_confirmacion" /><button type="button" @onclick="() => _verConfirmacion = !_verConfirmacion">@(_verConfirmacion ? "Ocultar" : "Mostrar")</button></span></label></div>
+        <small class="password-help">Usa al menos 8 caracteres. La contraseña y su confirmación deben coincidir.</small>
+        <label class="terms"><input type="checkbox" required @bind="_acepta" /> Acepto los términos y la política de privacidad cuando estén disponibles.</label><button class="submit-button" type="submit">Crear cuenta</button>
+    </form><p class="account-footer">¿Ya tienes una cuenta? <a href="/login">Iniciar sesión</a></p>
+</section></div>
+@code { private string _nombre="",_correo="",_clave="",_confirmacion="",_mensaje=""; private bool _verClave,_verConfirmacion,_acepta; private void Enviar(){ _mensaje=_clave!=_confirmacion?"Las contraseñas no coinciden.":"El registro requiere un servicio de servidor que todavía no está configurado. No se creó ninguna cuenta."; } }

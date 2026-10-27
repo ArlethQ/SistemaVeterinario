@@ -1,19 +1,70 @@
 <div class="nav-shell">
     <input id="menu-toggle" type="checkbox" class="menu-toggle" />
-    <label for="menu-toggle" class="menu-toggle-label">☰ <span>Menú</span></label>
+    <label for="menu-toggle" class="menu-toggle-label" aria-label="Abrir o cerrar menú">☰ <span>Menú</span></label>
     <div class="nav-scrollable">
-        <nav class="menu-tree">
+        <nav class="menu-tree" aria-label="Navegación del sistema">
             <span class="menu-section-label">General</span>
-            <NavLink class="menu-link" href="dashboard"><span class="menu-icon">⌂</span><span>Panel principal</span></NavLink>
-            <span class="menu-section-label">Gestión clínica</span>
-            <details open><summary><span class="menu-icon">▤</span><span>Kardex clínico</span><i>⌄</i></summary><div class="submenu"><NavLink href="kardex/ordenes">Bandeja de órdenes</NavLink><NavLink href="kardex/enfermeria">Kardex enfermería</NavLink><NavLink href="kardex/signos">Signos y balance hídrico</NavLink></div></details>
-            <details><summary><span class="menu-icon">✚</span><span>Hospitalización</span><i>⌄</i></summary><div class="submenu"><NavLink href="hospitalizacion/ficha">Ficha hospitalización</NavLink><NavLink href="hospitalizacion/monitoreo">Monitoreo 24 horas</NavLink></div></details>
-            <details><summary><span class="menu-icon">✦</span><span>Quirófano</span><i>⌄</i></summary><div class="submenu"><NavLink href="quirofano/preanestesia">Pre-anestesia</NavLink><NavLink href="quirofano/anestesia">Hoja de anestesia</NavLink><NavLink href="quirofano/protocolo">Protocolo quirúrgico</NavLink><NavLink href="quirofano/recuperacion">Sala de recuperación</NavLink></div></details>
-            <details><summary><span class="menu-icon">♡</span><span>Consulta externa</span><i>⌄</i></summary><div class="submenu"><NavLink href="consulta/fichamedica">Historia clínica SOAP</NavLink><NavLink href="consulta/evoluciones">Evolución médica</NavLink><NavLink href="consulta/recetario">Recetario médico</NavLink><NavLink href="consulta/autorizaciones">Consentimientos y alta</NavLink></div></details>
-            <details><summary><span class="menu-icon">⌕</span><span>Diagnóstico</span><i>⌄</i></summary><div class="submenu"><NavLink href="diagnostico/laboratorio">Órdenes laboratorio</NavLink><NavLink href="diagnostico/imagenologia">Rayos X y ecografía</NavLink><NavLink href="diagnostico/bandeja">Bandeja de resultados</NavLink></div></details>
-            <details><summary><span class="menu-icon">♙</span><span>Admisión</span><i>⌄</i></summary><div class="submenu"><NavLink href="admision/clientes-pacientes">Clientes y mascotas</NavLink><NavLink href="admision/ordenes">Recepción y triaje</NavLink><NavLink href="admision/citas">Agenda de citas</NavLink></div></details>
+            <NavLink class="menu-link" href="dashboard"><MenuIcon Name="dashboard" /><span>Dashboard</span></NavLink>
+
+            <span class="menu-section-label">Gestión</span>
+            <details open>
+                <summary><MenuIcon Name="admission" /><span>Admisión</span><i>⌄</i></summary>
+                <div class="submenu">
+                    <NavLink href="admision/clientes-pacientes">Clientes, tutores y mascotas</NavLink>
+                    <NavLink href="admision/ordenes">Recepción y triaje</NavLink>
+                    <NavLink href="admision/citas">Agenda de citas</NavLink>
+                </div>
+            </details>
+
+            <span class="menu-section-label">Atención clínica</span>
+            <details>
+                <summary><MenuIcon Name="kardex" /><span>Kardex clínico</span><i>⌄</i></summary>
+                <div class="submenu">
+                    <NavLink href="kardex/ordenes">Bandeja de órdenes</NavLink>
+                    <NavLink href="kardex/enfermeria">Kardex enfermería</NavLink>
+                    <NavLink href="kardex/signos">Signos y balance hídrico</NavLink>
+                </div>
+            </details>
+
+            <details>
+                <summary><MenuIcon Name="hospital" /><span>Hospitalización 24h</span><i>⌄</i></summary>
+                <div class="submenu">
+                    <NavLink href="hospitalizacion/ficha">Ficha de hospitalización</NavLink>
+                    <NavLink href="hospitalizacion/monitoreo">Monitoreo 24 horas</NavLink>
+                </div>
+            </details>
+
+            <details>
+                <summary><MenuIcon Name="surgery" /><span>Quirófano y anestesia</span><i>⌄</i></summary>
+                <div class="submenu">
+                    <NavLink href="quirofano/preanestesia">Pre-anestesia</NavLink>
+                    <NavLink href="quirofano/anestesia">Hoja de anestesia</NavLink>
+                    <NavLink href="quirofano/protocolo">Protocolo quirúrgico</NavLink>
+                    <NavLink href="quirofano/recuperacion">Sala de recuperación</NavLink>
+                </div>
+            </details>
+
+            <details>
+                <summary><MenuIcon Name="consultation" /><span>Consulta e historia</span><i>⌄</i></summary>
+                <div class="submenu">
+                    <NavLink href="consulta/fichamedica">Historia clínica SOAP</NavLink>
+                    <NavLink href="consulta/evoluciones">Evolución médica</NavLink>
+                    <NavLink href="consulta/recetario">Recetario médico</NavLink>
+                    <NavLink href="consulta/autorizaciones">Consentimientos y alta</NavLink>
+                </div>
+            </details>
+
+            <details>
+                <summary><MenuIcon Name="diagnostic" /><span>Laboratorio e imagen</span><i>⌄</i></summary>
+                <div class="submenu">
+                    <NavLink href="diagnostico/laboratorio">Órdenes de laboratorio</NavLink>
+                    <NavLink href="diagnostico/imagenologia">Rayos X y ecografía</NavLink>
+                    <NavLink href="diagnostico/bandeja">Bandeja de resultados</NavLink>
+                </div>
+            </details>
+
             <span class="menu-section-label">Administración</span>
-            <NavLink class="menu-link" href="facturacion/proformas"><span class="menu-icon">$</span><span>Proformas y facturación</span></NavLink>
+            <NavLink class="menu-link" href="facturacion/proformas"><MenuIcon Name="billing" /><span>Proformas y facturación</span></NavLink>
         </nav>
     </div>
 </div>
