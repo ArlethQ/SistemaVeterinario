@@ -233,15 +233,36 @@
 
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">Apellidos *</label>
-                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaApellidos" />
-                                    <ValidationMessage For="() => _clienteEditando.PaApellidos" />
+                                    <input type="text"
+                                           class="form-control form-control-sm @(_errorApellidos != null ? "is-invalid border-danger" : (!string.IsNullOrWhiteSpace(_clienteEditando.PaApellidos) ? "is-valid border-success" : ""))"
+                                           value="@_clienteEditando.PaApellidos"
+                                           placeholder="Ej: Pérez-Gómez, De la Cruz"
+                                           onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'-]/.test(event.key);"
+                                           @oninput="OnInputApellidos"
+                                           @onblur="OnBlurApellidos" />
+                                    @if (!string.IsNullOrEmpty(_errorApellidos))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorApellidos
+                                        </div>
+                                    }
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">Nombres *</label>
-                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaNombres" />
-                                    <ValidationMessage For="() => _clienteEditando.PaNombres" />
+                                    <input type="text"
+                                           class="form-control form-control-sm @(_errorNombres != null ? "is-invalid border-danger" : (!string.IsNullOrWhiteSpace(_clienteEditando.PaNombres) ? "is-valid border-success" : ""))"
+                                           value="@_clienteEditando.PaNombres"
+                                           placeholder="Ej: Juan Carlos, D'Angelo"
+                                           onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'-]/.test(event.key);"
+                                           @oninput="OnInputNombres"
+                                           @onblur="OnBlurNombres" />
+                                    @if (!string.IsNullOrEmpty(_errorNombres))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorNombres
+                                        </div>
+                                    }
                                 </div>
-
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">Teléfono Móvil *</label>
                                     <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaMovil" />
@@ -441,6 +462,8 @@
     private bool _esError;
     private string? _errorDocumento;
     private bool _esDocValido;
+    private string? _errorApellidos;
+    private string? _errorNombres;
 
     protected override async Task OnInitializedAsync()
     {
@@ -494,6 +517,8 @@
             PaFormaPago = cli.PaFormaPago
         };
         ValidarDocumentoEnVivo(_clienteEditando.PaCedula);
+        ValidarApellidosEnVivo(_clienteEditando.PaApellidos);
+        ValidarNombresEnVivo(_clienteEditando.PaNombres);
 
 
         _mascotas = await AdmisionService.ObtenerMascotasPorClienteAsync(cli.PaCodigo);
@@ -508,6 +533,8 @@
         _clienteSeleccionado = null;
         _clienteEditando = new ClienteDto { PaDocumento = "CEDULA" };
         _errorDocumento = null;
+        _errorApellidos = null;
+        _errorNombres = null;
         _esDocValido = false;
         _tabActiva = "CLIENTE";
     }
@@ -593,6 +620,53 @@
         _errorDocumento = res.Mensaje;
     }
 
+    private void OnInputApellidos(ChangeEventArgs e)
+    {
+        string val = e.Value?.ToString() ?? string.Empty;
+        _clienteEditando.PaApellidos = val;
+        ValidarApellidosEnVivo(val);
+    }
+
+    private void OnBlurApellidos()
+    {
+        _clienteEditando.PaApellidos = NombreValidador.Sanitizar(_clienteEditando.PaApellidos);
+        ValidarApellidosEnVivo(_clienteEditando.PaApellidos);
+    }
+
+    private void ValidarApellidosEnVivo(string val)
+    {
+        if (string.IsNullOrEmpty(val))
+        {
+            _errorApellidos = null;
+            return;
+        }
+        var res = NombreValidador.Validar(val, "Los apellidos");
+        _errorApellidos = res.MensajeError;
+    }
+
+    private void OnInputNombres(ChangeEventArgs e)
+    {
+        string val = e.Value?.ToString() ?? string.Empty;
+        _clienteEditando.PaNombres = val;
+        ValidarNombresEnVivo(val);
+    }
+
+    private void OnBlurNombres()
+    {
+        _clienteEditando.PaNombres = NombreValidador.Sanitizar(_clienteEditando.PaNombres);
+        ValidarNombresEnVivo(_clienteEditando.PaNombres);
+    }
+
+    private void ValidarNombresEnVivo(string val)
+    {
+        if (string.IsNullOrEmpty(val))
+        {
+            _errorNombres = null;
+            return;
+        }
+        var res = NombreValidador.Validar(val, "Los nombres");
+        _errorNombres = res.MensajeError;
+    }
     private async Task GuardarClienteAsync()
     {
         var resVal = EcuadorDocumentoValidador.Validar(_clienteEditando.PaDocumento, _clienteEditando.PaCedula);
@@ -606,6 +680,27 @@
         }
 
         _clienteEditando.PaCedula = resVal.ValorLimpio;
+
+        _clienteEditando.PaApellidos = NombreValidador.Sanitizar(_clienteEditando.PaApellidos);
+        _clienteEditando.PaNombres = NombreValidador.Sanitizar(_clienteEditando.PaNombres);
+
+        var valAp = NombreValidador.Validar(_clienteEditando.PaApellidos, "Los apellidos");
+        if (!valAp.EsValido)
+        {
+            _esError = true;
+            _errorApellidos = valAp.MensajeError;
+            _mensajeAlerta = valAp.MensajeError!;
+            return;
+        }
+
+        var valNom = NombreValidador.Validar(_clienteEditando.PaNombres, "Los nombres");
+        if (!valNom.EsValido)
+        {
+            _esError = true;
+            _errorNombres = valNom.MensajeError;
+            _mensajeAlerta = valNom.MensajeError!;
+            return;
+        }
         int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
         int idGuardado = await AdmisionService.GuardarClienteAsync(_clienteEditando, idUser);
         _clienteEditando.PaCodigo = idGuardado;

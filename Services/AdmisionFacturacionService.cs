@@ -1,4 +1,4 @@
-﻿using HosvetKardex.Web.Data;
+using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Models;
 
 namespace HosvetKardex.Web.Services;
@@ -154,6 +154,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         {
             cliente.PaCedula = valDoc.ValorLimpio;
         }
+        cliente.PaApellidos = NombreValidador.Sanitizar(cliente.PaApellidos);
+        cliente.PaNombres = NombreValidador.Sanitizar(cliente.PaNombres);
+
         try
         {
             if (cliente.PaCodigo == 0)
