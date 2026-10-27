@@ -1,0 +1,40 @@
+@page "/consulta/historial/{Nhcl:int}"
+@inject SessionStateService Session
+@inject IAdministracionClinicaService AdminService
+@inject IWebHostEnvironment Environment
+@inject NavigationManager Nav
+<PageTitle>Historial del paciente | e-ForVets</PageTitle>
+
+@if (_autorizado)
+{
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3"><div><small class="text-primary fw-bold">HISTORIA LONGITUDINAL</small><h2 class="mb-0">Paciente NHCL @Nhcl</h2></div><a class="btn btn-outline-secondary" href="/admision/clientes-pacientes">Volver a pacientes</a></div>
+    @if(!string.IsNullOrWhiteSpace(_error)){<div class="alert alert-danger">@_error</div>}
+    <ul class="nav nav-tabs mb-3"><li class="nav-item"><button class="nav-link @(_tab=="resumen"?"active":"")" @onclick='()=>_tab="resumen"'>Resumen clínico</button></li><li class="nav-item"><button class="nav-link @(_tab=="crecimiento"?"active":"")" @onclick='()=>_tab="crecimiento"'>Curva de crecimiento</button></li><li class="nav-item"><button class="nav-link @(_tab=="archivos"?"active":"")" @onclick='()=>_tab="archivos"'>Archivos (@_archivos.Count)</button></li></ul>
+    @if(_cargando){<div class="text-muted">Cargando historial...</div>}
+    else if(_tab=="resumen")
+    {
+        <div class="row g-3">@foreach(var grupo in _historial.GroupBy(x=>x.Categoria)){<div class="col-lg-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-white fw-bold">@grupo.Key</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Descripción</th><th class="text-end">Registros</th></tr></thead><tbody>@foreach(var x in grupo.OrderByDescending(x=>x.NumeroVeces)){<tr><td>@if(!string.IsNullOrWhiteSpace(x.Codigo)){<code>@x.Codigo</code>} @x.Descripcion</td><td class="text-end">@x.NumeroVeces</td></tr>}</tbody></table></div></div></div>}</div>
+    }
+    else if(_tab=="crecimiento")
+    {
+        <div class="card border-0 shadow-sm"><div class="card-header bg-white"><strong>Evolución de peso</strong><small class="d-block text-muted">Datos provenientes de fichas médicas.</small></div><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Fecha</th><th>Edad</th><th>Peso (kg)</th><th>FC</th><th>FR</th></tr></thead><tbody>@foreach(var x in _mediciones){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td>@(x.EdadMeses/12) años @(x.EdadMeses%12) meses</td><td><strong>@x.Peso?.ToString("N2")</strong></td><td>@x.FrecuenciaCardiaca?.ToString("N0")</td><td>@x.FrecuenciaRespiratoria?.ToString("N0")</td></tr>}</tbody></table></div></div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm"><div class="card-body"><label class="form-label fw-semibold">Adjuntar archivo clínico</label><InputFile OnChange="SubirArchivoAsync" class="form-control mb-3" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.docx" />@if(!string.IsNullOrWhiteSpace(_mensaje)){<div class="alert alert-success py-2">@_mensaje</div>}<div class="list-group">@foreach(var archivo in _archivos){<a class="list-group-item list-group-item-action d-flex justify-content-between" href="@archivo.Url" target="_blank"><span>📎 @archivo.Nombre</span><small>@archivo.Fecha.ToString("yyyy-MM-dd HH:mm")</small></a>}</div></div></div>
+    }
+</div>
+}
+
+@code {
+    [Parameter] public int Nhcl { get; set; }
+    private bool _autorizado,_cargando=true; private string _tab="resumen",_error="",_mensaje="";
+    private List<HistorialPacienteItemDto> _historial=[]; private List<MedicionCrecimientoDto> _mediciones=[]; private List<ArchivoPaciente> _archivos=[];
+    private sealed record ArchivoPaciente(string Nombre,string Url,DateTime Fecha);
+    protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated){Nav.NavigateTo("/login");return;}_autorizado=true;try{var h=AdminService.ObtenerResumenHistorialAsync(Nhcl);var c=AdminService.ObtenerCurvaCrecimientoAsync(Nhcl);await Task.WhenAll(h,c);_historial=h.Result;_mediciones=c.Result;CargarArchivos();}catch(Exception){_error="No se pudo cargar el historial del paciente.";}_cargando=false;}
+    private string DirectorioRelativo=>$"archivosPacientes/{Nhcl}/ingreso";
+    private string DirectorioFisico=>Path.Combine(Environment.WebRootPath,"archivosPacientes",Nhcl.ToString(),"ingreso");
+    private void CargarArchivos(){Directory.CreateDirectory(DirectorioFisico);_archivos=Directory.EnumerateFiles(DirectorioFisico).Select(x=>new ArchivoPaciente(Path.GetFileName(x),$"/{DirectorioRelativo}/{Uri.EscapeDataString(Path.GetFileName(x))}",File.GetLastWriteTime(x))).OrderByDescending(x=>x.Fecha).ToList();}
+    private async Task SubirArchivoAsync(InputFileChangeEventArgs e){var archivo=e.File;if(archivo.Size>15*1024*1024){_error="El archivo supera el límite de 15 MB.";return;}var extensiones=new HashSet<string>(StringComparer.OrdinalIgnoreCase){".pdf",".png",".jpg",".jpeg",".xlsx",".docx"};var ext=Path.GetExtension(archivo.Name);if(!extensiones.Contains(ext)){_error="Tipo de archivo no permitido.";return;}Directory.CreateDirectory(DirectorioFisico);var nombre=$"{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileNameWithoutExtension(archivo.Name)}{ext}";await using var entrada=archivo.OpenReadStream(15*1024*1024);await using var salida=File.Create(Path.Combine(DirectorioFisico,nombre));await entrada.CopyToAsync(salida);_error="";_mensaje="Archivo cargado correctamente.";CargarArchivos();}
+}

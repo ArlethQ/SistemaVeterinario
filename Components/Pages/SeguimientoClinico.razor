@@ -1,0 +1,34 @@
+@page "/seguimiento/clinico"
+@inject SessionStateService Session
+@inject IAdministracionClinicaService AdminService
+@inject NavigationManager Nav
+<PageTitle>Seguimiento clínico | e-ForVets</PageTitle>
+
+@if (_autorizado)
+{
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3"><div><small class="text-primary fw-bold">SEGUIMIENTO</small><h2 class="mb-1">Recordatorios, alertas y fallecidos</h2><p class="text-muted mb-0">Consulta operativa migrada de los reportes WebForms.</p></div><button class="btn btn-primary" disabled="@_cargando" @onclick="CargarAsync">@(_cargando ? "Consultando..." : "Consultar")</button></div>
+    @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-danger">@_error</div> }
+    <div class="card border-0 shadow-sm mb-3"><div class="card-body row g-3 align-items-end"><div class="col-md-3"><label class="form-label">Desde</label><input class="form-control" type="date" @bind="_desde" /></div><div class="col-md-3"><label class="form-label">Hasta</label><input class="form-control" type="date" @bind="_hasta" /></div><div class="col-md-3">@if(_tab=="alertas"){<label class="form-label">Estado</label><select class="form-select" @bind="_estado"><option value="">Todos</option><option value="PENDIENTE">Pendiente</option><option value="REALIZADO">Realizado</option></select>}else if(_tab=="recordatorios"){<label class="form-label">Fecha de referencia</label><select class="form-select" @bind="_porRevision"><option value="false">Envío</option><option value="true">Próxima revisión</option></select>}</div></div></div>
+    <ul class="nav nav-tabs mb-3"><li class="nav-item"><button class="nav-link @(_tab=="recordatorios"?"active":"")" @onclick='()=>CambiarTab("recordatorios")'>Recordatorios (@_recordatorios.Count)</button></li><li class="nav-item"><button class="nav-link @(_tab=="alertas"?"active":"")" @onclick='()=>CambiarTab("alertas")'>Alertas (@_alertas.Count)</button></li><li class="nav-item"><button class="nav-link @(_tab=="fallecidos"?"active":"")" @onclick='()=>CambiarTab("fallecidos")'>Fallecidos (@_fallecidos.Count)</button></li></ul>
+    <div class="card border-0 shadow-sm"><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead class="table-light">
+    @if(_tab=="recordatorios"){<tr><th>Paciente</th><th>Propietario</th><th>Enviado por</th><th>Envío</th><th>Próxima revisión</th><th>Contacto</th></tr>}
+    else if(_tab=="alertas"){<tr><th>Orden / paciente</th><th>Cliente</th><th>Médico</th><th>Fecha</th><th>Pronóstico</th><th>Estado</th></tr>}
+    else{<tr><th>Fecha</th><th>NHCL</th><th>Paciente</th><th>Propietario</th><th>Motivo</th></tr>}
+    </thead><tbody>
+    @if(_tab=="recordatorios"){@foreach(var x in _recordatorios){<tr><td><strong>@x.Paciente</strong><small class="d-block text-muted">NHCL @x.Nhcl</small></td><td>@x.Propietario</td><td>@x.QuienManda<small class="d-block text-muted">@x.Especialidad</small></td><td>@x.FechaEnvio.ToString("yyyy-MM-dd")</td><td>@x.ProximaRevision?.ToString("yyyy-MM-dd")</td><td>@x.Telefono<small class="d-block text-muted">@x.CorreoEnviado</small></td></tr>}}
+    else if(_tab=="alertas"){@foreach(var x in _alertas){<tr><td><strong>@x.Paciente</strong><small class="d-block text-muted">Orden @x.Orden · NHCL @x.Nhcl</small></td><td>@x.Cliente<small class="d-block text-muted">@x.Telefono</small></td><td>@x.Medico<small class="d-block text-muted">@x.Especialidad</small></td><td>@x.FechaEnvio.ToString("yyyy-MM-dd")</td><td>@x.Pronostico</td><td><span class="badge bg-secondary">@x.Estado</span></td></tr>}}
+    else{@foreach(var x in _fallecidos){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td>@x.Nhcl</td><td><strong>@x.Paciente</strong></td><td>@x.Propietario</td><td>@x.Motivo</td></tr>}}
+    </tbody></table></div></div>
+</div>
+}
+
+@code {
+    private bool _autorizado, _cargando, _porRevision;
+    private string _tab="recordatorios", _estado="", _error="";
+    private DateTime _desde=new(DateTime.Today.Year,DateTime.Today.Month,1), _hasta=DateTime.Today;
+    private List<RecordatorioVacunaDto> _recordatorios=[]; private List<AlertaClinicaDto> _alertas=[]; private List<PacienteFallecidoDto> _fallecidos=[];
+    protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated){Nav.NavigateTo("/login");return;}_autorizado=true;await CargarAsync();}
+    private async Task CambiarTab(string tab){_tab=tab;await CargarAsync();}
+    private async Task CargarAsync(){if(_desde>_hasta){_error="La fecha inicial no puede superar la fecha final.";return;}_cargando=true;_error="";try{if(_tab=="recordatorios")_recordatorios=await AdminService.ObtenerRecordatoriosAsync(_desde,_hasta,_porRevision);else if(_tab=="alertas")_alertas=await AdminService.ObtenerAlertasAsync(_desde,_hasta,_estado);else _fallecidos=await AdminService.ObtenerFallecidosAsync(_desde,_hasta);}catch(Exception){_error="No se pudo consultar la información en la base de datos.";}_cargando=false;}
+}

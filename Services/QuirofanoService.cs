@@ -39,16 +39,16 @@ public interface IQuirofanoService
 public class QuirofanoService : IQuirofanoService
 {
     private readonly ISqlDataService _db;
-    private readonly IBusinessCentralService _bcService;
+    private readonly IInventarioService _inventarioService;
     private readonly ILogger<QuirofanoService> _logger;
 
     public QuirofanoService(
         ISqlDataService db,
-        IBusinessCentralService bcService,
+        IInventarioService inventarioService,
         ILogger<QuirofanoService> logger)
     {
         _db = db;
-        _bcService = bcService;
+        _inventarioService = inventarioService;
         _logger = logger;
     }
 
@@ -258,7 +258,7 @@ public class QuirofanoService : IQuirofanoService
 
             if (idCreado > 0 && !string.IsNullOrWhiteSpace(prod.CodigoProd))
             {
-                await _bcService.GuardarReservaStockAsync(
+                await _inventarioService.GuardarReservaStockAsync(
                     prod.CodigoProd,
                     idUsuario,
                     prod.CantProd,
@@ -284,7 +284,7 @@ public class QuirofanoService : IQuirofanoService
         try
         {
             await _db.ExecuteAsync("DELETE FROM qvt_productosUtilizados WHERE id = @Id", new { Id = idProducto });
-            await _bcService.EliminarReservaStockAsync(codigoProd, idOrden, idProducto, origReserva);
+            await _inventarioService.EliminarReservaStockAsync(codigoProd, idOrden, idProducto, origReserva);
             return true;
         }
         catch (Exception ex)
@@ -1209,7 +1209,7 @@ public class QuirofanoService : IQuirofanoService
 
             if (dto.Tipo == "I" && idCreado > 0 && !string.IsNullOrWhiteSpace(dto.MedIdProdu))
             {
-                await _bcService.GuardarReservaStockAsync(
+                await _inventarioService.GuardarReservaStockAsync(
                     dto.MedIdProdu,
                     idUsuario,
                     dto.MedCantidad,
@@ -1234,7 +1234,7 @@ public class QuirofanoService : IQuirofanoService
         await _db.ExecuteAsync("UPDATE qvt_ingliqadm SET estado = 'I' WHERE id = @Id", new { Id = id });
         if (!string.IsNullOrWhiteSpace(codigoProd))
         {
-            await _bcService.EliminarReservaStockAsync(codigoProd, idOrden, id, "LIQ");
+            await _inventarioService.EliminarReservaStockAsync(codigoProd, idOrden, id, "LIQ");
         }
         return true;
     }

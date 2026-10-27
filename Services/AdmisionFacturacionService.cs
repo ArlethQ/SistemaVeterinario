@@ -34,11 +34,11 @@ public interface IAdmisionFacturacionService
     Task<bool> ActualizarEstadoCitaAsync(int idCita, string nuevoEstado);
     Task<bool> BloquearHorarioMedicoAsync(int idMedico, DateTime fecha, string horaDesde, string horaHasta, int idLocalidad);
 
-    // 4. Facturación Consolidada / Proformas Business Central (Hosp_PreProformas, vt_QuirProformas, vt_UniProformas)
+    // 4. Facturación consolidada / proformas
     Task<List<OrdenProformaResumenDto>> BuscarOrdenesParaProformaAsync(DateTime desde, DateTime hasta, string filtro = "");
     Task<OrdenProformaResumenDto?> ObtenerDetalleProformaOrdenAsync(int idOrden);
     Task<bool> AgregarCargoProformaManualAsync(ItemFacturableProformaDto cargo, int idUsuario);
-    Task<(bool Exito, string NumeroProformaBc, string Mensaje)> EmitirProformaBusinessCentralAsync(int idOrden, List<ItemFacturableProformaDto> itemsSeleccionados, int idUsuario);
+    Task<(bool Exito, string NumeroProforma, string Mensaje)> EmitirProformaAsync(int idOrden, List<ItemFacturableProformaDto> itemsSeleccionados, int idUsuario);
 
     // 5. Usuarios y Bitácora (vt_usuarios, vt_vitacora)
     Task<List<UsuarioSistemaDto>> ObtenerUsuariosAsync(string filtro = "");
@@ -49,7 +49,6 @@ public interface IAdmisionFacturacionService
 public class AdmisionFacturacionService : IAdmisionFacturacionService
 {
     private readonly ISqlDataService _db;
-    private readonly IBusinessCentralService _bcService;
     private readonly ILogger<AdmisionFacturacionService> _logger;
 
     // Estado en memoria para modo demostrativo si SQL Server no está disponible
@@ -83,10 +82,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         new() { CiId = 703, CiNhcl = 5003, CiNombre = "Salazar Gómez María Fernanda", CiNombreMas = "ROCKY", CiFecha = DateTime.Today, CiHora = "11:30", CiEstadoCita = "C", CiTelefono = "0987654321", CiEmail = "mfsalazar@corporacion.ec", CiObservacion = "Evaluación prequirúrgica síndrome braquicefálico", CiUsuario = 3, NombreMedico = "Dr. Sebastián Cordero", Especialidad = "Cirugía y Tejidos Blandos", CiTipoConsulta = 3, CiTipo = "M" }
     };
 
-    public AdmisionFacturacionService(ISqlDataService db, IBusinessCentralService bcService, ILogger<AdmisionFacturacionService> logger)
+    public AdmisionFacturacionService(ISqlDataService db, ILogger<AdmisionFacturacionService> logger)
     {
         _db = db;
-        _bcService = bcService;
         _logger = logger;
     }
 
@@ -1042,7 +1040,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     }
 
     // =========================================================================
-    // 4. FACTURACIÓN CONSOLIDADA / PROFORMAS BUSINESS CENTRAL
+    // 4. FACTURACIÓN CONSOLIDADA / PROFORMAS
     // =========================================================================
 
     public async Task<List<OrdenProformaResumenDto>> BuscarOrdenesParaProformaAsync(DateTime desde, DateTime hasta, string filtro = "")
@@ -1125,10 +1123,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         return Task.FromResult(true);
     }
 
-    public async Task<(bool Exito, string NumeroProformaBc, string Mensaje)> EmitirProformaBusinessCentralAsync(
+    public async Task<(bool Exito, string NumeroProforma, string Mensaje)> EmitirProformaAsync(
         int idOrden, List<ItemFacturableProformaDto> itemsSeleccionados, int idUsuario)
     {
-        string numeroGenerado = $"PROF-BC-{DateTime.Now:yyyyMMdd}-{idOrden}";
+        string numeroGenerado = $"PROF-{DateTime.Now:yyyyMMdd}-{idOrden}";
 
         try
         {
@@ -1141,7 +1139,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Modo Demo al actualizar ordenaten_factura en EmitirProformaBusinessCentralAsync");
+            _logger.LogWarning(ex, "Modo demostrativo al actualizar la proforma de la orden");
         }
 
         var ord = _ordenesDemo.FirstOrDefault(o => o.IdOrden == idOrden);
@@ -1152,7 +1150,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
 
         decimal total = itemsSeleccionados.Where(i => i.Seleccionado).Sum(i => i.Subtotal);
-        return (true, numeroGenerado, $"Proforma consolidada {numeroGenerado} sincronizada con Microsoft Dynamics 365 Business Central por ${total:F2}.");
+        return (true, numeroGenerado, $"Proforma consolidada {numeroGenerado} emitida por ${total:F2}.");
     }
 
     // =========================================================================
@@ -1228,7 +1226,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
         return new List<BitacoraAuditoriaDto>
         {
-            new() { VitId = 9804, VitDetalle = "Emisión de Proforma Consolidada Business Central #PROF-BC-008941 (Orden #24004)", UserLogin = "gvintimilla", VitFechaMod = DateTime.Now.AddMinutes(-15), Ip = "10.10.24.18", Hostname = "HDEV-CAJA-01" },
+            new() { VitId = 9804, VitDetalle = "Emisión de Proforma Consolidada #PROF-008941 (Orden #24004)", UserLogin = "gvintimilla", VitFechaMod = DateTime.Now.AddMinutes(-15), Ip = "10.10.24.18", Hostname = "HDEV-CAJA-01" },
             new() { VitId = 9803, VitDetalle = "Registro de Aplicación Kardex Hora 08:00 - Omeprazol IV 40mg (NHCL #5001 - MAX)", UserLogin = "vandrade", VitFechaMod = DateTime.Now.AddMinutes(-42), Ip = "10.10.24.35", Hostname = "HDEV-UCI-02" },
             new() { VitId = 9802, VitDetalle = "Cierre de Protocolo Quirúrgico e ingreso a Sala de Recuperación Aldrete (NHCL #5003 - ROCKY)", UserLogin = "scordero", VitFechaMod = DateTime.Now.AddHours(-2), Ip = "10.10.24.50", Hostname = "HDEV-QUIR-01" },
             new() { VitId = 9801, VitDetalle = "Admisión de Paciente Fauna Silvestre TUERI #9001 (Amazona farinosa)", UserLogin = "cpaez", VitFechaMod = DateTime.Now.AddHours(-4), Ip = "10.10.24.90", Hostname = "TUERI-ADM-01" }

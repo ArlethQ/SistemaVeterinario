@@ -38,15 +38,15 @@ public interface IHospitalizacionService
 public class HospitalizacionService : IHospitalizacionService
 {
     private readonly ISqlDataService _db;
-    private readonly IBusinessCentralService _bcService;
+    private readonly IInventarioService _inventarioService;
 
     private static List<CondicionHospitalDto>? _cacheCondiciones;
     private static List<RitmoHorarioDto>? _cacheRitmos;
 
-    public HospitalizacionService(ISqlDataService db, IBusinessCentralService bcService)
+    public HospitalizacionService(ISqlDataService db, IInventarioService inventarioService)
     {
         _db = db;
-        _bcService = bcService;
+        _inventarioService = inventarioService;
     }
 
     public async Task<List<CondicionHospitalDto>> ObtenerCondicionesAsync()
@@ -850,7 +850,7 @@ public class HospitalizacionService : IHospitalizacionService
                 CodigoStr = input.CodigoProducto
             });
 
-        await _bcService.GuardarReservaStockAsync(
+        await _inventarioService.GuardarReservaStockAsync(
             input.CodigoProducto, idUsuario, input.Cantidad, idLocalidad, input.Bodega,
             input.OrdenId, input.Nhcl, idInserted, "MON", null, 1);
 
@@ -860,7 +860,7 @@ public class HospitalizacionService : IHospitalizacionService
     public async Task EliminarMedicamentoMonitoreoAsync(int idRegistro, string codigoProd, int idOrden)
     {
         await _db.ExecuteAsync("DELETE FROM hvt_cabMonitoreoMedBC WHERE id = @Id", new { Id = idRegistro });
-        await _bcService.EliminarReservaStockAsync(codigoProd, idOrden, idRegistro, "MON");
+        await _inventarioService.EliminarReservaStockAsync(codigoProd, idOrden, idRegistro, "MON");
     }
 
     // ========================================================================

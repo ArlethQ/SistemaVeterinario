@@ -7,22 +7,22 @@
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
 
-<PageTitle>e-ForVets — Proformas Business Central, Usuarios y Auditoría</PageTitle>
+<PageTitle>e-ForVets — Proformas, Usuarios y Auditoría</PageTitle>
 
 <div class="container-fluid py-3">
     <!-- Encabezado -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded-3 shadow-sm bg-white border-start border-4 border-warning">
         <div>
             <h4 class="mb-0 fw-bold text-dark">
-                <i class="bi bi-receipt-cutoff me-2 text-warning"></i>Pre-Facturación ERP Business Central, Usuarios y Auditoría
+                <i class="bi bi-receipt-cutoff me-2 text-warning"></i>Pre-Facturación, Usuarios y Auditoría
             </h4>
             <small class="text-muted">
-                Consolidación de cargos hospitalarios, liquidación de proformas Business Central, gestión de usuarios y auditoría.
+                Consolidación de cargos hospitalarios, liquidación de proformas, gestión de usuarios y auditoría.
             </small>
         </div>
         <div class="btn-group btn-group-sm">
             <button class="btn @(_pestanaActiva == "PROFORMAS" ? "btn-dark" : "btn-outline-dark")" @onclick='() => _pestanaActiva = "PROFORMAS"'>
-                <i class="bi bi-cash-coin me-1"></i>Proformas Business Central
+                <i class="bi bi-cash-coin me-1"></i>Proformas
             </button>
             <button class="btn @(_pestanaActiva == "USUARIOS" ? "btn-dark" : "btn-outline-dark")" @onclick='() => _pestanaActiva = "USUARIOS"'>
                 <i class="bi bi-person-gear me-1"></i>Usuarios y Especialistas
@@ -45,7 +45,7 @@
     {
         <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
             <div class="spinner-border spinner-border-sm" role="status"></div>
-            <span class="fw-semibold small">Cargando proformas Business Central, usuarios y bitácora...</span>
+            <span class="fw-semibold small">Cargando proformas, usuarios y bitácora...</span>
         </div>
     }
 
@@ -76,7 +76,7 @@
                                     <div class="d-flex justify-content-between align-items-center">
                                         <strong>Orden #@op.IdOrden — @op.MascotaNombre</strong>
                                         <span class="badge @(op.FacturadoBc == "S" ? "bg-success" : "bg-warning text-dark")">
-                                            @(op.FacturadoBc == "S" ? op.NumeroFacturaBc : "Pendiente BC")
+                                            @(op.FacturadoBc == "S" ? op.NumeroFacturaBc : "Pendiente")
                                         </span>
                                     </div>
                                     <div class="small @(activa ? "text-light" : "text-muted")">
@@ -136,10 +136,10 @@
                                     <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF Proforma
                                 </button>
                                 <button class="btn btn-outline-success btn-sm" @onclick="ExportarProformaExcelAsync">
-                                    <i class="bi bi-file-earmark-excel-fill me-1"></i>Excel BC
+                                    <i class="bi bi-file-earmark-excel-fill me-1"></i>Excel
                                 </button>
-                                <button class="btn btn-primary btn-sm fw-bold" @onclick="EmitirProformaBcAsync">
-                                    <i class="bi bi-cloud-upload-fill me-1"></i>Sincronizar y Emitir en Business Central
+                                <button class="btn btn-primary btn-sm fw-bold" @onclick="EmitirProformaAsync">
+                                    <i class="bi bi-check-circle-fill me-1"></i>Emitir proforma
                                 </button>
                             </div>
                         </div>
@@ -157,7 +157,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-2">
-                                    <label class="form-label small fw-bold mb-0">Código BC</label>
+                                    <label class="form-label small fw-bold mb-0">Código</label>
                                     <input type="text" class="form-control form-control-sm" placeholder="SER-001" @bind="_nuevoCargo.CodigoItemBc" />
                                 </div>
                                 <div class="col-md-4">
@@ -385,13 +385,13 @@
         _nuevoCargo = new ItemFacturableProformaDto { OrigenModulo = "HOSPITALIZACION", CodigoItemBc = "SER-HOSP-EXTRA", Cantidad = 1, PrecioUnitario = 15.00m };
     }
 
-    private async Task EmitirProformaBcAsync()
+    private async Task EmitirProformaAsync()
     {
         if (_proformaActual == null) return;
         int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
-        var res = await AdmisionService.EmitirProformaBusinessCentralAsync(_proformaActual.IdOrden, _proformaActual.Items, idUser);
+        var res = await AdmisionService.EmitirProformaAsync(_proformaActual.IdOrden, _proformaActual.Items, idUser);
         _proformaActual.FacturadoBc = "S";
-        _proformaActual.NumeroFacturaBc = res.NumeroProformaBc;
+        _proformaActual.NumeroFacturaBc = res.NumeroProforma;
         _mensajeNotificacion = res.Mensaje;
     }
 
@@ -400,7 +400,7 @@
         if (_proformaActual == null) return;
         var bytes = ReportService.GenerarProformaConsolidadaPdf(_proformaActual);
         var base64 = Convert.ToBase64String(bytes);
-        await JS.InvokeVoidAsync("eval", $"{{ const a = document.createElement('a'); a.href = 'data:application/pdf;base64,{base64}'; a.download = 'Proforma_BC_{_proformaActual.IdOrden}.pdf'; a.click(); }}");
+        await JS.InvokeVoidAsync("eval", $"{{ const a = document.createElement('a'); a.href = 'data:application/pdf;base64,{base64}'; a.download = 'Proforma_{_proformaActual.IdOrden}.pdf'; a.click(); }}");
     }
 
     private async Task ExportarProformaExcelAsync()
@@ -408,6 +408,6 @@
         if (_proformaActual == null) return;
         var bytes = ReportService.GenerarProformaConsolidadaExcel(_proformaActual);
         var base64 = Convert.ToBase64String(bytes);
-        await JS.InvokeVoidAsync("eval", $"{{ const a = document.createElement('a'); a.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{base64}'; a.download = 'Proforma_BC_{_proformaActual.IdOrden}.xlsx'; a.click(); }}");
+        await JS.InvokeVoidAsync("eval", $"{{ const a = document.createElement('a'); a.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{base64}'; a.download = 'Proforma_{_proformaActual.IdOrden}.xlsx'; a.click(); }}");
     }
 }
