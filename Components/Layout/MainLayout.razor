@@ -3,32 +3,21 @@
 @inject NavigationManager Nav
 
 <div class="page">
-    <div class="sidebar">
+    <aside class="sidebar">
+        <a class="sidebar-brand" href="/dashboard"><span class="brand-mark">eF</span><span><strong>e-ForVets</strong><small>Gestión veterinaria</small></span></a>
+        <div class="clinic-pill"><span>●</span><div><small>Sucursal activa</small><strong>@Session.Apostrofe</strong></div></div>
         <NavMenu />
-    </div>
-
-    <main>
-        <div class="top-row px-4 d-flex justify-content-between align-items-center bg-light border-bottom shadow-sm">
-            <div class="d-flex align-items-center gap-3">
-                <span class="badge bg-primary fs-6">HOSVET USFQ</span>
-                <span class="text-secondary fw-semibold small">@Session.LocalidadDescripcion</span>
-            </div>
-            <div class="d-flex align-items-center gap-3">
-                <span class="small text-dark">
-                    <strong>Usuario:</strong> @Session.NombreUsuario (@Session.Iniciales)
-                </span>
-                <a href="/login" class="btn btn-sm btn-outline-danger">Cambiar Usuario / Salir</a>
-            </div>
-        </div>
-
-        <article class="content px-4 py-3">
-            @Body
-        </article>
+        <div class="sidebar-footer"><span>🐾</span><div><strong>Cuidado conectado</strong><small>Versión clínica</small></div></div>
+    </aside>
+    <main class="workspace">
+        <header class="workspace-header">
+            <div class="workspace-brand"><span class="mobile-mark">H</span><div><small>Hospital Veterinario</small><strong>@Session.LocalidadDescripcion</strong></div></div>
+            <div class="session-actions"><div class="user-avatar">@Session.Iniciales</div><div class="user-copy"><strong>@Session.NombreUsuario</strong><small>@Session.LoginUser</small></div><button type="button" class="logout-button" @onclick="CerrarSesion">Salir</button></div>
+        </header>
+        <article class="workspace-content">@Body</article>
     </main>
 </div>
 
-<div id="blazor-error-ui" data-nosnippet>
-    Ha ocurrido un error inesperado en la aplicación.
-    <a href="." class="reload">Recargar</a>
-    <span class="dismiss">🗙</span>
-</div>
+<div id="blazor-error-ui" data-nosnippet>Ha ocurrido un error inesperado. <a href="." class="reload">Recargar</a><span class="dismiss">🗙</span></div>
+
+@code { private void CerrarSesion() { Session.Logout(); Nav.NavigateTo("/login"); } }

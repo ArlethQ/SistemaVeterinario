@@ -1,0 +1,18 @@
+@page "/registro"
+@layout Layout.PublicLayout
+<PageTitle>e-ForVets - Registro</PageTitle>
+<div class="account-page">
+    <a class="account-brand" href="/"><span>eF</span><strong>e-ForVets</strong></a>
+    <section class="account-card">
+        <div class="account-heading"><span>Nuevo acceso</span><h1>Crear una cuenta</h1><p>Completa tus datos para solicitar acceso al sistema veterinario.</p></div>
+        @if (_enviado) { <div class="success-message"><strong>Solicitud recibida</strong><span>El administrador de e-ForVets revisará tus datos y habilitará tu acceso.</span></div> }
+        else {
+            <form @onsubmit="Enviar" @onsubmit:preventDefault>
+                <div class="form-grid"><label>Nombre completo<input required @bind="_nombre" /></label><label>Correo electrónico<input required type="email" @bind="_correo" /></label><label>Teléfono<input required type="tel" @bind="_telefono" /></label><label>Rol solicitado<select @bind="_rol"><option>Médico veterinario</option><option>Enfermería</option><option>Recepción</option><option>Administración</option></select></label></div>
+                <label class="terms"><input type="checkbox" required /> Acepto el tratamiento de mis datos para gestionar esta solicitud.</label><button type="submit">Solicitar registro</button>
+            </form>
+        }
+        <p class="account-footer">¿Ya tienes una cuenta? <a href="/login">Inicia sesión</a></p>
+    </section>
+</div>
+@code { private string _nombre=string.Empty,_correo=string.Empty,_telefono=string.Empty,_rol="Médico veterinario"; private bool _enviado; private void Enviar()=>_enviado=true; }

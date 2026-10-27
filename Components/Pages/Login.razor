@@ -1,53 +1,31 @@
 @page "/login"
+@layout Layout.PublicLayout
 @inject IAuthService AuthService
 @inject NavigationManager Nav
 
-<PageTitle>HOSVET - Iniciar Sesión</PageTitle>
+<PageTitle>e-ForVets - Iniciar sesión</PageTitle>
 
-<div class="row justify-content-center mt-5">
-    <div class="col-md-5 col-lg-4">
-        <div class="card shadow border-0">
-            <div class="card-header bg-primary text-white text-center py-3">
-                <h5 class="mb-0 fw-bold">HOSPITAL VETERINARIO USFQ</h5>
-                <small>Sistema de Gestión Clínica y Kardex</small>
-            </div>
-            <div class="card-body p-4">
-                @if (!string.IsNullOrWhiteSpace(_mensajeError))
-                {
-                    <div class="alert alert-danger py-2 small">@_mensajeError</div>
-                }
-
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Usuario:</label>
-                    <input class="form-control" @bind="_username" placeholder="Ingrese su usuario" />
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Contraseña:</label>
-                    <input type="password" class="form-control" @bind="_password" placeholder="••••••••" />
-                </div>
-
-                <div class="mb-4">
-                    <label class="form-label fw-semibold">Localidad / Sucursal:</label>
-                    <select class="form-select" @bind="_localidad">
-                        <option value="1">HDEV - Hospital de Especialidades Veterinarias (Cumbayá)</option>
-                        <option value="2">EQ - Clínica Equina / Fauna TUERI</option>
-                    </select>
-                </div>
-
-                <button class="btn btn-primary w-100 fw-semibold" @onclick="IngresarAsync" disabled="@_cargando">
-                    @if (_cargando)
-                    {
-                        <span>Validando credenciales...</span>
-                    }
-                    else
-                    {
-                        <span>Ingresar al Sistema</span>
-                    }
-                </button>
-            </div>
+<div class="auth-page">
+    <a class="back-link" href="/">← Volver al inicio</a>
+    <section class="auth-card">
+        <div class="auth-welcome">
+            <a class="auth-brand" href="/"><span>eF</span><div><strong>e-ForVets</strong><small>Hospital Veterinario</small></div></a>
+            <div><span class="auth-kicker">Gestión clínica integral</span><h1>Cuidamos mejor cuando trabajamos conectados.</h1><p>Accede a historias clínicas, hospitalización, quirófano, diagnóstico y seguimiento desde un solo lugar.</p></div>
+            <div class="welcome-detail"><span>🐾</span><div><strong>Atención coordinada</strong><small>Información segura para decisiones oportunas.</small></div></div>
         </div>
-    </div>
+        <div class="auth-form-panel">
+            <div class="form-heading"><span>Bienvenido de nuevo</span><h2>Iniciar sesión</h2><p>Ingresa tus credenciales para continuar.</p></div>
+            @if (!string.IsNullOrWhiteSpace(_mensajeError)) { <div class="auth-alert">@_mensajeError</div> }
+            <form @onsubmit="IngresarAsync" @onsubmit:preventDefault>
+                <label>Usuario o correo electrónico<input autocomplete="username" @bind="_username" placeholder="Ingresa tu usuario" /></label>
+                <label>Contraseña<input type="password" autocomplete="current-password" @bind="_password" placeholder="Ingresa tu contraseña" /></label>
+                <div class="form-options"><label class="remember"><input type="checkbox" /> Recordarme</label><a href="/recuperar-contrasena">¿Olvidaste tu contraseña?</a></div>
+                <label>Localidad / Sucursal<select @bind="_localidad"><option value="1">Hospital de Especialidades Veterinarias</option><option value="2">Clínica Equina / Fauna TUERI</option></select></label>
+                <button type="submit" disabled="@_cargando">@(_cargando ? "Validando credenciales..." : "Ingresar")</button>
+            </form>
+            <p class="register-prompt">¿Aún no tienes una cuenta? <a href="/registro">Regístrate</a></p>
+        </div>
+    </section>
 </div>
 
 @code {
@@ -56,28 +34,10 @@
     private int _localidad = 1;
     private string? _mensajeError;
     private bool _cargando;
-
-    private async Task IngresarAsync()
-    {
-        _mensajeError = null;
-        _cargando = true;
-        try
-        {
-            var resultado = await AuthService.LoginAsync(_username, _password, _localidad);
-            if (!resultado.Exito)
-            {
-                _mensajeError = resultado.Mensaje;
-                return;
-            }
-            Nav.NavigateTo("/");
-        }
-        catch (Exception ex)
-        {
-            _mensajeError = $"Error al conectar con el servidor: {ex.Message}";
-        }
-        finally
-        {
-            _cargando = false;
-        }
+    private async Task IngresarAsync() {
+        _mensajeError = null; _cargando = true;
+        try { var resultado = await AuthService.LoginAsync(_username, _password, _localidad); if (!resultado.Exito) { _mensajeError = resultado.Mensaje; return; } Nav.NavigateTo("/dashboard"); }
+        catch (Exception ex) { _mensajeError = $"Error al conectar con el servidor: {ex.Message}"; }
+        finally { _cargando = false; }
     }
 }

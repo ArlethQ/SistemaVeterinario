@@ -7,6 +7,7 @@
     <base href="/" />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["account-pages.css"]" />
     <link rel="stylesheet" href="@Assets["HosvetKardex.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
@@ -16,48 +17,7 @@
 <body>
     <Routes @rendermode="new InteractiveServerRenderMode(prerender: false)" />
     <script src="_framework/blazor.web.js"></script>
-    <script>
-        window.hosvetDownloadFile = (fileName, contentType, base64Data) => {
-            const link = document.createElement('a');
-            link.download = fileName;
-            link.href = `data:${contentType};base64,${base64Data}`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        };
-        window.descargarArchivoBase64 = window.hosvetDownloadFile;
-
-        window.hosvetPrintElement = (elementId) => {
-            const el = document.getElementById(elementId);
-            if (!el) {
-                window.print();
-                return;
-            }
-            const printWin = window.open('', '_blank', 'width=1100,height=800');
-            printWin.document.write(`
-                <html>
-                <head>
-                    <title>Impresión Kardex HOSVET</title>
-                    <link rel="stylesheet" href="/lib/bootstrap/dist/css/bootstrap.min.css" />
-                    <style>
-                        body { font-family: Arial, sans-serif; font-size: 11px; margin: 15px; }
-                        table { width: 100%; border-collapse: collapse; }
-                        th, td { border: 1px solid #999; padding: 3px 5px; }
-                        .turno-noche { color: #dc2626 !important; font-weight: bold; }
-                        .turno-dia { color: #1d4ed8 !important; font-weight: bold; }
-                    </style>
-                </head>
-                <body>${el.innerHTML}</body>
-                </html>
-            `);
-            printWin.document.close();
-            printWin.focus();
-            setTimeout(() => {
-                printWin.print();
-                printWin.close();
-            }, 350);
-        };
-    </script>
+    <script src="@Assets["js/hosvet.js"]"></script>
 </body>
 
 </html>
