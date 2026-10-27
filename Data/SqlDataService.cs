@@ -33,7 +33,7 @@ public class SqlDataService : ISqlDataService
 
         var builder = new SqlConnectionStringBuilder(rawConn)
         {
-            ConnectTimeout = 2
+            ConnectTimeout = 15
         };
         _connectionString = builder.ConnectionString;
         _logger = logger;
@@ -57,7 +57,7 @@ public class SqlDataService : ISqlDataService
         catch
         {
             await connection.DisposeAsync();
-            _circuitOpenUntil = DateTime.UtcNow.AddSeconds(60);
+            _circuitOpenUntil = DateTime.UtcNow.AddSeconds(5);
             throw;
         }
     }
