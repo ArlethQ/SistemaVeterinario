@@ -6,25 +6,25 @@
 @inject SessionStateService SessionState
 @inject NavigationManager NavManager
 
-<PageTitle>e-ForVets — Clientes y Pacientes (HDEV / TUERI)</PageTitle>
+<PageTitle>e-ForVets — Clientes y Pacientes</PageTitle>
 
 <div class="container-fluid py-3">
     <!-- Encabezado -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded-3 shadow-sm bg-white border-start border-4 border-primary">
         <div>
             <h4 class="mb-0 fw-bold text-primary">
-                <i class="bi bi-people-fill me-2"></i>Registro Maestro de Propietarios y Pacientes (HDEV / TUERI)
+                <i class="bi bi-people-fill me-2"></i>Propietarios y Pacientes
             </h4>
             <small class="text-muted">
-                Gestión integral de clientes, mascotas domésticas (HDEV) y fauna silvestre (TUERI)
+                Gestión integral de propietarios, mascotas domésticas y fauna silvestre
             </small>
         </div>
         <div class="d-flex gap-2">
             <button class="btn btn-outline-primary btn-sm" @onclick="NuevoCliente">
-                <i class="bi bi-person-plus-fill me-1"></i>Nuevo Propietario
+                <i class="bi bi-person-plus-fill me-1"></i>+ Nuevo propietario
             </button>
-            <button class="btn btn-primary btn-sm" @onclick="() => NuevaMascota( _clienteSeleccionado?.PaCodigo ?? 0 )">
-                <i class="bi bi-heart-pulse-fill me-1"></i>Nuevo Paciente
+            <button class="btn btn-primary btn-sm" @onclick="NuevoPacienteDesdeEncabezadoAsync">
+                <i class="bi bi-heart-pulse-fill me-1"></i>+ Nuevo paciente
             </button>
             <a href="/admision/ordenes" class="btn btn-success btn-sm">
                 <i class="bi bi-clipboard2-plus me-1"></i>Ir a Recepción / Órdenes
@@ -48,422 +48,170 @@
         </div>
     }
 
-    <div class="row g-3">
-        <!-- Columna Izquierda: Buscador de Propietarios y Mascotas -->
-        <div class="col-lg-5">
-            <div class="card shadow-sm border-0 mb-3">
-                <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                    <span class="fw-bold text-dark"><i class="bi bi-search me-1"></i>Directorio de Propietarios</span>
-                    <span class="badge bg-primary">@_clientes.Count</span>
-                </div>
-                <div class="card-body">
-                    <div class="input-group input-group-sm mb-2">
-                        <span class="input-group-text bg-white"><i class="bi bi-person-vcard"></i></span>
-                        <input type="text" class="form-control" placeholder="Buscar por apellidos, nombres o Cédula/RUC..."
-                               @bind="_filtroClientes" @bind:event="oninput" @onkeyup="BuscarClientesAsync" />
-                        <button class="btn btn-primary" @onclick="BuscarClientesAsync">Buscar</button>
-                    </div>
-
-                    <div class="table-responsive" style="max-height: 270px; overflow-y: auto;">
-                        <table class="table table-sm table-hover align-middle mb-0">
-                            <thead class="table-light sticky-top">
-                                <tr>
-                                    <th>Cód.</th>
-                                    <th>Propietario</th>
-                                    <th>Cédula / RUC</th>
-                                    <th>Móvil</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var cli in _clientes)
-                                {
-                                    bool activo = _clienteSeleccionado?.PaCodigo == cli.PaCodigo;
-                                    <tr class="@(activo ? "table-primary fw-semibold" : "")" style="cursor:pointer" @onclick="() => SeleccionarClienteAsync(cli)">
-                                        <td>#@cli.PaCodigo</td>
-                                        <td>@cli.NombreCompleto</td>
-                                        <td><span class="badge bg-secondary">@cli.PaCedula</span></td>
-                                        <td>@cli.PaMovil</td>
-                                        <td class="text-end">
-                                            <button class="btn btn-sm btn-outline-primary py-0 px-2" title="Editar Cliente" @onclick:stopPropagation="true" @onclick="() => SeleccionarClienteAsync(cli)">
-                                                <i class="bi bi-pencil-square"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+    <!-- Barra de búsqueda unificada -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2">
+            <div class="d-flex gap-2">
+                <input type="text" class="form-control"
+                       placeholder="Buscar por nombre del animal, dueño o Cédula/RUC..."
+                       @bind="_filtroClientes" @bind:event="oninput" @onkeydown="OnBuscarKeyDown" />
+                <button class="btn btn-primary px-4" @onclick="BuscarClientesAsync">Buscar</button>
+                <button class="btn btn-secondary px-3 text-nowrap" @onclick="VerTodosAsync">Ver todos</button>
             </div>
-
-            <!-- Pacientes / Mascotas asociados -->
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                    <span class="fw-bold text-dark">
-                        <i class="bi bi-shield-plus me-1"></i>Pacientes Registrados
-                    </span>
-                    <div class="btn-group btn-group-sm">
-                        <button class="btn @(_filtroOrigen == "" ? "btn-dark" : "btn-outline-dark")" @onclick='() => FiltrarOrigenAsync("")'>Todos</button>
-                        <button class="btn @(_filtroOrigen == "M" ? "btn-primary" : "btn-outline-primary")" @onclick='() => FiltrarOrigenAsync("M")'>Domésticos</button>
-                        <button class="btn @(_filtroOrigen == "T" ? "btn-success" : "btn-outline-success")" @onclick='() => FiltrarOrigenAsync("T")'>Silvestres</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="input-group input-group-sm mb-2">
-                        <input type="text" class="form-control" placeholder="Filtrar por NHCL, nombre de mascota o propietario..."
-                               @bind="_filtroMascotas" @bind:event="oninput" @onkeyup="BuscarMascotasGlobalAsync" />
-                        <button class="btn btn-outline-secondary" @onclick="BuscarMascotasGlobalAsync">Filtrar</button>
-                    </div>
-
-                    <div class="table-responsive" style="max-height: 290px; overflow-y: auto;">
-                        <table class="table table-sm table-hover align-middle mb-0">
-                            <thead class="table-light sticky-top">
-                                <tr>
-                                    <th>NHCL</th>
-                                    <th>Paciente</th>
-                                    <th>Origen</th>
-                                    <th>Especie / Raza</th>
-                                    <th>Triaje</th>
-                                    <th>Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var mas in _mascotas)
-                                {
-                                    <tr class="@(_mascotaEditando.MasNhcl == mas.MasNhcl ? "table-info" : "")" style="cursor:pointer" @onclick="() => SeleccionarMascota(mas)">
-                                        <td class="fw-bold text-primary">#@mas.MasNhcl</td>
-                                        <td class="fw-semibold">@mas.MasNombre</td>
-                                        <td>
-                                            @if (mas.MasOrigen == "T")
-                                            {
-                                                <span class="badge bg-success">Silvestre</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-primary">Doméstico</span>
-                                            }
-                                        </td>
-                                        <td><small>@mas.EspecieDescripcion - @mas.RazaDescripcion</small></td>
-                                        <td>
-                                            <span class="badge rounded-pill" style="background-color:@ObtenerColorHexTriaje(mas.MasColorTriaje); color:#fff;">
-                                                @ObtenerTextoTriaje(mas.MasColorTriaje)
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-xs btn-outline-primary py-0 px-2 me-1" title="Ver historial clínico"
-                                                    @onclick:stopPropagation="true"
-                                                    @onclick='() => NavManager.NavigateTo($"/consulta/historial/{mas.MasNhcl}")'>
-                                                <i class="bi bi-clock-history"></i> Historial
-                                            </button>
-                                            <button class="btn btn-xs btn-success py-0 px-2" title="Crear Orden de Atención"
-                                                    @onclick:stopPropagation="true"
-                                                    @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>
-                                                <i class="bi bi-box-arrow-in-right"></i> Orden
-                                            </button>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Columna Derecha: Formularios de Edición de Cliente y Mascota (HDEV / TUERI) -->
-        <div class="col-lg-7">
-            <!-- Pestañas -->
-            <ul class="nav nav-tabs mb-3">
-                <li class="nav-item">
-                    <button class="nav-link @(_tabActiva == "CLIENTE" ? "active fw-bold" : "")" @onclick='() => _tabActiva = "CLIENTE"'>
-                        <i class="bi bi-person-lines-fill me-1"></i>1. Ficha del Propietario
-                    </button>
-                </li>
-                <li class="nav-item">
-                    <button class="nav-link @(_tabActiva == "MASCOTA" ? "active fw-bold" : "")" @onclick='() => _tabActiva = "MASCOTA"'>
-                        <i class="bi bi-heart-pulse me-1"></i>2. Ficha Clínica del Paciente (Domésticos / Silvestres)
-                    </button>
-                </li>
-            </ul>
-
-            @if (_tabActiva == "CLIENTE")
-            {
-                <div class="card shadow-sm border-0">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                        <span>
-                            <i class="bi bi-person-badge me-1"></i>
-                            @(_clienteEditando.PaCodigo == 0 ? "Nuevo Registro de Propietario" : $"Editando Propietario #{_clienteEditando.PaCodigo} — {_clienteEditando.NombreCompleto}")
-                        </span>
-                    </div>
-                    <div class="card-body">
-                        <EditForm Model="_clienteEditando" OnValidSubmit="GuardarClienteAsync">
-                            <DataAnnotationsValidator />
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Tipo Documento SRI</label>
-                                    <select class="form-select form-select-sm" value="@_clienteEditando.PaDocumento" @onchange="OnCambiarTipoDocumento">
-                                        <option value="CEDULA">CÉDULA (máx. 10 dígitos)</option>
-                                        <option value="RUC">RUC (máx. 13 dígitos)</option>
-                                        <option value="PASAPORTE">PASAPORTE (6-15 caracteres)</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Número de Documento *</label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text"
-                                               class="form-control form-control-sm @(_errorDocumento != null ? (_esDocValido ? "is-valid border-success" : "is-invalid border-danger") : "")"
-                                               value="@_clienteEditando.PaCedula"
-                                               inputmode="@InputModeDocumento"
-                                               data-doc-type="@_clienteEditando.PaDocumento"
-                                               data-numeric="@EsDocumentoNumerico"
-                                               onkeypress="if (this.dataset.docType !== 'PASAPORTE' && (event.which < 48 || event.which > 57)) return false;"
-                                               maxlength="@ObtenerMaximoDocumento()"
-                                               placeholder="@ObtenerPlaceholderDocumento()"
-                                               @oninput="OnInputDocumento" />
-                                        @if (_esDocValido)
-                                        {
-                                            <span class="input-group-text bg-success text-white py-0 px-2" title="Documento válido">
-                                                <i class="bi bi-check-circle-fill"></i>
-                                            </span>
-                                        }
-                                    </div>
-                                    @if (!string.IsNullOrEmpty(_errorDocumento))
-                                    {
-                                        <div class="@(_esDocValido ? "text-success" : "text-danger") small mt-1 fw-semibold">
-                                            <i class="bi @(_esDocValido ? "bi-check-circle-fill" : "bi-exclamation-triangle-fill") me-1"></i>@_errorDocumento
-                                        </div>
-                                    }
-                                </div>
-
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Apellidos *</label>
-                                    <input type="text"
-                                           class="form-control form-control-sm @(_errorApellidos != null ? "is-invalid border-danger" : (!string.IsNullOrWhiteSpace(_clienteEditando.PaApellidos) ? "is-valid border-success" : ""))"
-                                           value="@_clienteEditando.PaApellidos"
-                                           placeholder="Ej: Pérez-Gómez, De la Cruz"
-                                           onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'-]/.test(event.key);"
-                                           @oninput="OnInputApellidos"
-                                           @onblur="OnBlurApellidos" />
-                                    @if (!string.IsNullOrEmpty(_errorApellidos))
-                                    {
-                                        <div class="text-danger small mt-1 fw-semibold">
-                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorApellidos
-                                        </div>
-                                    }
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Nombres *</label>
-                                    <input type="text"
-                                           class="form-control form-control-sm @(_errorNombres != null ? "is-invalid border-danger" : (!string.IsNullOrWhiteSpace(_clienteEditando.PaNombres) ? "is-valid border-success" : ""))"
-                                           value="@_clienteEditando.PaNombres"
-                                           placeholder="Ej: Juan Carlos, D'Angelo"
-                                           onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'-]/.test(event.key);"
-                                           @oninput="OnInputNombres"
-                                           @onblur="OnBlurNombres" />
-                                    @if (!string.IsNullOrEmpty(_errorNombres))
-                                    {
-                                        <div class="text-danger small mt-1 fw-semibold">
-                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorNombres
-                                        </div>
-                                    }
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Teléfono Móvil *</label>
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text bg-light text-muted fw-bold border-end-0">+593</span>
-                                        <input type="text"
-                                               class="form-control form-control-sm @(_errorMovil != null ? "is-invalid border-danger" : (_esMovilValido ? "is-valid border-success" : ""))"
-                                               value="@_clienteEditando.PaMovil"
-                                               maxlength="10"
-                                               inputmode="numeric"
-                                               placeholder="09XXXXXXXX (10 dígitos)"
-                                               onkeypress="if (event.which < 48 || event.which > 57) return false;"
-                                               @oninput="OnInputMovil" />
-                                        @if (_esMovilValido)
-                                        {
-                                            <span class="input-group-text bg-success text-white py-0 px-2" title="Móvil válido">
-                                                <i class="bi bi-check-circle-fill"></i>
-                                            </span>
-                                        }
-                                    </div>
-                                    @if (!string.IsNullOrEmpty(_errorMovil))
-                                    {
-                                        <div class="text-danger small mt-1 fw-semibold">
-                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorMovil
-                                        </div>
-                                    }
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Teléfono Convencional <small class="text-muted fw-normal">(Opcional)</small></label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text"
-                                               class="form-control form-control-sm @(_errorTelefono != null ? "is-invalid border-danger" : (_esTelefonoValido ? "is-valid border-success" : ""))"
-                                               value="@_clienteEditando.PaTelefono"
-                                               maxlength="7"
-                                               inputmode="numeric"
-                                               placeholder="7 dígitos (no iniciar en 0)"
-                                               onkeypress="if (event.which < 48 || event.which > 57) return false;"
-                                               @oninput="OnInputTelefono" />
-                                        @if (_esTelefonoValido)
-                                        {
-                                            <span class="input-group-text bg-success text-white py-0 px-2" title="Teléfono válido">
-                                                <i class="bi bi-check-circle-fill"></i>
-                                            </span>
-                                        }
-                                    </div>
-                                    @if (!string.IsNullOrEmpty(_errorTelefono))
-                                    {
-                                        <div class="text-danger small mt-1 fw-semibold">
-                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorTelefono
-                                        </div>
-                                    }
-                                </div>
-                                <div class="col-md-12">
-                                    <label class="form-label small fw-bold">Correo Electrónico</label>
-                                    <input type="text" class="@ClaseEmail" value="@_clienteEditando.PaEmail" @oninput="OnInputEmailAsync" />
-                                    @if (!string.IsNullOrEmpty(_errorEmail))
-                                    {
-                                        <div class="text-danger small mt-1 fw-semibold">
-                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorEmail
-                                        </div>
-                                    }
-                                </div>
-
-                                <div class="col-md-12">
-                                    <label class="form-label small fw-bold">Dirección Domiciliaria *</label>
-                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaDireccion" />
-                                    <ValidationMessage For="() => _clienteEditando.PaDireccion" />
-                                </div>
-
-                                <div class="col-md-12">
-                                    <label class="form-label small fw-bold">Observaciones</label>
-                                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_clienteEditando.PaObservaciones" />
-                                </div>
-                            </div>
-
-                            <div class="d-flex justify-content-end gap-2 mt-3">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="NuevoCliente">Limpiar</button>
-                                <button type="submit" class="btn btn-primary btn-sm">
-                                    <i class="bi bi-save me-1"></i>Guardar Propietario
-                                </button>
-                            </div>
-                        </EditForm>
-                    </div>
-                </div>
-            }
-            else
-            {
-                <div class="card shadow-sm border-0">
-                    <div class="card-header @(_mascotaEditando.MasOrigen == "T" ? "bg-success" : "bg-info") text-white d-flex justify-content-between align-items-center">
-                        <span>
-                            <i class="bi bi-heart-pulse-fill me-1"></i>
-                            @(_mascotaEditando.MasNhcl == 0 ? "Nuevo Paciente" : $"Historia Clínica NHCL #{_mascotaEditando.MasNhcl} — {_mascotaEditando.MasNombre}")
-                        </span>
-                        <span class="badge bg-dark">
-                            @(_mascotaEditando.MasOrigen == "T" ? "FAUNA SILVESTRE" : "MASCOTA DOMÉSTICA")
-                        </span>
-                    </div>
-                    <div class="card-body">
-                        <EditForm Model="_mascotaEditando" OnValidSubmit="GuardarMascotaAsync">
-                            <DataAnnotationsValidator />
-                            <div class="row g-2">
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Origen Institucional</label>
-                                    <select class="form-select form-select-sm fw-bold" @bind="_mascotaEditando.MasOrigen">
-                                        <option value="M">Mascota Doméstica</option>
-                                        <option value="T">Fauna Silvestre</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Nombre del Paciente / Ejemplar *</label>
-                                    <InputText class="form-control form-control-sm text-uppercase fw-bold" @bind-Value="_mascotaEditando.MasNombre" />
-                                    <ValidationMessage For="() => _mascotaEditando.MasNombre" />
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Propietario Asociado (ID #@_mascotaEditando.MasIdCliente)</label>
-                                    <input type="text" class="form-control form-control-sm bg-light" readonly value="@(_clienteSeleccionado?.NombreCompleto ?? _mascotaEditando.ClienteNombre)" />
-                                </div>
-
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Especie</label>
-                                    <select class="form-select form-select-sm" value="@_mascotaEditando.MasEspecie" @onchange="CambiarEspecieAsync">
-                                        @foreach (var esp in _especies)
-                                        {
-                                            <option value="@esp.Id">@esp.Descripcion</option>
-                                        }
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Raza / Familia</label>
-                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasRaza">
-                                        @foreach (var raz in _razas)
-                                        {
-                                            <option value="@raz.Id">@raz.Descripcion</option>
-                                        }
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Sexo</label>
-                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasSexo">
-                                        @foreach (var s in _sexos)
-                                        {
-                                            <option value="@s.Id">@s.Descripcion</option>
-                                        }
-                                    </select>
-                                </div>
-
-                                <div class="col-md-3">
-                                    <label class="form-label small fw-bold">Esterilizado / Castrado</label>
-                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasCastrado">
-                                        <option value="NO">NO</option>
-                                        <option value="SI">SÍ</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold">Fecha de Nacimiento Aprox.</label>
-                                    <InputDate class="form-control form-control-sm" @bind-Value="_mascotaEditando.MasFechaNace" />
-                                </div>
-                                <div class="col-md-5">
-                                    <label class="form-label small fw-bold">Semáforo de Temperamento / Triaje</label>
-                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasColorTriaje">
-                                        <option value="green">🟢 Verde — Dócil / Manejo Estándar</option>
-                                        <option value="yellow">🟡 Amarillo — Nervioso / Precaución</option>
-                                        <option value="red">🔴 Rojo — Agresivo / Riesgo / Braquicéfalo</option>
-                                    </select>
-                                </div>
-
-                                <div class="col-md-12">
-                                    <label class="form-label small fw-bold">Antecedentes / Alergias / Observaciones del Paciente</label>
-                                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_mascotaEditando.MasObservacion" />
-                                </div>
-                            </div>
-
-                            <div class="d-flex justify-content-between align-items-center mt-3">
-                                <span class="small text-muted">Edad estimada: <strong>@_mascotaEditando.EdadCalculada</strong></span>
-                                <div class="d-flex gap-2">
-                                    @if (_mascotaEditando.MasNhcl > 0)
-                                    {
-                                        <a href="/admision/ordenes?nhcl=@_mascotaEditando.MasNhcl" class="btn btn-success btn-sm">
-                                            <i class="bi bi-clipboard2-plus me-1"></i>Generar Orden de Atención
-                                        </a>
-                                    }
-                                    <button type="submit" class="btn btn-primary btn-sm">
-                                        <i class="bi bi-save me-1"></i>Guardar Paciente
-                                    </button>
-                                </div>
-                            </div>
-                        </EditForm>
-                    </div>
-                </div>
-            }
         </div>
     </div>
+
+    <!-- Nuevo propietario (formulario desplegable) -->
+    @if (_editandoClienteId == 0)
+    {
+        <div class="card shadow-sm border-0 mb-3 inline-panel">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-person-badge me-1"></i>Nuevo propietario
+            </div>
+            <div class="card-body">
+                @FormularioCliente
+            </div>
+        </div>
+    }
+
+    <!-- Tarjetas de propietarios (acordeón) -->
+    @foreach (var cli in _clientes)
+    {
+        bool expandido = _clienteExpandido == cli.PaCodigo;
+        var pacientes = ObtenerPacientes(cli.PaCodigo);
+        <div class="card shadow-sm border-0 mb-2 owner-card @(expandido ? "owner-open" : "")">
+            <div class="owner-header d-flex align-items-center gap-3 p-3" @onclick="() => AlternarClienteAsync(cli)">
+                <div class="owner-avatar">@Iniciales(cli)</div>
+                <div class="flex-grow-1">
+                    <div class="fw-bold">@cli.NombreCompleto</div>
+                    <div class="small text-muted">
+                        @cli.PaMovil
+                        @if (!string.IsNullOrWhiteSpace(cli.PaEmail))
+                        {
+                            <span> · @cli.PaEmail</span>
+                        }
+                    </div>
+                </div>
+                <span class="count-pill">@TextoContador(pacientes)</span>
+                <button class="btn btn-sm btn-outline-primary text-nowrap" @onclick:stopPropagation="true" @onclick="() => EditarClienteAsync(cli)">
+                    <i class="bi bi-pencil-square me-1"></i>Editar dueño
+                </button>
+                <i class="bi @(expandido ? "bi-chevron-up" : "bi-chevron-down") text-muted"></i>
+            </div>
+
+            @if (expandido)
+            {
+                @if (_editandoClienteId == cli.PaCodigo)
+                {
+                    <div class="border-top bg-light p-3 inline-panel">
+                        <div class="fw-bold mb-2 text-primary">
+                            <i class="bi bi-person-badge me-1"></i>Editar dueño #@cli.PaCodigo
+                        </div>
+                        @FormularioCliente
+                    </div>
+                }
+
+                <div class="border-top">
+                    <table class="table table-sm align-middle mb-0 pet-table">
+                        <thead>
+                            <tr>
+                                <th class="ps-3">Animal</th>
+                                <th>Origen / Especie</th>
+                                <th>Sexo</th>
+                                <th>Edad</th>
+                                <th class="text-end pe-3">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var mas in pacientes)
+                            {
+                                <tr>
+                                    <td class="ps-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="pet-avatar">@InicialAnimal(mas)</div>
+                                            <div>
+                                                <div class="fw-bold">@mas.MasNombre</div>
+                                                <div class="small text-muted">@(string.IsNullOrWhiteSpace(mas.RazaDescripcion) ? mas.EspecieDescripcion : mas.RazaDescripcion)</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        @if (mas.MasOrigen == "T")
+                                        {
+                                            <span class="badge bg-success me-1">Silvestre</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-primary me-1">Doméstico</span>
+                                        }
+                                        <span>@mas.EspecieDescripcion</span>
+                                    </td>
+                                    <td><span class="badge @ClaseSexo(mas)">@TextoSexo(mas)</span></td>
+                                    <td>@mas.EdadCalculada</td>
+                                    <td class="text-end pe-3 text-nowrap">
+                                        <button class="btn btn-sm btn-outline-info py-0 px-2" @onclick='() => NavManager.NavigateTo($"/consulta/historial/{mas.MasNhcl}")'>
+                                            <i class="bi bi-clock-history"></i> Ver historial
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-success py-0 px-2" @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>
+                                            <i class="bi bi-clipboard2-plus"></i> Orden
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning py-0 px-2" @onclick="() => EditarMascotaAsync(mas)">
+                                            <i class="bi bi-pencil"></i> Editar
+                                        </button>
+                                    </td>
+                                </tr>
+                                @if (_editandoMascotaNhcl == mas.MasNhcl)
+                                {
+                                    <tr>
+                                        <td colspan="5" class="bg-light p-3">
+                                            <div class="inline-panel">
+                                                <div class="fw-bold mb-2 text-primary">
+                                                    <i class="bi bi-heart-pulse me-1"></i>Editar paciente NHCL #@mas.MasNhcl
+                                                </div>
+                                                @FormularioMascota
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            @if (pacientes.Count == 0)
+                            {
+                                <tr><td colspan="5" class="text-center text-muted py-3">Este propietario aún no tiene pacientes registrados.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    @if (_editandoMascotaNhcl == 0 && _mascotaEditando.MasIdCliente == cli.PaCodigo)
+                    {
+                        <div class="bg-light p-3 border-top inline-panel">
+                            <div class="fw-bold mb-2 text-primary">
+                                <i class="bi bi-plus-circle me-1"></i>Nuevo paciente
+                            </div>
+                            @FormularioMascota
+                        </div>
+                    }
+
+                    <div class="p-3 d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-primary add-btn" @onclick='() => NuevaMascotaAsync(cli.PaCodigo, "M")'>+ Agregar mascota</button>
+                        <button class="btn btn-sm btn-outline-success add-btn" @onclick='() => NuevaMascotaAsync(cli.PaCodigo, "T")'>+ Agregar paciente silvestre</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (!_cargandoInicial && _clientes.Count == 0)
+    {
+        <div class="text-center text-muted py-4">No se encontraron propietarios ni pacientes con ese criterio.</div>
+    }
 </div>
 
 @code {
     private List<ClienteDto> _clientes = new();
-    private List<PacienteMascotaDto> _mascotas = new();
+    private readonly Dictionary<int, List<PacienteMascotaDto>> _mascotasPorCliente = new();
+    private int? _clienteExpandido;
+    private int? _editandoClienteId;
+    private int? _editandoMascotaNhcl;
     private List<CatalogoItemGenericoDto> _especies = new();
     private List<CatalogoItemGenericoDto> _razas = new();
     private List<CatalogoItemGenericoDto> _sexos = new();
@@ -474,9 +222,6 @@
     private PacienteMascotaDto _mascotaEditando = new();
 
     private string _filtroClientes = string.Empty;
-    private string _filtroMascotas = string.Empty;
-    private string _filtroOrigen = string.Empty;
-    private string _tabActiva = "CLIENTE";
     private bool _cargandoInicial = true;
     private string _mensajeAlerta = string.Empty;
     private bool _esError;
@@ -507,19 +252,130 @@
         _clasesTueri = await tCla;
         _razas = await tRaz;
 
-        if (_clientes.Count > 0)
-        {
-            await SeleccionarClienteAsync(_clientes[0]);
-        }
         _cargandoInicial = false;
     }
 
     private async Task BuscarClientesAsync()
     {
-        _clientes = await AdmisionService.BuscarClientesAsync(_filtroClientes);
+        string filtro = _filtroClientes?.Trim() ?? string.Empty;
+        var lista = await AdmisionService.BuscarClientesAsync(filtro);
+
+        if (filtro.Length > 0)
+        {
+            // También incluir dueños cuyo animal coincide con la búsqueda
+            var porAnimal = await AdmisionService.BuscarMascotasAsync(filtro, string.Empty);
+            var idsExtra = porAnimal.Select(m => m.MasIdCliente)
+                                    .Where(id => id > 0 && lista.All(c => c.PaCodigo != id))
+                                    .Distinct().ToList();
+            if (idsExtra.Count > 0)
+            {
+                var todos = await AdmisionService.BuscarClientesAsync(string.Empty);
+                lista.AddRange(todos.Where(c => idsExtra.Contains(c.PaCodigo)));
+            }
+        }
+
+        _clientes = lista;
+
+        // Contadores de pacientes para las cabeceras
+        var todasMascotas = await AdmisionService.BuscarMascotasAsync(string.Empty, string.Empty);
+        foreach (var c in _clientes)
+        {
+            if (c.PaCodigo == _clienteExpandido) continue;
+            _mascotasPorCliente[c.PaCodigo] = todasMascotas.Where(m => m.MasIdCliente == c.PaCodigo).ToList();
+        }
     }
 
-    private async Task SeleccionarClienteAsync(ClienteDto cli)
+    private async Task VerTodosAsync()
+    {
+        _filtroClientes = string.Empty;
+        await BuscarClientesAsync();
+    }
+
+    private async Task OnBuscarKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarClientesAsync();
+    }
+
+    private List<PacienteMascotaDto> ObtenerPacientes(int idCliente) =>
+        _mascotasPorCliente.TryGetValue(idCliente, out var lista) ? lista : new List<PacienteMascotaDto>();
+
+    private async Task CargarPacientesClienteAsync(int idCliente)
+    {
+        _mascotasPorCliente[idCliente] = await AdmisionService.ObtenerMascotasPorClienteAsync(idCliente);
+    }
+
+    private async Task AlternarClienteAsync(ClienteDto cli)
+    {
+        bool yaAbierto = _clienteExpandido == cli.PaCodigo;
+        _editandoClienteId = null;
+        _editandoMascotaNhcl = null;
+        if (yaAbierto)
+        {
+            _clienteExpandido = null;
+            return;
+        }
+        _clienteExpandido = cli.PaCodigo;
+        _clienteSeleccionado = cli;
+        await CargarPacientesClienteAsync(cli.PaCodigo);
+    }
+
+    private async Task EditarClienteAsync(ClienteDto cli)
+    {
+        if (_editandoClienteId == cli.PaCodigo)
+        {
+            _editandoClienteId = null;
+            return;
+        }
+        _editandoMascotaNhcl = null;
+        if (_clienteExpandido != cli.PaCodigo)
+        {
+            _clienteExpandido = cli.PaCodigo;
+            await CargarPacientesClienteAsync(cli.PaCodigo);
+        }
+        CargarClienteEnFormulario(cli);
+        _editandoClienteId = cli.PaCodigo;
+    }
+
+    private void CancelarEdicionCliente()
+    {
+        _editandoClienteId = null;
+    }
+
+    private static string Iniciales(ClienteDto c)
+    {
+        string a = (c.PaNombres ?? string.Empty).Trim();
+        string b = (c.PaApellidos ?? string.Empty).Trim();
+        string r = (a.Length > 0 ? a[..1] : string.Empty) + (b.Length > 0 ? b[..1] : string.Empty);
+        return r.Length > 0 ? r.ToUpperInvariant() : "?";
+    }
+
+    private static string InicialAnimal(PacienteMascotaDto m) =>
+        string.IsNullOrWhiteSpace(m.MasNombre) ? "?" : m.MasNombre.Trim()[..1].ToUpperInvariant();
+
+    private static string TextoContador(List<PacienteMascotaDto> p)
+    {
+        int n = p.Count;
+        if (n == 0) return "Sin pacientes";
+        if (p.All(x => x.MasOrigen == "T")) return $"{n} ejemplar(es) silvestre(s)";
+        if (p.All(x => x.MasOrigen != "T")) return $"{n} mascota(s)";
+        return $"{n} paciente(s)";
+    }
+
+    private static string TextoSexo(PacienteMascotaDto m) => m.MasSexo switch
+    {
+        1 => "Macho",
+        2 => "Hembra",
+        _ => "Indeterminado"
+    };
+
+    private static string ClaseSexo(PacienteMascotaDto m) => m.MasSexo switch
+    {
+        1 => "bg-info text-dark",
+        2 => "bg-danger-subtle text-danger-emphasis",
+        _ => "bg-secondary"
+    };
+
+    private void CargarClienteEnFormulario(ClienteDto cli)
     {
         _clienteSeleccionado = cli;
         string rawMovil = new string((cli.PaMovil ?? string.Empty).Where(char.IsDigit).ToArray());
@@ -550,14 +406,6 @@
         ValidarMovilEnVivo(_clienteEditando.PaMovil);
         _errorEmail = null;
         ValidarTelefonoEnVivo(_clienteEditando.PaTelefono);
-
-
-        _mascotas = await AdmisionService.ObtenerMascotasPorClienteAsync(cli.PaCodigo);
-        if (_mascotas.Count > 0)
-        {
-            _tabActiva = "CLIENTE";
-            await CargarDatosMascotaAsync(_mascotas[0], cambiarTab: false);
-        }
     }
 
     private void NuevoCliente()
@@ -573,7 +421,9 @@
         _errorTelefono = null;
         _esTelefonoValido = false;
         _esDocValido = false;
-        _tabActiva = "CLIENTE";
+        _editandoClienteId = 0;
+        _editandoMascotaNhcl = null;
+        _clienteExpandido = null;
     }
 
     private static string NormalizarTipoDocumento(string? tipoDoc, string? cedula)
@@ -870,8 +720,13 @@
         {
             int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
             int idGuardado = await AdmisionService.GuardarClienteAsync(_clienteEditando, idUser);
+            bool eraNuevo = _clienteEditando.PaCodigo == 0;
             _clienteEditando.PaCodigo = idGuardado;
+            if (eraNuevo) _filtroClientes = string.Empty;
             await BuscarClientesAsync();
+            _editandoClienteId = null;
+            _clienteExpandido = idGuardado;
+            await CargarPacientesClienteAsync(idGuardado);
             _esError = false;
             _mensajeAlerta = $"Propietario #{idGuardado} ({_clienteEditando.NombreCompleto}) guardado exitosamente en la base de datos.";
         }
@@ -890,28 +745,53 @@
         }
     }
 
-    private async Task NuevaMascota(int idCliente)
+    private async Task NuevaMascotaAsync(int idCliente, string origen)
     {
-        int clienteId = idCliente > 0 ? idCliente : (_clientes.FirstOrDefault()?.PaCodigo ?? 101);
+        _editandoClienteId = null;
         _mascotaEditando = new PacienteMascotaDto
         {
-            MasIdCliente = clienteId,
-            MasOrigen = "M",
+            MasIdCliente = idCliente,
+            MasOrigen = origen,
             MasEspecie = 1,
             MasSexo = 1,
             MasColorTriaje = "green",
             MasFechaNace = DateTime.Today.AddYears(-1)
         };
         _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(1);
-        _tabActiva = "MASCOTA";
+        _editandoMascotaNhcl = 0;
     }
 
-    private async Task SeleccionarMascota(PacienteMascotaDto mas)
+    private async Task NuevoPacienteDesdeEncabezadoAsync()
     {
-        await CargarDatosMascotaAsync(mas, cambiarTab: true);
+        if (_clienteExpandido is int idCliente)
+        {
+            await NuevaMascotaAsync(idCliente, "M");
+        }
+        else
+        {
+            _esError = true;
+            _mensajeAlerta = "Primero expande un propietario para agregarle un paciente.";
+        }
     }
 
-    private async Task CargarDatosMascotaAsync(PacienteMascotaDto mas, bool cambiarTab = true)
+    private async Task EditarMascotaAsync(PacienteMascotaDto mas)
+    {
+        if (_editandoMascotaNhcl == mas.MasNhcl)
+        {
+            _editandoMascotaNhcl = null;
+            return;
+        }
+        _editandoClienteId = null;
+        await CargarDatosMascotaAsync(mas);
+        _editandoMascotaNhcl = mas.MasNhcl;
+    }
+
+    private void CancelarEdicionMascota()
+    {
+        _editandoMascotaNhcl = null;
+    }
+
+    private async Task CargarDatosMascotaAsync(PacienteMascotaDto mas)
     {
         _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(mas.MasEspecie);
         _mascotaEditando = new PacienteMascotaDto
@@ -929,6 +809,7 @@
             EspecieDescripcion = mas.EspecieDescripcion,
             MasRaza = mas.MasRaza,
             RazaDescripcion = mas.RazaDescripcion,
+            MasOtros = mas.MasOtros,
             MasFechaNace = mas.MasFechaNace,
             MasObservacion = mas.MasObservacion,
             MasColorTriaje = mas.MasColorTriaje,
@@ -937,11 +818,6 @@
             TueCientifico = mas.TueCientifico,
             TueSectorBarrio = mas.TueSectorBarrio
         };
-        if (cambiarTab)
-        {
-            _tabActiva = "MASCOTA";
-        }
-        StateHasChanged();
     }
 
     private async Task CambiarEspecieAsync(ChangeEventArgs e)
@@ -965,7 +841,8 @@
 
             int nhcl = await AdmisionService.GuardarMascotaAsync(_mascotaEditando, idUser);
             _mascotaEditando.MasNhcl = nhcl;
-            _mascotas = await AdmisionService.BuscarMascotasAsync(_filtroMascotas, _filtroOrigen);
+            await CargarPacientesClienteAsync(_mascotaEditando.MasIdCliente);
+            _editandoMascotaNhcl = null;
             _esError = false;
             _mensajeAlerta = $"Paciente NHCL #{nhcl} ({_mascotaEditando.MasNombre}) guardado correctamente en la base de datos.";
         }
@@ -976,16 +853,243 @@
         }
     }
 
-    private async Task FiltrarOrigenAsync(string origen)
-    {
-        _filtroOrigen = origen;
-        await BuscarMascotasGlobalAsync();
-    }
+    // Formularios desplegables (inline). Mantienen exactamente las validaciones y bindings existentes.
+    private RenderFragment FormularioCliente => @<text>
+<EditForm Model="_clienteEditando" OnValidSubmit="GuardarClienteAsync">
+                            <DataAnnotationsValidator />
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Tipo Documento SRI</label>
+                                    <select class="form-select form-select-sm" value="@_clienteEditando.PaDocumento" @onchange="OnCambiarTipoDocumento">
+                                        <option value="CEDULA">CÉDULA (máx. 10 dígitos)</option>
+                                        <option value="RUC">RUC (máx. 13 dígitos)</option>
+                                        <option value="PASAPORTE">PASAPORTE (6-15 caracteres)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Número de Documento *</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text"
+                                               class="form-control form-control-sm @(_errorDocumento != null ? (_esDocValido ? "is-valid border-success" : "is-invalid border-danger") : "")"
+                                               value="@_clienteEditando.PaCedula"
+                                               inputmode="@InputModeDocumento"
+                                               data-doc-type="@_clienteEditando.PaDocumento"
+                                               data-numeric="@EsDocumentoNumerico"
+                                               onkeypress="if (this.dataset.docType !== 'PASAPORTE' && (event.which < 48 || event.which > 57)) return false;"
+                                               maxlength="@ObtenerMaximoDocumento()"
+                                               placeholder="@ObtenerPlaceholderDocumento()"
+                                               @oninput="OnInputDocumento" />
+                                        @if (_esDocValido)
+                                        {
+                                            <span class="input-group-text bg-success text-white py-0 px-2" title="Documento válido">
+                                                <i class="bi bi-check-circle-fill"></i>
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(_errorDocumento))
+                                    {
+                                        <div class="@(_esDocValido ? "text-success" : "text-danger") small mt-1 fw-semibold">
+                                            <i class="bi @(_esDocValido ? "bi-check-circle-fill" : "bi-exclamation-triangle-fill") me-1"></i>@_errorDocumento
+                                        </div>
+                                    }
+                                </div>
 
-    private async Task BuscarMascotasGlobalAsync()
-    {
-        _mascotas = await AdmisionService.BuscarMascotasAsync(_filtroMascotas, _filtroOrigen);
-    }
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Apellidos *</label>
+                                    <input type="text"
+                                           class="form-control form-control-sm @(_errorApellidos != null ? "is-invalid border-danger" : (!string.IsNullOrWhiteSpace(_clienteEditando.PaApellidos) ? "is-valid border-success" : ""))"
+                                           value="@_clienteEditando.PaApellidos"
+                                           placeholder="Ej: Pérez-Gómez, De la Cruz"
+                                           onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'-]/.test(event.key);"
+                                           @oninput="OnInputApellidos"
+                                           @onblur="OnBlurApellidos" />
+                                    @if (!string.IsNullOrEmpty(_errorApellidos))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorApellidos
+                                        </div>
+                                    }
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Nombres *</label>
+                                    <input type="text"
+                                           class="form-control form-control-sm @(_errorNombres != null ? "is-invalid border-danger" : (!string.IsNullOrWhiteSpace(_clienteEditando.PaNombres) ? "is-valid border-success" : ""))"
+                                           value="@_clienteEditando.PaNombres"
+                                           placeholder="Ej: Juan Carlos, D'Angelo"
+                                           onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'-]/.test(event.key);"
+                                           @oninput="OnInputNombres"
+                                           @onblur="OnBlurNombres" />
+                                    @if (!string.IsNullOrEmpty(_errorNombres))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorNombres
+                                        </div>
+                                    }
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Teléfono Móvil *</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-light text-muted fw-bold border-end-0">+593</span>
+                                        <input type="text"
+                                               class="form-control form-control-sm @(_errorMovil != null ? "is-invalid border-danger" : (_esMovilValido ? "is-valid border-success" : ""))"
+                                               value="@_clienteEditando.PaMovil"
+                                               maxlength="10"
+                                               inputmode="numeric"
+                                               placeholder="09XXXXXXXX (10 dígitos)"
+                                               onkeypress="if (event.which < 48 || event.which > 57) return false;"
+                                               @oninput="OnInputMovil" />
+                                        @if (_esMovilValido)
+                                        {
+                                            <span class="input-group-text bg-success text-white py-0 px-2" title="Móvil válido">
+                                                <i class="bi bi-check-circle-fill"></i>
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(_errorMovil))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorMovil
+                                        </div>
+                                    }
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Teléfono Convencional <small class="text-muted fw-normal">(Opcional)</small></label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text"
+                                               class="form-control form-control-sm @(_errorTelefono != null ? "is-invalid border-danger" : (_esTelefonoValido ? "is-valid border-success" : ""))"
+                                               value="@_clienteEditando.PaTelefono"
+                                               maxlength="7"
+                                               inputmode="numeric"
+                                               placeholder="7 dígitos (no iniciar en 0)"
+                                               onkeypress="if (event.which < 48 || event.which > 57) return false;"
+                                               @oninput="OnInputTelefono" />
+                                        @if (_esTelefonoValido)
+                                        {
+                                            <span class="input-group-text bg-success text-white py-0 px-2" title="Teléfono válido">
+                                                <i class="bi bi-check-circle-fill"></i>
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(_errorTelefono))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorTelefono
+                                        </div>
+                                    }
+                                </div>
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold">Correo Electrónico</label>
+                                    <input type="text" class="@ClaseEmail" value="@_clienteEditando.PaEmail" @oninput="OnInputEmailAsync" />
+                                    @if (!string.IsNullOrEmpty(_errorEmail))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorEmail
+                                        </div>
+                                    }
+                                </div>
+
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold">Dirección Domiciliaria *</label>
+                                    <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaDireccion" />
+                                    <ValidationMessage For="() => _clienteEditando.PaDireccion" />
+                                </div>
+
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold">Observaciones</label>
+                                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_clienteEditando.PaObservaciones" />
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2 mt-3">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelarEdicionCliente">Cancelar</button>
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="bi bi-save me-1"></i>Guardar Propietario
+                                </button>
+                            </div>
+                        </EditForm>
+    </text>;
+
+    private RenderFragment FormularioMascota => @<text>
+<EditForm Model="_mascotaEditando" OnValidSubmit="GuardarMascotaAsync">
+                            <DataAnnotationsValidator />
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Origen Institucional</label>
+                                    <select class="form-select form-select-sm fw-bold" @bind="_mascotaEditando.MasOrigen">
+                                        <option value="M">Mascota Doméstica</option>
+                                        <option value="T">Fauna Silvestre</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label small fw-bold">Nombre del Paciente / Ejemplar *</label>
+                                    <InputText class="form-control form-control-sm text-uppercase fw-bold" @bind-Value="_mascotaEditando.MasNombre" />
+                                    <ValidationMessage For="() => _mascotaEditando.MasNombre" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Especie</label>
+                                    <select class="form-select form-select-sm" value="@_mascotaEditando.MasEspecie" @onchange="CambiarEspecieAsync">
+                                        @foreach (var esp in _especies)
+                                        {
+                                            <option value="@esp.Id">@esp.Descripcion</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Raza / Familia</label>
+                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasRaza">
+                                        @foreach (var raz in _razas)
+                                        {
+                                            <option value="@raz.Id">@raz.Descripcion</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Sexo</label>
+                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasSexo">
+                                        @foreach (var s in _sexos)
+                                        {
+                                            <option value="@s.Id">@s.Descripcion</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold">Esterilizado / Castrado</label>
+                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasCastrado">
+                                        <option value="NO">NO</option>
+                                        <option value="SI">SÍ</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Fecha de Nacimiento Aprox.</label>
+                                    <InputDate class="form-control form-control-sm" @bind-Value="_mascotaEditando.MasFechaNace" />
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-bold">Semáforo de Temperamento / Triaje</label>
+                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasColorTriaje">
+                                        <option value="green">🟢 Verde — Dócil / Manejo Estándar</option>
+                                        <option value="yellow">🟡 Amarillo — Nervioso / Precaución</option>
+                                        <option value="red">🔴 Rojo — Agresivo / Riesgo / Braquicéfalo</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold">Antecedentes / Alergias / Observaciones del Paciente</label>
+                                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_mascotaEditando.MasObservacion" />
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <span class="small text-muted">Edad estimada: <strong>@_mascotaEditando.EdadCalculada</strong></span>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelarEdicionMascota">Cancelar</button>
+                                    <button type="submit" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-save me-1"></i>Guardar Paciente
+                                    </button>
+                                </div>
+                            </div>
+                        </EditForm>
+    </text>;
 
     private static string ObtenerColorHexTriaje(string color) => color switch
     {
