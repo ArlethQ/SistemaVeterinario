@@ -110,7 +110,9 @@ public class ConsultaExternaService : IConsultaExternaService
                     ISNULL(pielyanexos, '') AS PielYAnexos,
                     ISNULL(cavidadoral, '') AS CavidadOral,
                     ISNULL(otros, '') AS Otros,
-                    ISNULL(temperamento, 'TRANQUILO') AS Temperamento
+                    ISNULL(temperamento, 'TRANQUILO') AS Temperamento,
+                    ISNULL(med_pregunta, 'N') AS RequiereCirugia,
+                    ISNULL(estadoparte, 'PENDIENTE') AS EstadoParte
                 FROM vt_fichamedica
                 WHERE med_orden = @IdOrden
                 ORDER BY sec DESC";
@@ -183,6 +185,8 @@ public class ConsultaExternaService : IConsultaExternaService
                         observacionesyrecomendaciones = @ObservacionesYRecomendaciones,
                         med_apuntes = @MedApuntes,
                         temperamento = @Temperamento,
+                        med_pregunta = @RequiereCirugia,
+                        estadoparte = @EstadoParte,
                         med_idmodifica = @MedIdUser,
                         med_fechamodifica = GETDATE()
                     WHERE sec = @Sec";
@@ -201,7 +205,7 @@ public class ConsultaExternaService : IConsultaExternaService
                         mucosas, tiempollenadocapilar, deshidratacion, reflejotusigeno,
                         auscultacion, palpaciontiroides, indicecondicioncorporal, cp,
                         linfonodos, palpacionabdominal, pielyanexos, cavidadoral, otros,
-                        tratamiento, observacionesyrecomendaciones, med_apuntes, temperamento, med_estado
+                        tratamiento, observacionesyrecomendaciones, med_apuntes, temperamento, med_estado, med_pregunta, estadoparte
                     ) VALUES (
                         @MedNhcl, @MedOrden, GETDATE(), @MedIdUser, @MedTipo, @MedCliente,
                         @MedEspecialidad, @MedEdadAnios, @MedEdadMeses, @MedLocalidad, @MedEspecie,
@@ -211,7 +215,7 @@ public class ConsultaExternaService : IConsultaExternaService
                         @Mucosas, @TiempoLlenadoCapilar, @Deshidratacion, @ReflejoTusigeno,
                         @Auscultacion, @PalpacionTiroides, @IndiceCondicionCorporal, @Cp,
                         @Linfonodos, @PalpacionAbdominal, @PielYAnexos, @CavidadOral, @Otros,
-                        @Tratamiento, @ObservacionesYRecomendaciones, @MedApuntes, @Temperamento, 'A'
+                        @Tratamiento, @ObservacionesYRecomendaciones, @MedApuntes, @Temperamento, 'A', @RequiereCirugia, @EstadoParte
                     )";
 
                 await _db.ExecuteAsync(sqlInsert, dto);
