@@ -230,8 +230,8 @@ public class HospitalizacionService : IHospitalizacionService
                        TRY_CAST(diaInternacion AS INT) AS DiasInternacion,
                        TRY_CAST(diaPostquirurgico AS INT) AS DiasPostQuirurgico
                 FROM qvt_enfFechas
-                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @EffectiveForm AND tipo = 'SIGNOS'
-                ORDER BY orden;
+                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'
+                ORDER BY orden", param);
 
             var tSignos = _db.QueryAsync<SignoVitalSlotDto>(@"
                 SELECT sec AS Id, ISNULL(orden, 1) AS Orden,
@@ -241,8 +241,8 @@ public class HospitalizacionService : IHospitalizacionService
                        TRY_CAST(sistolica AS INT) AS PresionSistolica,
                        TRY_CAST(diastolica AS INT) AS PresionDiastolica
                 FROM qvt_enfSignosVitales
-                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @EffectiveForm AND tipo = 'SIGNOS'
-                ORDER BY orden;
+                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'
+                ORDER BY orden", param);
 
             var tBalance = _db.QueryAsync<EnfBalanceHidricoDiaDto>(@"
                 SELECT sec AS Id, ISNULL(orden, 1) AS Orden,
@@ -252,8 +252,8 @@ public class HospitalizacionService : IHospitalizacionService
                        TRY_CAST(drenaje AS decimal(10,2)) AS Drenaje,
                        TRY_CAST(otros AS decimal(10,2)) AS Otros
                 FROM qvt_enfBalanceHidrico
-                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @EffectiveForm AND tipo = 'SIGNOS'
-                ORDER BY orden;
+                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'
+                ORDER BY orden", param);
 
             var tMediciones = _db.QueryAsync<EnfMedicionDiaDto>(@"
                 SELECT sec AS Id, ISNULL(orden, 1) AS Orden,
@@ -267,8 +267,8 @@ public class HospitalizacionService : IHospitalizacionService
                        cambioSonda AS CambioSonda,
                        responsable AS Responsable
                 FROM qvt_enfMediciones
-                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @EffectiveForm AND tipo = 'SIGNOS'
-                ORDER BY orden;";
+                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'
+                ORDER BY orden", param);
 
             await Task.WhenAll(tFechas, tSignos, tBalance, tMediciones);
 
