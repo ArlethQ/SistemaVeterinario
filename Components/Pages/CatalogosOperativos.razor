@@ -16,10 +16,11 @@
             <div class="col-md-2"><button class="btn btn-outline-primary" @onclick="Nuevo">Nuevo registro</button></div>
         </div>
         @if (!string.IsNullOrEmpty(_mensaje)) { <div class="alert @(_error ? "alert-danger" : "alert-success")">@_mensaje</div> }
+        @if (_pendienteEliminar is not null) { <div class="alert alert-warning d-flex align-items-center justify-content-between"><span>¿Eliminar <strong>@_pendienteEliminar.Descripcion</strong> de E-FACT?</span><span><button class="btn btn-sm btn-danger me-2" @onclick="ConfirmarEliminar">Sí, eliminar</button><button class="btn btn-sm btn-outline-secondary" @onclick="CancelarEliminar">Cancelar</button></span></div> }
         <div class="row g-3">
             <div class="col-lg-8"><div class="table-responsive card"><table class="table table-hover mb-0">
-                <thead><tr><th>Código</th><th>Descripción</th>@if (MuestraGrupo){<th>@EtiquetaGrupo</th>}@if (_tipo == "productos"){<th>Subcategoría</th><th>Tipo</th><th>IVA</th><th class="text-end">Precio</th>}<th>Estado</th><th></th></tr></thead>
-                <tbody>@foreach (var x in Filtrados) { <tr><td>@(_tipo == "productos" && !string.IsNullOrWhiteSpace(x.Codigo) ? x.Codigo : x.Id)</td><td>@x.Descripcion</td>@if (MuestraGrupo){<td>@(string.IsNullOrWhiteSpace(x.Grupo) ? "Sin categoría" : x.Grupo)</td>}@if (_tipo == "productos"){<td>@(string.IsNullOrWhiteSpace(x.Subgrupo) ? "Sin subcategoría" : x.Subgrupo)</td><td>@x.Tipo</td><td>@TarifaDescripcion(x)</td><td class="text-end">@x.Precio?.ToString("C2")</td>}<td>@x.Estado</td><td><button class="btn btn-sm btn-outline-primary" @onclick="() => Editar(x)">Editar</button></td></tr> }</tbody>
+                <thead><tr><th>Código</th><th>Descripción</th>@if (MuestraGrupo){<th>@EtiquetaGrupo</th>}@if (_tipo == "productos"){<th>Subcategoría</th><th>Tipo</th><th>IVA</th><th class="text-end">Precio</th>}<th>Estado</th><th>Acciones</th></tr></thead>
+                <tbody>@foreach (var x in Filtrados) { <tr><td>@(_tipo == "productos" && !string.IsNullOrWhiteSpace(x.Codigo) ? x.Codigo : x.Id)</td><td>@x.Descripcion</td>@if (MuestraGrupo){<td>@(string.IsNullOrWhiteSpace(x.Grupo) ? "Sin categoría" : x.Grupo)</td>}@if (_tipo == "productos"){<td>@(string.IsNullOrWhiteSpace(x.Subgrupo) ? "Sin subcategoría" : x.Subgrupo)</td><td>@x.Tipo</td><td>@TarifaDescripcion(x)</td><td class="text-end">@x.Precio?.ToString("C2")</td>}<td>@x.Estado</td><td><div class="btn-group btn-group-sm">@if (_tipo == "productos"){<button class="btn btn-outline-info" title="Ver" @onclick="() => Ver(x)">Ver</button>}<button class="btn btn-outline-primary" title="Editar" @onclick="() => Editar(x)">Editar</button>@if (_tipo == "productos"){<button class="btn btn-outline-danger" title="Eliminar" @onclick="() => PrepararEliminar(x)">Eliminar</button>}</div></td></tr> }</tbody>
             </table></div></div>
             <div class="col-lg-4"><div class="card"><div class="card-body">
                 <h5>@(_edit.Id > 0 ? "Editar" : "Nuevo")</h5>
@@ -49,6 +50,10 @@
                 <button class="btn btn-primary" @onclick="Guardar">Guardar</button>
             </div></div></div>
         </div>
+        @if (_vista is not null)
+        {
+            <div class="card mt-3 border-info"><div class="card-header d-flex justify-content-between"><strong>Detalle del producto</strong><button class="btn-close" @onclick="CerrarVista"></button></div><div class="card-body"><div class="row g-3"><div class="col-md-4"><small class="text-muted d-block">Nombre</small><strong>@_vista.Descripcion</strong></div><div class="col-md-2"><small class="text-muted d-block">Código</small><strong>@(string.IsNullOrWhiteSpace(_vista.Codigo) ? $"#{_vista.Id}" : _vista.Codigo)</strong></div><div class="col-md-2"><small class="text-muted d-block">Tipo</small><strong>@_vista.Tipo</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio base</small><strong>@_vista.Precio?.ToString("C2")</strong></div><div class="col-md-2"><small class="text-muted d-block">IVA</small><strong>@TarifaDescripcion(_vista)</strong></div><div class="col-md-4"><small class="text-muted d-block">Categoría</small><strong>@(string.IsNullOrWhiteSpace(_vista.Grupo) ? "Sin categoría" : _vista.Grupo)</strong></div><div class="col-md-4"><small class="text-muted d-block">Subcategoría</small><strong>@(string.IsNullOrWhiteSpace(_vista.Subgrupo) ? "Sin subcategoría" : _vista.Subgrupo)</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio 2</small><strong>@(_vista.Precio2?.ToString("C2") ?? "—")</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio 3</small><strong>@(_vista.Precio3?.ToString("C2") ?? "—")</strong></div></div></div></div>
+        }
     </div>
 }
 
@@ -58,6 +63,8 @@
     private List<CatalogoOperativoDto> _items = [], _grupos = [], _subgrupos = [];
     private List<TarifaIvaDto> _tarifas = [];
     private CatalogoOperativoDto _edit = new();
+    private CatalogoOperativoDto? _vista;
+    private CatalogoOperativoDto? _pendienteEliminar;
     private bool EsGrupo => _tipo.StartsWith("grupos-", StringComparison.Ordinal);
     private bool MuestraGrupo => !EsGrupo && _tipo != "grupos-productos";
     private string EtiquetaGrupo => _tipo is "productos" or "subgrupos-productos" ? "Categoría" : "Grupo";
@@ -72,5 +79,10 @@
     private void CambiarIva() { _edit.CodigoImpuesto = _aplicaIva ? "2" : ""; if (!_aplicaIva) _edit.PorcentajeImpuesto = ""; }
     private string TarifaDescripcion(CatalogoOperativoDto x) => x.CodigoImpuesto == "2" ? _tarifas.FirstOrDefault(t => t.Codigo == x.PorcentajeImpuesto)?.Descripcion ?? "IVA" : "Sin IVA";
     private void Editar(CatalogoOperativoDto x) { _edit = new() { Id = x.Id, Descripcion = x.Descripcion, Codigo = x.Codigo, Precio = x.Precio, Precio2 = x.Precio2, Precio3 = x.Precio3, IdGrupo = x.IdGrupo, Grupo = x.Grupo, IdSubgrupo = x.IdSubgrupo, Subgrupo = x.Subgrupo, Tipo = x.Tipo, CodigoImpuesto = x.CodigoImpuesto, PorcentajeImpuesto = x.PorcentajeImpuesto, Estado = x.Estado }; _aplicaIva = x.CodigoImpuesto == "2"; }
+    private void Ver(CatalogoOperativoDto x) => _vista = x;
+    private void CerrarVista() => _vista = null;
+    private void PrepararEliminar(CatalogoOperativoDto x) => _pendienteEliminar = x;
+    private void CancelarEliminar() => _pendienteEliminar = null;
+    private async Task ConfirmarEliminar() { if (_pendienteEliminar is null) return; var ok = await EFactCatalog.EliminarProductoAsync(_pendienteEliminar.Id); _error = !ok; _mensaje = ok ? "Producto eliminado de E-FACT." : "No se pudo eliminar el producto."; if (ok) { _vista = null; _pendienteEliminar = null; await Cargar(); } }
     private async Task Guardar() { var ok = await Service.GuardarCatalogoAsync(_tipo, _edit, Session.IdUser); _error = !ok; _mensaje = ok ? "Registro guardado en E-FACT." : "No se pudo guardar: revise campos obligatorios, conexión o nombres duplicados."; if (ok) await Cargar(); }
 }

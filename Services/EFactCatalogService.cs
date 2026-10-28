@@ -20,6 +20,7 @@ public interface IEFactCatalogService
     Task<bool> GuardarCategoriaAsync(CatalogoOperativoDto item);
     Task<bool> GuardarSubcategoriaAsync(CatalogoOperativoDto item);
     Task<bool> GuardarProductoAsync(CatalogoOperativoDto item);
+    Task<bool> EliminarProductoAsync(int codigo);
 }
 
 public sealed class EFactCatalogService(
@@ -52,9 +53,14 @@ public sealed class EFactCatalogService(
     {
         try
         {
-            var categorias = (await ObtenerCategoriasAsync()).ToDictionary(x => x.Id, x => x.Descripcion);
-            var subcategorias = (await ObtenerSubcategoriasAsync()).ToDictionary(x => x.Id, x => x.Descripcion);
-            var items = await http.GetFromJsonAsync<List<ProductoDto>>(Url("api/productos")) ?? [];
+            var categoriasTask = ObtenerCategoriasAsync();
+            var subcategoriasTask = ObtenerSubcategoriasAsync();
+            var productosTask = http.GetFromJsonAsync<List<ProductoDto>>(Url("api/productos"));
+            await Task.WhenAll(categoriasTask, subcategoriasTask, productosTask);
+
+            var categorias = (await categoriasTask).ToDictionary(x => x.Id, x => x.Descripcion);
+            var subcategorias = (await subcategoriasTask).ToDictionary(x => x.Id, x => x.Descripcion);
+            var items = await productosTask ?? [];
             return items.Select(x => new CatalogoOperativoDto
             {
                 Id = x.Codigo,
@@ -186,6 +192,21 @@ public sealed class EFactCatalogService(
         catch (Exception ex)
         {
             logger.LogError(ex, "No se pudo guardar la subcategoría {Subcategoria} en E-FACT.", item.Id);
+            return false;
+        }
+    }
+
+    public async Task<bool> EliminarProductoAsync(int codigo)
+    {
+        if (!ConfiguracionValida() || codigo <= 0) return false;
+        try
+        {
+            var response = await http.DeleteAsync(Url($"api/productos/{codigo}"));
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "No se pudo eliminar el producto {Producto} de E-FACT.", codigo);
             return false;
         }
     }
