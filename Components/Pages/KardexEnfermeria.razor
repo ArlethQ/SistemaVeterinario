@@ -557,6 +557,7 @@ else
 
     private async Task BuscarMedicamentosAsync()
     {
+        _alertaMensaje = null;
         if (string.IsNullOrWhiteSpace(_textoBusquedaProd) || _textoBusquedaProd.Trim().Length < 3)
         {
             MostrarAlerta("Ingrese la descripción del producto (mínimo 3 caracteres).", false);
@@ -568,7 +569,11 @@ else
         {
             _productosEncontrados = await InventarioService.BuscarMedicamentosConStockAsync(
                 _textoBusquedaProd.Trim(), Session.Localidad, Session.Apostrofe);
-            _mostrarModalProductos = true;
+            _mostrarModalProductos = _productosEncontrados.Count > 0;
+            if (_mostrarModalProductos)
+            {
+                _alertaMensaje = null;
+            }
             if (_productosEncontrados.Count == 0)
             {
                 MostrarAlerta("No se recuperó ningún producto con ese criterio.", false);
@@ -590,6 +595,7 @@ else
 
     private void SeleccionarProducto(FarmacoStockDto prod)
     {
+        _alertaMensaje = null;
         if (prod.Inventory <= 0)
         {
             MostrarAlerta("No se puede seleccionar productos con stock 0.", false);
