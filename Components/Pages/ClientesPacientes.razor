@@ -5,28 +5,32 @@
 @inject IAdmisionFacturacionService AdmisionService
 @inject SessionStateService SessionState
 @inject NavigationManager NavManager
+@inject IWebHostEnvironment Env
 
 <PageTitle>e-ForVets — Clientes y Pacientes</PageTitle>
 
-<div class="container-fluid py-3">
+<div class="container-fluid py-3 clients-page">
     <!-- Encabezado -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded-3 shadow-sm bg-white border-start border-4 border-primary">
-        <div>
-            <h4 class="mb-0 fw-bold text-primary">
+    <div class="clients-hero d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded-3 bg-white">
+        <div class="d-flex align-items-center gap-3">
+            <div class="hero-icon"><i class="bi bi-people-fill"></i></div>
+            <div>
+            <h4 class="mb-0 fw-bold">
                 <i class="bi bi-people-fill me-2"></i>Propietarios y Pacientes
             </h4>
             <small class="text-muted">
                 Gestión integral de propietarios, mascotas domésticas y fauna silvestre
             </small>
+            </div>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-outline-primary btn-sm" @onclick="NuevoCliente">
+            <button class="btn btn-sm action-new-owner" @onclick="NuevoCliente">
                 <i class="bi bi-person-plus-fill me-1"></i>+ Nuevo propietario
             </button>
-            <button class="btn btn-primary btn-sm" @onclick="NuevoPacienteDesdeEncabezadoAsync">
+            <button class="btn btn-sm action-new-patient" @onclick="NuevoPacienteDesdeEncabezadoAsync">
                 <i class="bi bi-heart-pulse-fill me-1"></i>+ Nuevo paciente
             </button>
-            <a href="/admision/ordenes" class="btn btn-success btn-sm">
+            <a href="/admision/ordenes" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-clipboard2-plus me-1"></i>Ir a Recepción / Órdenes
             </a>
         </div>
@@ -40,6 +44,13 @@
         </div>
     }
 
+    <div class="row g-3 mb-3 stats-row">
+        <div class="col-6 col-xl-3"><div class="stat-card"><span class="stat-icon blue"><i class="bi bi-person"></i></span><div><small>Total propietarios</small><strong>@_clientes.Count</strong></div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card"><span class="stat-icon violet"><i class="bi bi-heart-fill"></i></span><div><small>Pacientes registrados</small><strong>@TotalPacientes</strong></div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card"><span class="stat-icon teal"><i class="bi bi-person-check"></i></span><div><small>Con pacientes</small><strong>@PropietariosConPacientes</strong></div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card"><span class="stat-icon slate"><i class="bi bi-person-dash"></i></span><div><small>Sin pacientes</small><strong>@(_clientes.Count - PropietariosConPacientes)</strong></div></div></div>
+    </div>
+
     @if (_cargandoInicial)
     {
         <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
@@ -49,155 +60,125 @@
     }
 
     <!-- Barra de búsqueda unificada -->
-    <div class="card shadow-sm border-0 mb-3">
+    <div class="card search-card border-0 mb-3">
         <div class="card-body py-2">
             <div class="d-flex gap-2">
-                <input type="text" class="form-control"
+                <div class="input-group"><span class="input-group-text bg-white border-end-0"><i class="bi bi-search"></i></span><input type="text" class="form-control border-start-0"
                        placeholder="Buscar por nombre del animal, dueño o Cédula/RUC..."
-                       @bind="_filtroClientes" @bind:event="oninput" @onkeydown="OnBuscarKeyDown" />
+                       value="@_filtroClientes" @oninput="BuscarMientrasEscribeAsync" @onkeydown="OnBuscarKeyDown" /></div>
                 <button class="btn btn-primary px-4" @onclick="BuscarClientesAsync">Buscar</button>
                 <button class="btn btn-secondary px-3 text-nowrap" @onclick="VerTodosAsync">Ver todos</button>
             </div>
+            @if (!string.IsNullOrWhiteSpace(_filtroClientes))
+            {
+                <div class="search-feedback">@(_buscandoCoincidencias ? "Buscando coincidencias..." : $"{_clientes.Count} coincidencia(s) encontrada(s)")</div>
+            }
         </div>
     </div>
 
     <!-- Nuevo propietario (formulario desplegable) -->
     @if (_editandoClienteId == 0)
     {
-        <div class="card shadow-sm border-0 mb-3 inline-panel">
-            <div class="card-header bg-primary text-white">
-                <i class="bi bi-person-badge me-1"></i>Nuevo propietario
-            </div>
-            <div class="card-body">
+        <div class="owner-editor-backdrop" @onclick="CancelarEdicionCliente"></div>
+        <aside class="owner-editor inline-panel">
+            <div class="owner-editor-title"><span>Nuevo propietario</span><button class="btn-close" @onclick="CancelarEdicionCliente"></button></div>
+            <div class="owner-editor-summary new-owner-summary"><div class="summary-person-icon"><i class="bi bi-person-plus"></i></div><div><strong>Registrar propietario</strong><small>Complete la información personal y de contacto</small></div></div>
+            <div class="editor-tabs"><span class="active">Información</span><span>Observaciones</span><span>Historial</span></div>
+            <div class="card-body editor-form">
                 @FormularioCliente
             </div>
-        </div>
+        </aside>
     }
 
-    <!-- Tarjetas de propietarios (acordeón) -->
+    <div class="owner-list-head"><span>Propietario</span><span>Contacto</span><span>Pacientes</span><span>Dirección</span><span>Acciones</span></div>
+    <!-- Propietarios y pacientes -->
     @foreach (var cli in _clientes)
     {
         bool expandido = _clienteExpandido == cli.PaCodigo;
         var pacientes = ObtenerPacientes(cli.PaCodigo);
         <div class="card shadow-sm border-0 mb-2 owner-card @(expandido ? "owner-open" : "")">
             <div class="owner-header d-flex align-items-center gap-3 p-3" @onclick="() => AlternarClienteAsync(cli)">
-                <div class="owner-avatar">@Iniciales(cli)</div>
-                <div class="flex-grow-1">
-                    <div class="fw-bold">@cli.NombreCompleto</div>
-                    <div class="small text-muted">
-                        @cli.PaMovil
-                        @if (!string.IsNullOrWhiteSpace(cli.PaEmail))
-                        {
-                            <span> · @cli.PaEmail</span>
-                        }
+                <div class="owner-profile">
+                    <div class="owner-avatar">@Iniciales(cli)</div>
+                    <div class="owner-identity">
+                        <div class="fw-bold">@cli.NombreCompleto</div>
+                        <div class="small text-muted">C.I. @cli.PaCedula</div>
                     </div>
                 </div>
+                <div class="owner-contact small">
+                    <div><i class="bi bi-telephone text-primary me-2"></i>@cli.PaMovil</div>
+                    @if (!string.IsNullOrWhiteSpace(cli.PaEmail)) { <div class="text-muted"><i class="bi bi-envelope text-primary me-2"></i>@cli.PaEmail</div> }
+                </div>
                 <span class="count-pill">@TextoContador(pacientes)</span>
-                <button class="btn btn-sm btn-outline-primary text-nowrap" @onclick:stopPropagation="true" @onclick="() => EditarClienteAsync(cli)">
-                    <i class="bi bi-pencil-square me-1"></i>Editar dueño
-                </button>
-                <i class="bi @(expandido ? "bi-chevron-up" : "bi-chevron-down") text-muted"></i>
+                <div class="owner-address small">@cli.PaDireccion</div>
+                <div class="owner-actions" @onclick:stopPropagation="true">
+                    <button class="btn btn-sm action-patients" @onclick="() => AlternarClienteAsync(cli)">@(expandido ? "Ocultar" : "Ver pacientes")</button>
+                    <button class="btn btn-sm action-add" @onclick='() => AgregarMascotaDesdeFilaAsync(cli)'>Agregar mascota</button>
+                    <button class="btn btn-sm action-owner-edit" @onclick="() => EditarClienteAsync(cli)">Editar</button>
+                </div>
             </div>
 
             @if (expandido)
             {
                 @if (_editandoClienteId == cli.PaCodigo)
                 {
-                    <div class="border-top bg-light p-3 inline-panel">
-                        <div class="fw-bold mb-2 text-primary">
-                            <i class="bi bi-person-badge me-1"></i>Editar dueño #@cli.PaCodigo
-                        </div>
-                        @FormularioCliente
-                    </div>
+                    <div class="owner-editor-backdrop" @onclick="CancelarEdicionCliente"></div>
+                    <aside class="owner-editor inline-panel" @onclick:stopPropagation="true">
+                        <div class="owner-editor-title"><span><i class="bi bi-person-badge me-2"></i>Editar propietario</span><button class="btn-close" @onclick="CancelarEdicionCliente"></button></div>
+                        <div class="owner-editor-summary"><div class="summary-person-icon"><i class="bi bi-person"></i></div><div class="flex-grow-1"><strong>@cli.NombreCompleto</strong><small>C.I. @cli.PaCedula</small></div><span class="count-pill">@TextoContador(pacientes)</span></div>
+                        <div class="editor-tabs"><span class="active">Información</span><span>Observaciones</span><span>Historial</span></div>
+                        <div class="p-3 editor-form">@FormularioCliente</div>
+                    </aside>
                 }
 
-                <div class="border-top">
-                    <table class="table table-sm align-middle mb-0 pet-table">
-                        <thead>
-                            <tr>
-                                <th class="ps-3">Animal</th>
-                                <th>Origen / Especie</th>
-                                <th>Sexo</th>
-                                <th>Edad</th>
-                                <th class="text-end pe-3">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var mas in pacientes)
-                            {
-                                <tr>
-                                    <td class="ps-3">
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="pet-avatar">@InicialAnimal(mas)</div>
-                                            <div>
-                                                <div class="fw-bold">@mas.MasNombre</div>
-                                                <div class="small text-muted">@(string.IsNullOrWhiteSpace(mas.RazaDescripcion) ? mas.EspecieDescripcion : mas.RazaDescripcion)</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        @if (mas.MasOrigen == "T")
-                                        {
-                                            <span class="badge bg-success me-1">Silvestre</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-primary me-1">Doméstico</span>
-                                        }
-                                        <span>@mas.EspecieDescripcion</span>
-                                    </td>
-                                    <td><span class="badge @ClaseSexo(mas)">@TextoSexo(mas)</span></td>
-                                    <td>@mas.EdadCalculada</td>
-                                    <td class="text-end pe-3 text-nowrap">
-                                        <button class="btn btn-sm btn-outline-info py-0 px-2" @onclick='() => NavManager.NavigateTo($"/consulta/historial/{mas.MasNhcl}")'>
-                                            <i class="bi bi-clock-history"></i> Ver historial
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-success py-0 px-2" @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>
-                                            <i class="bi bi-clipboard2-plus"></i> Orden
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-warning py-0 px-2" @onclick="() => EditarMascotaAsync(mas)">
-                                            <i class="bi bi-pencil"></i> Editar
-                                        </button>
-                                    </td>
-                                </tr>
-                                @if (_editandoMascotaNhcl == mas.MasNhcl)
-                                {
-                                    <tr>
-                                        <td colspan="5" class="bg-light p-3">
-                                            <div class="inline-panel">
-                                                <div class="fw-bold mb-2 text-primary">
-                                                    <i class="bi bi-heart-pulse me-1"></i>Editar paciente NHCL #@mas.MasNhcl
-                                                </div>
-                                                @FormularioMascota
-                                            </div>
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                            @if (pacientes.Count == 0)
-                            {
-                                <tr><td colspan="5" class="text-center text-muted py-3">Este propietario aún no tiene pacientes registrados.</td></tr>
-                            }
-                        </tbody>
-                    </table>
-
-                    @if (_editandoMascotaNhcl == 0 && _mascotaEditando.MasIdCliente == cli.PaCodigo)
+                <div class="pets-expanded border-top">
+                    <div class="pets-expanded-head"><strong>Mascotas de este propietario <span>(@pacientes.Count)</span></strong></div>
+                    @if (pacientes.Count > 0)
                     {
-                        <div class="bg-light p-3 border-top inline-panel">
-                            <div class="fw-bold mb-2 text-primary">
-                                <i class="bi bi-plus-circle me-1"></i>Nuevo paciente
-                            </div>
-                            @FormularioMascota
+                        <div class="pet-cards-grid">
+                        @foreach (var mas in pacientes)
+                        {
+                            <article class="pet-card">
+                                <div class="pet-card-main">
+                                    <div class="pet-avatar">
+                                        @if (!string.IsNullOrEmpty(ObtenerFotoPaciente(mas.MasNhcl))) { <img src="@ObtenerFotoPaciente(mas.MasNhcl)" alt="Foto de @mas.MasNombre" /> }
+                                        else { <span>@InicialAnimal(mas)</span> }
+                                    </div>
+                                    <div class="pet-card-info">
+                                        <div class="pet-name">@mas.MasNombre <span class="pet-kind @(mas.MasOrigen == "T" ? "wild" : "domestic")">@(mas.MasOrigen == "T" ? "Silvestre" : "Doméstico")</span></div>
+                                        <div>@(string.IsNullOrWhiteSpace(mas.RazaDescripcion) ? mas.EspecieDescripcion : mas.RazaDescripcion) <span>· @mas.EspecieDescripcion</span></div>
+                                        <small><i class="bi @(mas.MasSexo == 2 ? "bi-gender-female" : "bi-gender-male")"></i> @TextoSexo(mas) &nbsp; @mas.EdadCalculada</small>
+                                    </div>
+                                </div>
+                                <div class="pet-card-actions">
+                                    <button class="btn btn-sm action-record" @onclick="() => EditarMascotaAsync(mas)">Ver y editar ficha</button>
+                                    <button class="btn btn-sm action-history" @onclick='() => NavManager.NavigateTo($"/consulta/historial/{mas.MasNhcl}")'>Historia</button>
+                                    <button class="btn btn-sm action-order" @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>Orden</button>
+                                </div>
+                            </article>
+                        }
                         </div>
                     }
+                    else
+                    {
+                        <div class="empty-pets"><i class="bi bi-heart"></i><span>Este propietario aún no tiene pacientes registrados.</span></div>
+                    }
 
-                    <div class="p-3 d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-primary add-btn" @onclick='() => NuevaMascotaAsync(cli.PaCodigo, "M")'>+ Agregar mascota</button>
-                        <button class="btn btn-sm btn-outline-success add-btn" @onclick='() => NuevaMascotaAsync(cli.PaCodigo, "T")'>+ Agregar paciente silvestre</button>
-                    </div>
                 </div>
             }
         </div>
+    }
+
+    @if (_editandoMascotaNhcl.HasValue)
+    {
+        <div class="patient-modal-backdrop" @onclick="CancelarEdicionMascota"></div>
+        <section class="patient-modal" role="dialog" aria-modal="true" aria-label="Ficha del paciente">
+            <header class="patient-modal-header">
+                <div><small>@(_editandoMascotaNhcl == 0 ? "NUEVO PACIENTE" : $"NHCL #{_editandoMascotaNhcl}")</small><h5>@(_editandoMascotaNhcl == 0 ? "Agregar paciente" : "Ver y editar paciente")</h5></div>
+                <button type="button" class="modal-close" title="Cerrar" @onclick="CancelarEdicionMascota">×</button>
+            </header>
+            <div class="patient-modal-body">@FormularioMascota</div>
+        </section>
     }
 
     @if (!_cargandoInicial && _clientes.Count == 0)
@@ -222,6 +203,8 @@
     private PacienteMascotaDto _mascotaEditando = new();
 
     private string _filtroClientes = string.Empty;
+    private int _versionBusqueda;
+    private bool _buscandoCoincidencias;
     private bool _cargandoInicial = true;
     private string _mensajeAlerta = string.Empty;
     private bool _esError;
@@ -234,6 +217,12 @@
     private bool _esMovilValido;
     private string? _errorTelefono;
     private bool _esTelefonoValido;
+    private IBrowserFile? _fotoMascota;
+    private string? _fotoMascotaPreview;
+    private string? _errorFotoMascota;
+    private string _fotoMascotaNombre = "Ningún archivo seleccionado";
+    private int TotalPacientes => _clientes.Sum(c => ObtenerPacientes(c.PaCodigo).Count);
+    private int PropietariosConPacientes => _clientes.Count(c => ObtenerPacientes(c.PaCodigo).Count > 0);
 
     protected override async Task OnInitializedAsync()
     {
@@ -289,6 +278,17 @@
     {
         _filtroClientes = string.Empty;
         await BuscarClientesAsync();
+    }
+
+    private async Task BuscarMientrasEscribeAsync(ChangeEventArgs e)
+    {
+        _filtroClientes = e.Value?.ToString() ?? string.Empty;
+        int versionActual = ++_versionBusqueda;
+        _buscandoCoincidencias = true;
+        await Task.Delay(300);
+        if (versionActual != _versionBusqueda) return;
+        await BuscarClientesAsync();
+        if (versionActual == _versionBusqueda) _buscandoCoincidencias = false;
     }
 
     private async Task OnBuscarKeyDown(KeyboardEventArgs e)
@@ -758,7 +758,18 @@
             MasFechaNace = DateTime.Today.AddYears(-1)
         };
         _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(1);
+        _fotoMascota = null;
+        _fotoMascotaPreview = null;
+        _errorFotoMascota = null;
+        _fotoMascotaNombre = "Ningún archivo seleccionado";
         _editandoMascotaNhcl = 0;
+    }
+
+    private async Task AgregarMascotaDesdeFilaAsync(ClienteDto cli)
+    {
+        _clienteExpandido = cli.PaCodigo;
+        await CargarPacientesClienteAsync(cli.PaCodigo);
+        await NuevaMascotaAsync(cli.PaCodigo, "M");
     }
 
     private async Task NuevoPacienteDesdeEncabezadoAsync()
@@ -789,6 +800,10 @@
     private void CancelarEdicionMascota()
     {
         _editandoMascotaNhcl = null;
+        _fotoMascota = null;
+        _fotoMascotaPreview = null;
+        _errorFotoMascota = null;
+        _fotoMascotaNombre = "Ningún archivo seleccionado";
     }
 
     private async Task CargarDatosMascotaAsync(PacienteMascotaDto mas)
@@ -818,6 +833,54 @@
             TueCientifico = mas.TueCientifico,
             TueSectorBarrio = mas.TueSectorBarrio
         };
+        _fotoMascota = null;
+        _fotoMascotaPreview = ObtenerFotoPaciente(mas.MasNhcl);
+        _errorFotoMascota = null;
+        _fotoMascotaNombre = "Ningún archivo seleccionado";
+    }
+
+    private async Task SeleccionarFotoMascotaAsync(InputFileChangeEventArgs e)
+    {
+        var archivo = e.File;
+        _errorFotoMascota = null;
+        if (!archivo.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            _errorFotoMascota = "Seleccione una imagen JPG, PNG o WEBP.";
+            return;
+        }
+        if (archivo.Size > 5 * 1024 * 1024)
+        {
+            _errorFotoMascota = "La imagen no puede superar 5 MB.";
+            return;
+        }
+        _fotoMascota = archivo;
+        _fotoMascotaNombre = archivo.Name;
+        await using var stream = archivo.OpenReadStream(5 * 1024 * 1024);
+        using var memoria = new MemoryStream();
+        await stream.CopyToAsync(memoria);
+        _fotoMascotaPreview = $"data:{archivo.ContentType};base64,{Convert.ToBase64String(memoria.ToArray())}";
+    }
+
+    private string ObtenerFotoPaciente(int nhcl)
+    {
+        if (nhcl <= 0) return string.Empty;
+        string directorio = Path.Combine(Env.WebRootPath, "PacientesFotos");
+        if (!Directory.Exists(directorio)) return string.Empty;
+        string? archivo = Directory.EnumerateFiles(directorio, $"{nhcl}.*").FirstOrDefault();
+        return archivo is null ? string.Empty : $"/PacientesFotos/{Path.GetFileName(archivo)}?v={File.GetLastWriteTimeUtc(archivo).Ticks}";
+    }
+
+    private async Task GuardarFotoMascotaAsync(int nhcl)
+    {
+        if (_fotoMascota is null || nhcl <= 0) return;
+        string extension = Path.GetExtension(_fotoMascota.Name).ToLowerInvariant();
+        if (extension is not (".jpg" or ".jpeg" or ".png" or ".webp")) extension = ".jpg";
+        string directorio = Path.Combine(Env.WebRootPath, "PacientesFotos");
+        Directory.CreateDirectory(directorio);
+        foreach (string anterior in Directory.EnumerateFiles(directorio, $"{nhcl}.*")) File.Delete(anterior);
+        await using var entrada = _fotoMascota.OpenReadStream(5 * 1024 * 1024);
+        await using var salida = File.Create(Path.Combine(directorio, $"{nhcl}{extension}"));
+        await entrada.CopyToAsync(salida);
     }
 
     private async Task CambiarEspecieAsync(ChangeEventArgs e)
@@ -841,6 +904,7 @@
 
             int nhcl = await AdmisionService.GuardarMascotaAsync(_mascotaEditando, idUser);
             _mascotaEditando.MasNhcl = nhcl;
+            await GuardarFotoMascotaAsync(nhcl);
             await CargarPacientesClienteAsync(_mascotaEditando.MasIdCliente);
             _editandoMascotaNhcl = null;
             _esError = false;
@@ -858,6 +922,7 @@
 <EditForm Model="_clienteEditando" OnValidSubmit="GuardarClienteAsync">
                             <DataAnnotationsValidator />
                             <div class="row g-2">
+                                <div class="col-12 form-section-title">Datos personales</div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">Tipo Documento SRI</label>
                                     <select class="form-select form-select-sm" value="@_clienteEditando.PaDocumento" @onchange="OnCambiarTipoDocumento">
@@ -926,6 +991,7 @@
                                         </div>
                                     }
                                 </div>
+                                <div class="col-12 form-section-title mt-3">Datos de contacto</div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">Teléfono Móvil *</label>
                                     <div class="input-group input-group-sm">
@@ -988,6 +1054,7 @@
                                     }
                                 </div>
 
+                                <div class="col-12 form-section-title mt-3">Dirección</div>
                                 <div class="col-md-12">
                                     <label class="form-label small fw-bold">Dirección Domiciliaria *</label>
                                     <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaDireccion" />
@@ -1013,6 +1080,24 @@
 <EditForm Model="_mascotaEditando" OnValidSubmit="GuardarMascotaAsync">
                             <DataAnnotationsValidator />
                             <div class="row g-2">
+                                <div class="col-12">
+                                    <div class="pet-photo-upload">
+                                        <div class="pet-photo-preview">
+                                            @if (!string.IsNullOrEmpty(_fotoMascotaPreview)) { <img src="@_fotoMascotaPreview" alt="Vista previa del paciente" /> }
+                                            else { <span>@InicialAnimal(_mascotaEditando)</span> }
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <label class="form-label small fw-bold mb-1">Fotografía del paciente</label>
+                                            <div class="spanish-file-picker">
+                                                <InputFile id="foto-paciente" OnChange="SeleccionarFotoMascotaAsync" accept="image/jpeg,image/png,image/webp" class="visually-hidden" />
+                                                <label for="foto-paciente">Seleccionar imagen</label>
+                                                <span title="@_fotoMascotaNombre">@_fotoMascotaNombre</span>
+                                            </div>
+                                            <small class="text-muted">JPG, PNG o WEBP. Tamaño máximo: 5 MB.</small>
+                                            @if (!string.IsNullOrEmpty(_errorFotoMascota)) { <div class="text-danger small fw-semibold">@_errorFotoMascota</div> }
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold">Origen Institucional</label>
                                     <select class="form-select form-select-sm fw-bold" @bind="_mascotaEditando.MasOrigen">

@@ -1,14 +1,114 @@
+.clients-page {
+    --clients-blue: #0969ed;
+    --clients-ink: #0b1f4b;
+    color: var(--clients-ink);
+    background: #f4f8fc;
+    min-height: 100%;
+}
+
+.clients-hero,
+.search-card,
+.owner-card,
+.stat-card {
+    border: 1px solid #e1eaf4 !important;
+    box-shadow: 0 5px 18px rgba(35, 70, 120, .06) !important;
+}
+
+.hero-icon,
+.stat-icon {
+    display: grid;
+    place-items: center;
+    border-radius: 13px;
+}
+
+.hero-icon {
+    width: 48px;
+    height: 48px;
+    color: #0787bd;
+    background: #dff4fb;
+    font-size: 1.35rem;
+}
+
+.clients-hero h4 > i { display: none; }
+
+.stat-card {
+    min-height: 92px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 17px 18px;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.stat-card small { display: block; color: #4a5d7c; font-size: .76rem; }
+.stat-card strong { display: block; color: var(--clients-ink); font-size: 1.45rem; line-height: 1.2; }
+.stat-icon { width: 54px; height: 54px; flex: 0 0 54px; font-size: 1.4rem; }
+.stat-icon.blue { color: #0877df; background: #dff1ff; }
+.stat-icon.violet { color: #7138e7; background: #eee7ff; }
+.stat-icon.teal { color: #008f83; background: #dff8f3; }
+.stat-icon.slate { color: #687c9a; background: #eaf0f7; }
+
+.search-card .card-body { padding: 10px 12px !important; }
+.search-card .form-control, .search-card .input-group-text { border-color: #d8e2ef; }
+.search-feedback { padding: 7px 3px 0; color: #526b89; font-size: .72rem; font-weight: 600; }
+
 .owner-header {
     cursor: pointer;
     transition: background-color .15s ease;
 }
+
+.owner-list-head,
+.owner-header {
+    display: grid !important;
+    grid-template-columns: minmax(220px, 1.35fr) minmax(190px, 1.15fr) minmax(110px, .6fr) minmax(135px, .75fr) minmax(260px, 1.35fr);
+    align-items: center;
+    column-gap: 14px;
+}
+
+.owner-list-head {
+    padding: 12px 18px;
+    color: #385275;
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .035em;
+    background: #edf4fb;
+    border: 1px solid #dce7f2;
+    border-radius: 10px 10px 0 0;
+}
+
+.owner-list-head span:last-child { grid-column: 5; }
+.owner-card { margin-bottom: 0 !important; border-radius: 0; overflow: hidden; box-shadow: none !important; border-top: 0 !important; }
+.owner-card:last-of-type { border-radius: 0 0 10px 10px; }
+.owner-identity { min-width: 0; }
+.owner-profile { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.owner-contact { min-width: 0; line-height: 1.65; overflow: hidden; }
+.owner-address { color: #253d62; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owner-actions { display: flex; justify-content: flex-end; gap: 6px; min-width: 0; }
+.owner-actions .btn { white-space: nowrap; font-size: .7rem; }
+.owner-actions .btn,
+.pet-card-actions .btn { border: 0; color: #fff; box-shadow: 0 2px 5px rgba(20, 48, 85, .14); transition: transform .15s ease, filter .15s ease, box-shadow .15s ease; }
+.owner-actions .btn:hover,
+.pet-card-actions .btn:hover { color: #fff; filter: brightness(.92); transform: translateY(-1px); box-shadow: 0 4px 9px rgba(20, 48, 85, .2); }
+.owner-actions .btn:focus-visible,
+.pet-card-actions .btn:focus-visible { color: #fff; outline: 3px solid rgba(13, 110, 253, .24); outline-offset: 2px; }
+.action-patients { background: #1673d1; }
+.action-add { background: #7453d6; }
+.action-owner-edit { background: #526b89; }
+.action-record { background: #0869df; }
+.action-history { background: #078d9f; }
+.action-order { background: #168552; }
+.action-new-owner { color: #fff; border: 0; background: #7453d6; box-shadow: 0 3px 8px rgba(116, 83, 214, .22); }
+.action-new-patient { color: #fff; border: 0; background: #087f96; box-shadow: 0 3px 8px rgba(8, 127, 150, .22); }
+.action-new-owner:hover, .action-new-patient:hover { color: #fff; filter: brightness(.92); transform: translateY(-1px); }
 
 .owner-header:hover {
     background-color: #f1f8fb;
 }
 
 .owner-open > .owner-header {
-    background-color: #e6f4f8;
+    background: linear-gradient(90deg, #eaf7ff, #f8fcff);
 }
 
 .owner-avatar {
@@ -16,7 +116,7 @@
     height: 40px;
     flex: 0 0 40px;
     border-radius: 50%;
-    background: #1b8fa8;
+    background: linear-gradient(145deg, #38afe0, #167cc4);
     color: #fff;
     display: flex;
     align-items: center;
@@ -48,12 +148,110 @@
     white-space: nowrap;
 }
 
-.pet-table thead th {
-    font-size: .7rem;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    color: #6c757d;
-    background: #f8f9fa;
+.pets-expanded { padding: 12px 14px 14px; background: linear-gradient(120deg, #e8f6ff, #f4fbff); }
+.pets-expanded-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: #075ec9; font-size: .8rem; }
+.pets-expanded-head strong span { color: #182d4c; }
+.pet-cards-grid { display: grid; grid-template-columns: repeat(3, minmax(225px, 1fr)); gap: 12px; }
+.pet-card { min-width: 0; padding: 13px; border: 1px solid #dce9f5; border-radius: 9px; background: rgba(255,255,255,.94); box-shadow: 0 3px 10px rgba(42, 79, 120, .05); }
+.pet-card-main { display: flex; align-items: flex-start; gap: 11px; min-height: 75px; }
+.pet-card .pet-avatar { width: 58px; height: 58px; flex-basis: 58px; border-radius: 12px; font-size: 1.45rem; background: linear-gradient(145deg, #f8d6a8, #fff0d6); }
+.pet-avatar img, .pet-photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.pet-avatar img { border-radius: 12px; }
+.pet-card-info { min-width: 0; color: #50637d; font-size: .78rem; }
+.pet-card-info > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pet-card-info small { display: block; margin-top: 3px; color: #3d5b80; }
+.pet-name { color: #091c43; font-size: .86rem; font-weight: 800; margin-bottom: 3px; }
+.pet-kind { display: inline-block; margin-left: 7px; padding: 3px 7px; border-radius: 7px; font-size: .65rem; vertical-align: 1px; }
+.pet-kind.domestic { color: #0867d7; background: #dceeff; }
+.pet-kind.wild { color: #087343; background: #d9f5e7; }
+.pet-card-actions { display: grid; grid-template-columns: 1.45fr 1fr 1fr; gap: 6px; margin-top: 9px; }
+.pet-card-actions .btn { padding: 4px 6px; font-size: .7rem; font-weight: 600; }
+.pet-card-actions .icon-action { padding: 4px 0; }
+.pet-editor { grid-column: 1 / -1; padding: 16px; border: 1px solid #cbdff0; border-radius: 9px; background: #fff; }
+.pet-photo-upload { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; padding: 13px; border: 1px dashed #9fc7ef; border-radius: 10px; background: #f5faff; }
+.pet-photo-preview { width: 76px; height: 76px; flex: 0 0 76px; display: grid; place-items: center; overflow: hidden; border-radius: 12px; color: #1576c9; background: #dcefff; font-size: 1.5rem; font-weight: 800; }
+.pet-photo-upload input[type=file] { min-height: auto; }
+.spanish-file-picker { display: flex; align-items: stretch; min-width: 0; border: 1px solid #c8d7e7; border-radius: 6px; overflow: hidden; background: #fff; }
+.spanish-file-picker label { flex: 0 0 auto; margin: 0; padding: 8px 13px; color: #fff; background: #1474d4; cursor: pointer; font-size: .78rem; font-weight: 600; }
+.spanish-file-picker span { min-width: 0; padding: 8px 11px; overflow: hidden; color: #526982; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; }
+
+.patient-modal-backdrop { position: fixed; inset: 0; z-index: 1050; background: rgba(10, 29, 57, .5); backdrop-filter: blur(2px); }
+.patient-modal { position: fixed; z-index: 1055; top: 50%; left: 50%; width: min(920px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: hidden; transform: translate(-50%, -50%); border: 1px solid #d7e3ef; border-radius: 13px; background: #fff; box-shadow: 0 24px 70px rgba(4, 24, 55, .28); }
+.patient-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #dfe8f1; background: #f8fbff; }
+.patient-modal-header small { color: #1875da; font-size: .66rem; font-weight: 800; letter-spacing: .08em; }
+.patient-modal-header h5 { margin: 1px 0 0; color: #0a2048; font-weight: 800; }
+.modal-close { width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; color: #405873; background: #eaf1f8; font-size: 1.5rem; line-height: 1; }
+.modal-close:hover { color: #fff; background: #176fd0; }
+.patient-modal-body { max-height: calc(100vh - 112px); padding: 18px 20px; overflow-y: auto; }
+.patient-modal-body .form-control, .patient-modal-body .form-select { min-height: 40px; border-color: #c9d6e4; }
+.patient-modal-body form > .d-flex:last-child { position: sticky; bottom: -18px; z-index: 2; margin: 18px -20px -18px !important; padding: 14px 20px; border-top: 1px solid #dfe8f1; background: #fff; }
+.empty-pets { display: flex; justify-content: center; align-items: center; gap: 9px; padding: 25px; color: #71859e; }
+.pet-additional-actions { padding-top: 12px; }
+
+.owner-editor-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1040;
+    background: rgba(10, 31, 65, .22);
+    backdrop-filter: blur(1px);
+}
+
+.owner-editor {
+    position: fixed;
+    z-index: 1045;
+    top: 0;
+    right: 0;
+    width: min(560px, 96vw);
+    height: 100vh;
+    overflow-y: auto;
+    background: #fff;
+    box-shadow: -12px 0 36px rgba(20, 45, 80, .18);
+}
+
+.owner-editor > .card-header,
+.owner-editor-title {
+    padding: 18px 20px;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.owner-editor-title { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e7edf5; }
+.owner-editor-summary { margin: 14px 18px 2px; padding: 13px; display: flex; align-items: center; gap: 12px; border: 1px solid #cde4f5; border-radius: 9px; background: #edf8ff; }
+.owner-editor-summary small { display: block; color: #536987; }
+.summary-person-icon { width: 48px; height: 48px; flex: 0 0 48px; display: grid; place-items: center; border-radius: 11px; color: #0877df; background: #cfeaff; font-size: 1.5rem; }
+.editor-tabs { display: grid; grid-template-columns: repeat(3, 1fr); margin: 12px 18px 0; border-bottom: 1px solid #dbe5ef; }
+.editor-tabs span { padding: 10px; color: #30496d; font-size: .78rem; text-align: center; }
+.editor-tabs .active { color: #0869e3; font-weight: 700; border-bottom: 3px solid #0869e3; }
+.owner-editor .card-body { padding: 18px; }
+.editor-form { padding-bottom: 90px !important; }
+.owner-editor .form-label { margin: 7px 0 6px; color: #10284f; font-size: .76rem !important; font-weight: 600 !important; }
+.owner-editor .form-control, .owner-editor .form-select { min-height: 42px; border: 1px solid #c8d7e7; border-radius: 7px; color: #10284f; background-color: #fff; box-shadow: none; }
+.owner-editor .form-control:focus, .owner-editor .form-select:focus { border-color: #3988ea; box-shadow: 0 0 0 3px rgba(57,136,234,.1); }
+.owner-editor textarea.form-control { min-height: 82px; }
+.form-section-title { margin-top: 5px; padding-bottom: 2px; color: #091e46; font-size: .84rem; font-weight: 800; }
+.editor-form form > .d-flex:last-child { position: sticky; bottom: -18px; margin: 20px -18px -18px !important; padding: 15px 18px; background: #fff; border-top: 1px solid #dfe7f0; box-shadow: 0 -5px 16px rgba(20,45,80,.05); }
+.editor-form form > .d-flex:last-child .btn { min-height: 40px; padding-inline: 18px; font-weight: 600; }
+
+@media (max-width: 900px) {
+    .owner-list-head { display: none !important; }
+    .owner-header { grid-template-columns: minmax(150px, 1fr) auto auto !important; }
+    .owner-contact, .owner-address { display: none; }
+    .pet-cards-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+}
+
+@media (max-width: 576px) {
+    .clients-hero .d-flex.gap-2 { width: 100%; margin-top: 12px; flex-wrap: wrap; }
+    .stats-row .stat-card { padding: 10px; gap: 8px; }
+    .stat-card small { font-size: .68rem; }
+    .owner-header { gap: 8px !important; }
+    .owner-header .count-pill { display: none; }
+    .owner-header .btn { font-size: 0; }
+    .owner-header .btn i { margin: 0 !important; font-size: .9rem; }
+    .pet-cards-grid { grid-template-columns: 1fr; }
+    .patient-modal { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+    .patient-modal-body { max-height: calc(100vh - 88px); padding: 14px; }
+    .pet-photo-upload { align-items: flex-start; }
+    .spanish-file-picker { flex-direction: column; }
 }
 
 .add-btn {
