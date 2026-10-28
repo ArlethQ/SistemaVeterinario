@@ -74,14 +74,13 @@
             <span class="fw-semibold small">Cargando signos vitales y balance hídrico...</span>
         </div>
     }
-    else if (_paciente is null)
-    {
-        <div class="alert alert-info shadow-sm">
-            Seleccione un paciente hospitalizado en la barra superior para gestionar su <strong>Hoja de Signos Vitales, Gráfica Térmica/Pulso y Balance Hídrico (9 días)</strong>.
-        </div>
-    }
     else
     {
+        @if (_paciente is null)
+        {
+            <div class="alert alert-info shadow-sm">Vista previa de la hoja. Seleccione un paciente para habilitar el ingreso y guardado de información.</div>
+        }
+        <fieldset disabled="@(_paciente is null)" class="m-0 p-0 border-0">
         <div id="area-impresion-signos">
             <!-- CABECERA DEL PACIENTE -->
             <div class="card shadow-sm border-0 mb-3">
@@ -109,27 +108,27 @@
                     <div class="row text-center small g-2">
                         <div class="col-md-2 border-end">
                             <div class="text-muted">Historia (NHCL) / Orden</div>
-                            <div class="fw-bold text-danger fs-6">@_paciente.Nhcl <span class="text-secondary">(#@_paciente.OrdenAtencionId)</span></div>
+                            <div class="fw-bold text-danger fs-6">@_pacienteVista.Nhcl <span class="text-secondary">(#@_pacienteVista.OrdenAtencionId)</span></div>
                         </div>
                         <div class="col-md-2 border-end">
                             <div class="text-muted">Paciente</div>
-                            <div class="fw-bold fs-6">@_paciente.PacienteNombre</div>
+                            <div class="fw-bold fs-6">@(_pacienteVista.PacienteNombre.Length > 0 ? _pacienteVista.PacienteNombre : "—")</div>
                         </div>
                         <div class="col-md-2 border-end">
                             <div class="text-muted">Especie / Sexo</div>
-                            <div class="fw-semibold text-success">@_paciente.Especie — @_paciente.Sexo</div>
+                            <div class="fw-semibold text-success">@(_paciente is null ? "—" : $"{_pacienteVista.Especie} — {_pacienteVista.Sexo}")</div>
                         </div>
                         <div class="col-md-2 border-end">
                             <div class="text-muted">Edad</div>
-                            <div class="fw-semibold">@_paciente.Anios años, @_paciente.Meses meses</div>
+                            <div class="fw-semibold">@(_paciente is null ? "—" : $"{_pacienteVista.Anios} años, {_pacienteVista.Meses} meses")</div>
                         </div>
                         <div class="col-md-3 border-end">
                             <div class="text-muted">Propietario</div>
-                            <div class="fw-semibold">@_paciente.ClienteNombre</div>
+                            <div class="fw-semibold">@(_pacienteVista.ClienteNombre.Length > 0 ? _pacienteVista.ClienteNombre : "—")</div>
                         </div>
                         <div class="col-md-1">
                             <div class="text-muted">Origen</div>
-                            <span class="badge bg-danger">@_paciente.TipoOrigen</span>
+                            <span class="badge bg-danger">@(_pacienteVista.TipoOrigen.Length > 0 ? _pacienteVista.TipoOrigen : "—")</span>
                         </div>
                     </div>
                 </div>
@@ -469,6 +468,7 @@
                 </div>
             </div>
         </div>
+        </fieldset>
     }
 </div>
 
@@ -479,13 +479,22 @@
     private string _filtroOrden = string.Empty;
     private List<OrdenActivaResumenDto> _ordenesActivas = [];
     private PacienteHeaderDto? _paciente;
-    private FormularioSignosEnfermeriaDto _form = new();
+    private PacienteHeaderDto _pacienteVista => _paciente ?? new();
+    private FormularioSignosEnfermeriaDto _form = CrearFormularioVacio();
     private bool _cargandoInicial = true;
     private bool _guardando;
     private string? _mensajeAlerta;
     private bool _esError;
     private int _ultimoIdOrdenCargado;
     private int _ultimoNhclCargado;
+
+    private static FormularioSignosEnfermeriaDto CrearFormularioVacio() => new()
+    {
+        Fechas = Enumerable.Range(1, 9).Select(i => new EnfFechaDiaDto { Orden = i }).ToList(),
+        SignosVitales = Enumerable.Range(1, 18).Select(i => new SignoVitalSlotDto { Orden = i }).ToList(),
+        BalanceHidrico = Enumerable.Range(1, 9).Select(i => new EnfBalanceHidricoDiaDto { Orden = i }).ToList(),
+        Mediciones = Enumerable.Range(1, 18).Select(i => new EnfMedicionDiaDto { Orden = i }).ToList()
+    };
 
     protected override async Task OnInitializedAsync()
     {

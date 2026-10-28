@@ -37,7 +37,7 @@ public interface IHospitalizacionService
     // Notas importantes y Observaciones por hora compartidas
     Task AgregarNotaImportanteAsync(int idOrden, int nhcl, string observacion, string tipo, int idUsuario, int idLocalidad);
     Task EliminarNotaImportanteAsync(int idNota);
-    Task AgregarObservacionHoraAsync(int idOrden, int nhcl, string hora, string observacion, string responsable, int idLocalidad);
+    Task AgregarObservacionHoraAsync(int idOrden, int nhcl, string hora, string observacion, int responsable, int idLocalidad);
     Task EliminarObservacionHoraAsync(int idObs);
 }
 
@@ -1199,7 +1199,7 @@ public class HospitalizacionService : IHospitalizacionService
         await _db.ExecuteAsync("UPDATE hvt_importante SET estado = 'I' WHERE id = @Id", new { Id = idNota });
     }
 
-    public async Task AgregarObservacionHoraAsync(int idOrden, int nhcl, string hora, string observacion, string responsable, int idLocalidad)
+    public async Task AgregarObservacionHoraAsync(int idOrden, int nhcl, string hora, string observacion, int responsable, int idLocalidad)
     {
         if (string.IsNullOrWhiteSpace(observacion)) return;
 

@@ -78,14 +78,13 @@
             <span class="fw-semibold small">Cargando Ficha de Hospitalización 24h...</span>
         </div>
     }
-    else if (_paciente is null)
-    {
-        <div class="alert alert-info shadow-sm">
-            Seleccione un paciente en la parte superior para abrir su <strong>Ficha de Hospitalización 24 Horas (Medicación, Alimentación y Fluidoterapia)</strong>.
-        </div>
-    }
     else
     {
+        @if (_paciente is null)
+        {
+            <div class="alert alert-info shadow-sm">Vista previa de la ficha. Seleccione un paciente para habilitar el ingreso y guardado de información.</div>
+        }
+        <fieldset disabled="@(_paciente is null)" class="m-0 p-0 border-0">
         <div id="area-impresion-ficha">
             <!-- CABECERA DEL PACIENTE Y METADATOS DE LA HOJA -->
             <div class="card shadow-sm border-0 mb-3">
@@ -115,15 +114,15 @@
                     <div class="row text-center small g-2 align-items-center">
                         <div class="col-md-2 border-end">
                             <div class="text-muted">Historia / Orden</div>
-                            <div class="fw-bold text-danger fs-6">@_paciente.Nhcl <span class="text-secondary">(#@_paciente.OrdenAtencionId)</span></div>
+                            <div class="fw-bold text-danger fs-6">@_pacienteVista.Nhcl <span class="text-secondary">(#@_pacienteVista.OrdenAtencionId)</span></div>
                         </div>
                         <div class="col-md-2 border-end">
                             <div class="text-muted">Paciente / Especie</div>
-                            <div class="fw-bold">@_paciente.PacienteNombre <span class="text-success">(@_paciente.Especie)</span></div>
+                            <div class="fw-bold">@(_pacienteVista.PacienteNombre.Length > 0 ? _pacienteVista.PacienteNombre : "—") <span class="text-success">@(_paciente is null ? "" : $"({_pacienteVista.Especie})")</span></div>
                         </div>
                         <div class="col-md-2 border-end">
                             <div class="text-muted">Propietario</div>
-                            <div class="fw-semibold">@_paciente.ClienteNombre</div>
+                            <div class="fw-semibold">@(_pacienteVista.ClienteNombre.Length > 0 ? _pacienteVista.ClienteNombre : "—")</div>
                         </div>
                         <div class="col-md-2 border-end">
                             <label class="text-muted d-block">Condición Clínica</label>
@@ -484,6 +483,7 @@
                 </div>
             </div>
         </div>
+        </fieldset>
     }
 </div>
 
@@ -494,7 +494,8 @@
     private string _filtroOrden = string.Empty;
     private List<OrdenActivaResumenDto> _ordenesActivas = [];
     private PacienteHeaderDto? _paciente;
-    private FichaHospitalizacionSheetDto _sheet = new();
+    private PacienteHeaderDto _pacienteVista => _paciente ?? new();
+    private FichaHospitalizacionSheetDto _sheet = CrearFichaVacia();
 
     private List<ViaAdministracionDto> _vias = [];
     private List<RitmoHorarioDto> _ritmos = [];
@@ -513,6 +514,13 @@
     private bool _catalogoBuscado;
     private string? _mensajeAlerta;
     private bool _esError;
+
+    private static FichaHospitalizacionSheetDto CrearFichaVacia() => new()
+    {
+        Bloque1Medicacion = Enumerable.Range(1, 12).Select(i => new FichaBloque1MedicacionDto { Fila = i }).ToList(),
+        Bloque2Alimentacion = Enumerable.Range(1, 12).Select(i => new FichaBloque2AlimentacionDto { Fila = i }).ToList(),
+        Bloque3Fluidoterapia = Enumerable.Range(1, 12).Select(i => new FichaBloque3FluidoterapiaDto { Fila = i }).ToList()
+    };
 
     protected override async Task OnInitializedAsync()
     {
