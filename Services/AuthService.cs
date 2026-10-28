@@ -288,7 +288,13 @@ public class AuthService : IAuthService
     public async Task<List<int>> ObtenerLocalidadesAsignadasAsync(int idUser) =>
         (await _sql.QueryAsync<int>("SELECT ul_idLocalidad FROM vt_usuarioLocalidades WHERE ul_idUsuario=@IdUser AND ISNULL(ul_estado,'A')='A'", new { IdUser=idUser })).ToList();
 
-    public async Task<(bool Exito, string Mensaje)> GuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId)
+    public async Task<(bool Exito, string Mensaje)> GuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId) => await SafeGuardarUsuarioAdministracionAsync(usuario, claveTemporal, adminId);
+    private async Task<(bool Exito, string Mensaje)> SafeGuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId)
+    {
+        try { return await DoGuardarUsuarioAdministracionAsync(usuario, claveTemporal, adminId); }
+        catch (Exception ex) { return (false, $"Error al guardar el usuario: {ex.Message}"); }
+    }
+    private async Task<(bool Exito, string Mensaje)> DoGuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId)
     {
         if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
         if (string.IsNullOrWhiteSpace(usuario.Nombre) || string.IsNullOrWhiteSpace(usuario.Login) || usuario.RolId <= 0) return (false, "Nombre, usuario y rol son obligatorios.");
@@ -303,8 +309,8 @@ public class AuthService : IAuthService
                     user_email=@Email, user_celular=@Celular, user_convensional=@Convencional, user_cedula=@Cedula,
                     user_tipouser_numero=@RolId, user_esp_numero=@EspecialidadId, user_tipomedico=@TipoMedico,
                     user_observaciones=@Observaciones WHERE user_numero=@Id"
-            : @"INSERT INTO vt_usuarios (user_numero,user_nombre,user_login,user_clave,user_iniciales,user_email,user_celular,user_convensional,user_cedula,user_tipouser_numero,user_esp_numero,user_tipomedico,user_observaciones,user_estado,user_fechacambio)
-                VALUES ((SELECT ISNULL(MAX(user_numero),0)+1 FROM vt_usuarios WITH (UPDLOCK,HOLDLOCK)),@Nombre,@Login,@Clave,@Iniciales,@Email,@Celular,@Convencional,@Cedula,@RolId,@EspecialidadId,@TipoMedico,@Observaciones,'A',GETDATE())";
+            : @"INSERT INTO vt_usuarios (user_nombre,user_login,user_clave,user_iniciales,user_email,user_celular,user_convensional,user_cedula,user_tipouser_numero,user_esp_numero,user_tipomedico,user_observaciones,user_estado,user_fechacambio)
+                VALUES (@Nombre,@Login,@Clave,@Iniciales,@Email,@Celular,@Convencional,@Cedula,@RolId,@EspecialidadId,@TipoMedico,@Observaciones,'A',GETDATE())";
         var args = new { usuario.Id, Nombre=usuario.Nombre.Trim(), Login=usuario.Login.Trim(), Iniciales=usuario.Iniciales.Trim(), Email=usuario.Email.Trim(), Celular=usuario.Celular.Trim(), Convencional=usuario.Convencional.Trim(), Cedula=usuario.Cedula.Trim(), usuario.RolId, usuario.EspecialidadId, TipoMedico=usuario.TipoMedico.Trim(), Observaciones=usuario.Observaciones.Trim(), Clave=_sql.HashPasswordSha1(claveTemporal ?? string.Empty) };
         var result = await _sql.ExecuteAsync(sql, args);
         if (result < 0) return (false, "No se pudo guardar el usuario.");
@@ -316,7 +322,13 @@ public class AuthService : IAuthService
         return (true, "Usuario guardado correctamente.");
     }
 
-    public async Task<(bool Exito, string Mensaje)> CambiarEstadoUsuarioAsync(int idUser, bool activo, int adminId)
+    public async Task<(bool Exito, string Mensaje)> CambiarEstadoUsuarioAsync(int idUser, bool activo, int adminId) => await SafeCambiarEstadoUsuarioAsync(idUser, activo, adminId);
+    private async Task<(bool Exito, string Mensaje)> SafeCambiarEstadoUsuarioAsync(int idUser, bool activo, int adminId)
+    {
+        try { return await DoCambiarEstadoUsuarioAsync(idUser, activo, adminId); }
+        catch (Exception ex) { return (false, $"Error al cambiar estado: {ex.Message}"); }
+    }
+    private async Task<(bool Exito, string Mensaje)> DoCambiarEstadoUsuarioAsync(int idUser, bool activo, int adminId)
     {
         if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
         if (idUser == _session.IdUser && !activo) return (false, "No puedes desactivar tu propia cuenta.");
@@ -327,7 +339,13 @@ public class AuthService : IAuthService
         return (true, activo ? "Usuario activado." : "Usuario desactivado.");
     }
 
-    public async Task<(bool Exito, string Mensaje)> RestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId)
+    public async Task<(bool Exito, string Mensaje)> RestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId) => await SafeRestablecerClaveUsuarioAsync(idUser, nuevaClave, adminId);
+    private async Task<(bool Exito, string Mensaje)> SafeRestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId)
+    {
+        try { return await DoRestablecerClaveUsuarioAsync(idUser, nuevaClave, adminId); }
+        catch (Exception ex) { return (false, $"Error al restablecer contraseña: {ex.Message}"); }
+    }
+    private async Task<(bool Exito, string Mensaje)> DoRestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId)
     {
         if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
         if (string.IsNullOrWhiteSpace(nuevaClave) || nuevaClave.Length < 8) return (false, "La contraseña debe tener al menos 8 caracteres.");
