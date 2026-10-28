@@ -112,11 +112,11 @@
         </div>
         <div class="col-xl-3">
             <section class="day-list-card">
-                <header><strong>Citas del día (@_citas.Count)</strong><button class="btn btn-sm btn-outline-primary" @onclick="AbrirFormularioCita">Nueva</button></header>
+                <header><strong>Citas del día (@_citas.Count)</strong></header>
                 <div class="day-list">
                     @foreach (var cita in _citas.OrderBy(c => c.CiHora))
                     {
-                        <button type="button" class="day-appointment" @onclick="() => VerDetalleCita(cita)"><time>@cita.CiHora</time><span class="mini-pet">@Iniciales(cita.CiNombreMas)</span><span><strong>@cita.CiNombreMas</strong><small>@cita.CiNombre</small></span><em class="@ClaseEstadoCita(cita.CiEstadoCita)">@TextoEstadoCita(cita.CiEstadoCita)</em></button>
+                        <button type="button" class="day-appointment" @onclick="() => VerDetalleCita(cita)"><time>@cita.CiHora</time><span class="mini-pet">@if(!string.IsNullOrEmpty(ObtenerFotoPaciente(cita.CiNhcl))){<img src="@ObtenerFotoPaciente(cita.CiNhcl)" alt="Foto de @cita.CiNombreMas"/>}else{<b>@Iniciales(cita.CiNombreMas)</b>}</span><span><strong>@cita.CiNombreMas</strong><small>@cita.CiNombre</small></span><em class="@ClaseEstadoCita(cita.CiEstadoCita)">@TextoEstadoCita(cita.CiEstadoCita)</em></button>
                     }
                 </div>
             </section>
@@ -438,7 +438,7 @@
     private int CitasConfirmadas => _citas.Count(c => c.CiEstadoCita == "C");
     private int CitasCanceladas => _citas.Count(c => c.CiEstadoCita == "X");
     private int CitasPendientes => _citas.Count(c => c.CiEstadoCita is not ("C" or "X" or "A"));
-    private List<CatalogoItemGenericoDto> MedicosAgenda => _medicos.Take(4).ToList();
+    private List<CatalogoItemGenericoDto> MedicosAgenda => _medicos.ToList();
     private static readonly string[] HorasAgenda = Enumerable.Range(16, 20).Select(i => $"{i / 2:D2}:{(i % 2) * 30:D2}").ToArray();
 
     private int Porcentaje(int cantidad) => _citas.Count == 0 ? 0 : (int)Math.Round(cantidad * 100d / _citas.Count);

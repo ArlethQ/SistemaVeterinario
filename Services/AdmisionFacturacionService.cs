@@ -676,7 +676,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             var res = (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
                 SELECT user_numero AS Id, user_nombre AS Descripcion, user_esp_numero AS IdPadre
                 FROM vt_usuarios
-                WHERE user_estado = 'A' AND (@IdEsp = 0 OR user_esp_numero = @IdEsp)
+                WHERE user_estado = 'A'
+                  AND ISNULL(user_esp_numero, 0) > 0
+                  AND (@IdEsp = 0 OR user_esp_numero = @IdEsp)
                 ORDER BY user_nombre", new { IdEsp = idEspecialidad })).ToList();
             if (res.Count > 0) return res;
         }
