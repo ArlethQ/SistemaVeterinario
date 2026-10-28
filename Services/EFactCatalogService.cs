@@ -53,9 +53,14 @@ public sealed class EFactCatalogService(
     {
         try
         {
-            var categorias = (await ObtenerCategoriasAsync()).ToDictionary(x => x.Id, x => x.Descripcion);
-            var subcategorias = (await ObtenerSubcategoriasAsync()).ToDictionary(x => x.Id, x => x.Descripcion);
-            var items = await http.GetFromJsonAsync<List<ProductoDto>>(Url("api/productos")) ?? [];
+            var categoriasTask = ObtenerCategoriasAsync();
+            var subcategoriasTask = ObtenerSubcategoriasAsync();
+            var productosTask = http.GetFromJsonAsync<List<ProductoDto>>(Url("api/productos"));
+            await Task.WhenAll(categoriasTask, subcategoriasTask, productosTask);
+
+            var categorias = (await categoriasTask).ToDictionary(x => x.Id, x => x.Descripcion);
+            var subcategorias = (await subcategoriasTask).ToDictionary(x => x.Id, x => x.Descripcion);
+            var items = await productosTask ?? [];
             return items.Select(x => new CatalogoOperativoDto
             {
                 Id = x.Codigo,

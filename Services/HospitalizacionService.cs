@@ -2,6 +2,7 @@ using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Models;
 using Dapper;
 using Microsoft.Data.SqlClient;
+using System.Text;
 
 namespace HosvetKardex.Web.Services;
 
@@ -563,92 +564,95 @@ public class HospitalizacionService : IHospitalizacionService
         if (sheet.Peso is < 0)
             throw new ArgumentException("El peso no puede ser negativo.");
 
+        ValidarFilas(sheet.Bloque1Medicacion, 12, "medicación");
+        ValidarFilas(sheet.Bloque2Alimentacion, 5, "alimentación");
+        ValidarFilas(sheet.Bloque3Fluidoterapia, 7, "fluidoterapia");
+
+        var sql = new StringBuilder("SET XACT_ABORT ON; BEGIN TRANSACTION;");
+        var parametros = new DynamicParameters(new
+        {
+            sheet.IdOrden,
+            sheet.Nhcl,
+            sheet.Hoja,
+            sheet.Fecha,
+            sheet.CondicionId,
+            sheet.Peso,
+            sheet.DiasHospitalizacion,
+            Resp = idUsuario
+        });
+
+        AgregarActualizacionBloque(sql, parametros, "hvt_bloque1ficha", "B1", sheet.Bloque1Medicacion,
+        [
+            ("medicacion", "Medicacion"), ("mgkg", "MgKg"), ("ml", "Ml"),
+            ("via", "Via"), ("ritmo", "Ritmo")
+        ]);
+        AgregarActualizacionBloque(sql, parametros, "hvt_bloque2ficha", "B2", sheet.Bloque2Alimentacion,
+        [
+            ("alimentacion", "Alimentacion"), ("cald", "Cald"), ("calv", "Calv"),
+            ("gr", "Gr"), ("ritmo", "Ritmo")
+        ]);
+        AgregarActualizacionBloque(sql, parametros, "hvt_bloque3ficha", "B3", sheet.Bloque3Fluidoterapia,
+        [
+            ("fluidoterapia", "Fluidoterapia"), ("mpd", "Mpd"), ("mldia", "MlDia"),
+            ("mlh", "MlH"), ("gotas", "Gotas")
+        ]);
+        sql.Append("COMMIT TRANSACTION;");
+
         await using var connection = new SqlConnection(_db.GetConnectionString());
         await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
-
-        try
-        {
-        foreach (var r in sheet.Bloque1Medicacion)
-        {
-            var filas = await connection.ExecuteAsync(@"
-                UPDATE hvt_bloque1ficha SET
-                    medicacion = @Medicacion, mgkg = @MgKg, ml = @Ml, via = @Via, ritmo = @Ritmo,
-                    fecha = @Fecha, condicion = @CondicionId, peso = @Peso, dia = @DiasHospitalizacion, responsable = @Resp,
-                    txt7 = @Txt7, txt8 = @Txt8, txt9 = @Txt9, txt10 = @Txt10, txt11 = @Txt11, txt12 = @Txt12,
-                    txt13 = @Txt13, txt14 = @Txt14, txt15 = @Txt15, txt16 = @Txt16, txt17 = @Txt17, txt18 = @Txt18,
-                    txt19 = @Txt19, txt20 = @Txt20, txt21 = @Txt21, txt22 = @Txt22, txt23 = @Txt23, txt24 = @Txt24,
-                    txt1 = @Txt1, txt2 = @Txt2, txt3 = @Txt3, txt4 = @Txt4, txt5 = @Txt5, txt6 = @Txt6
-                WHERE idorden = @IdOrden AND nhcl = @Nhcl AND ISNULL(hoja, 1) = @Hoja AND fila = @Fila",
-                new
-                {
-                    sheet.IdOrden, sheet.Nhcl, sheet.Hoja, r.Fila, r.Medicacion, r.MgKg, r.Ml, r.Via, r.Ritmo,
-                    sheet.Fecha, sheet.CondicionId, sheet.Peso, sheet.DiasHospitalizacion, Resp = idUsuario,
-                    r.Txt7, r.Txt8, r.Txt9, r.Txt10, r.Txt11, r.Txt12,
-                    r.Txt13, r.Txt14, r.Txt15, r.Txt16, r.Txt17, r.Txt18,
-                    r.Txt19, r.Txt20, r.Txt21, r.Txt22, r.Txt23, r.Txt24,
-                    r.Txt1, r.Txt2, r.Txt3, r.Txt4, r.Txt5, r.Txt6
-                }, transaction);
-            if (filas != 1) throw new InvalidOperationException($"No se pudo guardar la fila {r.Fila} de medicación.");
-        }
-
-        foreach (var r in sheet.Bloque2Alimentacion)
-        {
-            var filas = await connection.ExecuteAsync(@"
-                UPDATE hvt_bloque2ficha SET
-                    alimentacion = @Alimentacion, cald = @Cald, calv = @Calv, gr = @Gr, ritmo = @Ritmo,
-                    fecha = @Fecha, condicion = @CondicionId, peso = @Peso, dia = @DiasHospitalizacion, responsable = @Resp,
-                    txt7 = @Txt7, txt8 = @Txt8, txt9 = @Txt9, txt10 = @Txt10, txt11 = @Txt11, txt12 = @Txt12,
-                    txt13 = @Txt13, txt14 = @Txt14, txt15 = @Txt15, txt16 = @Txt16, txt17 = @Txt17, txt18 = @Txt18,
-                    txt19 = @Txt19, txt20 = @Txt20, txt21 = @Txt21, txt22 = @Txt22, txt23 = @Txt23, txt24 = @Txt24,
-                    txt1 = @Txt1, txt2 = @Txt2, txt3 = @Txt3, txt4 = @Txt4, txt5 = @Txt5, txt6 = @Txt6
-                WHERE idorden = @IdOrden AND nhcl = @Nhcl AND ISNULL(hoja, 1) = @Hoja AND fila = @Fila",
-                new
-                {
-                    sheet.IdOrden, sheet.Nhcl, sheet.Hoja, r.Fila, r.Alimentacion, r.Cald, r.Calv, r.Gr, r.Ritmo,
-                    sheet.Fecha, sheet.CondicionId, sheet.Peso, sheet.DiasHospitalizacion, Resp = idUsuario,
-                    r.Txt7, r.Txt8, r.Txt9, r.Txt10, r.Txt11, r.Txt12,
-                    r.Txt13, r.Txt14, r.Txt15, r.Txt16, r.Txt17, r.Txt18,
-                    r.Txt19, r.Txt20, r.Txt21, r.Txt22, r.Txt23, r.Txt24,
-                    r.Txt1, r.Txt2, r.Txt3, r.Txt4, r.Txt5, r.Txt6
-                }, transaction);
-            if (filas != 1) throw new InvalidOperationException($"No se pudo guardar la fila {r.Fila} de alimentación.");
-        }
-
-        foreach (var r in sheet.Bloque3Fluidoterapia)
-        {
-            var filas = await connection.ExecuteAsync(@"
-                UPDATE hvt_bloque3ficha SET
-                    fluidoterapia = @Fluidoterapia, mpd = @Mpd, mldia = @MlDia, mlh = @MlH, gotas = @Gotas,
-                    fecha = @Fecha, condicion = @CondicionId, peso = @Peso, dia = @DiasHospitalizacion, responsable = @Resp,
-                    txt7 = @Txt7, txt8 = @Txt8, txt9 = @Txt9, txt10 = @Txt10, txt11 = @Txt11, txt12 = @Txt12,
-                    txt13 = @Txt13, txt14 = @Txt14, txt15 = @Txt15, txt16 = @Txt16, txt17 = @Txt17, txt18 = @Txt18,
-                    txt19 = @Txt19, txt20 = @Txt20, txt21 = @Txt21, txt22 = @Txt22, txt23 = @Txt23, txt24 = @Txt24,
-                    txt1 = @Txt1, txt2 = @Txt2, txt3 = @Txt3, txt4 = @Txt4, txt5 = @Txt5, txt6 = @Txt6
-                WHERE idorden = @IdOrden AND nhcl = @Nhcl AND ISNULL(hoja, 1) = @Hoja AND fila = @Fila",
-                new
-                {
-                    sheet.IdOrden, sheet.Nhcl, sheet.Hoja, r.Fila, r.Fluidoterapia, r.Mpd, r.MlDia, r.MlH, r.Gotas,
-                    sheet.Fecha, sheet.CondicionId, sheet.Peso, sheet.DiasHospitalizacion, Resp = idUsuario,
-                    r.Txt7, r.Txt8, r.Txt9, r.Txt10, r.Txt11, r.Txt12,
-                    r.Txt13, r.Txt14, r.Txt15, r.Txt16, r.Txt17, r.Txt18,
-                    r.Txt19, r.Txt20, r.Txt21, r.Txt22, r.Txt23, r.Txt24,
-                    r.Txt1, r.Txt2, r.Txt3, r.Txt4, r.Txt5, r.Txt6
-                }, transaction);
-            if (filas != 1) throw new InvalidOperationException($"No se pudo guardar la fila {r.Fila} de fluidoterapia.");
-        }
-
-        await transaction.CommitAsync();
-        }
-        catch
-        {
-            await transaction.RollbackAsync();
-            throw;
-        }
+        var filasActualizadas = await connection.ExecuteAsync(sql.ToString(), parametros, commandTimeout: 15);
+        if (filasActualizadas != 24)
+            throw new InvalidOperationException($"Se esperaban 24 filas y SQL actualizó {filasActualizadas}. No se confirmó el guardado.");
 
         await _db.RegistrarBitacoraAsync(
             $"Guardó Ficha Hospitalización Orden={sheet.IdOrden} Hoja={sheet.Hoja}",
             idUsuario, "Hosp_FichaHospitalizacion");
+    }
+
+    private static void ValidarFilas<T>(IReadOnlyCollection<T> filas, int cantidadEsperada, string bloque)
+        where T : Matriz24HorasBaseDto
+    {
+        if (filas.Count != cantidadEsperada || filas.Select(x => x.Fila).Distinct().Count() != cantidadEsperada)
+            throw new InvalidOperationException($"El bloque de {bloque} no contiene sus {cantidadEsperada} filas válidas.");
+    }
+
+    private static void AgregarActualizacionBloque<T>(
+        StringBuilder sql,
+        DynamicParameters parametros,
+        string tabla,
+        string prefijo,
+        IReadOnlyList<T> filas,
+        IReadOnlyList<(string Columna, string Propiedad)> columnasEspecificas)
+        where T : Matriz24HorasBaseDto
+    {
+        var columnas = columnasEspecificas.Concat(
+            Matriz24HorasBaseDto.HorasOrden.Select(h => ($"txt{h}", $"Txt{h}")));
+
+        sql.Append(" UPDATE ").Append(tabla).Append(" SET ");
+        bool primeraColumna = true;
+        foreach (var (columna, propiedad) in columnas)
+        {
+            if (!primeraColumna) sql.Append(',');
+            primeraColumna = false;
+            sql.Append(columna).Append(" = CASE fila ");
+
+            var propertyInfo = typeof(T).GetProperty(propiedad)
+                ?? typeof(Matriz24HorasBaseDto).GetProperty(propiedad)
+                ?? throw new InvalidOperationException($"No existe la propiedad {propiedad}.");
+
+            foreach (var fila in filas)
+            {
+                string nombreParametro = $"{prefijo}_{fila.Fila}_{propiedad}";
+                sql.Append("WHEN ").Append(fila.Fila).Append(" THEN @").Append(nombreParametro).Append(' ');
+                parametros.Add(nombreParametro, propertyInfo.GetValue(fila));
+            }
+            sql.Append("ELSE ").Append(columna).Append(" END ");
+        }
+
+        sql.Append(@", fecha=@Fecha, condicion=@CondicionId, peso=@Peso, dia=@DiasHospitalizacion, responsable=@Resp
+            WHERE idorden=@IdOrden AND nhcl=@Nhcl AND ISNULL(hoja,1)=@Hoja;")
+            .Append(" IF @@ROWCOUNT <> ").Append(filas.Count)
+            .Append(" THROW 50001, 'La ficha tiene filas incompletas en SQL Server.', 1;");
     }
 
     public async Task CerrarFichaHospitalizacionAsync(int idOrden)
