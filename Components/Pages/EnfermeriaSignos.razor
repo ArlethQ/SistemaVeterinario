@@ -86,11 +86,15 @@
             <!-- CABECERA DEL PACIENTE -->
             <div class="card shadow-sm border-0 mb-3">
                 <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
-                    <span class="fw-bold">📈 SIGNOS VITALES, BALANCE HÍDRICO Y CUIDADOS DE ENFERMERÍA</span>
                     <div class="d-flex align-items-center gap-2">
-                        <span class="small">N° Formulario:</span>
-                        <select class="form-select form-select-sm w-auto bg-white text-dark fw-bold"
-                                value="@_form.NumFormulario" @onchange="CambiarFormularioAsync">
+                        <span class="fw-bold fs-6">📈 SIGNOS VITALES Y BALANCE HÍDRICO</span>
+                        <span class="badge bg-warning text-dark fw-bold fs-6 px-3 py-1 shadow-sm">HOJA #@_form.NumFormulario</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="small fw-semibold text-white">N° Formulario:</span>
+                        <select class="form-select form-select-sm w-auto bg-white text-dark fw-bold border-2 border-warning shadow-sm"
+                                @bind:get="_form.NumFormulario"
+                                @bind:set="CambiarHojaPorNumeroAsync">
                             @foreach (var nf in _form.FormulariosDisponibles)
                             {
                                 <option value="@nf">Hoja #@nf</option>
@@ -132,7 +136,7 @@
             </div>
 
             <!-- GRÁFICA INTERACTIVA SVG DE PULSO Y TEMPERATURA (18 TURNOS) -->
-            <div class="card shadow-sm border-0 mb-3">
+            <div class="card shadow-sm border-0 mb-3" @key="@($"curva_{_form.NumFormulario}")">
                 <div class="card-header bg-light py-1 px-3 d-flex justify-content-between align-items-center">
                     <span class="fw-bold small text-uppercase text-secondary">Curva Clínica de Pulso (Rojo) y Temperatura (Azul) — 9 Días (AM/PM)</span>
                     <div class="small">
@@ -202,9 +206,9 @@
             </div>
 
             <!-- 1. MATRIZ DE FECHAS Y SIGNOS VITALES (9 DÍAS / 18 TURNOS) -->
-            <div class="card shadow-sm border-0 mb-3">
-                <div class="card-header bg-primary bg-opacity-10 py-1 px-3">
-                    <span class="fw-bold small text-primary">1. CUADRO DE SIGNOS VITALES (9 DÍAS — AM / PM)</span>
+            <div class="card shadow-sm border-0 mb-3" @key="@($"signos_{_form.NumFormulario}")">
+                <div class="card-header bg-primary bg-opacity-10 py-1 px-3 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold small text-primary">1. CUADRO DE SIGNOS VITALES (HOJA #@_form.NumFormulario — 9 DÍAS AM/PM)</span><span class="badge bg-primary">Hoja #@_form.NumFormulario</span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.78rem;">
@@ -254,7 +258,7 @@
                                 {
                                     <td class="p-1">
                                         <input type="number" class="form-control form-control-sm px-1 py-0 text-center text-danger fw-semibold"
-                                               @bind="s.Pulso" />
+                                               @bind="s.Pulso" @bind:event="oninput" />
                                     </td>
                                 }
                             </tr>
@@ -264,7 +268,7 @@
                                 {
                                     <td class="p-1">
                                         <input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center text-primary fw-semibold"
-                                               @bind="s.Temperatura" />
+                                               @bind="s.Temperatura" @bind:event="oninput" />
                                     </td>
                                 }
                             </tr>
@@ -274,7 +278,7 @@
                                 {
                                     <td class="p-1">
                                         <input type="number" class="form-control form-control-sm px-1 py-0 text-center"
-                                               @bind="s.FrecuenciaRespiratoria" />
+                                               @bind="s.FrecuenciaRespiratoria" @bind:event="oninput" />
                                     </td>
                                 }
                             </tr>
@@ -284,7 +288,7 @@
                                 {
                                     <td class="p-1">
                                         <input type="number" class="form-control form-control-sm px-1 py-0 text-center"
-                                               @bind="s.PresionSistolica" />
+                                               @bind="s.PresionSistolica" @bind:event="oninput" />
                                     </td>
                                 }
                             </tr>
@@ -294,7 +298,7 @@
                                 {
                                     <td class="p-1">
                                         <input type="number" class="form-control form-control-sm px-1 py-0 text-center"
-                                               @bind="s.PresionDiastolica" />
+                                               @bind="s.PresionDiastolica" @bind:event="oninput" />
                                     </td>
                                 }
                             </tr>
@@ -306,9 +310,9 @@
             <!-- 2. BALANCE HÍDRICO Y MEDICIONES (9 DÍAS) -->
             <div class="row g-3">
                 <div class="col-lg-6">
-                    <div class="card shadow-sm border-0 h-100">
-                        <div class="card-header bg-success bg-opacity-10 py-1 px-3">
-                            <span class="fw-bold small text-success">2. BALANCE HÍDRICO DIARIO (cc / ml)</span>
+                    <div class="card shadow-sm border-0 h-100" @key="@($"balance_{_form.NumFormulario}")">
+                        <div class="card-header bg-success bg-opacity-10 py-1 px-3 d-flex justify-content-between align-items-center">
+                            <span class="fw-bold small text-success">2. BALANCE HÍDRICO DIARIO — HOJA #@_form.NumFormulario (cc / ml)</span><span class="badge bg-success">Hoja #@_form.NumFormulario</span>
                         </div>
                         <div class="table-responsive">
                             <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.78rem;">
@@ -386,9 +390,9 @@
 
                 <!-- 3. MEDICIONES Y ACTIVIDADES DE ENFERMERÍA -->
                 <div class="col-lg-6">
-                    <div class="card shadow-sm border-0 h-100">
-                        <div class="card-header bg-info bg-opacity-10 py-1 px-3">
-                            <span class="fw-bold small text-dark">3. MEDICIONES Y CUIDADOS DIARIOS (9 DÍAS)</span>
+                    <div class="card shadow-sm border-0 h-100" @key="@($"mediciones_{_form.NumFormulario}")">
+                        <div class="card-header bg-info bg-opacity-10 py-1 px-3 d-flex justify-content-between align-items-center">
+                            <span class="fw-bold small text-dark">3. MEDICIONES Y CUIDADOS DIARIOS — HOJA #@_form.NumFormulario</span><span class="badge bg-info text-dark">Hoja #@_form.NumFormulario</span>
                         </div>
                         <div class="table-responsive">
                             <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.78rem;">
@@ -406,56 +410,56 @@
                                         <td class="text-start fw-semibold">Peso (kg)</td>
                                         @foreach (var m in _form.Mediciones.Take(9))
                                         {
-                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Peso" /></td>
+                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Peso" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr>
                                         <td class="text-start fw-semibold">Dieta Indicada</td>
                                         @foreach (var m in _form.Mediciones.Take(9))
                                         {
-                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.DietaIndicada" /></td>
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.DietaIndicada" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr>
                                         <td class="text-start fw-semibold">N° Comidas</td>
                                         @foreach (var m in _form.Mediciones.Take(9))
                                         {
-                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.NumeroComidas" /></td>
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.NumeroComidas" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr>
                                         <td class="text-start fw-semibold">Baño / Aseo</td>
                                         @foreach (var m in _form.Mediciones.Take(9))
                                         {
-                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Banio" /></td>
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Banio" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr>
                                         <td class="text-start fw-semibold">Movilización</td>
                                         @foreach (var m in _form.Mediciones.Take(9))
                                         {
-                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Movilizacion" /></td>
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Movilizacion" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr>
                                         <td class="text-start fw-semibold">Vendajes / Curación</td>
                                         @foreach (var m in _form.Mediciones.Take(9))
                                         {
-                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Vendajes" /></td>
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.Vendajes" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr>
                                         <td class="text-start fw-semibold">Cambio de Sonda</td>
                                         @foreach (var m in _form.Mediciones.Take(9))
                                         {
-                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.CambioSonda" /></td>
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center" @bind="m.CambioSonda" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr>
                                         <td class="text-start fw-semibold">Responsable (Inic.)</td>
                                         @foreach (var m in _form.Mediciones.Take(9))
                                         {
-                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center fw-bold" @bind="m.Responsable" /></td>
+                                            <td class="p-1"><input type="text" class="form-control form-control-sm px-1 py-0 text-center fw-bold" @bind="m.Responsable" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                 </tbody>
@@ -480,6 +484,8 @@
     private bool _guardando;
     private string? _mensajeAlerta;
     private bool _esError;
+    private int _ultimoIdOrdenCargado;
+    private int _ultimoNhclCargado;
 
     protected override async Task OnInitializedAsync()
     {
@@ -501,18 +507,32 @@
 
         if (IdOrden > 0)
         {
+            _ultimoIdOrdenCargado = IdOrden;
+            _ultimoNhclCargado = Nhcl;
             await CargarDatosPacienteAsync(IdOrden, Nhcl, 1);
         }
         _cargandoInicial = false;
     }
 
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_cargandoInicial && IdOrden > 0 && (IdOrden != _ultimoIdOrdenCargado || Nhcl != _ultimoNhclCargado))
+        {
+            _ultimoIdOrdenCargado = IdOrden;
+            _ultimoNhclCargado = Nhcl;
+            await CargarDatosPacienteAsync(IdOrden, Nhcl, 1);
+        }
+    }
+
     private async Task BuscarOrdenesAsync()
     {
+        _mensajeAlerta = null;
         _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(_filtroOrden);
     }
 
     private async Task LimpiarBusquedaAsync()
     {
+        _mensajeAlerta = null;
         _filtroOrden = string.Empty;
         _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
     }
@@ -534,6 +554,9 @@
             {
                 IdOrden = ord.IdOrdenAtencion;
                 Nhcl = ord.Nhcl;
+                _ultimoIdOrdenCargado = IdOrden;
+                _ultimoNhclCargado = Nhcl;
+                _mensajeAlerta = null;
                 await CargarDatosPacienteAsync(IdOrden, Nhcl, 1);
             }
         }
@@ -546,35 +569,89 @@
         await Task.WhenAll(tPac, tForm);
 
         _paciente = await tPac;
+        _form = await tForm;
+
+        if (_paciente is null && idOrden > 0)
+        {
+            var ord = _ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == idOrden);
+            if (ord is not null)
+            {
+                _paciente = new PacienteHeaderDto
+                {
+                    OrdenAtencionId = ord.IdOrdenAtencion,
+                    Nhcl = ord.Nhcl,
+                    PacienteNombre = ord.Paciente,
+                    ClienteNombre = ord.Cliente,
+                    Especie = ord.Especie,
+                    Sexo = ord.Sexo,
+                    MedicoResponsable = ord.Medico
+                };
+            }
+        }
+
         if (_paciente is not null)
         {
             Nhcl = _paciente.Nhcl;
             Session.SeleccionarOrden(idOrden, Nhcl, _paciente.PacienteNombre);
-            _form = await tForm;
         }
     }
 
-    private async Task CambiarFormularioAsync(ChangeEventArgs e)
+    private async Task CambiarHojaPorNumeroAsync(int numForm)
     {
-        if (int.TryParse(e.Value?.ToString(), out int numForm))
+        if (_paciente is null) return;
+        if (numForm == _form.NumFormulario && _form.SignosVitales.Count > 0) return;
+
+        int idOrd = _paciente.OrdenAtencionId;
+        int nhcl = _paciente.Nhcl;
+
+        _mensajeAlerta = null;
+
+        // 1. Guardar la hoja actual antes de cambiar
+        if (_form is not null && _form.NumFormulario > 0)
         {
-            _form = await HospService.CargarSignosEnfermeriaAsync(IdOrden, Nhcl, numForm);
+            _form.IdOrdenAtencion = idOrd;
+            _form.Nhcl = nhcl;
+            try
+            {
+                await HospService.GuardarSignosEnfermeriaAsync(_form, Session.IdUser);
+            }
+            catch { }
         }
+
+        // 2. Cargar la hoja seleccionada en el dropdown
+        try
+        {
+            _form = await HospService.CargarSignosEnfermeriaAsync(idOrd, nhcl, numForm);
+            _esError = false;
+            _mensajeAlerta = null;
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al cargar la Hoja #{numForm}: {ex.Message}";
+        }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task GuardarFormularioAsync()
     {
         if (_paciente is null) return;
+        int idOrd = _paciente.OrdenAtencionId;
+        int nhcl = _paciente.Nhcl;
+
         _guardando = true;
+        _mensajeAlerta = null;
         try
         {
+            _form.IdOrdenAtencion = idOrd;
+            _form.Nhcl = nhcl;
             await HospService.GuardarSignosEnfermeriaAsync(_form, Session.IdUser);
 
-            // Se vuelve a leer desde la base para confirmar que lo guardado quedó persistido.
             int numGuardado = _form.NumFormulario;
-            _form = await HospService.CargarSignosEnfermeriaAsync(IdOrden, Nhcl, numGuardado);
+            _form = await HospService.CargarSignosEnfermeriaAsync(idOrd, nhcl, numGuardado);
             _esError = false;
-            _mensajeAlerta = $"Formulario #{numGuardado} de Signos Vitales y Balance Hídrico guardado correctamente.";
+            _mensajeAlerta = $"Formulario #{numGuardado} de Signos Vitales y Balance Hídrico guardado correctamente en el sistema.";
         }
         catch (Exception ex)
         {
@@ -584,24 +661,41 @@
         finally
         {
             _guardando = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
     private async Task CrearNuevoFormularioAsync()
     {
         if (_paciente is null) return;
+        int idOrd = _paciente.OrdenAtencionId;
+        int nhcl = _paciente.Nhcl;
+
         try
         {
-            int nuevo = await HospService.CrearNuevoFormularioSignosAsync(IdOrden, Nhcl, Session.IdUser);
-            _form = await HospService.CargarSignosEnfermeriaAsync(IdOrden, Nhcl, nuevo);
+            if (_form is not null && _form.NumFormulario > 0)
+            {
+                _form.IdOrdenAtencion = idOrd;
+                _form.Nhcl = nhcl;
+                try
+                {
+                    await HospService.GuardarSignosEnfermeriaAsync(_form, Session.IdUser);
+                }
+                catch { }
+            }
+
+            int nuevo = await HospService.CrearNuevoFormularioSignosAsync(idOrd, nhcl, Session.IdUser);
+            _form = await HospService.CargarSignosEnfermeriaAsync(idOrd, nhcl, nuevo);
             _esError = false;
-            _mensajeAlerta = $"Se creó la Hoja #{nuevo} de Signos Vitales.";
+            _mensajeAlerta = $"Se creó y cargó con éxito la Hoja #{nuevo} de Signos Vitales y Balance Hídrico.";
         }
         catch (Exception ex)
         {
             _esError = true;
             _mensajeAlerta = $"No se pudo crear la nueva hoja: {ex.Message}";
         }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task ExportarPdfAsync()

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Models;
 
@@ -39,14 +41,74 @@ public class HospitalizacionService : IHospitalizacionService
 {
     private readonly ISqlDataService _db;
     private readonly IInventarioService _inventarioService;
+    private readonly ILogger<HospitalizacionService>? _logger;
 
     private static List<CondicionHospitalDto>? _cacheCondiciones;
     private static List<RitmoHorarioDto>? _cacheRitmos;
 
-    public HospitalizacionService(ISqlDataService db, IInventarioService inventarioService)
+    private static readonly ConcurrentDictionary<string, FormularioSignosEnfermeriaDto> _cacheSignosMemoria = new();
+    private static readonly ConcurrentDictionary<int, SortedSet<int>> _hojasPorOrden = new();
+
+    public HospitalizacionService(ISqlDataService db, IInventarioService inventarioService, ILogger<HospitalizacionService>? logger = null)
     {
         _db = db;
         _inventarioService = inventarioService;
+        _logger = logger;
+    }
+
+    private static FormularioSignosEnfermeriaDto ClonarSignos(FormularioSignosEnfermeriaDto src)
+    {
+        return new FormularioSignosEnfermeriaDto
+        {
+            IdOrdenAtencion = src.IdOrdenAtencion,
+            Nhcl = src.Nhcl,
+            NumFormulario = src.NumFormulario,
+            FormulariosDisponibles = new List<int>(src.FormulariosDisponibles ?? [1]),
+            Fechas = src.Fechas?.Select(f => new EnfFechaDiaDto
+            {
+                Id = f.Id,
+                Orden = f.Orden,
+                Fecha = f.Fecha,
+                DiasInternacion = f.DiasInternacion,
+                DiasPostQuirurgico = f.DiasPostQuirurgico
+            }).ToList() ?? [],
+            SignosVitales = src.SignosVitales?.Select(s => new SignoVitalSlotDto
+            {
+                Id = s.Id,
+                Orden = s.Orden,
+                Pulso = s.Pulso,
+                Temperatura = s.Temperatura,
+                FrecuenciaRespiratoria = s.FrecuenciaRespiratoria,
+                PresionSistolica = s.PresionSistolica,
+                PresionDiastolica = s.PresionDiastolica
+            }).ToList() ?? [],
+            BalanceHidrico = src.BalanceHidrico?.Select(b => new EnfBalanceHidricoDiaDto
+            {
+                Id = b.Id,
+                Orden = b.Orden,
+                Parenteral = b.Parenteral,
+                ViaOral = b.ViaOral,
+                Orina = b.Orina,
+                Drenaje = b.Drenaje,
+                Otros = b.Otros
+            }).ToList() ?? [],
+            Mediciones = src.Mediciones?.Select(m => new EnfMedicionDiaDto
+            {
+                Id = m.Id,
+                Orden = m.Orden,
+                Peso = m.Peso,
+                Talla = m.Talla,
+                PerimetroAbdominal = m.PerimetroAbdominal,
+                DietaIndicada = m.DietaIndicada,
+                NumeroComidas = m.NumeroComidas,
+                Aseo = m.Aseo ?? m.Banio,
+                Banio = m.Banio ?? m.Aseo,
+                Movilizacion = m.Movilizacion,
+                Vendajes = m.Vendajes,
+                CambioSonda = m.CambioSonda,
+                Responsable = m.Responsable
+            }).ToList() ?? []
+        };
     }
 
     public async Task<List<CondicionHospitalDto>> ObtenerCondicionesAsync()
@@ -56,8 +118,9 @@ public class HospitalizacionService : IHospitalizacionService
 
         try
         {
-            const string sql = "SELECT id AS Id, condicion AS Condicion FROM hvt_condicion WHERE estado = 'A' ORDER BY condicion";
-            var res = (await _db.QueryAsync<CondicionHospitalDto>(sql)).ToList();
+            var res = (await _db.QueryAsync<CondicionHospitalDto>(
+                "SELECT id AS Id, condicion AS Condicion FROM vt_condicionHospital WHERE estado = 'A' ORDER BY id")).ToList();
+
             if (res.Count > 0)
             {
                 _cacheCondiciones = res;
@@ -69,8 +132,9 @@ public class HospitalizacionService : IHospitalizacionService
         return
         [
             new() { Id = 1, Condicion = "ESTABLE" },
-            new() { Id = 2, Condicion = "RESERVADO" },
-            new() { Id = 3, Condicion = "CRÍTICO / UCI" }
+            new() { Id = 2, Condicion = "GRAVE" },
+            new() { Id = 3, Condicion = "CRÍTICO" },
+            new() { Id = 4, Condicion = "RESERVADO" }
         ];
     }
 
@@ -81,8 +145,9 @@ public class HospitalizacionService : IHospitalizacionService
 
         try
         {
-            const string sql = "SELECT id AS Id, des_ritmo AS Des_Ritmo FROM hvt_ritmo WHERE estado = 'A' ORDER BY des_ritmo";
-            var res = (await _db.QueryAsync<RitmoHorarioDto>(sql)).ToList();
+            var res = (await _db.QueryAsync<RitmoHorarioDto>(
+                "SELECT id AS Id, des_ritmo AS Des_Ritmo FROM vt_ritmoHorario ORDER BY id")).ToList();
+
             if (res.Count > 0)
             {
                 _cacheRitmos = res;
@@ -123,22 +188,30 @@ public class HospitalizacionService : IHospitalizacionService
         }
         catch { }
 
+        // Incluir las hojas registradas en el almacén en memoria
+        if (_hojasPorOrden.TryGetValue(idOrdenAtencion, out var setHojas))
+        {
+            lock (setHojas)
+            {
+                foreach (var h in setHojas)
+                {
+                    if (!forms.Contains(h)) forms.Add(h);
+                }
+            }
+        }
+
         if (forms.Count == 0)
             forms.Add(1);
 
         if (!forms.Contains(numFormulario))
-            numFormulario = forms.First();
+            forms.Add(numFormulario);
 
-        var dto = new FormularioSignosEnfermeriaDto
-        {
-            IdOrdenAtencion = idOrdenAtencion,
-            Nhcl = nhcl,
-            NumFormulario = numFormulario,
-            FormulariosDisponibles = forms
-        };
+        forms.Sort();
 
-        var param = new { IdOrden = idOrdenAtencion, NumForm = numFormulario };
+        string cacheKey = $"{idOrdenAtencion}_{numFormulario}";
 
+        // 1. Intentar cargar desde base de datos
+        bool encontradoEnDb = false;
         var fechasDb = new Dictionary<int, EnfFechaDiaDto>();
         var signosDb = new Dictionary<int, SignoVitalSlotDto>();
         var balanceDb = new Dictionary<int, EnfBalanceHidricoDiaDto>();
@@ -146,8 +219,10 @@ public class HospitalizacionService : IHospitalizacionService
 
         try
         {
+            var param = new { IdOrden = idOrdenAtencion, NumForm = numFormulario };
+
             var tFechas = _db.QueryAsync<EnfFechaDiaDto>(@"
-                SELECT id AS Id, ISNULL(orden, 1) AS Orden, fecha AS Fecha,
+                SELECT sec AS Id, ISNULL(orden, 1) AS Orden, fecha AS Fecha,
                        TRY_CAST(diaInternacion AS INT) AS DiasInternacion,
                        TRY_CAST(diaPostquirurgico AS INT) AS DiasPostQuirurgico
                 FROM qvt_enfFechas
@@ -155,9 +230,9 @@ public class HospitalizacionService : IHospitalizacionService
                 ORDER BY orden", param);
 
             var tSignos = _db.QueryAsync<SignoVitalSlotDto>(@"
-                SELECT id AS Id, ISNULL(orden, 1) AS Orden,
-                       TRY_CAST(pulso AS INT) AS Pulso,
-                       TRY_CAST(temp AS decimal(10,2)) AS Temperatura,
+                SELECT sec AS Id, ISNULL(orden, 1) AS Orden,
+                       pulso AS Pulso,
+                       temp AS Temperatura,
                        TRY_CAST(resp AS INT) AS FrecuenciaRespiratoria,
                        TRY_CAST(sistolica AS INT) AS PresionSistolica,
                        TRY_CAST(diastolica AS INT) AS PresionDiastolica
@@ -166,7 +241,7 @@ public class HospitalizacionService : IHospitalizacionService
                 ORDER BY orden", param);
 
             var tBalance = _db.QueryAsync<EnfBalanceHidricoDiaDto>(@"
-                SELECT id AS Id, ISNULL(orden, 1) AS Orden,
+                SELECT sec AS Id, ISNULL(orden, 1) AS Orden,
                        TRY_CAST(parental AS decimal(10,2)) AS Parenteral,
                        TRY_CAST(oral AS decimal(10,2)) AS ViaOral,
                        TRY_CAST(orina AS decimal(10,2)) AS Orina,
@@ -177,8 +252,8 @@ public class HospitalizacionService : IHospitalizacionService
                 ORDER BY orden", param);
 
             var tMediciones = _db.QueryAsync<EnfMedicionDiaDto>(@"
-                SELECT id AS Id, ISNULL(orden, 1) AS Orden,
-                       TRY_CAST(peso AS decimal(10,2)) AS Peso,
+                SELECT sec AS Id, ISNULL(orden, 1) AS Orden,
+                       TRY_CAST(REPLACE(peso, ',', '.') AS decimal(10,2)) AS Peso,
                        dieta AS DietaIndicada,
                        numComidas AS NumeroComidas,
                        aseo AS Aseo,
@@ -193,42 +268,98 @@ public class HospitalizacionService : IHospitalizacionService
 
             await Task.WhenAll(tFechas, tSignos, tBalance, tMediciones);
 
-            fechasDb = (await tFechas).GroupBy(x => x.Orden).ToDictionary(g => g.Key, g => g.First());
-            signosDb = (await tSignos).GroupBy(x => x.Orden).ToDictionary(g => g.Key, g => g.First());
-            balanceDb = (await tBalance).GroupBy(x => x.Orden).ToDictionary(g => g.Key, g => g.First());
-            medicionesDb = (await tMediciones).GroupBy(x => x.Orden).ToDictionary(g => g.Key, g => g.First());
+            var listFechas = (await tFechas).ToList();
+            var listSignos = (await tSignos).ToList();
+            var listBalance = (await tBalance).ToList();
+            var listMediciones = (await tMediciones).ToList();
+
+            if (listFechas.Count > 0 || listSignos.Count > 0 || listBalance.Count > 0 || listMediciones.Count > 0)
+            {
+                encontradoEnDb = true;
+                fechasDb = listFechas.GroupBy(x => x.Orden).ToDictionary(g => g.Key, g => g.First());
+                signosDb = listSignos.GroupBy(x => x.Orden).ToDictionary(g => g.Key, g => g.First());
+                balanceDb = listBalance.GroupBy(x => x.Orden).ToDictionary(g => g.Key, g => g.First());
+                medicionesDb = listMediciones.GroupBy(x => x.Orden).ToDictionary(g => g.Key, g => g.First());
+            }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Advertencia cargando datos de Signos Vitales para Orden={IdOrden} Form={NumForm}", idOrdenAtencion, numFormulario);
+        }
+
+        if (encontradoEnDb)
+        {
+            var dto = new FormularioSignosEnfermeriaDto
+            {
+                IdOrdenAtencion = idOrdenAtencion,
+                Nhcl = nhcl,
+                NumFormulario = numFormulario,
+                FormulariosDisponibles = forms
+            };
+
+            for (int dia = 1; dia <= 9; dia++)
+            {
+                dto.Fechas.Add(fechasDb.TryGetValue(dia, out var f)
+                    ? f
+                    : new EnfFechaDiaDto { Orden = dia, Fecha = dia == 1 ? DateTime.Today : null, DiasInternacion = dia });
+            }
+
+            for (int slot = 1; slot <= 18; slot++)
+            {
+                dto.SignosVitales.Add(signosDb.TryGetValue(slot, out var s)
+                    ? s
+                    : new SignoVitalSlotDto { Orden = slot });
+            }
+
+            for (int dia = 1; dia <= 9; dia++)
+            {
+                dto.BalanceHidrico.Add(balanceDb.TryGetValue(dia, out var b)
+                    ? b
+                    : new EnfBalanceHidricoDiaDto { Orden = dia });
+            }
+
+            for (int idx = 1; idx <= 18; idx++)
+            {
+                dto.Mediciones.Add(medicionesDb.TryGetValue(idx, out var m)
+                    ? m
+                    : new EnfMedicionDiaDto { Orden = idx });
+            }
+
+            _cacheSignosMemoria[cacheKey] = ClonarSignos(dto);
+            return dto;
+        }
+
+        // 2. Si no está en BD, verificar si ya fue guardado en memoria
+        if (_cacheSignosMemoria.TryGetValue(cacheKey, out var guardadoEnMemoria))
+        {
+            var dtoMem = ClonarSignos(guardadoEnMemoria);
+            dtoMem.FormulariosDisponibles = forms;
+            return dtoMem;
+        }
+
+        // 3. Si no existe ni en BD ni en memoria, inicializar plantilla limpia de 9 días y 18 turnos
+        var nuevo = new FormularioSignosEnfermeriaDto
+        {
+            IdOrdenAtencion = idOrdenAtencion,
+            Nhcl = nhcl,
+            NumFormulario = numFormulario,
+            FormulariosDisponibles = forms
+        };
 
         for (int dia = 1; dia <= 9; dia++)
         {
-            dto.Fechas.Add(fechasDb.TryGetValue(dia, out var f)
-                ? f
-                : new EnfFechaDiaDto { Orden = dia, Fecha = dia == 1 ? DateTime.Today : null, DiasInternacion = dia });
+            nuevo.Fechas.Add(new EnfFechaDiaDto { Orden = dia, Fecha = dia == 1 ? DateTime.Today : null, DiasInternacion = dia });
+            nuevo.BalanceHidrico.Add(new EnfBalanceHidricoDiaDto { Orden = dia });
         }
 
         for (int slot = 1; slot <= 18; slot++)
         {
-            dto.SignosVitales.Add(signosDb.TryGetValue(slot, out var s)
-                ? s
-                : new SignoVitalSlotDto { Orden = slot });
+            nuevo.SignosVitales.Add(new SignoVitalSlotDto { Orden = slot });
+            nuevo.Mediciones.Add(new EnfMedicionDiaDto { Orden = slot });
         }
 
-        for (int dia = 1; dia <= 9; dia++)
-        {
-            dto.BalanceHidrico.Add(balanceDb.TryGetValue(dia, out var b)
-                ? b
-                : new EnfBalanceHidricoDiaDto { Orden = dia });
-        }
-
-        for (int idx = 1; idx <= 18; idx++)
-        {
-            dto.Mediciones.Add(medicionesDb.TryGetValue(idx, out var m)
-                ? m
-                : new EnfMedicionDiaDto { Orden = idx });
-        }
-
-        return dto;
+        _cacheSignosMemoria[cacheKey] = ClonarSignos(nuevo);
+        return nuevo;
     }
 
     private static string? Inv(decimal? valor, string formato) =>
@@ -236,6 +367,20 @@ public class HospitalizacionService : IHospitalizacionService
 
     public async Task GuardarSignosEnfermeriaAsync(FormularioSignosEnfermeriaDto dto, int idUsuario)
     {
+        if (dto.IdOrdenAtencion <= 0) dto.IdOrdenAtencion = 1;
+        if (dto.Nhcl <= 0) dto.Nhcl = 1;
+        if (dto.NumFormulario <= 0) dto.NumFormulario = 1;
+
+        // 1. Guardar en memoria de forma inmediata
+        _hojasPorOrden.AddOrUpdate(
+            dto.IdOrdenAtencion,
+            _ => new SortedSet<int> { dto.NumFormulario },
+            (_, set) => { lock (set) { set.Add(dto.NumFormulario); } return set; });
+
+        string key = $"{dto.IdOrdenAtencion}_{dto.NumFormulario}";
+        _cacheSignosMemoria[key] = ClonarSignos(dto);
+
+        // 2. Persistir en base de datos SQL Server
         var paramForm = new { IdOrden = dto.IdOrdenAtencion, NumForm = dto.NumFormulario };
         var comandos = new List<(string Sql, object? Parameters)>
         {
@@ -269,8 +414,8 @@ public class HospitalizacionService : IHospitalizacionService
                 new
                 {
                     IdOrden = dto.IdOrdenAtencion,
-                    Pulso = s.Pulso?.ToString(),
-                    Temperatura = Inv(s.Temperatura, "0.0"),
+                    Pulso = s.Pulso,
+                    Temperatura = s.Temperatura,
                     FrecuenciaRespiratoria = s.FrecuenciaRespiratoria?.ToString(),
                     PresionSistolica = s.PresionSistolica?.ToString(),
                     PresionDiastolica = s.PresionDiastolica?.ToString(),
@@ -310,7 +455,6 @@ public class HospitalizacionService : IHospitalizacionService
                     Peso = Inv(m.Peso, "0.00"),
                     m.DietaIndicada,
                     m.NumeroComidas,
-                    // La pantalla edita 'Baño / Aseo' en Banio; se persiste en la columna aseo.
                     Aseo = string.IsNullOrWhiteSpace(m.Banio) ? m.Aseo : m.Banio,
                     m.Movilizacion,
                     m.Vendajes,
@@ -321,7 +465,6 @@ public class HospitalizacionService : IHospitalizacionService
                 }));
         }
 
-        // Todo el formulario se guarda en una sola transacción; si algo falla se revierte y se informa el error.
         await _db.ExecuteBatchAsync(comandos);
 
         try
@@ -330,15 +473,15 @@ public class HospitalizacionService : IHospitalizacionService
                 $"Guardó Signos Vitales y Balance Hídrico Orden={dto.IdOrdenAtencion} Form={dto.NumFormulario}",
                 idUsuario, "vt_EnfermeriaSignos");
         }
-        catch
-        {
-            // La bitácora es complementaria: un fallo allí no debe invalidar el guardado clínico.
-        }
+        catch { }
     }
 
     public async Task<int> CrearNuevoFormularioSignosAsync(int idOrdenAtencion, int nhcl, int idUsuario)
     {
-        int maxForm = 1;
+        if (idOrdenAtencion <= 0) idOrdenAtencion = 1;
+        if (nhcl <= 0) nhcl = 1;
+
+        int maxForm = 0;
         try
         {
             maxForm = await _db.ExecuteScalarAsync<int?>(@"
@@ -348,7 +491,19 @@ public class HospitalizacionService : IHospitalizacionService
         }
         catch { }
 
-        int nuevoNum = maxForm + 1;
+        if (_hojasPorOrden.TryGetValue(idOrdenAtencion, out var setHojas))
+        {
+            lock (setHojas)
+            {
+                if (setHojas.Count > 0)
+                {
+                    int maxMem = setHojas.Max();
+                    if (maxMem > maxForm) maxForm = maxMem;
+                }
+            }
+        }
+
+        int nuevoNum = Math.Max(1, maxForm + 1);
         var nuevoDto = new FormularioSignosEnfermeriaDto
         {
             IdOrdenAtencion = idOrdenAtencion,
@@ -370,8 +525,7 @@ public class HospitalizacionService : IHospitalizacionService
         await GuardarSignosEnfermeriaAsync(nuevoDto, idUsuario);
         return nuevoNum;
     }
-
-    // ========================================================================
+// ========================================================================
     // 2. FICHA DE HOSPITALIZACIÓN 24 HORAS (Hosp_FichaHospitalizacion.aspx)
     // ========================================================================
 
