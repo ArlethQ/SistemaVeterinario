@@ -4,27 +4,41 @@
 @inject IAdmisionFacturacionService AdmisionService
 @inject SessionStateService SessionState
 @inject NavigationManager NavManager
+@inject IWebHostEnvironment Env
 
 <PageTitle>e-ForVets — Recepción, Triaje y Órdenes de Atención</PageTitle>
 
-<div class="container-fluid py-3">
+<div class="container-fluid py-3 triage-page">
     <!-- Encabezado -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded-3 shadow-sm bg-white border-start border-4 border-success">
-        <div>
-            <h4 class="mb-0 fw-bold text-success">
+    <div class="triage-hero d-flex flex-wrap justify-content-between align-items-center mb-2 p-3 rounded-3 bg-white">
+        <div class="d-flex align-items-center gap-3">
+            <div class="triage-hero-icon">🐾</div><div>
+            <h4 class="mb-0 fw-bold">
                 <i class="bi bi-clipboard2-pulse-fill me-2"></i>Recepción de Pacientes, Triaje y Órdenes de Atención
             </h4>
             <small class="text-muted">
                 Asignación de médico tratante, triaje clínico, cola de espera en vivo y despacho por área.
             </small>
+            </div>
         </div>
         <div class="d-flex gap-2">
+            <button type="button" class="btn btn-success btn-sm" @onclick="AbrirFormularioOrden">+ Nueva orden</button>
             <a href="/admision/clientes-pacientes" class="btn btn-outline-primary btn-sm">
                 <i class="bi bi-people me-1"></i>Clientes / Mascotas
             </a>
             <a href="/admision/citas" class="btn btn-outline-dark btn-sm">
                 <i class="bi bi-calendar-week me-1"></i>Agenda de Citas
             </a>
+        </div>
+    </div>
+
+    <div class="waiting-strip mb-3">
+        <div class="waiting-label"><span>◷</span><div><strong>Pacientes en espera</strong><small>Próximos a ser atendidos</small></div></div>
+        <div class="waiting-doctors">
+            @foreach (var med in _conteoMedicos.Take(4))
+            {
+                <div class="doctor-chip"><span class="doctor-avatar">@InicialesMedico(med.Medico)</span><div><strong>@med.Medico</strong><small>@med.Especialidad</small></div><b>@med.EnEspera</b></div>
+            }
         </div>
     </div>
 
@@ -38,14 +52,12 @@
 
     @if (_cargandoInicial)
     {
-        <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
-            <div class="spinner-border spinner-border-sm" role="status"></div>
-            <span class="fw-semibold small">Cargando recepción, triaje y órdenes de atención...</span>
-        </div>
+        <LoadingState Title="Cargando recepción y triaje"
+                      Message="Preparando pacientes, médicos y órdenes de atención." />
     }
 
     <!-- Fila Superior: Conteo de Médicos en Espera (Conteomedicos) -->
-    <div class="row g-2 mb-3">
+    <div class="row g-2 mb-3 d-none">
         @foreach (var med in _conteoMedicos)
         {
             <div class="col-md-3 col-sm-6">
@@ -67,17 +79,25 @@
         }
     </div>
 
+    @if (_mostrarFormularioOrden)
+    {
+        <div class="order-drawer-backdrop" @onclick="CerrarFormularioOrden"></div>
+    }
+
     <div class="row g-3">
         <!-- Columna Izquierda: Emisión de Nueva Orden de Atención -->
-        <div class="col-lg-4">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-success text-white fw-bold">
-                    <i class="bi bi-plus-circle me-1"></i>Generar Nueva Orden de Atención
+        <div class="@(_mostrarFormularioOrden ? "order-drawer" : "d-none")">
+            <div class="card shadow-sm border-0 triage-register-card">
+                <div class="card-header text-white fw-bold">
+                    <div><i class="bi bi-plus-circle me-1"></i><span>1.</span> Registrar Nueva Orden de Atención
+                    <small>Busca al paciente, completa los datos y envíalo a sala de espera.</small></div>
+                    <button type="button" class="order-drawer-close" title="Cerrar" @onclick="CerrarFormularioOrden">×</button>
                 </div>
                 <div class="card-body">
                     <!-- Selector rápido de paciente -->
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">1. Buscar Paciente por NHCL, Nombre o Cédula</label>
+                        <label class="form-label small fw-bold"><span class="step-dot">1</span> Buscar paciente</label>
+                        <div class="patient-search-tabs"><span class="active">Por nombre / NHCL</span><span>Por cédula</span><span>Por código</span></div>
                         <div class="input-group input-group-sm">
                             <input type="text" class="form-control" placeholder="Ej: 5001, MAX, Mendoza..."
                                    @bind="_filtroPaciente" @bind:event="oninput" @onkeyup="BuscarPacientesAsync" />
@@ -108,9 +128,11 @@
                     <EditForm Model="_nuevaOrden" OnValidSubmit="CrearOrdenAtencionAsync">
                         <DataAnnotationsValidator />
 
-                        <div class="p-2 rounded bg-light border mb-2 small">
-                            <div><strong>Paciente Seleccionado:</strong> @(_nuevaOrden.Nhcl > 0 ? $"#{_nuevaOrden.Nhcl} - {_nuevaOrden.NombreMascota}" : "Ninguno")</div>
-                            <div><strong>Propietario:</strong> @_nuevaOrden.NombrePropietario</div>
+                        <div class="selected-patient mb-2 small">
+                            <span class="selected-patient-avatar">
+                                @if (!string.IsNullOrEmpty(ObtenerFotoPaciente(_nuevaOrden.Nhcl))) { <img src="@ObtenerFotoPaciente(_nuevaOrden.Nhcl)" alt="Foto de @_nuevaOrden.NombreMascota" /> }
+                                else { <span>🐾</span> }
+                            </span><div><small>Paciente seleccionado</small><strong>@(_nuevaOrden.Nhcl > 0 ? $"#{_nuevaOrden.Nhcl} - {_nuevaOrden.NombreMascota}" : "Ninguno")</strong><span>Propietario: @_nuevaOrden.NombrePropietario</span></div>
                         </div>
 
                         <div class="row g-2">
@@ -173,7 +195,13 @@
         </div>
 
         <!-- Columna Derecha: Tablero de Órdenes Activas del Día y Ruteo Clínico -->
-        <div class="col-lg-8">
+        <div class="col-12">
+            <div class="row g-2 mb-2 triage-kpis">
+                <div class="col-6 col-xl-3"><div class="kpi-card blue"><span class="kpi-symbol">ORD</span><div><strong>@_ordenes.Count</strong><small>Órdenes en curso</small><em>Actividad del día</em></div></div></div>
+                <div class="col-6 col-xl-3"><div class="kpi-card green"><span class="kpi-symbol">ATN</span><div><strong>@OrdenesEnAtencion</strong><small>En atención</small><em>Pacientes atendidos</em></div></div></div>
+                <div class="col-6 col-xl-3"><div class="kpi-card amber"><span class="kpi-symbol">PEN</span><div><strong>@OrdenesPendientes</strong><small>Pendientes</small><em>Requieren seguimiento</em></div></div></div>
+                <div class="col-6 col-xl-3"><div class="kpi-card red"><span class="kpi-symbol">ESP</span><div><strong>@OrdenesEnEspera</strong><small>En espera</small><em>En cola de atención</em></div></div></div>
+            </div>
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span class="fw-bold text-dark">
@@ -202,6 +230,7 @@
                                 <tr>
                                     <th>N° Orden</th>
                                     <th>Hora</th>
+                                    <th>Prioridad</th>
                                     <th>Paciente (NHCL)</th>
                                     <th>Propietario</th>
                                     <th>Especialidad / Médico</th>
@@ -215,13 +244,18 @@
                                 {
                                     <tr>
                                         <td class="fw-bold text-primary">
-                                            #@o.IdOrden
-                                            <span class="ms-1 badge rounded-pill" style="background-color:@ObtenerColorHexTriaje(o.ColorTriaje)">•</span>
+                                            <span>#@o.IdOrden</span>
                                         </td>
                                         <td>@o.Hora</td>
+                                        <td><span class="triage-priority @ClaseTriaje(o.ColorTriaje)">@TextoPrioridad(o.ColorTriaje)</span></td>
                                         <td>
-                                            <div class="fw-bold">@o.Mascota <span class="text-muted">(#@o.Nhcl)</span></div>
-                                            <small class="text-muted">@o.Especie — @(o.TipoOrigen == "T" ? "TUERI" : "HDEV")</small>
+                                            <div class="order-patient-cell">
+                                                <span class="order-patient-photo">
+                                                    @if (!string.IsNullOrEmpty(ObtenerFotoPaciente(o.Nhcl))) { <img src="@ObtenerFotoPaciente(o.Nhcl)" alt="Foto de @o.Mascota" /> }
+                                                    else { <span>@InicialPaciente(o.Mascota)</span> }
+                                                </span>
+                                                <div><div class="fw-bold">@o.Mascota <span class="text-muted">(#@o.Nhcl)</span></div><small class="text-muted">@o.Especie — @(o.TipoOrigen == "T" ? "TUERI" : "HDEV")</small></div>
+                                            </div>
                                         </td>
                                         <td>
                                             <div>@o.Propietario</div>
@@ -249,7 +283,7 @@
                                                 <a href="/consulta/fichamedica/@o.IdOrden/@o.Nhcl" class="btn btn-outline-primary" title="Ficha Médica SOAP">
                                                     SOAP
                                                 </a>
-                                                <a href="/kardex/enfermeria?orden=@o.IdOrden&nhcl=@o.Nhcl" class="btn btn-outline-indigo" style="border-color:#4f46e5;color:#4f46e5;" title="Kardex Enfermería">
+                                                <a href="/kardex/enfermeria?orden=@o.IdOrden&nhcl=@o.Nhcl" class="btn triage-kardex" title="Kardex Enfermería">
                                                     Kardex
                                                 </a>
                                                 <a href="/hospitalizacion/ficha/@o.IdOrden/@o.Nhcl" class="btn btn-outline-info" title="Ficha Hospitalización 24h">
@@ -272,6 +306,27 @@
             </div>
         </div>
     </div>
+
+    <section class="stage-board mt-3">
+        <header><span>▤</span><strong>Pacientes por Etapa</strong></header>
+        <div class="stage-columns">
+            @foreach (var etapa in EtapasResumen)
+            {
+                var pacientesEtapa = FiltrarPorEtapa(etapa.Clave);
+                <div class="stage-column @etapa.Clase">
+                    <div class="stage-title"><span>@etapa.Icono</span><strong>@etapa.Titulo (@pacientesEtapa.Count)</strong></div>
+                    @if (pacientesEtapa.Count == 0)
+                    {
+                        <div class="stage-empty">Sin pacientes en esta etapa</div>
+                    }
+                    @foreach (var orden in pacientesEtapa.Take(4))
+                    {
+                        <div class="stage-patient"><span class="stage-pet-avatar">@if (!string.IsNullOrEmpty(ObtenerFotoPaciente(orden.Nhcl))) { <img src="@ObtenerFotoPaciente(orden.Nhcl)" alt="Foto de @orden.Mascota" /> } else { <span>@InicialPaciente(orden.Mascota)</span> }</span><div><strong>@orden.Mascota</strong><small>@orden.Propietario</small></div><time>@orden.Hora</time></div>
+                    }
+                </div>
+            }
+        </div>
+    </section>
 </div>
 
 @code {
@@ -291,6 +346,56 @@
     private bool _cargandoInicial = true;
     private string _mensajeAlerta = string.Empty;
     private bool _esError;
+    private bool _mostrarFormularioOrden;
+    private int OrdenesEnAtencion => _ordenes.Count(o => o.Etapa.Contains("Consulta", StringComparison.OrdinalIgnoreCase));
+    private int OrdenesPendientes => _ordenes.Count(o => o.Facturado != "S");
+    private int OrdenesEnEspera => Math.Max(0, _conteoMedicos.Sum(m => m.EnEspera));
+    private static readonly (string Clave, string Titulo, string Clase, string Icono)[] EtapasResumen =
+    [
+        ("ESPERA", "En espera", "waiting", "⌛"),
+        ("Consulta", "En atención", "attention", "▣"),
+        ("PENDIENTE", "Pendientes", "pending", "✓"),
+        ("FINALIZADO", "Finalizados", "finished", "◉")
+    ];
+
+    private List<OrdenAtencionResumenDto> FiltrarPorEtapa(string etapa) => etapa switch
+    {
+        "ESPERA" => _ordenes.Where(o => string.IsNullOrWhiteSpace(o.Etapa)).ToList(),
+        "PENDIENTE" => _ordenes.Where(o => o.Facturado != "S" && !o.Etapa.Contains("Consulta", StringComparison.OrdinalIgnoreCase)).ToList(),
+        "FINALIZADO" => _ordenes.Where(o => o.Etapa.Contains("Final", StringComparison.OrdinalIgnoreCase)).ToList(),
+        _ => _ordenes.Where(o => o.Etapa.Contains(etapa, StringComparison.OrdinalIgnoreCase)).ToList()
+    };
+
+    private static string InicialesMedico(string nombre)
+    {
+        var partes = (nombre ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(partes.Take(2).Select(p => p[0])).ToUpperInvariant();
+    }
+
+    private static string InicialPaciente(string nombre) => string.IsNullOrWhiteSpace(nombre) ? "?" : nombre.Trim()[..1].ToUpperInvariant();
+
+    private string ObtenerFotoPaciente(int nhcl)
+    {
+        if (nhcl <= 0) return string.Empty;
+        string directorio = Path.Combine(Env.WebRootPath, "PacientesFotos");
+        if (!Directory.Exists(directorio)) return string.Empty;
+        string? archivo = Directory.EnumerateFiles(directorio, $"{nhcl}.*").FirstOrDefault();
+        return archivo is null ? string.Empty : $"/pacientes-fotos/{nhcl}?v={File.GetLastWriteTimeUtc(archivo).Ticks}";
+    }
+
+    private static string TextoPrioridad(string color) => color?.ToLowerInvariant() switch
+    {
+        "red" => "Emergencia",
+        "yellow" => "Prioritario",
+        _ => "Estándar"
+    };
+
+    private static string ClaseTriaje(string color) => color?.ToLowerInvariant() switch
+    {
+        "red" => "red",
+        "yellow" => "yellow",
+        _ => "green"
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -302,7 +407,10 @@
         {
             var q = System.Web.HttpUtility.ParseQueryString(uri.Query);
             if (int.TryParse(q["nhcl"], out int qNhcl) && qNhcl > 0)
+            {
                 NhclPreseleccionado = qNhcl;
+                _mostrarFormularioOrden = true;
+            }
         }
 
         var tEsp = AdmisionService.ObtenerEspecialidadesAsync();
@@ -336,6 +444,9 @@
     {
         _pacientesEncontrados = await AdmisionService.BuscarMascotasAsync(_filtroPaciente);
     }
+
+    private void AbrirFormularioOrden() => _mostrarFormularioOrden = true;
+    private void CerrarFormularioOrden() => _mostrarFormularioOrden = false;
 
     private void SeleccionarPacienteParaOrden(PacienteMascotaDto pac)
     {
@@ -372,6 +483,7 @@
 
         _esError = false;
         _mensajeAlerta = $"Orden de Atención #{idCreada} creada exitosamente para {_nuevaOrden.NombreMascota} (NHCL #{_nuevaOrden.Nhcl}).";
+        _mostrarFormularioOrden = false;
     }
 
     private async Task CambiarFechaTableroAsync(ChangeEventArgs e)
