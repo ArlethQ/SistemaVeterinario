@@ -230,8 +230,9 @@
                         <table class="table table-hover align-middle mb-0 small">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Orden / Triaje</th>
+                                    <th>N° Orden</th>
                                     <th>Hora</th>
+                                    <th>Prioridad</th>
                                     <th>Paciente (NHCL)</th>
                                     <th>Propietario</th>
                                     <th>Especialidad / Médico</th>
@@ -246,9 +247,9 @@
                                     <tr>
                                         <td class="fw-bold text-primary">
                                             <span>#@o.IdOrden</span>
-                                            <small class="triage-status @ClaseTriaje(o.ColorTriaje)">@TextoTriaje(o.ColorTriaje)</small>
                                         </td>
                                         <td>@o.Hora</td>
+                                        <td><span class="triage-priority @ClaseTriaje(o.ColorTriaje)">@TextoPrioridad(o.ColorTriaje)</span></td>
                                         <td>
                                             <div class="order-patient-cell">
                                                 <span class="order-patient-photo">
@@ -384,11 +385,11 @@
         return archivo is null ? string.Empty : $"/PacientesFotos/{Path.GetFileName(archivo)}?v={File.GetLastWriteTimeUtc(archivo).Ticks}";
     }
 
-    private static string TextoTriaje(string color) => color?.ToLowerInvariant() switch
+    private static string TextoPrioridad(string color) => color?.ToLowerInvariant() switch
     {
-        "red" => "Rojo",
-        "yellow" => "Amarillo",
-        _ => "Verde"
+        "red" => "Emergencia",
+        "yellow" => "Prioritario",
+        _ => "Estándar"
     };
 
     private static string ClaseTriaje(string color) => color?.ToLowerInvariant() switch
