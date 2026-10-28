@@ -264,7 +264,7 @@ public class AuthService : IAuthService
                                     ISNULL(user_tipouser_numero, 2) AS RolId, ISNULL(user_esp_numero, 1) AS EspecialidadId,
                                     RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad,
                                     RTRIM(ISNULL(user_tipomedico, 'N')) AS TipoMedico,
-                                    RTRIM(ISNULL(user_observaciones, '')) AS Observaciones,
+                                    LTRIM(RTRIM(ISNULL(CONVERT(nvarchar(max), user_observaciones), ''))) AS Observaciones,
                                     RTRIM(ISNULL(user_estado, 'A')) AS Estado
                              FROM vt_usuarios u
                              LEFT JOIN vt_especialidades e ON e.es_id=u.user_esp_numero
@@ -273,11 +273,17 @@ public class AuthService : IAuthService
         catch { return []; }
     }
 
-    public async Task<List<CatalogoItemGenericoDto>> ObtenerEspecialidadesUsuarioAsync() =>
-        (await _sql.QueryAsync<CatalogoItemGenericoDto>("SELECT es_id AS Id, RTRIM(es_descripcion) AS Descripcion FROM vt_especialidades WHERE ISNULL(es_estado,'A')='A' ORDER BY es_descripcion")).ToList();
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerEspecialidadesUsuarioAsync()
+    {
+        try { return (await _sql.QueryAsync<CatalogoItemGenericoDto>("SELECT es_id AS Id, RTRIM(es_descripcion) AS Descripcion FROM vt_especialidades ORDER BY es_descripcion")).ToList(); }
+        catch { return []; }
+    }
 
-    public async Task<List<CatalogoItemGenericoDto>> ObtenerLocalidadesUsuarioAsync() =>
-        (await _sql.QueryAsync<CatalogoItemGenericoDto>("SELECT loc_id AS Id, RTRIM(loc_descripcion) AS Descripcion FROM vt_localidades WHERE ISNULL(loc_estado,'A')='A' ORDER BY loc_descripcion")).ToList();
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerLocalidadesUsuarioAsync()
+    {
+        try { return (await _sql.QueryAsync<CatalogoItemGenericoDto>("SELECT loc_id AS Id, RTRIM(loc_descripcion) AS Descripcion FROM vt_localidades WHERE loc_estado='A' ORDER BY loc_descripcion")).ToList(); }
+        catch { return []; }
+    }
 
     public async Task<List<int>> ObtenerLocalidadesAsignadasAsync(int idUser) =>
         (await _sql.QueryAsync<int>("SELECT ul_idLocalidad FROM vt_usuarioLocalidades WHERE ul_idUsuario=@IdUser AND ISNULL(ul_estado,'A')='A'", new { IdUser=idUser })).ToList();
