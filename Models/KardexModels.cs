@@ -41,7 +41,14 @@ public class UsuarioAdministracionModel
     public string Iniciales { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string Celular { get; set; } = string.Empty;
+    public string Convencional { get; set; } = string.Empty;
+    public string Cedula { get; set; } = string.Empty;
     public int RolId { get; set; } = 2;
+    public int EspecialidadId { get; set; } = 1;
+    public string Especialidad { get; set; } = string.Empty;
+    public string TipoMedico { get; set; } = "N";
+    public string Observaciones { get; set; } = string.Empty;
+    public List<int> LocalidadesIds { get; set; } = [];
     public string Estado { get; set; } = "A";
 }
 
