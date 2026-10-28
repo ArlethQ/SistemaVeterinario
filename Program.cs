@@ -29,6 +29,13 @@ builder.Services.AddScoped<ILaboratorioImagenService, LaboratorioImagenService>(
 builder.Services.AddScoped<IAdmisionFacturacionService, AdmisionFacturacionService>();
 builder.Services.AddScoped<IAdministracionClinicaService, AdministracionClinicaService>();
 builder.Services.AddScoped<IGestionMigradaService, GestionMigradaService>();
+builder.Services.Configure<EFactApiOptions>(builder.Configuration.GetSection(EFactApiOptions.SectionName));
+builder.Services.AddHttpClient<IEFactCatalogService, EFactCatalogService>((services, client) =>
+{
+    var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<EFactApiOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 builder.Services.AddSingleton<IReportExportService, ReportExportService>();
 
 var app = builder.Build();

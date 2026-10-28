@@ -26,7 +26,7 @@ public interface IGestionMigradaService
     Task<List<BitacoraDto>> ObtenerBitacoraAsync(DateTime desde, DateTime hasta, string filtro);
 }
 
-public sealed class GestionMigradaService(ISqlDataService db) : IGestionMigradaService
+public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogService eFactCatalog) : IGestionMigradaService
 {
     public async Task<List<ReporteAtencionDto>> ObtenerAtencionesAsync(DateTime desde, DateTime hasta) => (await db.QueryAsync<ReporteAtencionDto>(@"
         SELECT o.ordenAten_id Orden,f.med_nhcl Nhcl,f.med_fecha Fecha,RTRIM(ISNULL(u.user_nombre,'')) Medico,
@@ -124,8 +124,20 @@ public sealed class GestionMigradaService(ISqlDataService db) : IGestionMigradaS
         "grupos-productos"=>("SELECT id_grupoprod Id,RTRIM(des_grupoprod) Descripcion,grupoprod_estado Estado FROM vt_grupos_productos ORDER BY des_grupoprod","INSERT INTO vt_grupos_productos(des_grupoprod,grupoprod_estado) VALUES(@Descripcion,@Estado)","UPDATE vt_grupos_productos SET des_grupoprod=@Descripcion,grupoprod_estado=@Estado WHERE id_grupoprod=@Id","SELECT COUNT(1) FROM vt_grupos_productos WHERE UPPER(LTRIM(RTRIM(des_grupoprod)))=UPPER(LTRIM(RTRIM(@Descripcion))) AND id_grupoprod<>@Id"),
         "grupos-laboratorio"=>("SELECT grupo_id Id,RTRIM(grupo_descripcion) Descripcion,estado Estado FROM vt_grupos_laboratorio ORDER BY grupo_descripcion","INSERT INTO vt_grupos_laboratorio(grupo_descripcion,estado) VALUES(@Descripcion,@Estado)","UPDATE vt_grupos_laboratorio SET grupo_descripcion=@Descripcion,estado=@Estado WHERE grupo_id=@Id","SELECT COUNT(1) FROM vt_grupos_laboratorio WHERE UPPER(LTRIM(RTRIM(grupo_descripcion)))=UPPER(LTRIM(RTRIM(@Descripcion))) AND grupo_id<>@Id"),
         _=>throw new ArgumentException("Catálogo no soportado.",nameof(tipo))};
-    public async Task<List<CatalogoOperativoDto>> ObtenerCatalogoAsync(string tipo){var q=SqlCatalogo(tipo);return(await db.QueryAsync<CatalogoOperativoDto>(q.Select)).ToList();}
-    public async Task<bool> GuardarCatalogoAsync(string tipo,CatalogoOperativoDto x,int idUsuario){if(string.IsNullOrWhiteSpace(x.Descripcion))return false;x.Descripcion=x.Descripcion.Trim();var q=SqlCatalogo(tipo);if(await db.QueryFirstOrDefaultAsync<int>(q.Existe,x)>0)return false;var esGrupo=tipo.StartsWith("grupos-",StringComparison.Ordinal);if(!esGrupo&&!x.IdGrupo.HasValue)return false;var ok=await db.ExecuteAsync(x.Id>0?q.Update:q.Insert,x)>0;if(ok)await db.RegistrarBitacoraAsync($"Catálogo {tipo}: {x.Descripcion}",idUsuario);return ok;}
+    public async Task<List<CatalogoOperativoDto>> ObtenerCatalogoAsync(string tipo)
+    {
+        if (tipo == "productos") return await eFactCatalog.ObtenerProductosAsync();
+        if (tipo == "grupos-productos") return await eFactCatalog.ObtenerCategoriasAsync();
+        if (tipo == "subgrupos-productos") return await eFactCatalog.ObtenerSubcategoriasAsync();
+        var q=SqlCatalogo(tipo);return(await db.QueryAsync<CatalogoOperativoDto>(q.Select)).ToList();
+    }
+    public async Task<bool> GuardarCatalogoAsync(string tipo,CatalogoOperativoDto x,int idUsuario)
+    {
+        if (tipo == "productos") return await eFactCatalog.GuardarProductoAsync(x);
+        if (tipo == "grupos-productos") return await eFactCatalog.GuardarCategoriaAsync(x);
+        if (tipo == "subgrupos-productos") return await eFactCatalog.GuardarSubcategoriaAsync(x);
+        if(string.IsNullOrWhiteSpace(x.Descripcion))return false;x.Descripcion=x.Descripcion.Trim();var q=SqlCatalogo(tipo);if(await db.QueryFirstOrDefaultAsync<int>(q.Existe,x)>0)return false;var esGrupo=tipo.StartsWith("grupos-",StringComparison.Ordinal);if(!esGrupo&&!x.IdGrupo.HasValue)return false;var ok=await db.ExecuteAsync(x.Id>0?q.Update:q.Insert,x)>0;if(ok)await db.RegistrarBitacoraAsync($"Catálogo {tipo}: {x.Descripcion}",idUsuario);return ok;
+    }
     public async Task<List<BitacoraDto>> ObtenerBitacoraAsync(DateTime desde,DateTime hasta,string filtro)=>(await db.QueryAsync<BitacoraDto>(@"
         SELECT v.vit_id Id,v.vit_idFechaMod Fecha,ISNULL(v.vit_idUser,0) IdUsuario,RTRIM(ISNULL(u.user_nombre,'')) Usuario,
         RTRIM(ISNULL(v.vit_detalle,'')) Detalle,RTRIM(ISNULL(v.ip,'')) Ip,RTRIM(ISNULL(v.hostname,'')) Equipo
