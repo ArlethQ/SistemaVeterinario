@@ -595,6 +595,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 FROM vt_usuarios
                 WHERE user_estado = 'A'
                   AND ISNULL(user_esp_numero, 0) > 0
+                  AND UPPER(LTRIM(RTRIM(ISNULL(user_tipomedico, '')))) IN ('P', 'L')
                   AND (@IdEsp = 0 OR user_esp_numero = @IdEsp)
                 ORDER BY user_nombre", new { IdEsp = idEspecialidad })).ToList();
         }
