@@ -292,13 +292,17 @@ public class QuirofanoService : IQuirofanoService
             NumFormulario = numFormulario
         };
 
-        // Asegurar la estructura vacía de los 16 intervalos.
+        // Asegurar los 16 intervalos de la plantilla clínica (cada 15 minutos).
         if (hoja.SlotsTiempo.Count < 16)
         {
             hoja.SlotsTiempo.Clear();
             for (int i = 1; i <= 16; i++)
             {
-                hoja.SlotsTiempo.Add(new SlotGraficaAnestesiaDto { Orden = i });
+                hoja.SlotsTiempo.Add(new SlotGraficaAnestesiaDto
+                {
+                    Orden = i,
+                    HoraLabel = DateTime.Today.AddHours(8).AddMinutes((i - 1) * 15).ToString("HH:mm")
+                });
             }
         }
 

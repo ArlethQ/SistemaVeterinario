@@ -180,11 +180,20 @@ public class HojaAnestesiaCompletaDto
     public string Comentarios { get; set; } = string.Empty;
 
     // 15 Nombres de Agentes/Fármacos Anestésicos (qvt_graficaDescripcion)
-    public string[] NombresAgentes { get; set; } = new string[15];
+    public string[] NombresAgentes { get; set; } = new string[15]
+    {
+        "Propofol (mg)", "Isoflurano / Sevoflurano (%)", "Fentanilo (mcg)", "Ketamina (mg)", "Midazolam (mg)",
+        "Lidocaína (mg)", "Bupivacaína (mg)", "Meloxicam / Analgesia", "Cefazolina / Antibiótico", "Atropina (mg)",
+        "Adrenalina / Vasopresor", "Ácido Tranexámico", "Ringer Lactato (ml/h)", "Cloruro Sodio 0.9% (ml/h)", "Otro Agente"
+    };
 
     // 16 Columnas de Tiempo Intraoperatorio (qvt_graficaAnestesia + qvt_graficaAnestesiaTiempo)
     public List<SlotGraficaAnestesiaDto> SlotsTiempo { get; set; } = Enumerable.Range(1, 16)
-        .Select(i => new SlotGraficaAnestesiaDto { Orden = i })
+        .Select(i => new SlotGraficaAnestesiaDto
+        {
+            Orden = i,
+            HoraLabel = DateTime.Today.AddHours(8).AddMinutes((i - 1) * 15).ToString("HH:mm")
+        })
         .ToList();
 }
 

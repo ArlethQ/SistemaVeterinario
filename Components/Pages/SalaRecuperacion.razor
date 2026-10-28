@@ -517,16 +517,6 @@ else if (paciente != null)
         await Task.Yield();
 
         ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
-        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
-        {
-            IdOrden = Session.OrdenActiva.Value;
-            Nhcl = Session.NhclActivo ?? 0;
-        }
-        else if (IdOrden <= 0 && ordenesActivas.Count > 0)
-        {
-            IdOrden = ordenesActivas[0].IdOrdenAtencion;
-            Nhcl = ordenesActivas[0].Nhcl;
-        }
 
         if (IdOrden > 0)
         {
@@ -550,11 +540,6 @@ else if (paciente != null)
 
     private async Task CargarPorInputAsync()
     {
-        if (ordenInput <= 0 && ordenesActivas.Count > 0)
-        {
-            ordenInput = ordenesActivas[0].IdOrdenAtencion;
-            Nhcl = ordenesActivas[0].Nhcl;
-        }
         if (ordenInput <= 0) return;
         IdOrden = ordenInput;
         var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
