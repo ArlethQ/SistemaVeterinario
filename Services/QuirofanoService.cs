@@ -219,7 +219,7 @@ public class QuirofanoService : IQuirofanoService
     {
         if (prod.OrdenId <= 0 || prod.Nhcl <= 0 || string.IsNullOrWhiteSpace(prod.CodigoProd) || string.IsNullOrWhiteSpace(prod.ProdDescripcion))
             return false;
-        if (prod.CantProd <= 0 || prod.StockProd <= 0 || prod.CantProd > prod.StockProd)
+        if (prod.CantProd <= 0 || (prod.StockProd > 0 && prod.CantProd > prod.StockProd))
             return false;
 
         try
@@ -228,11 +228,11 @@ public class QuirofanoService : IQuirofanoService
                 INSERT INTO qvt_productosUtilizados (
                     ordenId, nhcl, hora, fecha, codigoprod, precioprod, stockprod, indicacionesprod,
                     cantprod, usuario, localidad, proddescripcion, via, origen, iniciales, funcion,
-                    funcionario, estado, grupo, modulo, tipo, med_iva, med_iddinamics, med_medida, med_bodega
+                    funcionario, estado, modulo, tipo
                 ) VALUES (
                     @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProd, @PrecioProd, @StockProd, @IndicacionesProd,
                     @CantProd, @Usuario, @Localidad, @ProdDescripcion, @Via, 'E', @Iniciales, @Funcion,
-                    @Funcionario, 'Vigente', 'FARMACO', @Modulo, 'M', @MedIva, @MedIdDinamics, @MedMedida, @MedBodega
+                    @Funcionario, 'Vigente', @Modulo, 'M'
                 );
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -254,33 +254,10 @@ public class QuirofanoService : IQuirofanoService
                 prod.Iniciales,
                 prod.Funcion,
                 prod.Funcionario,
-                prod.Modulo,
-                prod.MedIva,
-                prod.MedIdDinamics,
-                prod.MedMedida,
-                prod.MedBodega
+                prod.Modulo
             });
 
-            if (idCreado > 0 && !string.IsNullOrWhiteSpace(prod.CodigoProd))
-            {
-                var reservado = await _inventarioService.GuardarReservaStockAsync(
-                    prod.CodigoProd,
-                    idUsuario,
-                    prod.CantProd,
-                    idLocalidad,
-                    prod.MedBodega,
-                    prod.OrdenId,
-                    prod.Nhcl,
-                    idCreado,
-                    origReserva);
-                if (reservado != 1)
-                {
-                    await _db.ExecuteAsync("DELETE FROM qvt_productosUtilizados WHERE id=@Id", new { Id = idCreado });
-                    return false;
-                }
-            }
-
-            return true;
+            return idCreado > 0;
         }
         catch (Exception ex)
         {
@@ -294,7 +271,6 @@ public class QuirofanoService : IQuirofanoService
         try
         {
             await _db.ExecuteAsync("DELETE FROM qvt_productosUtilizados WHERE id = @Id", new { Id = idProducto });
-            await _inventarioService.EliminarReservaStockAsync(codigoProd, idOrden, idProducto, origReserva);
             return true;
         }
         catch (Exception ex)

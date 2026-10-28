@@ -57,27 +57,32 @@
         <span class="fw-semibold small">Cargando evaluación pre-anestésica y pre-medicación...</span>
     </div>
 }
-else if (paciente != null)
+else
 {
+    @if (paciente is null)
+    {
+        <div class="alert alert-info shadow-sm">Vista previa de la evaluación pre-anestésica. Seleccione un paciente para habilitar el formulario.</div>
+    }
+    <fieldset disabled="@(paciente is null)" class="m-0 p-0 border-0">
     <!-- Cabecera del Paciente -->
     <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
         <div class="card-body py-2 px-3">
             <div class="row g-2 align-items-center small">
                 <div class="col-md-3">
                     <span class="text-muted">Orden / NHCL:</span>
-                    <strong class="ms-1 text-primary">#@paciente.OrdenAtencionId / @paciente.Nhcl</strong>
+                    <strong class="ms-1 text-primary">#@pacienteVista.OrdenAtencionId / @pacienteVista.Nhcl</strong>
                 </div>
                 <div class="col-md-3">
                     <span class="text-muted">Paciente:</span>
-                    <strong class="ms-1">@paciente.PacienteNombre</strong> (@paciente.Especie - @paciente.Raza)
+                    <strong class="ms-1">@(pacienteVista.PacienteNombre.Length > 0 ? pacienteVista.PacienteNombre : "—")</strong> @(paciente is null ? "" : $"({pacienteVista.Especie} - {pacienteVista.Raza})")
                 </div>
                 <div class="col-md-3">
                     <span class="text-muted">Edad / Sexo:</span>
-                    <strong class="ms-1">@paciente.EdadTexto / @paciente.Sexo</strong>
+                    <strong class="ms-1">@(paciente is null ? "—" : $"{pacienteVista.EdadTexto} / {pacienteVista.Sexo}")</strong>
                 </div>
                 <div class="col-md-3">
                     <span class="text-muted">Propietario:</span>
-                    <strong class="ms-1">@paciente.PropietarioNombre</strong>
+                    <strong class="ms-1">@(pacienteVista.PropietarioNombre.Length > 0 ? pacienteVista.PropietarioNombre : "—")</strong>
                 </div>
             </div>
         </div>
@@ -218,13 +223,14 @@ else if (paciente != null)
         <div class="col-lg-5">
             <div class="card shadow-sm border-0 mb-3">
                 <div class="card-header bg-white fw-bold text-primary">
-                    3. Medicación Pre-Anestésica (Stock de bodega)
+                    3. Medicación Pre-Anestésica (Catálogo de productos)
                 </div>
                 <div class="card-body">
                     <div class="input-group input-group-sm mb-2">
-                        <input type="text" class="form-control" placeholder="Buscar fármaco o insumo (mín. 3 letras)..." @bind="filtroProd" />
+                        <input type="text" class="form-control" placeholder="Buscar fármaco o insumo (mín. 3 letras)..."
+                               @bind="filtroProd" @bind:event="oninput" />
                         <button class="btn btn-outline-primary" @onclick="BuscarStockBcAsync" disabled="@buscandoStock">
-                            @(buscandoStock ? "Buscando..." : "Buscar Stock")
+                            @(buscandoStock ? "Buscando..." : "Buscar Productos")
                         </button>
                     </div>
 
@@ -237,7 +243,7 @@ else if (paciente != null)
                                         <th>Código</th>
                                         <th>Producto</th>
                                         <th>Bodega</th>
-                                        <th class="text-end">Disp.</th>
+                                        <th class="text-end">Precio</th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -248,7 +254,7 @@ else if (paciente != null)
                                             <td><code>@item.Number</code></td>
                                             <td>@item.DisplayName</td>
                                             <td>@item.Location</td>
-                                            <td class="text-end fw-bold">@item.Inventory.ToString("N0")</td>
+                                            <td class="text-end fw-bold">@item.UnitPrice.ToString("C2")</td>
                                             <td class="text-end">
                                                 <button class="btn btn-xs btn-primary py-0 px-2" @onclick="() => SeleccionarProducto(item)">Elegir</button>
                                             </td>
@@ -266,7 +272,7 @@ else if (paciente != null)
                         </div>
                         <div class="col-md-4">
                             <label class="form-label mb-0">Cantidad</label>
-                            <input type="number" min="0.01" max="@Math.Max(0.01m, nuevoProd.StockProd)" step="0.01"
+                            <input type="number" min="0.01" step="0.01"
                                    class="form-control form-control-sm" @bind="nuevoProd.CantProd" />
                         </div>
                         <div class="col-md-4">
@@ -337,6 +343,7 @@ else if (paciente != null)
             </div>
         </div>
     </div>
+    </fieldset>
 }
 
 @code {
@@ -346,6 +353,7 @@ else if (paciente != null)
     private int ordenInput;
     private List<OrdenActivaResumenDto> ordenesActivas = new();
     private PacienteHeaderDto? paciente;
+    private PacienteHeaderDto pacienteVista => paciente ?? new();
     private PreAnestesiaDto preDto = new();
     private List<ProductoQuirofanoDto> listaPremedicacion = new();
     private List<ViaAdministracionDto> catalogoVias = new();
@@ -464,7 +472,7 @@ else if (paciente != null)
 
     private void SeleccionarProducto(FarmacoStockDto item)
     {
-        nuevoProd.CodigoProd = item.Number;
+        nuevoProd.CodigoProd = item.Id;
         nuevoProd.ProdDescripcion = item.DisplayName;
         nuevoProd.PrecioProd = item.UnitPrice;
         nuevoProd.StockProd = (int)item.Inventory;
@@ -483,10 +491,12 @@ else if (paciente != null)
             mensajeAlerta = "Seleccione el fármaco o insumo desde los resultados del catálogo.";
             return;
         }
-        if (nuevoProd.CantProd <= 0 || nuevoProd.StockProd <= 0 || nuevoProd.CantProd > nuevoProd.StockProd)
+        if (nuevoProd.CantProd <= 0 || (nuevoProd.StockProd > 0 && nuevoProd.CantProd > nuevoProd.StockProd))
         {
             esError = true;
-            mensajeAlerta = $"Ingrese una cantidad mayor que cero y no superior al stock disponible ({nuevoProd.StockProd:N2}).";
+            mensajeAlerta = nuevoProd.CantProd <= 0
+                ? "Ingrese una cantidad mayor que cero."
+                : $"La cantidad no puede superar el stock disponible ({nuevoProd.StockProd:N2}).";
             return;
         }
         nuevoProd.OrdenId = IdOrden;
@@ -507,12 +517,12 @@ else if (paciente != null)
             nuevoProd = new ProductoQuirofanoDto { Modulo = "PreAnestesia", Via = "IV" };
             listaPremedicacion = await QuirofanoService.ObtenerProductosQuirofanoAsync(IdOrden, "PreAnestesia");
             esError = false;
-            mensajeAlerta = "Pre-medicación registrada y reservada en inventario.";
+            mensajeAlerta = "Pre-medicación registrada correctamente.";
         }
         else
         {
             esError = true;
-            mensajeAlerta = "No se pudo registrar el producto o reservar su stock.";
+            mensajeAlerta = "No se pudo registrar el producto seleccionado.";
         }
     }
 
