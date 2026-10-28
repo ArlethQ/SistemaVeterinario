@@ -20,6 +20,7 @@ public interface IEFactCatalogService
     Task<bool> GuardarCategoriaAsync(CatalogoOperativoDto item);
     Task<bool> GuardarSubcategoriaAsync(CatalogoOperativoDto item);
     Task<bool> GuardarProductoAsync(CatalogoOperativoDto item);
+    Task<bool> EliminarProductoAsync(int codigo);
 }
 
 public sealed class EFactCatalogService(
@@ -186,6 +187,21 @@ public sealed class EFactCatalogService(
         catch (Exception ex)
         {
             logger.LogError(ex, "No se pudo guardar la subcategoría {Subcategoria} en E-FACT.", item.Id);
+            return false;
+        }
+    }
+
+    public async Task<bool> EliminarProductoAsync(int codigo)
+    {
+        if (!ConfiguracionValida() || codigo <= 0) return false;
+        try
+        {
+            var response = await http.DeleteAsync(Url($"api/productos/{codigo}"));
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "No se pudo eliminar el producto {Producto} de E-FACT.", codigo);
             return false;
         }
     }

@@ -15,11 +15,13 @@ public class InventarioService : IInventarioService
 {
     private readonly ISqlDataService _sql;
     private readonly ILogger<InventarioService> _logger;
+    private readonly IEFactCatalogService _eFactCatalog;
 
-    public InventarioService(ISqlDataService sql, ILogger<InventarioService> logger)
+    public InventarioService(ISqlDataService sql, ILogger<InventarioService> logger, IEFactCatalogService eFactCatalog)
     {
         _sql = sql;
         _logger = logger;
+        _eFactCatalog = eFactCatalog;
     }
 
     public async Task<List<FarmacoStockDto>> BuscarMedicamentosConStockAsync(string filtro, int idLocalidad, string apostrofe = "HV")
@@ -29,6 +31,33 @@ public class InventarioService : IInventarioService
             return resultados;
 
         string termino = filtro.Trim().ToUpperInvariant();
+
+        // El catálogo comercial de E-FACT (usuario configurado) es la fuente principal.
+        try
+        {
+            var productosEFact = await _eFactCatalog.ObtenerProductosAsync();
+            resultados.AddRange(productosEFact
+                .Where(x => x.Estado == "A" &&
+                    (x.Descripcion.Contains(termino, StringComparison.OrdinalIgnoreCase) ||
+                     x.Codigo.Contains(termino, StringComparison.OrdinalIgnoreCase)))
+                .Take(30)
+                .Select(x => new FarmacoStockDto
+                {
+                    Number = string.IsNullOrWhiteSpace(x.Codigo) ? x.Id.ToString() : x.Codigo,
+                    DisplayName = x.Descripcion,
+                    Id = x.Id.ToString(),
+                    TaxGroupCode = x.CodigoImpuesto == "2" ? $"IVA{x.PorcentajeImpuesto}" : "IVA0",
+                    Inventory = 100,
+                    Available = 100,
+                    UnitPrice = x.Precio ?? 0,
+                    BaseUnitOfMeasureCode = "UND",
+                    Location = "E-FACT"
+                }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo consultar el catálogo E-FACT; se usará el catálogo veterinario local.");
+        }
 
         // Obtener bodegas configuradas para la localidad.
         var bodegas = new List<string>();
