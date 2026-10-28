@@ -26,7 +26,7 @@
 
         <div class="input-group input-group-sm" style="width: 210px;">
             <span class="input-group-text">Orden #</span>
-            <input type="number" class="form-control" @bind="ordenInput" />
+            <input type="number" min="1" class="form-control" @bind="ordenInput" />
             <button class="btn btn-primary" @onclick="CargarPorInputAsync">Cargar</button>
         </div>
 
@@ -68,20 +68,25 @@
         <span class="fw-semibold small">Cargando hoja intraoperatoria de anestesia...</span>
     </div>
 }
-else if (paciente != null)
+else
 {
+    @if (paciente is null)
+    {
+        <div class="alert alert-info shadow-sm">Vista previa de la Hoja de Anestesia. Seleccione un paciente para habilitar el ingreso y guardado de información.</div>
+    }
+    <fieldset disabled="@(paciente is null)" class="m-0 p-0 border-0">
     <!-- Cabecera del Paciente y Tiempos Anestésicos -->
     <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
         <div class="card-body py-2 px-3">
             <div class="row g-2 align-items-center small">
                 <div class="col-md-3">
                     <span class="text-muted">Orden / NHCL:</span>
-                    <strong class="ms-1 text-primary">#@paciente.OrdenAtencionId / @paciente.Nhcl</strong>
+                    <strong class="ms-1 text-primary">#@pacienteVista.OrdenAtencionId / @pacienteVista.Nhcl</strong>
                     <span class="badge bg-primary ms-2">ASA @hoja.Asa</span>
                 </div>
                 <div class="col-md-3">
                     <span class="text-muted">Paciente:</span>
-                    <strong class="ms-1">@paciente.PacienteNombre</strong> (@paciente.Especie - @paciente.Sexo)
+                    <strong class="ms-1">@(pacienteVista.PacienteNombre.Length > 0 ? pacienteVista.PacienteNombre : "—")</strong> @(paciente is null ? "" : $"({pacienteVista.Especie} - {pacienteVista.Sexo})")
                 </div>
                 <div class="col-md-2">
                     <div class="input-group input-group-sm">
@@ -99,6 +104,7 @@ else if (paciente != null)
                     <div class="input-group input-group-sm">
                         <span class="input-group-text">ASA</span>
                         <select class="form-select" @bind="hoja.Asa">
+                            <option value="">-- Seleccione --</option>
                             <option value="I">ASA I</option>
                             <option value="II">ASA II</option>
                             <option value="III">ASA III</option>
@@ -215,21 +221,21 @@ else if (paciente != null)
                                 <td class="fw-bold text-danger">Frec. Cardíaca (lpm)</td>
                                 @foreach (var slot in hoja.SlotsTiempo)
                                 {
-                                    <td><input type="number" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.FrecuenciaCardiaca" @bind:event="oninput" /></td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.FrecuenciaCardiaca" @bind:event="oninput" /></td>
                                 }
                             </tr>
                             <tr>
                                 <td class="fw-bold text-primary">P. Arterial Sistólica (mmHg)</td>
                                 @foreach (var slot in hoja.SlotsTiempo)
                                 {
-                                    <td><input type="number" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.PresionSistolica" @bind:event="oninput" /></td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.PresionSistolica" @bind:event="oninput" /></td>
                                 }
                             </tr>
                             <tr>
                                 <td class="fw-bold text-info">P. Arterial Diastólica (mmHg)</td>
                                 @foreach (var slot in hoja.SlotsTiempo)
                                 {
-                                    <td><input type="number" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.PresionDiastolica" @bind:event="oninput" /></td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.PresionDiastolica" @bind:event="oninput" /></td>
                                 }
                             </tr>
                             <tr>
@@ -243,21 +249,21 @@ else if (paciente != null)
                                 <td class="fw-bold text-success">Saturación SpO2 (%)</td>
                                 @foreach (var slot in hoja.SlotsTiempo)
                                 {
-                                    <td><input type="number" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.O2L" @bind:event="oninput" /></td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.O2L" @bind:event="oninput" /></td>
                                 }
                             </tr>
                             <tr>
                                 <td class="fw-bold text-warning-emphasis">Capnografía EtCO2 (mmHg)</td>
                                 @foreach (var slot in hoja.SlotsTiempo)
                                 {
-                                    <td><input type="number" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.EtCO2" @bind:event="oninput" /></td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.EtCO2" @bind:event="oninput" /></td>
                                 }
                             </tr>
                             <tr>
                                 <td class="fw-semibold">Temperatura (°C)</td>
                                 @foreach (var slot in hoja.SlotsTiempo)
                                 {
-                                    <td><input type="number" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.Temperatura" /></td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center px-1 py-0" @bind="slot.Temperatura" /></td>
                                 }
                             </tr>
                             <tr>
@@ -322,11 +328,11 @@ else if (paciente != null)
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0 fw-semibold">N° Intentos</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.NIntentos" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.NIntentos" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label mb-0 fw-semibold">Vol. Tidal (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.VolTidal" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.VolTidal" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label mb-0 fw-semibold">Frec. Resp.</label>
@@ -334,7 +340,7 @@ else if (paciente != null)
                             </div>
                             <div class="col-4">
                                 <label class="form-label mb-0 fw-semibold">FiO2 (%)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.O2" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.O2" />
                             </div>
                         </div>
 
@@ -419,35 +425,35 @@ else if (paciente != null)
                         <div class="row g-2">
                             <div class="col-6">
                                 <label class="form-label mb-0">Lactato de Ringer (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.IngLactatoRinger" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.IngLactatoRinger" @bind:event="oninput" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Solución Salina 0.9% (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.IngSalina09" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.IngSalina09" @bind:event="oninput" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Dextrosa (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.IngDextrosa" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.IngDextrosa" @bind:event="oninput" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Expansor / Coloides (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.IngExpansor" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.IngExpansor" @bind:event="oninput" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Sangre Total / GR (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.IngSangre" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.IngSangre" @bind:event="oninput" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Plasma Fresco (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.IngPlasma" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.IngPlasma" @bind:event="oninput" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Manitol (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.IngManitol" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.IngManitol" @bind:event="oninput" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Otros Líquidos (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.IngOtros" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.IngOtros" @bind:event="oninput" />
                             </div>
                         </div>
                         <div class="alert alert-success py-1 px-2 mt-3 mb-0 d-flex justify-content-between">
@@ -466,19 +472,19 @@ else if (paciente != null)
                         <div class="row g-2">
                             <div class="col-6">
                                 <label class="form-label mb-0">Sangrado Estimado (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.EgrSangrado" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.EgrSangrado" @bind:event="oninput" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Diuresis / Orina (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.EgrDiuresis" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.EgrDiuresis" @bind:event="oninput" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Pérdidas Insensibles (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.EgrPerdidasInsensibles" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.EgrPerdidasInsensibles" @bind:event="oninput" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Otros Egresos (ml)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="hoja.EgrOtros" @bind:event="oninput" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="hoja.EgrOtros" @bind:event="oninput" />
                             </div>
                         </div>
 
@@ -504,18 +510,18 @@ else if (paciente != null)
                             <div class="col-6">
                                 <label class="form-label mb-0">Duración Anestesia (Horas / Min)</label>
                                 <div class="input-group input-group-sm">
-                                    <input type="number" class="form-control" @bind="hoja.DuracionAnestesiaHoras" placeholder="H" />
+                                    <input type="number" min="0" class="form-control" @bind="hoja.DuracionAnestesiaHoras" placeholder="H" />
                                     <span class="input-group-text">h</span>
-                                    <input type="number" class="form-control" @bind="hoja.DuracionAnestesiaMinutos" placeholder="M" />
+                                    <input type="number" min="0" max="59" class="form-control" @bind="hoja.DuracionAnestesiaMinutos" placeholder="M" />
                                     <span class="input-group-text">m</span>
                                 </div>
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0">Duración Cirugía (Horas / Min)</label>
                                 <div class="input-group input-group-sm">
-                                    <input type="number" class="form-control" @bind="hoja.DuracionCirugiaHoras" placeholder="H" />
+                                    <input type="number" min="0" class="form-control" @bind="hoja.DuracionCirugiaHoras" placeholder="H" />
                                     <span class="input-group-text">h</span>
-                                    <input type="number" class="form-control" @bind="hoja.DuracionCirugiaMin" placeholder="M" />
+                                    <input type="number" min="0" max="59" class="form-control" @bind="hoja.DuracionCirugiaMin" placeholder="M" />
                                     <span class="input-group-text">m</span>
                                 </div>
                             </div>
@@ -535,6 +541,7 @@ else if (paciente != null)
             </div>
         </div>
     }
+    </fieldset>
 }
 
 @code {
@@ -545,6 +552,7 @@ else if (paciente != null)
     private List<OrdenActivaResumenDto> ordenesActivas = new();
     private int tabActiva = 1;
     private PacienteHeaderDto? paciente;
+    private PacienteHeaderDto pacienteVista => paciente ?? new();
     private HojaAnestesiaCompletaDto hoja = new();
     private bool cargandoInicial = true;
     private bool guardando;
@@ -557,17 +565,6 @@ else if (paciente != null)
         await Task.Yield();
 
         ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
-        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
-        {
-            IdOrden = Session.OrdenActiva.Value;
-            Nhcl = Session.NhclActivo ?? 0;
-        }
-        else if (IdOrden <= 0 && ordenesActivas.Count > 0)
-        {
-            IdOrden = ordenesActivas[0].IdOrdenAtencion;
-            Nhcl = ordenesActivas[0].Nhcl;
-        }
-
         if (IdOrden > 0)
         {
             ordenInput = IdOrden;
@@ -590,11 +587,6 @@ else if (paciente != null)
 
     private async Task CargarPorInputAsync()
     {
-        if (ordenInput <= 0 && ordenesActivas.Count > 0)
-        {
-            ordenInput = ordenesActivas[0].IdOrdenAtencion;
-            Nhcl = ordenesActivas[0].Nhcl;
-        }
         if (ordenInput <= 0) return;
         IdOrden = ordenInput;
         var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
@@ -616,7 +608,7 @@ else if (paciente != null)
             Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
             var h = await QuirofanoService.ObtenerHojaAnestesiaAsync(IdOrden, Nhcl, numForm);
             if (string.IsNullOrWhiteSpace(h.Firma))
-                h.Firma = Session.CurrentUser?.NombreCompleto ?? "Dr. Anestesiólogo";
+                h.Firma = Session.CurrentUser?.NombreCompleto ?? string.Empty;
             hoja = h;
             paciente = p;
         }

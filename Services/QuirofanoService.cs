@@ -292,17 +292,13 @@ public class QuirofanoService : IQuirofanoService
             NumFormulario = numFormulario
         };
 
-        // Asegurar los 16 slots de tiempo (cada 15 minutos por defecto)
+        // Asegurar la estructura vacía de los 16 intervalos.
         if (hoja.SlotsTiempo.Count < 16)
         {
             hoja.SlotsTiempo.Clear();
             for (int i = 1; i <= 16; i++)
             {
-                hoja.SlotsTiempo.Add(new SlotGraficaAnestesiaDto
-                {
-                    Orden = i,
-                    HoraLabel = DateTime.Today.AddHours(8).AddMinutes((i - 1) * 15).ToString("HH:mm")
-                });
+                hoja.SlotsTiempo.Add(new SlotGraficaAnestesiaDto { Orden = i });
             }
         }
 
@@ -526,6 +522,12 @@ public class QuirofanoService : IQuirofanoService
 
     public async Task<bool> GuardarHojaAnestesiaAsync(HojaAnestesiaCompletaDto dto, int idUsuario, string nombreUsuario)
     {
+        if (!ValoresAnestesiaValidos(dto))
+        {
+            _logger.LogWarning("Se rechazó Hoja de Anestesia con valores negativos o duración inválida. Orden {OrdenId}", dto.IdOrden);
+            return false;
+        }
+
         try
         {
             if (string.IsNullOrWhiteSpace(dto.Firma))
@@ -726,13 +728,55 @@ public class QuirofanoService : IQuirofanoService
                 $"Hoja de Anestesia guardada Orden {dto.IdOrden} (Registro #{dto.IdRegistro})",
                 idUsuario);
 
-            return true;
+            int completa = await _db.ExecuteScalarAsync<int>(@"
+                SELECT CASE WHEN
+                    EXISTS (SELECT 1 FROM qvt_RegistroAnestesia WHERE idRegistro=@IdReg AND idOrden=@IdOrden)
+                    AND EXISTS (SELECT 1 FROM qvt_ManejoViaAnestesia WHERE idRegistro=@IdReg)
+                    AND EXISTS (SELECT 1 FROM qvt_MonitoreoAnestesia WHERE idRegistro=@IdReg)
+                    AND EXISTS (SELECT 1 FROM qvt_tecnicaAnestesia WHERE idRegistro=@IdReg)
+                    AND EXISTS (SELECT 1 FROM qvt_ventilacionAnestesia WHERE idRegistro=@IdReg)
+                    AND EXISTS (SELECT 1 FROM qvt_IngresosAnestesia WHERE idRegistro=@IdReg)
+                    AND EXISTS (SELECT 1 FROM qvt_egresosAnestesia WHERE idRegistro=@IdReg)
+                    AND EXISTS (SELECT 1 FROM qvt_duracionAnestesia WHERE idRegistro=@IdReg)
+                    AND EXISTS (SELECT 1 FROM qvt_graficaDescripcion WHERE idOrden=@IdOrden AND ISNULL(numFormulario,1)=@NumForm)
+                    AND (SELECT COUNT(*) FROM qvt_graficaAnestesia WHERE idRegistro=@IdReg AND ISNULL(numFormulario,1)=@NumForm)=@Slots
+                    THEN 1 ELSE 0 END",
+                new { IdReg = idReg, dto.IdOrden, NumForm = dto.NumFormulario, Slots = dto.SlotsTiempo.Count });
+
+            return completa == 1;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al guardar Hoja de Anestesia para Orden {IdOrden}", dto.IdOrden);
             return false;
         }
+    }
+
+    private static bool ValoresAnestesiaValidos(HojaAnestesiaCompletaDto dto)
+    {
+        if (dto.IdOrden <= 0 || dto.Nhcl <= 0 || dto.NIntentos < 0 || dto.VolTidal < 0 || dto.O2 < 0 ||
+            dto.IngDextrosa < 0 || dto.IngSalina09 < 0 || dto.IngLactatoRinger < 0 || dto.IngSangre < 0 ||
+            dto.IngPlasma < 0 || dto.IngExpansor < 0 || dto.IngManitol < 0 || dto.IngOtros < 0 ||
+            dto.EgrSangrado < 0 || dto.EgrDiuresis < 0 || dto.EgrPerdidasInsensibles < 0 || dto.EgrOtros < 0 ||
+            dto.DuracionAnestesiaHoras < 0 || dto.DuracionAnestesiaMinutos is < 0 or > 59 ||
+            dto.DuracionCirugiaHoras < 0 || dto.DuracionCirugiaMin is < 0 or > 59)
+            return false;
+
+        foreach (var slot in dto.SlotsTiempo)
+        {
+            if (slot.PresionSistolica < 0 || slot.PresionDiastolica < 0 || slot.FrecuenciaCardiaca < 0 ||
+                slot.Temperatura < 0 || slot.O2L < 0 || slot.EtCO2 < 0)
+                return false;
+
+            foreach (var valor in slot.ValoresAgentes)
+            {
+                if (decimal.TryParse(valor, System.Globalization.NumberStyles.Number,
+                        System.Globalization.CultureInfo.CurrentCulture, out var numero) && numero < 0)
+                    return false;
+            }
+        }
+
+        return true;
     }
 
     // ========================================================================

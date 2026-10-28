@@ -103,12 +103,12 @@ public class HojaAnestesiaCompletaDto
     public int NumFormulario { get; set; } = 1;
     public DateTime Fecha { get; set; } = DateTime.Today;
     public string Sexo { get; set; } = string.Empty;
-    public string Asa { get; set; } = "I";
-    public string HoraInicio { get; set; } = DateTime.Now.ToString("HH:mm");
+    public string Asa { get; set; } = string.Empty;
+    public string HoraInicio { get; set; } = string.Empty;
     public string HoraFin { get; set; } = string.Empty;
-    public int TipoAnestesia { get; set; } = 1;
+    public int TipoAnestesia { get; set; }
     public string Firma { get; set; } = string.Empty;
-    public bool Atendido { get; set; } = true;
+    public bool Atendido { get; set; }
 
     // Manejo de Vía Aérea (qvt_ManejoViaAnestesia)
     public bool MascaraFacial { get; set; }
@@ -116,22 +116,22 @@ public class HojaAnestesiaCompletaDto
     public bool MascaraLaringea { get; set; }
     public string NumMascaraLaringea { get; set; } = string.Empty;
     public bool Traqueotomo { get; set; }
-    public bool IntubOral { get; set; } = true;
+    public bool IntubOral { get; set; }
     public bool IntubNasal { get; set; }
     public string NumTubo { get; set; } = string.Empty;
-    public bool IntubBalon { get; set; } = true;
-    public int DifCormack { get; set; } = 1;
-    public int NIntentos { get; set; } = 1;
+    public bool IntubBalon { get; set; }
+    public int DifCormack { get; set; }
+    public int NIntentos { get; set; }
     public int VolTidal { get; set; }
     public string FR { get; set; } = string.Empty;
-    public int O2 { get; set; } = 100;
+    public int O2 { get; set; }
 
     // Monitoreo Intraoperatorio (qvt_MonitoreoAnestesia)
-    public bool EKG { get; set; } = true;
-    public bool SPO2 { get; set; } = true;
-    public bool CO2ET { get; set; } = true;
-    public bool PANI { get; set; } = true;
-    public bool TempMonitoreo { get; set; } = true;
+    public bool EKG { get; set; }
+    public bool SPO2 { get; set; }
+    public bool CO2ET { get; set; }
+    public bool PANI { get; set; }
+    public bool TempMonitoreo { get; set; }
     public bool PVC { get; set; }
     public bool SondaVesical { get; set; }
     public bool SNG { get; set; }
@@ -140,7 +140,7 @@ public class HojaAnestesiaCompletaDto
     public string OtraMonitorizacion { get; set; } = string.Empty;
 
     // Técnica y Ventilación (qvt_tecnicaAnestesia + qvt_ventilacionAnestesia)
-    public bool TecnicaGeneral { get; set; } = true;
+    public bool TecnicaGeneral { get; set; }
     public bool TecnicaRegional { get; set; }
     public bool TecnicaEpidural { get; set; }
     public bool TecnicaSedacion { get; set; }
@@ -148,11 +148,11 @@ public class HojaAnestesiaCompletaDto
     public string Induccion { get; set; } = string.Empty;
     public string Mantenimiento { get; set; } = string.Empty;
     public string BloqueoRegional { get; set; } = string.Empty;
-    public bool VentEspontanea { get; set; } = true;
+    public bool VentEspontanea { get; set; }
     public bool VentMecanica { get; set; }
     public bool VentAsistida { get; set; }
     public string PEEP { get; set; } = string.Empty;
-    public string PosicionPaciente { get; set; } = "Decúbito Dorsal";
+    public string PosicionPaciente { get; set; } = string.Empty;
 
     // Balance Intraoperatorio: Ingresos (qvt_IngresosAnestesia) y Egresos (qvt_egresosAnestesia)
     public double IngDextrosa { get; set; }
@@ -180,20 +180,11 @@ public class HojaAnestesiaCompletaDto
     public string Comentarios { get; set; } = string.Empty;
 
     // 15 Nombres de Agentes/Fármacos Anestésicos (qvt_graficaDescripcion)
-    public string[] NombresAgentes { get; set; } = new string[15]
-    {
-        "Propofol (mg)", "Isoflurano / Sevoflurano (%)", "Fentanilo (mcg)", "Ketamina (mg)", "Midazolam (mg)",
-        "Lidocaína (mg)", "Bupivacaína (mg)", "Meloxicam / Analgesia", "Cefazolina / Antibiótico", "Atropina (mg)",
-        "Adrenalina / Vasopresor", "Ácido Tranexámico", "Ringer Lactato (ml/h)", "Cloruro Sodio 0.9% (ml/h)", "Otro Agente"
-    };
+    public string[] NombresAgentes { get; set; } = new string[15];
 
     // 16 Columnas de Tiempo Intraoperatorio (qvt_graficaAnestesia + qvt_graficaAnestesiaTiempo)
     public List<SlotGraficaAnestesiaDto> SlotsTiempo { get; set; } = Enumerable.Range(1, 16)
-        .Select(i => new SlotGraficaAnestesiaDto
-        {
-            Orden = i,
-            HoraLabel = DateTime.Today.AddHours(8).AddMinutes((i - 1) * 15).ToString("HH:mm")
-        })
+        .Select(i => new SlotGraficaAnestesiaDto { Orden = i })
         .ToList();
 }
 
