@@ -18,8 +18,10 @@
                     <label class="form-label small fw-bold mb-1 text-primary">Buscar Paciente Hospitalizado (Pre-Ficha):</label>
                     <div class="input-group input-group-sm">
                         <input type="text" class="form-control" placeholder="Nombre mascota, propietario o NHCL..."
-                               @bind="_filtroOrden" @bind:event="oninput" />
-                        <button class="btn btn-outline-primary" @onclick="BuscarOrdenesAsync">Buscar</button>
+                               @bind="_filtroOrden" @bind:event="oninput" @onkeydown="BuscarOrdenesConEnterAsync" />
+                        <button class="btn btn-outline-primary" @onclick="BuscarOrdenesAsync" disabled="@_buscandoOrdenes">
+                            @(_buscandoOrdenes ? "Buscando..." : "Buscar")
+                        </button>
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -160,18 +162,20 @@
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text fw-bold">🔎 Catálogo:</span>
                                 <input type="text" class="form-control" placeholder="Buscar fármaco, alimento o fluido..."
-                                       @bind="_busquedaBc" />
-                                <button class="btn btn-primary" @onclick="BuscarCatalogoBcAsync">Buscar</button>
+                                       @bind="_busquedaBc" @bind:event="oninput" @onkeydown="BuscarCatalogoConEnterAsync" />
+                                <button class="btn btn-primary" @onclick="BuscarCatalogoBcAsync" disabled="@_buscandoCatalogo">
+                                    @(_buscandoCatalogo ? "Buscando..." : "Buscar")
+                                </button>
                             </div>
                         </div>
                         @if (_resultadosBc.Count > 0)
                         {
                             <div class="col-md-8">
                                 <div class="d-flex gap-2 align-items-center">
-                                    <select class="form-select form-select-sm" @bind="_productoBcSeleccionado">
+                                    <select class="form-select form-select-sm" @bind="_productoBcSeleccionadoId">
                                         @foreach (var p in _resultadosBc)
                                         {
-                                            <option value="@p.DisplayName">@p.DisplayName (Stock: @p.Inventory @p.BaseUnitOfMeasureCode | $@p.UnitPrice)</option>
+                                            <option value="@ProductoKey(p)">@p.DisplayName (Stock: @p.Inventory @p.BaseUnitOfMeasureCode | $@p.UnitPrice)</option>
                                         }
                                     </select>
                                     <button class="btn btn-sm btn-outline-primary text-nowrap" @onclick="AsignarProductoABloque1">
@@ -185,6 +189,10 @@
                                     </button>
                                 </div>
                             </div>
+                        }
+                        else if (_catalogoBuscado && !_buscandoCatalogo)
+                        {
+                            <div class="col-md-8 text-muted">No se encontraron productos para la búsqueda.</div>
                         }
                     </div>
                 </div>
@@ -494,52 +502,79 @@
 
     private string _busquedaBc = string.Empty;
     private List<FarmacoStockDto> _resultadosBc = [];
-    private string _productoBcSeleccionado = string.Empty;
+    private string _productoBcSeleccionadoId = string.Empty;
 
     private string _nuevaNotaImportante = string.Empty;
     private string _nuevaObservacion = string.Empty;
     private bool _cargandoInicial = true;
     private bool _guardando;
+    private bool _buscandoOrdenes;
+    private bool _buscandoCatalogo;
+    private bool _catalogoBuscado;
     private string? _mensajeAlerta;
     private bool _esError;
 
     protected override async Task OnInitializedAsync()
     {
         _cargandoInicial = true;
-        await Task.Yield();
-        var tVias = KardexService.ObtenerViasAdministracionAsync();
-        var tRitmos = HospService.ObtenerRitmosHorariosAsync();
-        var tCond = HospService.ObtenerCondicionesAsync();
-        var tOrd = KardexService.ObtenerOrdenesActivasAsync();
-        await Task.WhenAll(tVias, tRitmos, tCond, tOrd);
-
-        _vias = await tVias;
-        _ritmos = await tRitmos;
-        _condiciones = await tCond;
-        _ordenesActivas = await tOrd;
-
-        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        try
         {
-            IdOrden = Session.OrdenActiva.Value;
-            Nhcl = Session.NhclActivo ?? 0;
-        }
-        else if (IdOrden <= 0 && _ordenesActivas.Count > 0)
-        {
-            var primera = _ordenesActivas[0];
-            IdOrden = primera.IdOrdenAtencion;
-            Nhcl = primera.Nhcl;
-        }
+            var tVias = KardexService.ObtenerViasAdministracionAsync();
+            var tRitmos = HospService.ObtenerRitmosHorariosAsync();
+            var tCond = HospService.ObtenerCondicionesAsync();
+            var tOrd = KardexService.ObtenerOrdenesActivasAsync();
+            await Task.WhenAll(tVias, tRitmos, tCond, tOrd);
 
-        if (IdOrden > 0)
-        {
-            await CargarFichaCompletaAsync(IdOrden, Nhcl, 1);
+            _vias = await tVias;
+            _ritmos = await tRitmos;
+            _condiciones = await tCond;
+            _ordenesActivas = await tOrd;
+
+            if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+            {
+                IdOrden = Session.OrdenActiva.Value;
+                Nhcl = Session.NhclActivo ?? 0;
+            }
+            else if (IdOrden <= 0 && _ordenesActivas.Count > 0)
+            {
+                var primera = _ordenesActivas[0];
+                IdOrden = primera.IdOrdenAtencion;
+                Nhcl = primera.Nhcl;
+            }
+
+            if (IdOrden > 0)
+                await CargarFichaCompletaAsync(IdOrden, Nhcl, 1);
         }
-        _cargandoInicial = false;
+        catch (Exception ex)
+        {
+            _paciente = null;
+            MostrarError(ex, "No se pudo cargar la ficha de hospitalización");
+        }
+        finally
+        {
+            _cargandoInicial = false;
+        }
     }
 
     private async Task BuscarOrdenesAsync()
     {
-        _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(_filtroOrden);
+        _buscandoOrdenes = true;
+        try
+        {
+            _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(_filtroOrden.Trim());
+            if (_ordenesActivas.Count == 0)
+            {
+                _esError = true;
+                _mensajeAlerta = "No se encontraron órdenes activas con ese criterio.";
+            }
+        }
+        catch (Exception ex) { MostrarError(ex, "No se pudo buscar pacientes"); }
+        finally { _buscandoOrdenes = false; }
+    }
+
+    private async Task BuscarOrdenesConEnterAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarOrdenesAsync();
     }
 
     private async Task OnOrdenChangedAsync(ChangeEventArgs e)
@@ -551,7 +586,8 @@
             {
                 IdOrden = ord.IdOrdenAtencion;
                 Nhcl = ord.Nhcl;
-                await CargarFichaCompletaAsync(IdOrden, Nhcl, 1);
+                try { await CargarFichaCompletaAsync(IdOrden, Nhcl, 1); }
+                catch (Exception ex) { MostrarError(ex, "No se pudo abrir la ficha seleccionada"); }
             }
         }
     }
@@ -575,7 +611,8 @@
     {
         if (int.TryParse(e.Value?.ToString(), out int h))
         {
-            await CargarFichaCompletaAsync(IdOrden, Nhcl, h);
+            try { await CargarFichaCompletaAsync(IdOrden, Nhcl, h); }
+            catch (Exception ex) { MostrarError(ex, "No se pudo cargar la hoja seleccionada"); }
         }
     }
 
@@ -603,47 +640,90 @@
     private async Task NuevaHojaAsync()
     {
         if (_paciente is null) return;
-        int nueva = await HospService.CrearNuevaHojaFichaAsync(IdOrden, Nhcl, Session.IdUser);
-        await CargarFichaCompletaAsync(IdOrden, Nhcl, nueva);
-        _esError = false;
-        _mensajeAlerta = $"Se creó la Hoja #{nueva} de la Ficha de Hospitalización.";
+        _guardando = true;
+        try
+        {
+            await HospService.GuardarFichaHospitalizacionAsync(_sheet, Session.IdUser);
+            int nueva = await HospService.CrearNuevaHojaFichaAsync(IdOrden, Nhcl, Session.IdUser);
+            await CargarFichaCompletaAsync(IdOrden, Nhcl, nueva);
+            _esError = false;
+            _mensajeAlerta = $"Se guardó la hoja anterior y se creó la Hoja #{nueva}.";
+        }
+        catch (Exception ex) { MostrarError(ex, "No se pudo crear una nueva hoja"); }
+        finally { _guardando = false; }
     }
 
     private async Task CerrarFichaAsync()
     {
         if (_paciente is null) return;
-        await HospService.CerrarFichaHospitalizacionAsync(IdOrden);
-        _sheet.Cerrada = true;
-        _esError = false;
-        _mensajeAlerta = "La Ficha de Hospitalización ha sido cerrada.";
+        _guardando = true;
+        try
+        {
+            await HospService.GuardarFichaHospitalizacionAsync(_sheet, Session.IdUser);
+            await HospService.CerrarFichaHospitalizacionAsync(IdOrden);
+            _sheet.Cerrada = true;
+            _esError = false;
+            _mensajeAlerta = "La ficha se guardó y cerró correctamente.";
+        }
+        catch (Exception ex) { MostrarError(ex, "No se pudo cerrar la ficha"); }
+        finally { _guardando = false; }
     }
 
     private async Task BuscarCatalogoBcAsync()
     {
-        if (string.IsNullOrWhiteSpace(_busquedaBc)) return;
-        _resultadosBc = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaBc, Session.Localidad, Session.Apostrofe);
-        _productoBcSeleccionado = _resultadosBc.FirstOrDefault()?.DisplayName ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(_busquedaBc) || _busquedaBc.Trim().Length < 2)
+        {
+            _esError = true;
+            _mensajeAlerta = "Ingrese al menos dos caracteres para buscar en el catálogo.";
+            return;
+        }
+
+        _buscandoCatalogo = true;
+        _catalogoBuscado = true;
+        try
+        {
+            _resultadosBc = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaBc.Trim(), Session.Localidad, Session.Apostrofe);
+            _productoBcSeleccionadoId = _resultadosBc.Count > 0 ? ProductoKey(_resultadosBc[0]) : string.Empty;
+        }
+        catch (Exception ex) { MostrarError(ex, "No se pudo consultar el catálogo"); }
+        finally { _buscandoCatalogo = false; }
     }
+
+    private async Task BuscarCatalogoConEnterAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarCatalogoBcAsync();
+    }
+
+    private static string ProductoKey(FarmacoStockDto producto) => $"{producto.Number}|{producto.Id}|{producto.Location}";
+
+    private FarmacoStockDto? ProductoSeleccionado() =>
+        _resultadosBc.FirstOrDefault(x => ProductoKey(x) == _productoBcSeleccionadoId);
 
     private void AsignarProductoABloque1()
     {
-        if (string.IsNullOrWhiteSpace(_productoBcSeleccionado)) return;
+        var producto = ProductoSeleccionado();
+        if (producto is null) return;
         var libre = _sheet.Bloque1Medicacion.FirstOrDefault(x => string.IsNullOrWhiteSpace(x.Medicacion));
-        if (libre is not null) libre.Medicacion = _productoBcSeleccionado;
+        if (libre is not null) libre.Medicacion = producto.DisplayName;
+        else MostrarError(null, "No existen filas libres en medicación");
     }
 
     private void AsignarProductoABloque2()
     {
-        if (string.IsNullOrWhiteSpace(_productoBcSeleccionado)) return;
+        var producto = ProductoSeleccionado();
+        if (producto is null) return;
         var libre = _sheet.Bloque2Alimentacion.FirstOrDefault(x => string.IsNullOrWhiteSpace(x.Alimentacion));
-        if (libre is not null) libre.Alimentacion = _productoBcSeleccionado;
+        if (libre is not null) libre.Alimentacion = producto.DisplayName;
+        else MostrarError(null, "No existen filas libres en alimentación");
     }
 
     private void AsignarProductoABloque3()
     {
-        if (string.IsNullOrWhiteSpace(_productoBcSeleccionado)) return;
+        var producto = ProductoSeleccionado();
+        if (producto is null) return;
         var libre = _sheet.Bloque3Fluidoterapia.FirstOrDefault(x => string.IsNullOrWhiteSpace(x.Fluidoterapia));
-        if (libre is not null) libre.Fluidoterapia = _productoBcSeleccionado;
+        if (libre is not null) libre.Fluidoterapia = producto.DisplayName;
+        else MostrarError(null, "No existen filas libres en fluidoterapia");
     }
 
     private async Task AgregarNotaAsync(string tipo)
@@ -651,21 +731,29 @@
         string texto = tipo == "I" ? _nuevaNotaImportante : _nuevaObservacion;
         if (string.IsNullOrWhiteSpace(texto)) return;
 
-        await HospService.AgregarNotaImportanteAsync(
-            IdOrden, Nhcl, texto, tipo,
-            Session.IdUser,
-            Session.Localidad);
+        try
+        {
+            await HospService.AgregarNotaImportanteAsync(
+                IdOrden, Nhcl, texto, tipo,
+                Session.IdUser,
+                Session.Localidad);
 
-        if (tipo == "I") _nuevaNotaImportante = string.Empty;
-        else _nuevaObservacion = string.Empty;
+            if (tipo == "I") _nuevaNotaImportante = string.Empty;
+            else _nuevaObservacion = string.Empty;
 
-        await CargarFichaCompletaAsync(IdOrden, Nhcl, _sheet.Hoja);
+            await CargarFichaCompletaAsync(IdOrden, Nhcl, _sheet.Hoja);
+        }
+        catch (Exception ex) { MostrarError(ex, "No se pudo guardar la nota"); }
     }
 
     private async Task EliminarNotaAsync(int idNota)
     {
-        await HospService.EliminarNotaImportanteAsync(idNota);
-        await CargarFichaCompletaAsync(IdOrden, Nhcl, _sheet.Hoja);
+        try
+        {
+            await HospService.EliminarNotaImportanteAsync(idNota);
+            await CargarFichaCompletaAsync(IdOrden, Nhcl, _sheet.Hoja);
+        }
+        catch (Exception ex) { MostrarError(ex, "No se pudo eliminar la nota"); }
     }
 
     private async Task ExportarPdfAsync()
@@ -685,5 +773,11 @@
     private async Task ImprimirVistaAsync()
     {
         await JS.InvokeVoidAsync("hosvetPrintElement", "area-impresion-ficha");
+    }
+
+    private void MostrarError(Exception? ex, string mensaje)
+    {
+        _esError = true;
+        _mensajeAlerta = ex is null ? mensaje : $"{mensaje}: {ex.GetBaseException().Message}";
     }
 }
