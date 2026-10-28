@@ -10,7 +10,7 @@
         <small class="text-muted">Explore y gestione las órdenes activas de pacientes en consulta, hospitalización o cirugía para acceder a su Kardex y fichas clínicas.</small>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        <a href="/" class="btn btn-outline-secondary btn-sm">
+        <a href="/dashboard" class="btn btn-outline-secondary btn-sm">
             🏠 Panel Principal
         </a>
         <a href="/admision/clientes-pacientes" class="btn btn-outline-dark btn-sm">
@@ -33,7 +33,7 @@
         <div class="row g-2 align-items-end">
             <div class="col-md-5">
                 <label class="form-label small fw-bold">Filtrar por Paciente, Propietario, N° Orden o NHCL:</label>
-                <input class="form-control" @bind="_filtro" @bind:event="oninput" placeholder="Ej. Max, Pérez, 12450..." />
+                <input class="form-control" @bind="_filtro" @bind:event="oninput" @onkeydown="OnFiltroKeyDown" placeholder="Ej. Max, Pérez, 12450..." />
             </div>
             <div class="col-md-2">
                 <button class="btn btn-primary w-100" @onclick="CargarOrdenesAsync" disabled="@_cargando">
@@ -43,8 +43,8 @@
             <div class="col-md-3">
                 <label class="form-label small fw-bold">Acceso rápido (Orden / NHCL):</label>
                 <div class="input-group">
-                    <input type="number" class="form-control" placeholder="Orden" @bind="_ordenManual" />
-                    <input type="number" class="form-control" placeholder="NHCL" @bind="_nhclManual" />
+                    <input type="number" class="form-control" placeholder="Orden" @bind="_ordenManual" @onkeydown="OnManualKeyDown" />
+                    <input type="number" class="form-control" placeholder="NHCL" @bind="_nhclManual" @onkeydown="OnManualKeyDown" />
                     <button class="btn btn-success" @onclick="IrKardexManual">Ir</button>
                 </div>
             </div>
@@ -198,6 +198,22 @@ else
         if (_ordenManual > 0 && _nhclManual > 0)
         {
             Nav.NavigateTo($"/kardex/enfermeria?orden={_ordenManual}&nhcl={_nhclManual}");
+        }
+    }
+
+    private async Task OnFiltroKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CargarOrdenesAsync();
+        }
+    }
+
+    private void OnManualKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            IrKardexManual();
         }
     }
 }
