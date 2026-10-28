@@ -93,6 +93,9 @@
                     </div>
                 </div>
                 <span class="count-pill">@TextoContador(pacientes)</span>
+                <button class="btn btn-sm btn-outline-secondary text-nowrap" @onclick:stopPropagation="true" @onclick="() => AlternarVerCliente(cli)">
+                    <i class="bi bi-eye me-1"></i>Ver datos
+                </button>
                 <button class="btn btn-sm btn-outline-primary text-nowrap" @onclick:stopPropagation="true" @onclick="() => EditarClienteAsync(cli)">
                     <i class="bi bi-pencil-square me-1"></i>Editar dueño
                 </button>
@@ -101,6 +104,62 @@
 
             @if (expandido)
             {
+                @if (_viendoClienteId == cli.PaCodigo)
+                {
+                    <div class="border-top bg-light p-3 inline-panel">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold text-dark">
+                                <i class="bi bi-eye me-1 text-primary"></i>Ficha del Propietario #@cli.PaCodigo (Solo Lectura)
+                            </span>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => EditarClienteAsync(cli)">
+                                    <i class="bi bi-pencil-square me-1"></i>Editar
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => _viendoClienteId = null">
+                                    <i class="bi bi-x-lg me-1"></i>Cerrar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="row g-2 bg-white p-3 rounded border">
+                            <div class="col-md-4">
+                                <small class="text-muted d-block">Tipo y N.º de Documento</small>
+                                <span class="fw-bold"><span class="badge bg-secondary me-1">@cli.PaDocumento</span> @cli.PaCedula</span>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted d-block">Apellidos</small>
+                                <span class="fw-bold">@cli.PaApellidos</span>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted d-block">Nombres</small>
+                                <span class="fw-bold">@cli.PaNombres</span>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted d-block">Teléfono Móvil (Celular)</small>
+                                <span class="fw-bold">+593 @cli.PaMovil</span>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted d-block">Teléfono Convencional</small>
+                                <span>@(string.IsNullOrWhiteSpace(cli.PaTelefono) ? "—" : cli.PaTelefono)</span>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted d-block">Correo Electrónico</small>
+                                <span>@(string.IsNullOrWhiteSpace(cli.PaEmail) ? "—" : cli.PaEmail)</span>
+                            </div>
+                            <div class="col-md-12">
+                                <small class="text-muted d-block">Dirección Domiciliaria</small>
+                                <span>@(string.IsNullOrWhiteSpace(cli.PaDireccion) ? "—" : cli.PaDireccion)</span>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(cli.PaObservaciones))
+                            {
+                                <div class="col-md-12">
+                                    <small class="text-muted d-block">Observaciones</small>
+                                    <span>@cli.PaObservaciones</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
                 @if (_editandoClienteId == cli.PaCodigo)
                 {
                     <div class="border-top bg-light p-3 inline-panel">
@@ -149,17 +208,92 @@
                                     <td><span class="badge @ClaseSexo(mas)">@TextoSexo(mas)</span></td>
                                     <td>@mas.EdadCalculada</td>
                                     <td class="text-end pe-3 text-nowrap">
-                                        <button class="btn btn-sm btn-outline-info py-0 px-2" @onclick='() => NavManager.NavigateTo($"/consulta/historial/{mas.MasNhcl}")'>
-                                            <i class="bi bi-clock-history"></i> Ver historial
+                                        <button class="btn btn-sm btn-outline-info py-0 px-2" title="Historia Clínica SOAP" @onclick='() => NavManager.NavigateTo($"/consulta/fichamedica/paciente/{mas.MasNhcl}")'>
+                                            <i class="bi bi-clipboard2-pulse"></i> Historia SOAP
                                         </button>
-                                        <button class="btn btn-sm btn-outline-success py-0 px-2" @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>
+                                        <button class="btn btn-sm btn-outline-success py-0 px-2" title="Generar orden de atención" @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>
                                             <i class="bi bi-clipboard2-plus"></i> Orden
                                         </button>
-                                        <button class="btn btn-sm btn-outline-warning py-0 px-2" @onclick="() => EditarMascotaAsync(mas)">
+                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Ver datos del paciente" @onclick="() => AlternarVerMascota(mas)">
+                                            <i class="bi bi-eye"></i> Ver datos
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning py-0 px-2" title="Editar datos del paciente" @onclick="() => EditarMascotaAsync(mas)">
                                             <i class="bi bi-pencil"></i> Editar
                                         </button>
                                     </td>
                                 </tr>
+                                @if (_viendoMascotaNhcl == mas.MasNhcl)
+                                {
+                                    <tr>
+                                        <td colspan="5" class="bg-light p-3">
+                                            <div class="inline-panel">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="fw-bold text-dark">
+                                                        <i class="bi bi-eye me-1 text-primary"></i>Ficha del Paciente NHCL #@mas.MasNhcl — @mas.MasNombre (Solo Lectura)
+                                                    </span>
+                                                    <div class="d-flex gap-2">
+                                                        <button class="btn btn-sm btn-outline-info" @onclick='() => NavManager.NavigateTo($"/consulta/fichamedica/paciente/{mas.MasNhcl}")'>
+                                                            <i class="bi bi-clipboard2-pulse me-1"></i>Historia SOAP
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-warning" @onclick="() => EditarMascotaAsync(mas)">
+                                                            <i class="bi bi-pencil me-1"></i>Editar
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => _viendoMascotaNhcl = null">
+                                                            <i class="bi bi-x-lg me-1"></i>Cerrar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div class="row g-2 bg-white p-3 rounded border">
+                                                    <div class="col-md-3">
+                                                        <small class="text-muted d-block">Origen Institucional</small>
+                                                        <span class="badge @(mas.MasOrigen == "T" ? "bg-success" : "bg-primary")">
+                                                            @(mas.MasOrigen == "T" ? "Fauna Silvestre" : "Mascota Doméstica")
+                                                        </span>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <small class="text-muted d-block">Nombre del Paciente</small>
+                                                        <span class="fw-bold">@mas.MasNombre</span>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <small class="text-muted d-block">Especie</small>
+                                                        <span class="fw-bold">@mas.EspecieDescripcion</span>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <small class="text-muted d-block">Raza / Familia</small>
+                                                        <span>@(string.IsNullOrWhiteSpace(mas.RazaDescripcion) ? "No especificada" : mas.RazaDescripcion)</span>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <small class="text-muted d-block">Sexo</small>
+                                                        <span class="badge @ClaseSexo(mas)">@TextoSexo(mas)</span>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <small class="text-muted d-block">Esterilizado / Castrado</small>
+                                                        <span>@(mas.MasCastrado == "SI" ? "SÍ" : "NO")</span>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <small class="text-muted d-block">Fecha Nacimiento / Edad</small>
+                                                        <span>@mas.MasFechaNace.ToString("dd/MM/yyyy") (@mas.EdadCalculada)</span>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <small class="text-muted d-block">Semáforo / Triaje</small>
+                                                        <span>
+                                                            <span class="badge rounded-pill" style="background-color:@ObtenerColorHexTriaje(mas.MasColorTriaje); color:#fff;">
+                                                                @ObtenerTextoTriaje(mas.MasColorTriaje)
+                                                            </span>
+                                                        </span>
+                                                    </div>
+                                                    @if (!string.IsNullOrWhiteSpace(mas.MasObservacion))
+                                                    {
+                                                        <div class="col-md-12">
+                                                            <small class="text-muted d-block">Antecedentes / Observaciones</small>
+                                                            <span>@mas.MasObservacion</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
                                 @if (_editandoMascotaNhcl == mas.MasNhcl)
                                 {
                                     <tr>
@@ -212,6 +346,8 @@
     private int? _clienteExpandido;
     private int? _editandoClienteId;
     private int? _editandoMascotaNhcl;
+    private int? _viendoClienteId;
+    private int? _viendoMascotaNhcl;
     private List<CatalogoItemGenericoDto> _especies = new();
     private List<CatalogoItemGenericoDto> _razas = new();
     private List<CatalogoItemGenericoDto> _sexos = new();
@@ -309,6 +445,8 @@
         bool yaAbierto = _clienteExpandido == cli.PaCodigo;
         _editandoClienteId = null;
         _editandoMascotaNhcl = null;
+        _viendoClienteId = null;
+        _viendoMascotaNhcl = null;
         if (yaAbierto)
         {
             _clienteExpandido = null;
@@ -319,6 +457,33 @@
         await CargarPacientesClienteAsync(cli.PaCodigo);
     }
 
+    private async Task AlternarVerCliente(ClienteDto cli)
+    {
+        if (_viendoClienteId == cli.PaCodigo)
+        {
+            _viendoClienteId = null;
+            return;
+        }
+        _editandoClienteId = null;
+        if (_clienteExpandido != cli.PaCodigo)
+        {
+            _clienteExpandido = cli.PaCodigo;
+            await CargarPacientesClienteAsync(cli.PaCodigo);
+        }
+        _viendoClienteId = cli.PaCodigo;
+    }
+
+    private void AlternarVerMascota(PacienteMascotaDto mas)
+    {
+        if (_viendoMascotaNhcl == mas.MasNhcl)
+        {
+            _viendoMascotaNhcl = null;
+            return;
+        }
+        _editandoMascotaNhcl = null;
+        _viendoMascotaNhcl = mas.MasNhcl;
+    }
+
     private async Task EditarClienteAsync(ClienteDto cli)
     {
         if (_editandoClienteId == cli.PaCodigo)
@@ -327,6 +492,7 @@
             return;
         }
         _editandoMascotaNhcl = null;
+        _viendoClienteId = null;
         if (_clienteExpandido != cli.PaCodigo)
         {
             _clienteExpandido = cli.PaCodigo;
@@ -782,6 +948,7 @@
             return;
         }
         _editandoClienteId = null;
+        _viendoMascotaNhcl = null;
         await CargarDatosMascotaAsync(mas);
         _editandoMascotaNhcl = mas.MasNhcl;
     }
@@ -834,6 +1001,10 @@
     {
         try
         {
+            if (!string.IsNullOrWhiteSpace(_mascotaEditando.MasNombre))
+            {
+                _mascotaEditando.MasNombre = _mascotaEditando.MasNombre.Trim().ToUpperInvariant();
+            }
             int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
             _mascotaEditando.EspecieDescripcion = _especies.FirstOrDefault(e => e.Id == _mascotaEditando.MasEspecie)?.Descripcion ?? "Canino";
             _mascotaEditando.RazaDescripcion = _razas.FirstOrDefault(r => r.Id == _mascotaEditando.MasRaza)?.Descripcion ?? "Mestizo";

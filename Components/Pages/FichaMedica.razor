@@ -1,5 +1,6 @@
 @page "/consulta/fichamedica"
 @page "/consulta/fichamedica/{IdOrden:int}/{Nhcl:int}"
+@page "/consulta/fichamedica/paciente/{Nhcl:int}"
 @inject IConsultaExternaService ConsultaService
 @inject IKardexService KardexService
 @inject IReportExportService ReportService
@@ -631,7 +632,16 @@
         CargandoInicial = true;
         await Task.Yield();
 
-        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        if (IdOrden <= 0 && Nhcl > 0)
+        {
+            var activas = await KardexService.ObtenerOrdenesActivasAsync();
+            var ordenPaciente = activas.FirstOrDefault(o => o.Nhcl == Nhcl);
+            if (ordenPaciente != null)
+            {
+                IdOrden = ordenPaciente.IdOrdenAtencion;
+            }
+        }
+        else if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
         {
             IdOrden = Session.OrdenActiva.Value;
             Nhcl = Session.NhclActivo ?? 0;
@@ -646,7 +656,7 @@
             }
         }
 
-        if (IdOrden > 0)
+        if (IdOrden > 0 || Nhcl > 0)
         {
             IdOrdenInput = IdOrden;
             NhclInput = Nhcl;

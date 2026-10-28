@@ -427,6 +427,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         try
         {
+            if (!string.IsNullOrWhiteSpace(mascota.MasNombre))
+            {
+                mascota.MasNombre = mascota.MasNombre.Trim().ToUpperInvariant();
+            }
             string sexoChar = mascota.MasSexo == 2 ? "H" : (mascota.MasSexo == 1 ? "M" : "I");
             string castradoChar = mascota.MasCastrado?.Trim().ToUpperInvariant().StartsWith("S") == true ? "S" : "N";
             decimal? tuePesoVal = decimal.TryParse(mascota.TuePeso, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var p) ? p : null;
