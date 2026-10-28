@@ -50,52 +50,16 @@ public class InventarioService : IInventarioService
                     DisplayName = x.Descripcion,
                     Id = x.Id.ToString(),
                     TaxGroupCode = x.CodigoImpuesto == "2" ? $"IVA{x.PorcentajeImpuesto}" : "IVA0",
-                    Inventory = 100,
-                    Available = 100,
+                    Inventory = 0,
+                    Available = 0,
                     UnitPrice = x.Precio ?? 0,
                     BaseUnitOfMeasureCode = "UND",
                     Location = "E-FACT"
                 }));
-
-            if (resultados.Count > 0)
-            {
-                var codigos = resultados.Select(x => x.Number).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToArray();
-                var reservas = await _sql.QueryAsync<ReservaStockResumen>(@"
-                    SELECT idProd AS Codigo, ISNULL(SUM(cantidad), 0) AS Cantidad
-                    FROM vt_reservaProductosStockBC
-                    WHERE idProd IN @Codigos
-                    GROUP BY idProd", new { Codigos = codigos });
-                var reservadoPorCodigo = reservas.ToDictionary(x => x.Codigo, x => x.Cantidad, StringComparer.OrdinalIgnoreCase);
-                foreach (var item in resultados)
-                {
-                    if (reservadoPorCodigo.TryGetValue(item.Number, out var reservado))
-                        item.Inventory = Math.Max(0, item.Inventory - reservado);
-                    item.Available = item.Inventory;
-                }
-            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "No se pudo consultar el catálogo E-FACT; se usará el catálogo veterinario local.");
-        }
-
-        // Obtener bodegas configuradas para la localidad.
-        var bodegas = new List<string>();
-        try
-        {
-            var bodQuery = await _sql.QueryAsync<string>(
-                "SELECT RTRIM(bodega) FROM vt_bodegasBC WHERE idlocalidad = @Localidad AND estado = 'A'",
-                new { Localidad = idLocalidad });
-            bodegas = bodQuery.Where(b => !string.IsNullOrWhiteSpace(b)).ToList();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "No se pudo consultar vt_bodegasBC; usando BOD001 por defecto.");
-        }
-
-        if (bodegas.Count == 0)
-        {
-            bodegas.Add("BOD001");
         }
 
         // Consultar únicamente el catálogo local de productos/medicinas.
@@ -105,32 +69,20 @@ public class InventarioService : IInventarioService
             {
                 const string sqlLocal = @"
                     SELECT TOP 30
-                        RTRIM(ISNULL(pro_codigo, CAST(pro_id AS VARCHAR(20)))) AS Number,
-                        RTRIM(ISNULL(pro_descripcion, '')) AS DisplayName,
-                        CAST(ISNULL(pro_id, 0) AS VARCHAR(50)) AS Id,
+                        CAST(prod_id AS VARCHAR(20)) AS Number,
+                        RTRIM(ISNULL(prod_descripcion, '')) AS DisplayName,
+                        CAST(prod_id AS VARCHAR(50)) AS Id,
                         'IVA0' AS TaxGroupCode,
-                        CAST(100 - ISNULL(r.Reservado, 0) AS DECIMAL(18,2)) AS Inventory,
-                        CAST(100 - ISNULL(r.Reservado, 0) AS DECIMAL(18,2)) AS Available,
-                        CAST(ISNULL(pro_precio, 0) AS DECIMAL(18,2)) AS UnitPrice,
+                        CAST(0 AS DECIMAL(18,2)) AS Inventory,
+                        CAST(0 AS DECIMAL(18,2)) AS Available,
+                        CAST(0 AS DECIMAL(18,2)) AS UnitPrice,
                         'UND' AS BaseUnitOfMeasureCode,
-                        @Bodega AS Location
+                        'LOCAL' AS Location
                     FROM vt_productos p
-                    OUTER APPLY (
-                        SELECT SUM(rs.cantidad) AS Reservado
-                        FROM vt_reservaProductosStockBC rs
-                        WHERE rs.idProd = RTRIM(ISNULL(p.pro_codigo, CAST(p.pro_id AS VARCHAR(20))))
-                          AND rs.bodega = @Bodega
-                    ) r
-                    WHERE pro_descripcion LIKE @Filtro AND ISNULL(pro_estado, 'A') = 'A'
-                    ORDER BY pro_descripcion";
+                    WHERE prod_descripcion LIKE @Filtro AND prod_estado = 'A'
+                    ORDER BY prod_descripcion";
 
-                var locales = await _sql.QueryAsync<FarmacoStockDto>(sqlLocal, new { Filtro = $"%{termino}%", Bodega = bodegas.First() });
-                resultados.AddRange(locales.Select(item =>
-                {
-                    item.Inventory = Math.Max(0, item.Inventory);
-                    item.Available = item.Inventory;
-                    return item;
-                }));
+                resultados.AddRange(await _sql.QueryAsync<FarmacoStockDto>(sqlLocal, new { Filtro = $"%{termino}%" }));
             }
             catch (Exception ex)
             {
@@ -144,14 +96,15 @@ public class InventarioService : IInventarioService
             {
                 const string sqlHist = @"
                     SELECT DISTINCT TOP 25
-                        RTRIM(ISNULL(codigoprod, 'HV-001')) AS Number,
+                        CAST(codigoprod AS VARCHAR(20)) AS Number,
                         RTRIM(ISNULL(proddescripcion, '')) AS DisplayName,
-                        RTRIM(ISNULL(med_iddinamics, 'BC-LOCAL')) AS Id,
-                        RTRIM(ISNULL(med_iva, 'IVA0')) AS TaxGroupCode,
-                        CAST(50 AS DECIMAL(18,2)) AS Inventory,
+                        CAST(codigoprod AS VARCHAR(20)) AS Id,
+                        'IVA0' AS TaxGroupCode,
+                        CAST(0 AS DECIMAL(18,2)) AS Inventory,
+                        CAST(0 AS DECIMAL(18,2)) AS Available,
                         CAST(ISNULL(precioprod, 0) AS DECIMAL(18,2)) AS UnitPrice,
-                        RTRIM(ISNULL(med_medida, 'UND')) AS BaseUnitOfMeasureCode,
-                        RTRIM(ISNULL(med_bodega, 'BOD001')) AS Location
+                        'UND' AS BaseUnitOfMeasureCode,
+                        'HISTORICO' AS Location
                     FROM qvt_productosUtilizados
                     WHERE proddescripcion LIKE @Filtro AND codigoprod IS NOT NULL";
 

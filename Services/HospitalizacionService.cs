@@ -179,6 +179,18 @@ public class HospitalizacionService : IHospitalizacionService
         if (nhcl <= 0) nhcl = 1;
         if (numFormulario <= 0) numFormulario = 1;
 
+        string cacheKey = $"{idOrdenAtencion}_{numFormulario}";
+        if (_cacheSignosMemoria.TryGetValue(cacheKey, out var cache))
+        {
+            var dtoCache = ClonarSignos(cache);
+            if (_hojasPorOrden.TryGetValue(idOrdenAtencion, out var hojasCache))
+            {
+                lock (hojasCache)
+                    dtoCache.FormulariosDisponibles = hojasCache.ToList();
+            }
+            return dtoCache;
+        }
+
         var forms = new List<int>();
         try
         {
@@ -211,8 +223,15 @@ public class HospitalizacionService : IHospitalizacionService
             forms.Add(numFormulario);
 
         forms.Sort();
-
-        string cacheKey = $"{idOrdenAtencion}_{numFormulario}";
+        _hojasPorOrden.AddOrUpdate(
+            idOrdenAtencion,
+            _ => new SortedSet<int>(forms),
+            (_, existentes) =>
+            {
+                lock (existentes)
+                    foreach (var form in forms) existentes.Add(form);
+                return existentes;
+            });
 
         // 1. Intentar cargar desde base de datos
         bool encontradoEnDb = false;
@@ -375,101 +394,117 @@ public class HospitalizacionService : IHospitalizacionService
         if (dto.Nhcl <= 0) dto.Nhcl = 1;
         if (dto.NumFormulario <= 0) dto.NumFormulario = 1;
 
-        // 1. Guardar en memoria de forma inmediata
+        // Persistir todo el formulario en un único viaje a SQL Server.
+        var sql = new StringBuilder(@"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+            DELETE FROM qvt_enfFechas WHERE idOrdenAtencion=@IdOrden AND numFormulario=@NumForm AND tipo='SIGNOS';
+            DELETE FROM qvt_enfSignosVitales WHERE idOrdenAtencion=@IdOrden AND numFormulario=@NumForm AND tipo='SIGNOS';
+            DELETE FROM qvt_enfBalanceHidrico WHERE idOrdenAtencion=@IdOrden AND numFormulario=@NumForm AND tipo='SIGNOS';
+            DELETE FROM qvt_enfMediciones WHERE idOrdenAtencion=@IdOrden AND numFormulario=@NumForm AND tipo='SIGNOS';");
+        var parametros = new DynamicParameters(new
+        {
+            IdOrden = dto.IdOrdenAtencion,
+            NumForm = dto.NumFormulario,
+            ExpectedFechas = dto.Fechas.Count,
+            ExpectedSignos = dto.SignosVitales.Count,
+            ExpectedBalance = dto.BalanceHidrico.Count,
+            ExpectedMediciones = dto.Mediciones.Count
+        });
+
+        if (dto.Fechas.Count > 0)
+        {
+            sql.Append(" INSERT INTO qvt_enfFechas (idOrdenAtencion,fecha,diaInternacion,diaPostquirurgico,orden,numFormulario,tipo) VALUES ");
+            for (int i = 0; i < dto.Fechas.Count; i++)
+            {
+                if (i > 0) sql.Append(',');
+                sql.Append($"(@IdOrden,@F{i}Fecha,@F{i}Internacion,@F{i}Post,@F{i}Orden,@NumForm,'SIGNOS')");
+                var f = dto.Fechas[i];
+                parametros.Add($"F{i}Fecha", f.Fecha);
+                parametros.Add($"F{i}Internacion", f.DiasInternacion?.ToString());
+                parametros.Add($"F{i}Post", f.DiasPostQuirurgico?.ToString());
+                parametros.Add($"F{i}Orden", f.Orden);
+            }
+            sql.Append(';');
+        }
+
+        if (dto.SignosVitales.Count > 0)
+        {
+            sql.Append(" INSERT INTO qvt_enfSignosVitales (idOrdenAtencion,pulso,temp,resp,sistolica,diastolica,orden,numFormulario,tipo) VALUES ");
+            for (int i = 0; i < dto.SignosVitales.Count; i++)
+            {
+                if (i > 0) sql.Append(',');
+                sql.Append($"(@IdOrden,@S{i}Pulso,@S{i}Temp,@S{i}Resp,@S{i}Sis,@S{i}Dia,@S{i}Orden,@NumForm,'SIGNOS')");
+                var s = dto.SignosVitales[i];
+                parametros.Add($"S{i}Pulso", s.Pulso);
+                parametros.Add($"S{i}Temp", s.Temperatura);
+                parametros.Add($"S{i}Resp", s.FrecuenciaRespiratoria?.ToString());
+                parametros.Add($"S{i}Sis", s.PresionSistolica?.ToString());
+                parametros.Add($"S{i}Dia", s.PresionDiastolica?.ToString());
+                parametros.Add($"S{i}Orden", s.Orden);
+            }
+            sql.Append(';');
+        }
+
+        if (dto.BalanceHidrico.Count > 0)
+        {
+            sql.Append(" INSERT INTO qvt_enfBalanceHidrico (idOrdenAtencion,parental,oral,totalIng,orina,drenaje,otros,totalElm,orden,numFormulario,tipo) VALUES ");
+            for (int i = 0; i < dto.BalanceHidrico.Count; i++)
+            {
+                if (i > 0) sql.Append(',');
+                sql.Append($"(@IdOrden,@B{i}Par,@B{i}Oral,@B{i}Ing,@B{i}Orina,@B{i}Dren,@B{i}Otros,@B{i}Elm,@B{i}Orden,@NumForm,'SIGNOS')");
+                var b = dto.BalanceHidrico[i];
+                parametros.Add($"B{i}Par", Inv(b.Parenteral, "0.0"));
+                parametros.Add($"B{i}Oral", Inv(b.ViaOral, "0.0"));
+                parametros.Add($"B{i}Ing", Inv(b.TotalIngresos, "0.0"));
+                parametros.Add($"B{i}Orina", Inv(b.Orina, "0.0"));
+                parametros.Add($"B{i}Dren", Inv(b.Drenaje, "0.0"));
+                parametros.Add($"B{i}Otros", Inv(b.Otros, "0.0"));
+                parametros.Add($"B{i}Elm", Inv(b.TotalEliminaciones, "0.0"));
+                parametros.Add($"B{i}Orden", b.Orden);
+            }
+            sql.Append(';');
+        }
+
+        if (dto.Mediciones.Count > 0)
+        {
+            sql.Append(" INSERT INTO qvt_enfMediciones (idOrdenAtencion,peso,dieta,numComidas,aseo,actividadFisica,recanalizacion,cambioSonda,responsable,orden,numFormulario,tipo) VALUES ");
+            for (int i = 0; i < dto.Mediciones.Count; i++)
+            {
+                if (i > 0) sql.Append(',');
+                sql.Append($"(@IdOrden,@M{i}Peso,@M{i}Dieta,@M{i}Comidas,@M{i}Aseo,@M{i}Mov,@M{i}Vend,@M{i}Sonda,@M{i}Resp,@M{i}Orden,@NumForm,'SIGNOS')");
+                var m = dto.Mediciones[i];
+                parametros.Add($"M{i}Peso", Inv(m.Peso, "0.00"));
+                parametros.Add($"M{i}Dieta", m.DietaIndicada);
+                parametros.Add($"M{i}Comidas", m.NumeroComidas);
+                parametros.Add($"M{i}Aseo", string.IsNullOrWhiteSpace(m.Banio) ? m.Aseo : m.Banio);
+                parametros.Add($"M{i}Mov", m.Movilizacion);
+                parametros.Add($"M{i}Vend", m.Vendajes);
+                parametros.Add($"M{i}Sonda", m.CambioSonda);
+                parametros.Add($"M{i}Resp", m.Responsable);
+                parametros.Add($"M{i}Orden", m.Orden);
+            }
+            sql.Append(';');
+        }
+
+        sql.Append(@"
+            IF (SELECT COUNT(*) FROM qvt_enfFechas WHERE idOrdenAtencion=@IdOrden AND numFormulario=@NumForm AND tipo='SIGNOS') <> @ExpectedFechas
+               OR (SELECT COUNT(*) FROM qvt_enfSignosVitales WHERE idOrdenAtencion=@IdOrden AND numFormulario=@NumForm AND tipo='SIGNOS') <> @ExpectedSignos
+               OR (SELECT COUNT(*) FROM qvt_enfBalanceHidrico WHERE idOrdenAtencion=@IdOrden AND numFormulario=@NumForm AND tipo='SIGNOS') <> @ExpectedBalance
+               OR (SELECT COUNT(*) FROM qvt_enfMediciones WHERE idOrdenAtencion=@IdOrden AND numFormulario=@NumForm AND tipo='SIGNOS') <> @ExpectedMediciones
+            BEGIN
+                ROLLBACK TRANSACTION;
+                THROW 51000, 'La hoja no se guardó completa en la base de datos.', 1;
+            END;
+            COMMIT TRANSACTION;");
+        await _db.ExecuteAsync(sql.ToString(), parametros);
+
         _hojasPorOrden.AddOrUpdate(
             dto.IdOrdenAtencion,
             _ => new SortedSet<int> { dto.NumFormulario },
             (_, set) => { lock (set) { set.Add(dto.NumFormulario); } return set; });
-
         string key = $"{dto.IdOrdenAtencion}_{dto.NumFormulario}";
         _cacheSignosMemoria[key] = ClonarSignos(dto);
-
-        // 2. Persistir en base de datos SQL Server
-        var paramForm = new { IdOrden = dto.IdOrdenAtencion, NumForm = dto.NumFormulario };
-        var comandos = new List<(string Sql, object? Parameters)>
-        {
-            ("DELETE FROM qvt_enfFechas WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'", paramForm),
-            ("DELETE FROM qvt_enfSignosVitales WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'", paramForm),
-            ("DELETE FROM qvt_enfBalanceHidrico WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'", paramForm),
-            ("DELETE FROM qvt_enfMediciones WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'", paramForm)
-        };
-
-        foreach (var f in dto.Fechas)
-        {
-            comandos.Add((@"
-                INSERT INTO qvt_enfFechas (idOrdenAtencion, fecha, diaInternacion, diaPostquirurgico, orden, numFormulario, tipo)
-                VALUES (@IdOrden, @Fecha, @DiasInternacion, @DiasPostQuirurgico, @Orden, @NumForm, 'SIGNOS')",
-                new
-                {
-                    IdOrden = dto.IdOrdenAtencion,
-                    f.Fecha,
-                    DiasInternacion = f.DiasInternacion?.ToString(),
-                    DiasPostQuirurgico = f.DiasPostQuirurgico?.ToString(),
-                    f.Orden,
-                    NumForm = dto.NumFormulario
-                }));
-        }
-
-        foreach (var s in dto.SignosVitales)
-        {
-            comandos.Add((@"
-                INSERT INTO qvt_enfSignosVitales (idOrdenAtencion, pulso, temp, resp, sistolica, diastolica, orden, numFormulario, tipo)
-                VALUES (@IdOrden, @Pulso, @Temperatura, @FrecuenciaRespiratoria, @PresionSistolica, @PresionDiastolica, @Orden, @NumForm, 'SIGNOS')",
-                new
-                {
-                    IdOrden = dto.IdOrdenAtencion,
-                    Pulso = s.Pulso,
-                    Temperatura = s.Temperatura,
-                    FrecuenciaRespiratoria = s.FrecuenciaRespiratoria?.ToString(),
-                    PresionSistolica = s.PresionSistolica?.ToString(),
-                    PresionDiastolica = s.PresionDiastolica?.ToString(),
-                    s.Orden,
-                    NumForm = dto.NumFormulario
-                }));
-        }
-
-        foreach (var b in dto.BalanceHidrico)
-        {
-            comandos.Add((@"
-                INSERT INTO qvt_enfBalanceHidrico (idOrdenAtencion, parental, oral, totalIng, orina, drenaje, otros, totalElm, orden, numFormulario, tipo)
-                VALUES (@IdOrden, @Parenteral, @ViaOral, @TotalIngresos, @Orina, @Drenaje, @Otros, @TotalEliminaciones, @Orden, @NumForm, 'SIGNOS')",
-                new
-                {
-                    IdOrden = dto.IdOrdenAtencion,
-                    Parenteral = Inv(b.Parenteral, "0.0"),
-                    ViaOral = Inv(b.ViaOral, "0.0"),
-                    TotalIngresos = Inv(b.TotalIngresos, "0.0"),
-                    Orina = Inv(b.Orina, "0.0"),
-                    Drenaje = Inv(b.Drenaje, "0.0"),
-                    Otros = Inv(b.Otros, "0.0"),
-                    TotalEliminaciones = Inv(b.TotalEliminaciones, "0.0"),
-                    b.Orden,
-                    NumForm = dto.NumFormulario
-                }));
-        }
-
-        foreach (var m in dto.Mediciones)
-        {
-            comandos.Add((@"
-                INSERT INTO qvt_enfMediciones (idOrdenAtencion, peso, dieta, numComidas, aseo, actividadFisica, recanalizacion, cambioSonda, responsable, orden, numFormulario, tipo)
-                VALUES (@IdOrden, @Peso, @DietaIndicada, @NumeroComidas, @Aseo, @Movilizacion, @Vendajes, @CambioSonda, @Responsable, @Orden, @NumForm, 'SIGNOS')",
-                new
-                {
-                    IdOrden = dto.IdOrdenAtencion,
-                    Peso = Inv(m.Peso, "0.00"),
-                    m.DietaIndicada,
-                    m.NumeroComidas,
-                    Aseo = string.IsNullOrWhiteSpace(m.Banio) ? m.Aseo : m.Banio,
-                    m.Movilizacion,
-                    m.Vendajes,
-                    m.CambioSonda,
-                    m.Responsable,
-                    m.Orden,
-                    NumForm = dto.NumFormulario
-                }));
-        }
-
-        await _db.ExecuteBatchAsync(comandos);
 
         try
         {
@@ -890,7 +925,7 @@ public class HospitalizacionService : IHospitalizacionService
                        ISNULL(proddescripcion, '') AS Producto, ISNULL(cantprod, 0) AS Cantidad,
                        ISNULL(indicacionesprod, '') AS Indicaciones, ISNULL(via, '') AS Via,
                        CONVERT(varchar(10), fecha, 120) AS Fecha, ISNULL(hora, '') AS Hora,
-                       ISNULL(NULLIF(RTRIM(med_idProdu), ''), CAST(ISNULL(codigoprod, 0) AS varchar(25))) AS Codigo,
+                       ISNULL(RTRIM(codigoprod), '') AS Codigo,
                        iniciales AS Iniciales, funcion AS Funcion
                 FROM hvt_cabMonitoreoMedBC
                 WHERE ordenId = @IdOrden AND modulo = 'Monitoreo'
@@ -1090,21 +1125,19 @@ public class HospitalizacionService : IHospitalizacionService
         if (input.Cantidad > input.StockDisponible && input.StockDisponible > 0)
             return (false, $"La cantidad ({input.Cantidad}) supera el stock disponible ({input.StockDisponible}).");
 
-        int.TryParse(input.CodigoProducto, out int codigoNum);
-
         int idInserted = await _db.ExecuteScalarAsync<int>(@"
             INSERT INTO hvt_cabMonitoreoMedBC (
                 ordenId, nhcl, hora, fecha, codigoprod, precioprod, stockprod,
                 indicacionesprod, cantprod, usuario, localidad, proddescripcion,
                 via, origen, iniciales, funcion, funcionario, estado, modulo,
-                med_iva, med_iddinamics, med_medida, med_bodega, med_idProdu
+                med_iva, med_iddinamics, med_medida, med_bodega
             )
             OUTPUT INSERTED.id
             VALUES (
-                @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoNum, @Precio, @Stock,
+                @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProducto, @Precio, @Stock,
                 @Indicaciones, @Cantidad, @Usuario, @Localidad, @Producto,
                 @Via, 'K', @Iniciales, @Funcion, @Funcionario, 'A', 'Monitoreo',
-                @Iva, @IdBC, @Medida, @Bodega, @CodigoStr
+                @Iva, @IdBC, @Medida, @Bodega
             )",
             new
             {
@@ -1112,7 +1145,7 @@ public class HospitalizacionService : IHospitalizacionService
                 input.Nhcl,
                 Hora = input.HoraAdministracion.ToString(@"hh\:mm"),
                 Fecha = input.FechaAdministracion.Date,
-                CodigoNum = codigoNum,
+                input.CodigoProducto,
                 Precio = input.PrecioUnitario,
                 Stock = (int)input.StockDisponible,
                 Indicaciones = input.Indicaciones.Trim().ToUpperInvariant(),
@@ -1127,23 +1160,8 @@ public class HospitalizacionService : IHospitalizacionService
                 input.Iva,
                 input.IdBC,
                 input.Medida,
-                input.Bodega,
-                CodigoStr = input.CodigoProducto
+                input.Bodega
             });
-
-        try
-        {
-            var reservado = await _inventarioService.GuardarReservaStockAsync(
-                input.CodigoProducto, idUsuario, input.Cantidad, idLocalidad, input.Bodega,
-                input.OrdenId, input.Nhcl, idInserted, "MON", null, 1);
-            if (reservado != 1)
-                throw new InvalidOperationException("No se pudo reservar el stock del producto.");
-        }
-        catch
-        {
-            await _db.ExecuteAsync("DELETE FROM hvt_cabMonitoreoMedBC WHERE id=@Id", new { Id = idInserted });
-            throw;
-        }
 
         return (true, "Medicamento de monitoreo registrado correctamente.");
     }
@@ -1151,7 +1169,6 @@ public class HospitalizacionService : IHospitalizacionService
     public async Task EliminarMedicamentoMonitoreoAsync(int idRegistro, string codigoProd, int idOrden)
     {
         await _db.ExecuteAsync("DELETE FROM hvt_cabMonitoreoMedBC WHERE id = @Id", new { Id = idRegistro });
-        await _inventarioService.EliminarReservaStockAsync(codigoProd, idOrden, idRegistro, "MON");
     }
 
     // ========================================================================

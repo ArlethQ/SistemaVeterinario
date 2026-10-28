@@ -40,8 +40,8 @@
                             <button class="btn btn-primary fw-semibold" @onclick="GuardarFormularioAsync" disabled="@_guardando">
                                 💾 @(_guardando ? "Guardando..." : "Guardar Formulario")
                             </button>
-                            <button class="btn btn-outline-secondary" @onclick="CrearNuevoFormularioAsync">
-                                ➕ Nueva Hoja
+                            <button class="btn btn-outline-secondary" @onclick="CrearNuevoFormularioAsync" disabled="@_guardando">
+                                ➕ @(_guardando ? "Procesando..." : "Nueva Hoja")
                             </button>
                             <button class="btn btn-danger" @onclick="ExportarPdfAsync">
                                 📄 PDF
@@ -603,7 +603,12 @@
             {
                 await HospService.GuardarSignosEnfermeriaAsync(_form, Session.IdUser);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _esError = true;
+                _mensajeAlerta = $"No se pudo guardar la hoja actual. No se cambió de hoja: {ex.Message}";
+                return;
+            }
         }
 
         // 2. Cargar la hoja seleccionada en el dropdown
@@ -637,7 +642,6 @@
             await HospService.GuardarSignosEnfermeriaAsync(_form, Session.IdUser);
 
             int numGuardado = _form.NumFormulario;
-            _form = await HospService.CargarSignosEnfermeriaAsync(idOrd, nhcl, numGuardado);
             _esError = false;
             _mensajeAlerta = $"Formulario #{numGuardado} de Signos Vitales y Balance Hídrico guardado correctamente en el sistema.";
         }
@@ -659,17 +663,14 @@
         int idOrd = _paciente.OrdenAtencionId;
         int nhcl = _paciente.Nhcl;
 
+        _guardando = true;
         try
         {
             if (_form is not null && _form.NumFormulario > 0)
             {
                 _form.IdOrdenAtencion = idOrd;
                 _form.Nhcl = nhcl;
-                try
-                {
-                    await HospService.GuardarSignosEnfermeriaAsync(_form, Session.IdUser);
-                }
-                catch { }
+                await HospService.GuardarSignosEnfermeriaAsync(_form, Session.IdUser);
             }
 
             int nuevo = await HospService.CrearNuevoFormularioSignosAsync(idOrd, nhcl, Session.IdUser);
@@ -682,8 +683,11 @@
             _esError = true;
             _mensajeAlerta = $"No se pudo crear la nueva hoja: {ex.Message}";
         }
-
-        await InvokeAsync(StateHasChanged);
+        finally
+        {
+            _guardando = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task ExportarPdfAsync()

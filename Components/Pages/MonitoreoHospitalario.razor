@@ -202,7 +202,7 @@
                                             }
                                             else
                                             {
-                                                <input type="text" maxlength="30" title="@regla.Ayuda" placeholder="@regla.Ayuda"
+                                                <input type="text" maxlength="30" title="@regla.Ayuda"
                                                        class="form-control form-control-sm border-0 px-0 py-1 text-center fw-bold"
                                                        style="font-size:0.72rem;" value="@f.GetValorHora(hLocal)"
                                                        @onchange="e => f.SetValorHora(hLocal, e.Value?.ToString())"
@@ -227,7 +227,8 @@
                         <div class="col-md-3">
                             <label class="form-label mb-0 fw-semibold">Buscar en bodega:</label>
                             <div class="input-group input-group-sm">
-                                <input type="text" class="form-control" placeholder="Nombre fármaco..." @bind="_busquedaFarmaco" />
+                                <input type="text" class="form-control" placeholder="Nombre fármaco..."
+                                       @bind="_busquedaFarmaco" @bind:event="oninput" />
                                 <button class="btn btn-outline-primary" @onclick="BuscarFarmacosBcAsync">🔎</button>
                             </div>
                         </div>
@@ -237,7 +238,7 @@
                                 <option value="">-- Seleccione del resultado --</option>
                                 @foreach (var p in _farmacosBc)
                                 {
-                                    <option value="@p.Number">@p.DisplayName (Stock: @p.Inventory | $@p.UnitPrice)</option>
+                                    <option value="@p.Number">@p.DisplayName (@p.Number | $@p.UnitPrice)</option>
                                 }
                             </select>
                         </div>
@@ -247,7 +248,7 @@
                         </div>
                         <div class="col-md-1">
                             <label class="form-label mb-0 fw-semibold">Cant.:</label>
-                            <input type="number" min="1" max="@Math.Max(1, (int)_nuevoMed.StockDisponible)"
+                            <input type="number" min="1"
                                    class="form-control form-control-sm text-center fw-bold text-danger" @bind="_nuevoMed.Cantidad" />
                         </div>
                         <div class="col-md-1">
@@ -548,7 +549,18 @@
     private async Task BuscarFarmacosBcAsync()
     {
         if (string.IsNullOrWhiteSpace(_busquedaFarmaco)) return;
-        _farmacosBc = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaFarmaco, Session.Localidad, Session.Apostrofe);
+        try
+        {
+            _farmacosBc = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaFarmaco, Session.Localidad, Session.Apostrofe);
+            _esError = _farmacosBc.Count == 0;
+            _mensajeAlerta = _farmacosBc.Count == 0 ? "No se encontraron productos activos con ese criterio." : null;
+        }
+        catch (Exception ex)
+        {
+            _farmacosBc = [];
+            _esError = true;
+            _mensajeAlerta = $"No se pudo consultar el catálogo de productos: {ex.Message}";
+        }
     }
 
     private void SeleccionarFarmacoBc(ChangeEventArgs e)
@@ -570,15 +582,30 @@
 
     private async Task AgregarMedicamentoMonitoreoAsync()
     {
-        if (_paciente is null || string.IsNullOrWhiteSpace(_nuevoMed.NombreProducto)) return;
+        if (_paciente is null || string.IsNullOrWhiteSpace(_nuevoMed.NombreProducto))
+        {
+            _esError = true;
+            _mensajeAlerta = "Seleccione un paciente y un producto del catálogo.";
+            return;
+        }
         _nuevoMed.OrdenId = IdOrden;
         _nuevoMed.Nhcl = Nhcl;
         _nuevoMed.Funcionario = _funcionarios.FirstOrDefault(f => f.UserIniciales == _nuevoMed.Iniciales)?.UserNombre ?? _nuevoMed.Iniciales;
 
-        var res = await HospService.RegistrarMedicamentoMonitoreoAsync(
-            _nuevoMed,
-            Session.IdUser,
-            Session.Localidad);
+        (bool Exito, string Mensaje) res;
+        try
+        {
+            res = await HospService.RegistrarMedicamentoMonitoreoAsync(
+                _nuevoMed,
+                Session.IdUser,
+                Session.Localidad);
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"No se pudo registrar el producto: {ex.Message}";
+            return;
+        }
 
         _esError = !res.Exito;
         _mensajeAlerta = res.Mensaje;
