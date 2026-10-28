@@ -221,6 +221,7 @@
     private string? _fotoMascotaPreview;
     private string? _errorFotoMascota;
     private string _fotoMascotaNombre = "Ningún archivo seleccionado";
+    private bool _guardandoMascota;
     private int TotalPacientes => _clientes.Sum(c => ObtenerPacientes(c.PaCodigo).Count);
     private int PropietariosConPacientes => _clientes.Count(c => ObtenerPacientes(c.PaCodigo).Count > 0);
 
@@ -895,6 +896,8 @@
 
     private async Task GuardarMascotaAsync()
     {
+        if (_guardandoMascota) return;
+        _guardandoMascota = true;
         try
         {
             int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
@@ -914,6 +917,10 @@
         {
             _esError = true;
             _mensajeAlerta = $"Error al guardar paciente en base de datos: {ex.Message}";
+        }
+        finally
+        {
+            _guardandoMascota = false;
         }
     }
 
@@ -1168,8 +1175,8 @@
                                 <span class="small text-muted">Edad estimada: <strong>@_mascotaEditando.EdadCalculada</strong></span>
                                 <div class="d-flex gap-2">
                                     <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelarEdicionMascota">Cancelar</button>
-                                    <button type="submit" class="btn btn-primary btn-sm">
-                                        <i class="bi bi-save me-1"></i>Guardar Paciente
+                                    <button type="submit" class="btn btn-primary btn-sm" disabled="@_guardandoMascota">
+                                        <i class="bi bi-save me-1"></i>@(_guardandoMascota ? "Guardando..." : "Guardar Paciente")
                                     </button>
                                 </div>
                             </div>
