@@ -323,7 +323,7 @@
                     }
                     @foreach (var orden in pacientesEtapa.Take(4))
                     {
-                        <div class="stage-patient"><span class="stage-pet-avatar">@InicialPaciente(orden.Mascota)</span><div><strong>@orden.Mascota</strong><small>@orden.Propietario</small></div><time>@orden.Hora</time></div>
+                        <div class="stage-patient"><span class="stage-pet-avatar">@if (!string.IsNullOrEmpty(ObtenerFotoPaciente(orden.Nhcl))) { <img src="@ObtenerFotoPaciente(orden.Nhcl)" alt="Foto de @orden.Mascota" /> } else { <span>@InicialPaciente(orden.Mascota)</span> }</span><div><strong>@orden.Mascota</strong><small>@orden.Propietario</small></div><time>@orden.Hora</time></div>
                     }
                 </div>
             }
@@ -382,7 +382,7 @@
         string directorio = Path.Combine(Env.WebRootPath, "PacientesFotos");
         if (!Directory.Exists(directorio)) return string.Empty;
         string? archivo = Directory.EnumerateFiles(directorio, $"{nhcl}.*").FirstOrDefault();
-        return archivo is null ? string.Empty : $"/PacientesFotos/{Path.GetFileName(archivo)}?v={File.GetLastWriteTimeUtc(archivo).Ticks}";
+        return archivo is null ? string.Empty : $"/pacientes-fotos/{nhcl}?v={File.GetLastWriteTimeUtc(archivo).Ticks}";
     }
 
     private static string TextoPrioridad(string color) => color?.ToLowerInvariant() switch

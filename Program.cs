@@ -46,6 +46,23 @@ app.UseAntiforgery();
 // Sirve archivos generados en tiempo de ejecución, como fotografías de pacientes.
 app.UseStaticFiles();
 app.MapStaticAssets();
+
+// Fotografías cargadas después de publicar/compilar, resueltas por NHCL.
+app.MapGet("/pacientes-fotos/{nhcl:int}", (int nhcl, IWebHostEnvironment env) =>
+{
+    string directorio = Path.Combine(env.WebRootPath, "PacientesFotos");
+    if (!Directory.Exists(directorio)) return Results.NotFound();
+    string? archivo = Directory.EnumerateFiles(directorio, $"{nhcl}.*").FirstOrDefault();
+    if (archivo is null) return Results.NotFound();
+    string contentType = Path.GetExtension(archivo).ToLowerInvariant() switch
+    {
+        ".png" => "image/png",
+        ".webp" => "image/webp",
+        _ => "image/jpeg"
+    };
+    return Results.File(archivo, contentType);
+});
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
