@@ -701,17 +701,19 @@
     private async Task ExportarPdfAsync()
     {
         if (_paciente is null) return;
+        int ordenId = _paciente.OrdenAtencionId > 0 ? _paciente.OrdenAtencionId : (IdOrden > 0 ? IdOrden : 1);
         var bytes = ReportService.GenerarSignosVitalesPdf(_paciente, _form);
         var b64 = Convert.ToBase64String(bytes);
-        await JS.InvokeVoidAsync("hosvetDownloadFile", $"SignosVitales_Orden{IdOrden}_Hoja{_form.NumFormulario}.pdf", "application/pdf", b64);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"SignosVitales_Orden{ordenId}_Hoja{_form.NumFormulario}.pdf", "application/pdf", b64);
     }
 
     private async Task ExportarExcelAsync()
     {
         if (_paciente is null) return;
+        int ordenId = _paciente.OrdenAtencionId > 0 ? _paciente.OrdenAtencionId : (IdOrden > 0 ? IdOrden : 1);
         var bytes = ReportService.GenerarSignosVitalesExcel(_paciente, _form);
         var b64 = Convert.ToBase64String(bytes);
-        await JS.InvokeVoidAsync("hosvetDownloadFile", $"SignosVitales_Orden{IdOrden}_Hoja{_form.NumFormulario}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", b64);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"SignosVitales_Orden{ordenId}_Hoja{_form.NumFormulario}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", b64);
     }
 
     private async Task ImprimirVistaAsync()

@@ -340,8 +340,8 @@ public class ReportExportService : IReportExportService
             container.Page(page =>
             {
                 page.Size(PageSizes.A4.Landscape());
-                page.Margin(16);
-                page.DefaultTextStyle(x => x.FontSize(7.5f).FontFamily("Lato"));
+                page.Margin(14);
+                page.DefaultTextStyle(x => x.FontSize(7.2f).FontFamily("Lato"));
 
                 page.Header().Column(col =>
                 {
@@ -349,13 +349,13 @@ public class ReportExportService : IReportExportService
                     {
                         row.RelativeItem().Column(c =>
                         {
-                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
-                            c.Item().Text($"SIGNOS VITALES, BALANCE HÍDRICO Y MEDICIONES — FORMULARIO #{form.NumFormulario}").Bold().FontSize(9.5f);
+                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text($"SIGNOS VITALES, BALANCE HÍDRICO Y CUIDADOS DE ENFERMERÍA — HOJA #{form.NumFormulario}").Bold().FontSize(9.5f);
                         });
-                        row.ConstantItem(46).Image(qrBytes);
+                        row.ConstantItem(44).Image(qrBytes);
                     });
 
-                    col.Item().PaddingVertical(3).Background(Colors.Blue.Lighten5).Border(0.5f).BorderColor(Colors.Blue.Lighten3).Padding(5).Row(r =>
+                    col.Item().PaddingVertical(2).Background(Colors.Blue.Lighten5).Border(0.5f).BorderColor(Colors.Blue.Lighten3).Padding(4).Row(r =>
                     {
                         r.RelativeItem().Text($"Orden: {paciente.OrdenAtencionId} | NHCL: {paciente.Nhcl}").Bold();
                         r.RelativeItem().Text($"Paciente: {paciente.PacienteNombre} ({paciente.Especie} - {paciente.Sexo})");
@@ -365,22 +365,23 @@ public class ReportExportService : IReportExportService
 
                 page.Content().Column(col =>
                 {
-                    col.Item().PaddingBottom(4).Text("1. SIGNOS VITALES (9 DÍAS — TURNOS AM / PM)").Bold().FontSize(8.5f).FontColor(Colors.Blue.Darken3);
+                    // 1. SIGNOS VITALES
+                    col.Item().PaddingTop(3).PaddingBottom(2).Text($"1. SIGNOS VITALES — HOJA #{form.NumFormulario} (9 DÍAS — TURNOS AM / PM)").Bold().FontSize(8f).FontColor(Colors.Blue.Darken3);
                     col.Item().Table(t =>
                     {
                         t.ColumnsDefinition(c =>
                         {
-                            c.RelativeColumn(2.4f);
+                            c.RelativeColumn(2.5f);
                             for (int i = 0; i < 18; i++) c.RelativeColumn(1f);
                         });
 
                         t.Header(h =>
                         {
-                            h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(2).Text("Parámetro").Bold();
+                            h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(1.5f).Text("Parámetro").Bold();
                             for (int d = 1; d <= 9; d++)
                             {
                                 var fec = form.Fechas.FirstOrDefault(x => x.Orden == d)?.Fecha?.ToString("dd/MM") ?? $"Día {d}";
-                                h.Cell().ColumnSpan(2).Border(0.5f).Background(Colors.Blue.Lighten4).Padding(2).AlignCenter().Text(fec).Bold();
+                                h.Cell().ColumnSpan(2).Border(0.5f).Background(Colors.Blue.Lighten4).Padding(1.5f).AlignCenter().Text(fec).Bold();
                             }
 
                             h.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(1).Text("Turno").Bold();
@@ -392,10 +393,10 @@ public class ReportExportService : IReportExportService
 
                         void AddSignoRow(string label, Func<SignoVitalSlotDto, string> selector)
                         {
-                            t.Cell().Border(0.5f).Padding(2).Text(label).Bold();
+                            t.Cell().Border(0.5f).Padding(1.5f).Text(label).Bold();
                             foreach (var slot in form.SignosVitales.OrderBy(x => x.Orden))
                             {
-                                t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(selector(slot));
+                                t.Cell().Border(0.5f).Padding(1.5f).AlignCenter().Text(selector(slot));
                             }
                         }
 
@@ -406,32 +407,33 @@ public class ReportExportService : IReportExportService
                         AddSignoRow("P. Diastólica", s => s.PresionDiastolica?.ToString() ?? "");
                     });
 
-                    col.Item().PaddingTop(8).PaddingBottom(4).Text("2. BALANCE HÍDRICO Y MEDICIONES DIARIAS (9 DÍAS)").Bold().FontSize(8.5f).FontColor(Colors.Blue.Darken3);
+                    // 2. BALANCE HÍDRICO
+                    col.Item().PaddingTop(5).PaddingBottom(2).Text($"2. BALANCE HÍDRICO DIARIO — HOJA #{form.NumFormulario} (cc / ml)").Bold().FontSize(8f).FontColor(Colors.Green.Darken3);
                     col.Item().Table(t =>
                     {
                         t.ColumnsDefinition(c =>
                         {
-                            c.RelativeColumn(2.4f);
+                            c.RelativeColumn(2.5f);
                             for (int i = 0; i < 9; i++) c.RelativeColumn(1f);
                         });
 
                         t.Header(h =>
                         {
-                            h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(2).Text("Concepto (cc / ml)").Bold();
+                            h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(1.5f).Text("Concepto (cc / ml)").Bold();
                             for (int d = 1; d <= 9; d++)
                             {
                                 var fec = form.Fechas.FirstOrDefault(x => x.Orden == d)?.Fecha?.ToString("yyyy-MM-dd") ?? $"Día {d}";
-                                h.Cell().Border(0.5f).Background(Colors.Green.Lighten4).Padding(2).AlignCenter().Text(fec).Bold();
+                                h.Cell().Border(0.5f).Background(Colors.Green.Lighten4).Padding(1.5f).AlignCenter().Text(fec).Bold();
                             }
                         });
 
                         void AddBalanceRow(string label, Func<EnfBalanceHidricoDiaDto, string> selector, bool bold = false)
                         {
-                            var c0 = t.Cell().Border(0.5f).Padding(2).Text(label);
+                            var c0 = t.Cell().Border(0.5f).Padding(1.5f).Text(label);
                             if (bold) c0.Bold();
                             foreach (var b in form.BalanceHidrico.OrderBy(x => x.Orden))
                             {
-                                var cell = t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(selector(b));
+                                var cell = t.Cell().Border(0.5f).Padding(1.5f).AlignCenter().Text(selector(b));
                                 if (bold) cell.Bold();
                             }
                         }
@@ -444,6 +446,47 @@ public class ReportExportService : IReportExportService
                         AddBalanceRow("Eliminación Otros", b => b.Otros?.ToString("N1") ?? "");
                         AddBalanceRow("TOTAL ELIMINACIONES", b => b.TotalEliminaciones.ToString("N1"), true);
                         AddBalanceRow("BALANCE NETO", b => b.BalanceNeto.ToString("N1"), true);
+                    });
+
+                    // 3. MEDICIONES Y CUIDADOS DIARIOS
+                    col.Item().PaddingTop(5).PaddingBottom(2).Text($"3. MEDICIONES Y CUIDADOS DIARIOS — HOJA #{form.NumFormulario} (9 DÍAS)").Bold().FontSize(8f).FontColor(Colors.Teal.Darken3);
+                    col.Item().Table(t =>
+                    {
+                        t.ColumnsDefinition(c =>
+                        {
+                            c.RelativeColumn(2.5f);
+                            for (int i = 0; i < 9; i++) c.RelativeColumn(1f);
+                        });
+
+                        t.Header(h =>
+                        {
+                            h.Cell().Border(0.5f).Background(Colors.BlueGrey.Lighten4).Padding(1.5f).Text("Actividad / Medición").Bold();
+                            for (int d = 1; d <= 9; d++)
+                            {
+                                var fec = form.Fechas.FirstOrDefault(x => x.Orden == d)?.Fecha?.ToString("yyyy-MM-dd") ?? $"Día {d}";
+                                h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(1.5f).AlignCenter().Text(fec).Bold();
+                            }
+                        });
+
+                        void AddMedicionRow(string label, Func<EnfMedicionDiaDto, string> selector)
+                        {
+                            t.Cell().Border(0.5f).Padding(1.5f).Text(label).Bold();
+                            for (int d = 1; d <= 9; d++)
+                            {
+                                var m = form.Mediciones.FirstOrDefault(x => x.Orden == d);
+                                var val = m is not null ? selector(m) : "";
+                                t.Cell().Border(0.5f).Padding(1.5f).AlignCenter().Text(val);
+                            }
+                        }
+
+                        AddMedicionRow("Peso (kg)", m => m.Peso?.ToString("N2") ?? "");
+                        AddMedicionRow("Dieta Indicada", m => m.DietaIndicada ?? "");
+                        AddMedicionRow("N° Comidas", m => m.NumeroComidas ?? "");
+                        AddMedicionRow("Baño / Aseo", m => (!string.IsNullOrWhiteSpace(m.Banio) ? m.Banio : m.Aseo) ?? "");
+                        AddMedicionRow("Movilización", m => m.Movilizacion ?? "");
+                        AddMedicionRow("Vendajes / Curación", m => m.Vendajes ?? "");
+                        AddMedicionRow("Cambio de Sonda", m => m.CambioSonda ?? "");
+                        AddMedicionRow("Responsable (Inic.)", m => m.Responsable ?? "");
                     });
                 });
 
@@ -463,13 +506,14 @@ public class ReportExportService : IReportExportService
     public byte[] GenerarSignosVitalesExcel(PacienteHeaderDto paciente, FormularioSignosEnfermeriaDto form)
     {
         using var wb = new XLWorkbook();
-        var ws = wb.Worksheets.Add($"Signos Form {form.NumFormulario}");
+        var ws = wb.Worksheets.Add($"Signos Hoja {form.NumFormulario}");
 
-        ws.Cell(1, 1).Value = $"e-ForVets - SIGNOS VITALES Y BALANCE HÍDRICO (Formulario #{form.NumFormulario})";
+        ws.Cell(1, 1).Value = $"e-ForVets - SIGNOS VITALES, BALANCE HÍDRICO Y MEDICIONES (HOJA #{form.NumFormulario})";
         ws.Range(1, 1, 1, 19).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
         ws.Cell(2, 1).Value = $"Orden: {paciente.OrdenAtencionId} | NHCL: {paciente.Nhcl} | Paciente: {paciente.PacienteNombre} | Cliente: {paciente.ClienteNombre}";
         ws.Range(2, 1, 2, 19).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#DBEAFE"));
 
+        // 1. SIGNOS VITALES
         ws.Cell(4, 1).Value = "Parámetro";
         for (int s = 1; s <= 18; s++)
         {
@@ -495,7 +539,8 @@ public class ReportExportService : IReportExportService
             ws.Cell(9, col).Value = s.PresionDiastolica;
         }
 
-        ws.Cell(11, 1).Value = "Balance Hídrico (9 Días)";
+        // 2. BALANCE HÍDRICO
+        ws.Cell(11, 1).Value = $"2. Balance Hídrico Diario — Hoja #{form.NumFormulario} (9 Días)";
         for (int d = 1; d <= 9; d++)
         {
             var fec = form.Fechas.FirstOrDefault(x => x.Orden == d)?.Fecha?.ToString("yyyy-MM-dd") ?? $"Día {d}";
@@ -518,6 +563,35 @@ public class ReportExportService : IReportExportService
             ws.Cell(17, col).Value = b.Otros;
             ws.Cell(18, col).Value = b.TotalEliminaciones;
             ws.Cell(19, col).Value = b.BalanceNeto;
+        }
+
+        // 3. MEDICIONES Y CUIDADOS DIARIOS
+        ws.Cell(21, 1).Value = $"3. Mediciones y Cuidados Diarios — Hoja #{form.NumFormulario} (9 Días)";
+        for (int d = 1; d <= 9; d++)
+        {
+            var fec = form.Fechas.FirstOrDefault(x => x.Orden == d)?.Fecha?.ToString("yyyy-MM-dd") ?? $"Día {d}";
+            ws.Cell(21, d + 1).Value = fec;
+        }
+        ws.Range(21, 1, 21, 10).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#BAE6FD"));
+
+        string[] labelsMed = ["Peso (kg)", "Dieta Indicada", "N° Comidas", "Baño / Aseo", "Movilización", "Vendajes / Curación", "Cambio de Sonda", "Responsable (Inic.)"];
+        for (int r = 0; r < labelsMed.Length; r++) ws.Cell(22 + r, 1).Value = labelsMed[r];
+
+        for (int d = 1; d <= 9; d++)
+        {
+            var m = form.Mediciones.FirstOrDefault(x => x.Orden == d);
+            int col = d + 1;
+            if (m is not null)
+            {
+                if (m.Peso.HasValue) ws.Cell(22, col).Value = m.Peso.Value;
+                ws.Cell(23, col).Value = m.DietaIndicada ?? "";
+                ws.Cell(24, col).Value = m.NumeroComidas ?? "";
+                ws.Cell(25, col).Value = (!string.IsNullOrWhiteSpace(m.Banio) ? m.Banio : m.Aseo) ?? "";
+                ws.Cell(26, col).Value = m.Movilizacion ?? "";
+                ws.Cell(27, col).Value = m.Vendajes ?? "";
+                ws.Cell(28, col).Value = m.CambioSonda ?? "";
+                ws.Cell(29, col).Value = m.Responsable ?? "";
+            }
         }
 
         ws.Columns().AdjustToContents();
