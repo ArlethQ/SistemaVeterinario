@@ -13,6 +13,7 @@ public interface ISqlDataService
     Task<T?> QueryFirstOrDefaultAsync<T>(string sql, object? parameters = null);
     Task<T?> ExecuteScalarAsync<T>(string sql, object? parameters = null);
     Task<int> ExecuteAsync(string sql, object? parameters = null);
+    Task<int> ExecuteBatchAsync(IEnumerable<(string Sql, object? Parameters)> commands);
     Task<DataTable> GetDataTableAsync(string sql, params SqlParameter[] parameters);
     Task<int> RegistrarBitacoraAsync(string detalle, int idUser, string ip = "127.0.0.1", string hostname = "BlazorClient");
     string HashPasswordSha1(string plainText);
@@ -90,6 +91,35 @@ public class SqlDataService : ISqlDataService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error ejecutando comando en SQL Server.");
+            throw;
+        }
+    }
+
+    public async Task<int> ExecuteBatchAsync(IEnumerable<(string Sql, object? Parameters)> commands)
+    {
+        try
+        {
+            await using var connection = await OpenConnectionFastAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            int total = 0;
+            try
+            {
+                foreach (var (sql, parameters) in commands)
+                {
+                    total += await connection.ExecuteAsync(sql, parameters, transaction, commandTimeout: 15);
+                }
+                await transaction.CommitAsync();
+                return total;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error ejecutando lote transaccional en SQL Server.");
             throw;
         }
     }

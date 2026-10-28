@@ -18,8 +18,9 @@
                     <label class="form-label small fw-bold mb-1 text-primary">Paciente / Orden Activa:</label>
                     <div class="input-group input-group-sm">
                         <input type="text" class="form-control" placeholder="Filtrar paciente o historia..."
-                               @bind="_filtroOrden" @bind:event="oninput" />
+                               @bind="_filtroOrden" @bind:event="oninput" @onkeydown="OnFiltroKeyDown" />
                         <button class="btn btn-outline-primary" @onclick="BuscarOrdenesAsync">Buscar</button>
+                        <button class="btn btn-outline-secondary" @onclick="LimpiarBusquedaAsync">🔄 Limpiar</button>
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -510,6 +511,20 @@
         _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(_filtroOrden);
     }
 
+    private async Task LimpiarBusquedaAsync()
+    {
+        _filtroOrden = string.Empty;
+        _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+    }
+
+    private async Task OnFiltroKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await BuscarOrdenesAsync();
+        }
+    }
+
     private async Task OnOrdenChangedAsync(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out int idOrd) && idOrd > 0)
@@ -554,13 +569,17 @@
         try
         {
             await HospService.GuardarSignosEnfermeriaAsync(_form, Session.IdUser);
+
+            // Se vuelve a leer desde la base para confirmar que lo guardado quedó persistido.
+            int numGuardado = _form.NumFormulario;
+            _form = await HospService.CargarSignosEnfermeriaAsync(IdOrden, Nhcl, numGuardado);
             _esError = false;
-            _mensajeAlerta = $"Formulario #{_form.NumFormulario} de Signos Vitales y Balance Hídrico guardado correctamente.";
+            _mensajeAlerta = $"Formulario #{numGuardado} de Signos Vitales y Balance Hídrico guardado correctamente.";
         }
         catch (Exception ex)
         {
             _esError = true;
-            _mensajeAlerta = $"Error al guardar: {ex.Message}";
+            _mensajeAlerta = $"No se pudo guardar el formulario: {ex.Message}";
         }
         finally
         {
@@ -571,10 +590,18 @@
     private async Task CrearNuevoFormularioAsync()
     {
         if (_paciente is null) return;
-        int nuevo = await HospService.CrearNuevoFormularioSignosAsync(IdOrden, Nhcl, Session.IdUser);
-        _form = await HospService.CargarSignosEnfermeriaAsync(IdOrden, Nhcl, nuevo);
-        _esError = false;
-        _mensajeAlerta = $"Se creó la Hoja #{nuevo} de Signos Vitales.";
+        try
+        {
+            int nuevo = await HospService.CrearNuevoFormularioSignosAsync(IdOrden, Nhcl, Session.IdUser);
+            _form = await HospService.CargarSignosEnfermeriaAsync(IdOrden, Nhcl, nuevo);
+            _esError = false;
+            _mensajeAlerta = $"Se creó la Hoja #{nuevo} de Signos Vitales.";
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"No se pudo crear la nueva hoja: {ex.Message}";
+        }
     }
 
     private async Task ExportarPdfAsync()

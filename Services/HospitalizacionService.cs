@@ -182,6 +182,7 @@ public class HospitalizacionService : IHospitalizacionService
                        dieta AS DietaIndicada,
                        numComidas AS NumeroComidas,
                        aseo AS Aseo,
+                       aseo AS Banio,
                        actividadFisica AS Movilizacion,
                        recanalizacion AS Vendajes,
                        cambioSonda AS CambioSonda,
@@ -230,98 +231,109 @@ public class HospitalizacionService : IHospitalizacionService
         return dto;
     }
 
+    private static string? Inv(decimal? valor, string formato) =>
+        valor?.ToString(formato, System.Globalization.CultureInfo.InvariantCulture);
+
     public async Task GuardarSignosEnfermeriaAsync(FormularioSignosEnfermeriaDto dto, int idUsuario)
     {
+        var paramForm = new { IdOrden = dto.IdOrdenAtencion, NumForm = dto.NumFormulario };
+        var comandos = new List<(string Sql, object? Parameters)>
+        {
+            ("DELETE FROM qvt_enfFechas WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'", paramForm),
+            ("DELETE FROM qvt_enfSignosVitales WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'", paramForm),
+            ("DELETE FROM qvt_enfBalanceHidrico WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'", paramForm),
+            ("DELETE FROM qvt_enfMediciones WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'", paramForm)
+        };
+
+        foreach (var f in dto.Fechas)
+        {
+            comandos.Add((@"
+                INSERT INTO qvt_enfFechas (idOrdenAtencion, fecha, diaInternacion, diaPostquirurgico, orden, numFormulario, tipo)
+                VALUES (@IdOrden, @Fecha, @DiasInternacion, @DiasPostQuirurgico, @Orden, @NumForm, 'SIGNOS')",
+                new
+                {
+                    IdOrden = dto.IdOrdenAtencion,
+                    f.Fecha,
+                    DiasInternacion = f.DiasInternacion?.ToString(),
+                    DiasPostQuirurgico = f.DiasPostQuirurgico?.ToString(),
+                    f.Orden,
+                    NumForm = dto.NumFormulario
+                }));
+        }
+
+        foreach (var s in dto.SignosVitales)
+        {
+            comandos.Add((@"
+                INSERT INTO qvt_enfSignosVitales (idOrdenAtencion, pulso, temp, resp, sistolica, diastolica, orden, numFormulario, tipo)
+                VALUES (@IdOrden, @Pulso, @Temperatura, @FrecuenciaRespiratoria, @PresionSistolica, @PresionDiastolica, @Orden, @NumForm, 'SIGNOS')",
+                new
+                {
+                    IdOrden = dto.IdOrdenAtencion,
+                    Pulso = s.Pulso?.ToString(),
+                    Temperatura = Inv(s.Temperatura, "0.0"),
+                    FrecuenciaRespiratoria = s.FrecuenciaRespiratoria?.ToString(),
+                    PresionSistolica = s.PresionSistolica?.ToString(),
+                    PresionDiastolica = s.PresionDiastolica?.ToString(),
+                    s.Orden,
+                    NumForm = dto.NumFormulario
+                }));
+        }
+
+        foreach (var b in dto.BalanceHidrico)
+        {
+            comandos.Add((@"
+                INSERT INTO qvt_enfBalanceHidrico (idOrdenAtencion, parental, oral, totalIng, orina, drenaje, otros, totalElm, orden, numFormulario, tipo)
+                VALUES (@IdOrden, @Parenteral, @ViaOral, @TotalIngresos, @Orina, @Drenaje, @Otros, @TotalEliminaciones, @Orden, @NumForm, 'SIGNOS')",
+                new
+                {
+                    IdOrden = dto.IdOrdenAtencion,
+                    Parenteral = Inv(b.Parenteral, "0.0"),
+                    ViaOral = Inv(b.ViaOral, "0.0"),
+                    TotalIngresos = Inv(b.TotalIngresos, "0.0"),
+                    Orina = Inv(b.Orina, "0.0"),
+                    Drenaje = Inv(b.Drenaje, "0.0"),
+                    Otros = Inv(b.Otros, "0.0"),
+                    TotalEliminaciones = Inv(b.TotalEliminaciones, "0.0"),
+                    b.Orden,
+                    NumForm = dto.NumFormulario
+                }));
+        }
+
+        foreach (var m in dto.Mediciones)
+        {
+            comandos.Add((@"
+                INSERT INTO qvt_enfMediciones (idOrdenAtencion, peso, dieta, numComidas, aseo, actividadFisica, recanalizacion, cambioSonda, responsable, orden, numFormulario, tipo)
+                VALUES (@IdOrden, @Peso, @DietaIndicada, @NumeroComidas, @Aseo, @Movilizacion, @Vendajes, @CambioSonda, @Responsable, @Orden, @NumForm, 'SIGNOS')",
+                new
+                {
+                    IdOrden = dto.IdOrdenAtencion,
+                    Peso = Inv(m.Peso, "0.00"),
+                    m.DietaIndicada,
+                    m.NumeroComidas,
+                    // La pantalla edita 'Baño / Aseo' en Banio; se persiste en la columna aseo.
+                    Aseo = string.IsNullOrWhiteSpace(m.Banio) ? m.Aseo : m.Banio,
+                    m.Movilizacion,
+                    m.Vendajes,
+                    m.CambioSonda,
+                    m.Responsable,
+                    m.Orden,
+                    NumForm = dto.NumFormulario
+                }));
+        }
+
+        // Todo el formulario se guarda en una sola transacción; si algo falla se revierte y se informa el error.
+        await _db.ExecuteBatchAsync(comandos);
+
         try
         {
-            var paramDel = new { IdOrden = dto.IdOrdenAtencion, NumForm = dto.NumFormulario };
-
-            await _db.ExecuteAsync(@"
-                DELETE FROM qvt_enfFechas WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS';
-                DELETE FROM qvt_enfSignosVitales WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS';
-                DELETE FROM qvt_enfBalanceHidrico WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS';
-                DELETE FROM qvt_enfMediciones WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS';", paramDel);
-
-            foreach (var f in dto.Fechas)
-            {
-                await _db.ExecuteAsync(@"
-                    INSERT INTO qvt_enfFechas (idOrdenAtencion, fecha, diaInternacion, diaPostquirurgico, orden, numFormulario, tipo)
-                    VALUES (@IdOrden, @Fecha, @DiasInternacion, @DiasPostQuirurgico, @Orden, @NumForm, 'SIGNOS')",
-                    new
-                    {
-                        IdOrden = dto.IdOrdenAtencion,
-                        f.Fecha,
-                        DiasInternacion = f.DiasInternacion?.ToString(),
-                        DiasPostQuirurgico = f.DiasPostQuirurgico?.ToString(),
-                        f.Orden,
-                        NumForm = dto.NumFormulario
-                    });
-            }
-
-            foreach (var s in dto.SignosVitales)
-            {
-                await _db.ExecuteAsync(@"
-                    INSERT INTO qvt_enfSignosVitales (idOrdenAtencion, pulso, temp, resp, sistolica, diastolica, orden, numFormulario, tipo)
-                    VALUES (@IdOrden, @Pulso, @Temperatura, @FrecuenciaRespiratoria, @PresionSistolica, @PresionDiastolica, @Orden, @NumForm, 'SIGNOS')",
-                    new
-                    {
-                        IdOrden = dto.IdOrdenAtencion,
-                        Pulso = s.Pulso?.ToString(),
-                        Temperatura = s.Temperatura?.ToString("N1"),
-                        FrecuenciaRespiratoria = s.FrecuenciaRespiratoria?.ToString(),
-                        PresionSistolica = s.PresionSistolica?.ToString(),
-                        PresionDiastolica = s.PresionDiastolica?.ToString(),
-                        s.Orden,
-                        NumForm = dto.NumFormulario
-                    });
-            }
-
-            foreach (var b in dto.BalanceHidrico)
-            {
-                await _db.ExecuteAsync(@"
-                    INSERT INTO qvt_enfBalanceHidrico (idOrdenAtencion, parental, oral, totalIng, orina, drenaje, otros, totalElm, orden, numFormulario, tipo)
-                    VALUES (@IdOrden, @Parenteral, @ViaOral, @TotalIngresos, @Orina, @Drenaje, @Otros, @TotalEliminaciones, @Orden, @NumForm, 'SIGNOS')",
-                    new
-                    {
-                        IdOrden = dto.IdOrdenAtencion,
-                        Parenteral = b.Parenteral?.ToString("N1"),
-                        ViaOral = b.ViaOral?.ToString("N1"),
-                        TotalIngresos = b.TotalIngresos.ToString("N1"),
-                        Orina = b.Orina?.ToString("N1"),
-                        Drenaje = b.Drenaje?.ToString("N1"),
-                        Otros = b.Otros?.ToString("N1"),
-                        TotalEliminaciones = b.TotalEliminaciones.ToString("N1"),
-                        b.Orden,
-                        NumForm = dto.NumFormulario
-                    });
-            }
-
-            foreach (var m in dto.Mediciones)
-            {
-                await _db.ExecuteAsync(@"
-                    INSERT INTO qvt_enfMediciones (idOrdenAtencion, peso, dieta, numComidas, aseo, actividadFisica, recanalizacion, cambioSonda, responsable, orden, numFormulario, tipo)
-                    VALUES (@IdOrden, @Peso, @DietaIndicada, @NumeroComidas, @Aseo, @Movilizacion, @Vendajes, @CambioSonda, @Responsable, @Orden, @NumForm, 'SIGNOS')",
-                    new
-                    {
-                        IdOrden = dto.IdOrdenAtencion,
-                        Peso = m.Peso?.ToString("N2"),
-                        m.DietaIndicada,
-                        m.NumeroComidas,
-                        m.Aseo,
-                        m.Movilizacion,
-                        m.Vendajes,
-                        m.CambioSonda,
-                        m.Responsable,
-                        m.Orden,
-                        NumForm = dto.NumFormulario
-                    });
-            }
-
             await _db.RegistrarBitacoraAsync(
                 $"Guardó Signos Vitales y Balance Hídrico Orden={dto.IdOrdenAtencion} Form={dto.NumFormulario}",
                 idUsuario, "vt_EnfermeriaSignos");
         }
-        catch { }
+        catch
+        {
+            // La bitácora es complementaria: un fallo allí no debe invalidar el guardado clínico.
+        }
     }
 
     public async Task<int> CrearNuevoFormularioSignosAsync(int idOrdenAtencion, int nhcl, int idUsuario)
