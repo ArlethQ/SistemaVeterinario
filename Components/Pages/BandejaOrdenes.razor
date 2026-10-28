@@ -1,219 +1,224 @@
-@page "/kardex/ordenes"
-@inject IKardexService KardexService
-@inject NavigationManager Nav
-
-<PageTitle>e-ForVets - Bandeja de Órdenes de Atención</PageTitle>
-
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-        <h3 class="fw-bold text-primary mb-0">📋 Bandeja General de Órdenes de Atención</h3>
-        <small class="text-muted">Explore y gestione las órdenes activas de pacientes en consulta, hospitalización o cirugía para acceder a su Kardex y fichas clínicas.</small>
-    </div>
-    <div class="d-flex gap-2 flex-wrap">
-        <a href="/dashboard" class="btn btn-outline-secondary btn-sm">
-            🏠 Panel Principal
-        </a>
-        <a href="/admision/clientes-pacientes" class="btn btn-outline-dark btn-sm">
-            🐾 Clientes / Pacientes
-        </a>
-        <a href="/admision/ordenes" class="btn btn-success btn-sm">
-            🛎️ Recepción y Nueva Orden
-        </a>
-        <a href="/admision/citas" class="btn btn-outline-info btn-sm">
-            📅 Agenda de Citas
-        </a>
-        <a href="/facturacion/proformas" class="btn btn-warning btn-sm fw-semibold">
-            💳 Proformas
-        </a>
-    </div>
-</div>
-
-<div class="card shadow-sm border-0 mb-4">
-    <div class="card-body">
-        <div class="row g-2 align-items-end">
-            <div class="col-md-5">
-                <label class="form-label small fw-bold">Filtrar por Paciente, Propietario, N° Orden o NHCL:</label>
-                <input class="form-control" @bind="_filtro" @bind:event="oninput" @onkeydown="OnFiltroKeyDown" placeholder="Ej. Max, Pérez, 12450..." />
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-primary w-100" @onclick="CargarOrdenesAsync" disabled="@_cargando">
-                    🔍 Buscar
-                </button>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small fw-bold">Acceso rápido (Orden / NHCL):</label>
-                <div class="input-group">
-                    <input type="number" class="form-control" placeholder="Orden" @bind="_ordenManual" @onkeydown="OnManualKeyDown" />
-                    <input type="number" class="form-control" placeholder="NHCL" @bind="_nhclManual" @onkeydown="OnManualKeyDown" />
-                    <button class="btn btn-success" @onclick="IrKardexManual">Ir</button>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-outline-secondary w-100" @onclick="LimpiarFiltroAsync">
-                    🔄 Limpiar
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-@if (_cargando)
-{
-    <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
-        <div class="spinner-border spinner-border-sm" role="status"></div>
-        <span class="fw-semibold small">Cargando órdenes de atención activas...</span>
-    </div>
-}
-else if (_ordenes.Count == 0)
-{
-    <div class="alert alert-warning">
-        No se encontraron órdenes con el criterio actual o la base de datos remota no devolvió registros. Puede usar el acceso rápido superior para abrir el Kardex con cualquier N° de Orden y NHCL.
-    </div>
-}
-else
-{
-    <div class="table-responsive shadow-sm rounded bg-white">
-        <table class="table table-hover table-striped align-middle mb-0">
-            <thead class="table-primary">
-                <tr>
-                    <th>N° Orden</th>
-                    <th>NHCL</th>
-                    <th>Paciente</th>
-                    <th>Especie / Sexo</th>
-                    <th>Propietario (Cliente)</th>
-                    <th>Médico / Especialidad</th>
-                    <th>Fecha</th>
-                    <th class="text-center">Acciones Clínicas y Kardex</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var item in _ordenes)
-                {
-                    <tr>
-                        <td class="fw-bold">@item.OrdenAtencionId</td>
-                        <td class="text-danger fw-bold">@item.Nhcl</td>
-                        <td class="fw-semibold">@item.Paciente</td>
-                        <td>@item.Especie (@item.Sexo)</td>
-                        <td>@item.Cliente</td>
-                        <td>
-                            <div>@item.Medico</div>
-                            <small class="text-muted">@item.Especialidad</small>
-                        </td>
-                        <td>@item.FechaOrden.ToString("yyyy-MM-dd")</td>
-                        <td class="text-center">
-                            <div class="btn-group btn-group-sm flex-wrap">
-                                <a class="btn btn-primary" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl" title="Kardex Medicación 5 Días">
-                                    💉 Kardex
-                                </a>
-                                <a class="btn btn-outline-primary" href="/kardex/signos/@item.OrdenAtencionId/@item.Nhcl" title="Signos Vitales y Balance Hídrico">
-                                    📈 Signos
-                                </a>
-                                <a class="btn btn-outline-success" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl" title="Ficha de Hospitalización 24h">
-                                    🏥 Ficha 24h
-                                </a>
-                                <a class="btn btn-outline-dark" href="/hospitalizacion/monitoreo/@item.OrdenAtencionId/@item.Nhcl" title="Monitoreo Clínico 24h">
-                                    🩺 Monitoreo
-                                </a>
-                                <a class="btn btn-outline-danger" href="/quirofano/preanestesia/@item.OrdenAtencionId/@item.Nhcl" title="Pre-Anestesia">
-                                    🧪 Pre-Anest.
-                                </a>
-                                <a class="btn btn-outline-info" href="/quirofano/anestesia/@item.OrdenAtencionId/@item.Nhcl" title="Hoja de Anestesia Intraoperatoria">
-                                    🫁 Anestesia
-                                </a>
-                                <a class="btn btn-outline-secondary" href="/quirofano/protocolo/@item.OrdenAtencionId/@item.Nhcl" title="Protocolo Quirúrgico">
-                                    🔪 Protocolo
-                                </a>
-                                <a class="btn btn-outline-warning text-dark" href="/quirofano/recuperacion/@item.OrdenAtencionId/@item.Nhcl" title="Sala de Recuperación">
-                                    🛏️ Recup.
-                                </a>
-                                <a class="btn btn-outline-primary" href="/consulta/fichamedica/@item.OrdenAtencionId/@item.Nhcl" title="Historia Clínica SOAP">
-                                    📋 SOAP
-                                </a>
-                                <a class="btn btn-outline-info" href="/consulta/evoluciones/@item.OrdenAtencionId/@item.Nhcl" title="Evoluciones Médicas">
-                                    📝 Evolución
-                                </a>
-                                <a class="btn btn-outline-success" href="/consulta/recetario/@item.OrdenAtencionId/@item.Nhcl" title="Recetario Médico">
-                                    💊 Receta
-                                </a>
-                                <a class="btn btn-outline-secondary" href="/consulta/autorizaciones/@item.OrdenAtencionId/@item.Nhcl" title="Consentimientos y Plan de Alta">
-                                    📄 Alta
-                                </a>
-                                <a class="btn btn-outline-primary" href="/diagnostico/laboratorio/@item.OrdenAtencionId/@item.Nhcl" title="Órdenes de Laboratorio Clínico">
-                                    🔬 Lab
-                                </a>
-                                <a class="btn btn-outline-info" href="/diagnostico/imagenologia/@item.OrdenAtencionId/@item.Nhcl" title="Órdenes de Rayos X y Ecografía">
-                                    ☢️ RX/Eco
-                                </a>
-                                <a class="btn btn-outline-dark" href="/diagnostico/bandeja/@item.OrdenAtencionId/@item.Nhcl" title="Bandeja de Resultados e Informes">
-                                    📥 Informes
-                                </a>
-                            </div>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-}
-
-@code {
-    private List<OrdenActivaResumenDto> _ordenes = [];
-    private string _filtro = string.Empty;
-    private bool _cargando;
-    private int _ordenManual = 1;
-    private int _nhclManual = 1;
-
-    protected override async Task OnInitializedAsync()
-    {
-        await CargarOrdenesAsync();
-    }
-
-    private async Task CargarOrdenesAsync()
-    {
-        _cargando = true;
-        await Task.Yield();
-        try
-        {
-            _ordenes = await KardexService.ObtenerOrdenesActivasAsync(_filtro);
-            if (_ordenes.Count > 0)
-            {
-                _ordenManual = _ordenes[0].OrdenAtencionId;
-                _nhclManual = _ordenes[0].Nhcl;
-            }
-        }
-        finally
-        {
-            _cargando = false;
-        }
-    }
-
-    private async Task LimpiarFiltroAsync()
-    {
-        _filtro = string.Empty;
-        await CargarOrdenesAsync();
-    }
-
-    private void IrKardexManual()
-    {
-        if (_ordenManual > 0 && _nhclManual > 0)
-        {
-            Nav.NavigateTo($"/kardex/enfermeria?orden={_ordenManual}&nhcl={_nhclManual}");
-        }
-    }
-
-    private async Task OnFiltroKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await CargarOrdenesAsync();
-        }
-    }
-
-    private void OnManualKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            IrKardexManual();
-        }
-    }
-}
+@page "/kardex/ordenes"
+@inject IKardexService KardexService
+@inject NavigationManager Nav
+
+<PageTitle>e-ForVets - Bandeja de Órdenes de Atención</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="fw-bold text-primary mb-0">📋 Bandeja General de Órdenes de Atención</h3>
+        <small class="text-muted">Explore y gestione las órdenes activas de pacientes en consulta, hospitalización o cirugía para acceder a su Kardex y fichas clínicas.</small>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="/dashboard" class="btn btn-outline-secondary btn-sm">
+            🏠 Panel Principal
+        </a>
+        <a href="/admision/clientes-pacientes" class="btn btn-outline-dark btn-sm">
+            🐾 Clientes / Pacientes
+        </a>
+        <a href="/admision/ordenes" class="btn btn-success btn-sm">
+            🛎️ Recepción y Nueva Orden
+        </a>
+        <a href="/admision/citas" class="btn btn-outline-info btn-sm">
+            📅 Agenda de Citas
+        </a>
+        <a href="/facturacion/proformas" class="btn btn-warning btn-sm fw-semibold">
+            💳 Proformas
+        </a>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label small fw-bold">Filtrar por Paciente, Propietario, N° Orden o NHCL:</label>
+                <input class="form-control" @bind="_filtro" @bind:event="oninput" @onkeydown="OnFiltroKeyDown" placeholder="Ej. Max, Pérez, 12450..." />
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100" @onclick="CargarOrdenesAsync" disabled="@_cargando">
+                    🔍 Buscar
+                </button>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">Acceso rápido (Orden / NHCL):</label>
+                <div class="input-group">
+                    <input type="number" class="form-control" placeholder="Orden" @bind="_ordenManual" @onkeydown="OnManualKeyDown" />
+                    <input type="number" class="form-control" placeholder="NHCL" @bind="_nhclManual" @onkeydown="OnManualKeyDown" />
+                    <button class="btn btn-success" @onclick="IrKardexManual">Ir</button>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-outline-secondary w-100" @onclick="LimpiarFiltroAsync">
+                    🔄 Limpiar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (_cargando)
+{
+    <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span class="fw-semibold small">Cargando órdenes de atención activas...</span>
+    </div>
+}
+else if (_ordenes.Count == 0)
+{
+    <div class="alert alert-warning">
+        No se encontraron órdenes con el criterio actual o la base de datos remota no devolvió registros. Puede usar el acceso rápido superior para abrir el Kardex con cualquier N° de Orden y NHCL.
+    </div>
+}
+else
+{
+    <div class="table-responsive shadow-sm rounded bg-white">
+        <table class="table table-hover table-striped align-middle mb-0">
+            <thead class="table-primary">
+                <tr>
+                    <th>N° Orden</th>
+                    <th>NHCL</th>
+                    <th>Paciente</th>
+                    <th>Especie / Sexo</th>
+                    <th>Propietario (Cliente)</th>
+                    <th>Médico / Especialidad</th>
+                    <th>Fecha</th>
+                    <th class="text-center">Acciones Clínicas y Kardex</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in _ordenes)
+                {
+                    <tr>
+                        <td class="fw-bold">@item.OrdenAtencionId</td>
+                        <td class="text-danger fw-bold">@item.Nhcl</td>
+                        <td class="fw-semibold">@item.Paciente</td>
+                        <td>@item.Especie (@item.Sexo)</td>
+                        <td>@item.Cliente</td>
+                        <td>
+                            <div>@item.Medico</div>
+                            <small class="text-muted">@item.Especialidad</small>
+                        </td>
+                        <td>@item.FechaOrden.ToString("yyyy-MM-dd")</td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm flex-wrap">
+                                <a class="btn btn-primary" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl" title="Kardex Medicación 5 Días">
+                                    💉 Kardex
+                                </a>
+                                <a class="btn btn-outline-primary" href="/kardex/signos/@item.OrdenAtencionId/@item.Nhcl" title="Signos Vitales y Balance Hídrico">
+                                    📈 Signos
+                                </a>
+                                <a class="btn btn-outline-success" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl" title="Ficha de Hospitalización 24h">
+                                    🏥 Ficha 24h
+                                </a>
+                                <a class="btn btn-outline-dark" href="/hospitalizacion/monitoreo/@item.OrdenAtencionId/@item.Nhcl" title="Monitoreo Clínico 24h">
+                                    🩺 Monitoreo
+                                </a>
+                                <a class="btn btn-outline-danger" href="/quirofano/preanestesia/@item.OrdenAtencionId/@item.Nhcl" title="Pre-Anestesia">
+                                    🧪 Pre-Anest.
+                                </a>
+                                <a class="btn btn-outline-info" href="/quirofano/anestesia/@item.OrdenAtencionId/@item.Nhcl" title="Hoja de Anestesia Intraoperatoria">
+                                    🫁 Anestesia
+                                </a>
+                                <a class="btn btn-outline-secondary" href="/quirofano/protocolo/@item.OrdenAtencionId/@item.Nhcl" title="Protocolo Quirúrgico">
+                                    🔪 Protocolo
+                                </a>
+                                <a class="btn btn-outline-warning text-dark" href="/quirofano/recuperacion/@item.OrdenAtencionId/@item.Nhcl" title="Sala de Recuperación">
+                                    🛏️ Recup.
+                                </a>
+                                <a class="btn btn-outline-primary" href="/consulta/fichamedica/@item.OrdenAtencionId/@item.Nhcl" title="Historia Clínica SOAP">
+                                    📋 SOAP
+                                </a>
+                                <a class="btn btn-outline-info" href="/consulta/evoluciones/@item.OrdenAtencionId/@item.Nhcl" title="Evoluciones Médicas">
+                                    📝 Evolución
+                                </a>
+                                <a class="btn btn-outline-success" href="/consulta/recetario/@item.OrdenAtencionId/@item.Nhcl" title="Recetario Médico">
+                                    💊 Receta
+                                </a>
+                                <a class="btn btn-outline-secondary" href="/consulta/autorizaciones/@item.OrdenAtencionId/@item.Nhcl" title="Consentimientos y Plan de Alta">
+                                    📄 Alta
+                                </a>
+                                <a class="btn btn-outline-primary" href="/diagnostico/laboratorio/@item.OrdenAtencionId/@item.Nhcl" title="Órdenes de Laboratorio Clínico">
+                                    🔬 Lab
+                                </a>
+                                <a class="btn btn-outline-info" href="/diagnostico/imagenologia/@item.OrdenAtencionId/@item.Nhcl" title="Órdenes de Rayos X y Ecografía">
+                                    ☢️ RX/Eco
+                                </a>
+                                <a class="btn btn-outline-dark" href="/diagnostico/bandeja/@item.OrdenAtencionId/@item.Nhcl" title="Bandeja de Resultados e Informes">
+                                    📥 Informes
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<OrdenActivaResumenDto> _ordenes = [];
+    private string _filtro = string.Empty;
+    private string _filtroAplicado = string.Empty;
+    private bool _cargando;
+    private int? _ordenManual;
+    private int? _nhclManual;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarOrdenesAsync();
+    }
+
+    private async Task CargarOrdenesAsync()
+    {
+        _cargando = true;
+        await Task.Yield();
+        try
+        {
+            _ordenes = await KardexService.ObtenerOrdenesActivasAsync(_filtro);
+            _filtroAplicado = _filtro;
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task LimpiarFiltroAsync()
+    {
+        bool teniaBusqueda = !string.IsNullOrWhiteSpace(_filtroAplicado);
+        _filtro = string.Empty;
+        _filtroAplicado = string.Empty;
+        _ordenManual = null;
+        _nhclManual = null;
+
+        if (teniaBusqueda)
+        {
+            await CargarOrdenesAsync();
+        }
+    }
+
+    private void IrKardexManual()
+    {
+        if (_ordenManual.HasValue && _ordenManual.Value > 0 && _nhclManual.HasValue && _nhclManual.Value > 0)
+        {
+            Nav.NavigateTo($"/kardex/enfermeria?orden={_ordenManual.Value}&nhcl={_nhclManual.Value}");
+        }
+    }
+
+    private async Task OnFiltroKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CargarOrdenesAsync();
+        }
+    }
+
+    private void OnManualKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            IrKardexManual();
+        }
+    }
+}
