@@ -38,7 +38,7 @@ public class KardexService : IKardexService
         new() { OrdenAtencionId = 24001, Nhcl = 5001, Paciente = "MAX", Cliente = "Mendoza Vintimilla Carlos Andrés", Especie = "Canino", Sexo = "Macho", Medico = "Dr. Gabriel Vintimilla", Especialidad = "Medicina Interna", FechaOrden = DateTime.Today, Estado = "A" },
         new() { OrdenAtencionId = 24002, Nhcl = 5002, Paciente = "LUNA", Cliente = "Mendoza Vintimilla Carlos Andrés", Especie = "Felino", Sexo = "Hembra", Medico = "Dra. Valeria Andrade", Especialidad = "Consulta General", FechaOrden = DateTime.Today, Estado = "A" },
         new() { OrdenAtencionId = 24003, Nhcl = 5003, Paciente = "ROCKY", Cliente = "Salazar Gómez María Fernanda", Especie = "Canino", Sexo = "Macho", Medico = "Dr. Sebastián Cordero", Especialidad = "Cirugía y Tejidos Blandos", FechaOrden = DateTime.Today, Estado = "A" },
-        new() { OrdenAtencionId = 24004, Nhcl = 9001, Paciente = "AMAZONA FARINOSA #42", Cliente = "Ministerio del Ambiente (TUERI)", Especie = "Ave Silvestre", Sexo = "Indefinido", Medico = "Dra. Carolina Páez", Especialidad = "Fauna Silvestre (TUERI)", FechaOrden = DateTime.Today, Estado = "A" }
+        new() { OrdenAtencionId = 24004, Nhcl = 9001, Paciente = "AMAZONA FARINOSA #42", Cliente = "Ministerio del Ambiente (Silvestre)", Especie = "Ave Silvestre", Sexo = "Indefinido", Medico = "Dra. Carolina Páez", Especialidad = "Fauna Silvestre", FechaOrden = DateTime.Today, Estado = "A" }
     ];
 
     private static readonly List<ProductoUtilizadoDto> _productosDemo =
@@ -154,7 +154,7 @@ public class KardexService : IKardexService
                          WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 'Macho'
                          ELSE RTRIM(ISNULL(p.mas_sexo, 'Indefinido')) END AS Sexo,
                     RTRIM(ISNULL(e.especie_descripcion, 'Canino')) AS Especie,
-                    CASE WHEN RTRIM(ISNULL(p.mas_origen, 'M')) = 'M' THEN 'HDEV' ELSE 'TUERI' END AS Origen,
+                    CASE WHEN RTRIM(ISNULL(p.mas_origen, 'M')) = 'M' THEN 'Doméstico' ELSE 'Silvestre' END AS Origen,
                     p.mas_fechanace AS FechaNacimiento,
                     RTRIM(ISNULL(u.user_nombre, 'Médico de Turno')) AS MedicoResponsable,
                     RTRIM(ISNULL(o.cierre, 'N')) AS Cierre,
@@ -200,7 +200,7 @@ public class KardexService : IKardexService
                 Sexo = demo.Sexo,
                 Especie = demo.Especie,
                 Raza = demo.Especie == "Canino" ? "Golden Retriever" : "Europeo Pelo Corto",
-                Origen = demo.Nhcl >= 9000 ? "TUERI" : "HDEV",
+                Origen = demo.Nhcl >= 9000 ? "Silvestre" : "Doméstico",
                 FechaNacimiento = DateTime.Today.AddYears(-4),
                 EdadAnios = 4,
                 EdadMeses = 2,
@@ -220,7 +220,7 @@ public class KardexService : IKardexService
             Sexo = "Indefinido",
             Especie = "Canino",
             Raza = "Mestizo",
-            Origen = "HDEV",
+            Origen = "Doméstico",
             FechaNacimiento = DateTime.Today.AddYears(-2),
             EdadAnios = 2,
             EdadMeses = 0,

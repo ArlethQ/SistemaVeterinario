@@ -62,7 +62,7 @@ public class PacienteHeaderDto
     public int ClienteCodigo { get; set; }
     public string Sexo { get; set; } = string.Empty;
     public string Especie { get; set; } = string.Empty;
-    public string Origen { get; set; } = "HDEV";
+    public string Origen { get; set; } = "Doméstico";
     public DateTime? FechaNacimiento { get; set; }
     public int EdadAnios { get; set; }
     public int EdadMeses { get; set; }
