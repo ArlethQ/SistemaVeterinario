@@ -137,12 +137,12 @@
                         </div>
                         <div class="col-md-1 border-end">
                             <label class="text-muted d-block">Peso (kg)</label>
-                            <input type="number" step="0.1" class="form-control form-control-sm text-center fw-bold"
+                            <input type="number" min="0" step="0.1" class="form-control form-control-sm text-center fw-bold"
                                    @bind="_sheet.Peso" disabled="@_sheet.Cerrada" />
                         </div>
                         <div class="col-md-1 border-end">
                             <label class="text-muted d-block">Día Hosp.</label>
-                            <input type="number" class="form-control form-control-sm text-center fw-bold"
+                            <input type="number" min="1" class="form-control form-control-sm text-center fw-bold"
                                    @bind="_sheet.DiasHospitalizacion" disabled="@_sheet.Cerrada" />
                         </div>
                         <div class="col-md-2">
@@ -229,11 +229,11 @@
                                                @bind="row.Medicacion" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <input type="number" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
+                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
                                                @bind="row.MgKg" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <input type="number" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
+                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
                                                @bind="row.Ml" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
@@ -303,15 +303,15 @@
                                                @bind="row.Alimentacion" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center"
+                                        <input type="number" min="0" step="0.1" class="form-control form-control-sm px-1 py-0 text-center"
                                                @bind="row.Cald" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center"
+                                        <input type="number" min="0" step="0.1" class="form-control form-control-sm px-1 py-0 text-center"
                                                @bind="row.Calv" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <input type="text" class="form-control form-control-sm px-1 py-0 text-center"
+                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
                                                @bind="row.Gr" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
@@ -372,19 +372,19 @@
                                                @bind="row.Fluidoterapia" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <input type="text" class="form-control form-control-sm px-1 py-0 text-center"
+                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
                                                @bind="row.Mpd" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <input type="text" class="form-control form-control-sm px-1 py-0 text-center"
+                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
                                                @bind="row.MlDia" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <input type="text" class="form-control form-control-sm px-1 py-0 text-center"
+                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
                                                @bind="row.MlH" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <input type="text" class="form-control form-control-sm px-1 py-0 text-center"
+                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
                                                @bind="row.Gotas" disabled="@_sheet.Cerrada" />
                                     </td>
                                     @foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
@@ -529,18 +529,6 @@
             _ritmos = await tRitmos;
             _condiciones = await tCond;
             _ordenesActivas = await tOrd;
-
-            if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
-            {
-                IdOrden = Session.OrdenActiva.Value;
-                Nhcl = Session.NhclActivo ?? 0;
-            }
-            else if (IdOrden <= 0 && _ordenesActivas.Count > 0)
-            {
-                var primera = _ordenesActivas[0];
-                IdOrden = primera.IdOrdenAtencion;
-                Nhcl = primera.Nhcl;
-            }
 
             if (IdOrden > 0)
                 await CargarFichaCompletaAsync(IdOrden, Nhcl, 1);

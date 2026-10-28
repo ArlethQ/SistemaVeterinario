@@ -5,6 +5,7 @@ using HosvetKardex.Web.Models;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using System.Text;
+using System.Globalization;
 
 namespace HosvetKardex.Web.Services;
 
@@ -229,8 +230,8 @@ public class HospitalizacionService : IHospitalizacionService
                        TRY_CAST(diaInternacion AS INT) AS DiasInternacion,
                        TRY_CAST(diaPostquirurgico AS INT) AS DiasPostQuirurgico
                 FROM qvt_enfFechas
-                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'
-                ORDER BY orden", param);
+                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @EffectiveForm AND tipo = 'SIGNOS'
+                ORDER BY orden;
 
             var tSignos = _db.QueryAsync<SignoVitalSlotDto>(@"
                 SELECT sec AS Id, ISNULL(orden, 1) AS Orden,
@@ -240,8 +241,8 @@ public class HospitalizacionService : IHospitalizacionService
                        TRY_CAST(sistolica AS INT) AS PresionSistolica,
                        TRY_CAST(diastolica AS INT) AS PresionDiastolica
                 FROM qvt_enfSignosVitales
-                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'
-                ORDER BY orden", param);
+                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @EffectiveForm AND tipo = 'SIGNOS'
+                ORDER BY orden;
 
             var tBalance = _db.QueryAsync<EnfBalanceHidricoDiaDto>(@"
                 SELECT sec AS Id, ISNULL(orden, 1) AS Orden,
@@ -251,8 +252,8 @@ public class HospitalizacionService : IHospitalizacionService
                        TRY_CAST(drenaje AS decimal(10,2)) AS Drenaje,
                        TRY_CAST(otros AS decimal(10,2)) AS Otros
                 FROM qvt_enfBalanceHidrico
-                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'
-                ORDER BY orden", param);
+                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @EffectiveForm AND tipo = 'SIGNOS'
+                ORDER BY orden;
 
             var tMediciones = _db.QueryAsync<EnfMedicionDiaDto>(@"
                 SELECT sec AS Id, ISNULL(orden, 1) AS Orden,
@@ -266,8 +267,8 @@ public class HospitalizacionService : IHospitalizacionService
                        cambioSonda AS CambioSonda,
                        responsable AS Responsable
                 FROM qvt_enfMediciones
-                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @NumForm AND tipo = 'SIGNOS'
-                ORDER BY orden", param);
+                WHERE idOrdenAtencion = @IdOrden AND numFormulario = @EffectiveForm AND tipo = 'SIGNOS'
+                ORDER BY orden;";
 
             await Task.WhenAll(tFechas, tSignos, tBalance, tMediciones);
 
@@ -717,6 +718,10 @@ public class HospitalizacionService : IHospitalizacionService
             throw new ArgumentException("El día de hospitalización debe ser mayor que cero.");
         if (sheet.Peso is < 0)
             throw new ArgumentException("El peso no puede ser negativo.");
+        if (sheet.Bloque1Medicacion.Any(x => x.MgKg is < 0 || x.Ml is < 0) ||
+            sheet.Bloque2Alimentacion.Any(x => x.Cald is < 0 || x.Calv is < 0 || EsNumeroNegativo(x.Gr)) ||
+            sheet.Bloque3Fluidoterapia.Any(x => EsNumeroNegativo(x.Mpd) || EsNumeroNegativo(x.MlDia) || EsNumeroNegativo(x.MlH) || EsNumeroNegativo(x.Gotas)))
+            throw new ArgumentException("La ficha de hospitalización no admite cantidades negativas.");
 
         ValidarFilas(sheet.Bloque1Medicacion, 12, "medicación");
         ValidarFilas(sheet.Bloque2Alimentacion, 5, "alimentación");
@@ -762,6 +767,12 @@ public class HospitalizacionService : IHospitalizacionService
             $"Guardó Ficha Hospitalización Orden={sheet.IdOrden} Hoja={sheet.Hoja}",
             idUsuario, "Hosp_FichaHospitalizacion");
     }
+
+    private static bool EsNumeroNegativo(string? valor) =>
+        !string.IsNullOrWhiteSpace(valor) &&
+        (decimal.TryParse(valor, NumberStyles.Number, CultureInfo.CurrentCulture, out var numero) ||
+         decimal.TryParse(valor, NumberStyles.Number, CultureInfo.InvariantCulture, out numero)) &&
+        numero < 0;
 
     private static void ValidarFilas<T>(IReadOnlyCollection<T> filas, int cantidadEsperada, string bloque)
         where T : Matriz24HorasBaseDto
@@ -879,7 +890,7 @@ public class HospitalizacionService : IHospitalizacionService
                        ISNULL(proddescripcion, '') AS Producto, ISNULL(cantprod, 0) AS Cantidad,
                        ISNULL(indicacionesprod, '') AS Indicaciones, ISNULL(via, '') AS Via,
                        CONVERT(varchar(10), fecha, 120) AS Fecha, ISNULL(hora, '') AS Hora,
-                       CAST(ISNULL(codigoprod, 0) AS varchar(25)) AS Codigo,
+                       ISNULL(NULLIF(RTRIM(med_idProdu), ''), CAST(ISNULL(codigoprod, 0) AS varchar(25))) AS Codigo,
                        iniciales AS Iniciales, funcion AS Funcion
                 FROM hvt_cabMonitoreoMedBC
                 WHERE ordenId = @IdOrden AND modulo = 'Monitoreo'
@@ -941,13 +952,15 @@ public class HospitalizacionService : IHospitalizacionService
 
     private async Task InicializarHojaMonitoreoAsync(int idOrden, int nhcl, int hoja, int idUsuario)
     {
-        for (int i = 1; i <= 24; i++)
-        {
-            await _db.ExecuteAsync(@"
-                INSERT INTO hvt_bloqueMonitoreo (fila, idorden, nhcl, hoja, fecha, responsable)
-                VALUES (@Fila, @IdOrden, @Nhcl, @Hoja, CAST(GETDATE() AS date), @Resp)",
-                new { Fila = i, IdOrden = idOrden, Nhcl = nhcl, Hoja = hoja, Resp = idUsuario });
-        }
+        await _db.ExecuteAsync(@"
+            INSERT INTO hvt_bloqueMonitoreo (fila, idorden, nhcl, hoja, fecha, responsable)
+            SELECT v.fila, @IdOrden, @Nhcl, @Hoja, CAST(GETDATE() AS date), @Resp
+            FROM (VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),
+                         (13),(14),(15),(16),(17),(18),(19),(20),(21),(22),(23),(24)) v(fila)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM hvt_bloqueMonitoreo x
+                WHERE x.idorden=@IdOrden AND x.nhcl=@Nhcl AND ISNULL(x.hoja,1)=@Hoja AND x.fila=v.fila);",
+            new { IdOrden = idOrden, Nhcl = nhcl, Hoja = hoja, Resp = idUsuario });
     }
 
     public async Task<int> CrearNuevaHojaMonitoreoAsync(int idOrden, int nhcl, int idUsuario)
@@ -963,29 +976,88 @@ public class HospitalizacionService : IHospitalizacionService
 
     public async Task GuardarMonitoreoHospitalarioAsync(MonitoreoHospitalarioSheetDto sheet, int idUsuario)
     {
-        foreach (var r in sheet.FilasMonitoreo)
+        ValidarFilas(sheet.FilasMonitoreo, 24, "monitoreo");
+        ValidarValoresMonitoreo(sheet.FilasMonitoreo);
+
+        var sql = new StringBuilder("SET XACT_ABORT ON; BEGIN TRANSACTION;");
+        var parametros = new DynamicParameters(new
         {
-            await _db.ExecuteAsync(@"
-                UPDATE hvt_bloqueMonitoreo SET
-                    item = @Item, fecha = @Fecha, responsable = @Resp,
-                    txt7 = @Txt7, txt8 = @Txt8, txt9 = @Txt9, txt10 = @Txt10, txt11 = @Txt11, txt12 = @Txt12,
-                    txt13 = @Txt13, txt14 = @Txt14, txt15 = @Txt15, txt16 = @Txt16, txt17 = @Txt17, txt18 = @Txt18,
-                    txt19 = @Txt19, txt20 = @Txt20, txt21 = @Txt21, txt22 = @Txt22, txt23 = @Txt23, txt24 = @Txt24,
-                    txt1 = @Txt1, txt2 = @Txt2, txt3 = @Txt3, txt4 = @Txt4, txt5 = @Txt5, txt6 = @Txt6
-                WHERE id = @Id",
-                new
-                {
-                    r.Id, r.Item, sheet.Fecha, Resp = idUsuario,
-                    r.Txt7, r.Txt8, r.Txt9, r.Txt10, r.Txt11, r.Txt12,
-                    r.Txt13, r.Txt14, r.Txt15, r.Txt16, r.Txt17, r.Txt18,
-                    r.Txt19, r.Txt20, r.Txt21, r.Txt22, r.Txt23, r.Txt24,
-                    r.Txt1, r.Txt2, r.Txt3, r.Txt4, r.Txt5, r.Txt6
-                });
-        }
+            sheet.IdOrden,
+            sheet.Nhcl,
+            sheet.Hoja,
+            sheet.Fecha,
+            Resp = idUsuario
+        });
+        AgregarActualizacionMonitoreo(sql, parametros, sheet.FilasMonitoreo);
+        sql.Append("COMMIT TRANSACTION;");
+
+        await using var connection = new SqlConnection(_db.GetConnectionString());
+        await connection.OpenAsync();
+        var filasActualizadas = await connection.ExecuteAsync(sql.ToString(), parametros, commandTimeout: 15);
+        if (filasActualizadas != 24)
+            throw new InvalidOperationException($"Se esperaban 24 filas y SQL actualizó {filasActualizadas}.");
 
         await _db.RegistrarBitacoraAsync(
             $"Guardó Monitoreo Hospitalario Orden={sheet.IdOrden} Hoja={sheet.Hoja}",
             idUsuario, "Hosp_Monitoreo");
+    }
+
+    private static void AgregarActualizacionMonitoreo(
+        StringBuilder sql,
+        DynamicParameters parametros,
+        IReadOnlyList<MonitoreoFilaDto> filas)
+    {
+        var columnas = new[] { (Columna: "item", Propiedad: "Item") }.Concat(
+            Matriz24HorasBaseDto.HorasOrden.Select(h => ($"txt{h}", $"Txt{h}")));
+
+        sql.Append(" UPDATE hvt_bloqueMonitoreo SET ");
+        bool primera = true;
+        foreach (var (columna, propiedad) in columnas)
+        {
+            if (!primera) sql.Append(',');
+            primera = false;
+            sql.Append(columna).Append(" = CASE fila ");
+            var propertyInfo = typeof(MonitoreoFilaDto).GetProperty(propiedad)
+                ?? throw new InvalidOperationException($"No existe la propiedad {propiedad}.");
+            foreach (var fila in filas)
+            {
+                string nombre = $"MON_{fila.Fila}_{propiedad}";
+                sql.Append("WHEN ").Append(fila.Fila).Append(" THEN @").Append(nombre).Append(' ');
+                parametros.Add(nombre, propertyInfo.GetValue(fila));
+            }
+            sql.Append("ELSE ").Append(columna).Append(" END ");
+        }
+
+        sql.Append(@", fecha=@Fecha, responsable=@Resp
+            WHERE idorden=@IdOrden AND nhcl=@Nhcl AND ISNULL(hoja,1)=@Hoja;")
+            .Append(" IF @@ROWCOUNT <> 24 THROW 50001, 'La hoja de monitoreo está incompleta en SQL Server.', 1;");
+    }
+
+    private static void ValidarValoresMonitoreo(IEnumerable<MonitoreoFilaDto> filas)
+    {
+        foreach (var fila in filas)
+        {
+            var regla = MonitoreoHospitalarioSheetDto.ObtenerRegla(fila.Fila);
+            foreach (var hora in Matriz24HorasBaseDto.HorasOrden)
+            {
+                var valor = fila.GetValorHora(hora);
+                if (string.IsNullOrWhiteSpace(valor)) continue;
+
+                if (regla.EsNumerico)
+                {
+                    if (!decimal.TryParse(valor, NumberStyles.Number, CultureInfo.CurrentCulture, out var numero) &&
+                        !decimal.TryParse(valor, NumberStyles.Number, CultureInfo.InvariantCulture, out numero))
+                        throw new ArgumentException($"{fila.ParametroLabel}, hora {hora}: debe ingresar un número.");
+                    if (numero < regla.Minimo || numero > regla.Maximo)
+                        throw new ArgumentException($"{fila.ParametroLabel}, hora {hora}: el valor permitido es {regla.Ayuda}.");
+                }
+                else if (regla.ValoresPermitidos is { Length: > 0 } &&
+                         !regla.ValoresPermitidos.Contains(valor.Trim(), StringComparer.OrdinalIgnoreCase))
+                {
+                    throw new ArgumentException($"{fila.ParametroLabel}, hora {hora}: use {regla.Ayuda}.");
+                }
+            }
+        }
     }
 
     public async Task CerrarMonitoreoHospitalarioAsync(int idOrden)
@@ -1011,6 +1083,10 @@ public class HospitalizacionService : IHospitalizacionService
     public async Task<(bool Exito, string Mensaje)> RegistrarMedicamentoMonitoreoAsync(
         MonitoreoMedInputModel input, int idUsuario, int idLocalidad)
     {
+        if (input.OrdenId <= 0 || input.Nhcl <= 0 || string.IsNullOrWhiteSpace(input.CodigoProducto) || string.IsNullOrWhiteSpace(input.NombreProducto))
+            return (false, "Seleccione un paciente y un producto válido.");
+        if (input.Cantidad <= 0)
+            return (false, "La cantidad debe ser mayor que cero.");
         if (input.Cantidad > input.StockDisponible && input.StockDisponible > 0)
             return (false, $"La cantidad ({input.Cantidad}) supera el stock disponible ({input.StockDisponible}).");
 
@@ -1055,9 +1131,19 @@ public class HospitalizacionService : IHospitalizacionService
                 CodigoStr = input.CodigoProducto
             });
 
-        await _inventarioService.GuardarReservaStockAsync(
-            input.CodigoProducto, idUsuario, input.Cantidad, idLocalidad, input.Bodega,
-            input.OrdenId, input.Nhcl, idInserted, "MON", null, 1);
+        try
+        {
+            var reservado = await _inventarioService.GuardarReservaStockAsync(
+                input.CodigoProducto, idUsuario, input.Cantidad, idLocalidad, input.Bodega,
+                input.OrdenId, input.Nhcl, idInserted, "MON", null, 1);
+            if (reservado != 1)
+                throw new InvalidOperationException("No se pudo reservar el stock del producto.");
+        }
+        catch
+        {
+            await _db.ExecuteAsync("DELETE FROM hvt_cabMonitoreoMedBC WHERE id=@Id", new { Id = idInserted });
+            throw;
+        }
 
         return (true, "Medicamento de monitoreo registrado correctamente.");
     }

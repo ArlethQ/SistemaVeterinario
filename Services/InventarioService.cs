@@ -56,6 +56,23 @@ public class InventarioService : IInventarioService
                     BaseUnitOfMeasureCode = "UND",
                     Location = "E-FACT"
                 }));
+
+            if (resultados.Count > 0)
+            {
+                var codigos = resultados.Select(x => x.Number).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToArray();
+                var reservas = await _sql.QueryAsync<ReservaStockResumen>(@"
+                    SELECT idProd AS Codigo, ISNULL(SUM(cantidad), 0) AS Cantidad
+                    FROM vt_reservaProductosStockBC
+                    WHERE idProd IN @Codigos
+                    GROUP BY idProd", new { Codigos = codigos });
+                var reservadoPorCodigo = reservas.ToDictionary(x => x.Codigo, x => x.Cantidad, StringComparer.OrdinalIgnoreCase);
+                foreach (var item in resultados)
+                {
+                    if (reservadoPorCodigo.TryGetValue(item.Number, out var reservado))
+                        item.Inventory = Math.Max(0, item.Inventory - reservado);
+                    item.Available = item.Inventory;
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -169,6 +186,12 @@ public class InventarioService : IInventarioService
         {
             _catalogoLock.Release();
         }
+    }
+
+    private sealed class ReservaStockResumen
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public decimal Cantidad { get; set; }
     }
 
     public async Task<decimal> ObtenerStockReservadoLocalAsync(string codigoProd, string bodega)

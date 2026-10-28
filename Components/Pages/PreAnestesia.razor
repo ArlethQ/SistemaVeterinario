@@ -266,7 +266,8 @@ else if (paciente != null)
                         </div>
                         <div class="col-md-4">
                             <label class="form-label mb-0">Cantidad</label>
-                            <input type="number" step="0.5" class="form-control form-control-sm" @bind="nuevoProd.CantProd" />
+                            <input type="number" min="0.01" max="@Math.Max(0.01m, nuevoProd.StockProd)" step="0.01"
+                                   class="form-control form-control-sm" @bind="nuevoProd.CantProd" />
                         </div>
                         <div class="col-md-4">
                             <label class="form-label mb-0">Vía</label>
@@ -371,17 +372,6 @@ else if (paciente != null)
         catalogoVias = await tVias;
         ordenesActivas = await tOrdenes;
 
-        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
-        {
-            IdOrden = Session.OrdenActiva.Value;
-            Nhcl = Session.NhclActivo ?? 0;
-        }
-        else if (IdOrden <= 0 && ordenesActivas.Count > 0)
-        {
-            IdOrden = ordenesActivas[0].IdOrdenAtencion;
-            Nhcl = ordenesActivas[0].Nhcl;
-        }
-
         if (IdOrden > 0)
         {
             ordenInput = IdOrden;
@@ -404,11 +394,6 @@ else if (paciente != null)
 
     private async Task CargarPorInputAsync()
     {
-        if (ordenInput <= 0 && ordenesActivas.Count > 0)
-        {
-            ordenInput = ordenesActivas[0].IdOrdenAtencion;
-            Nhcl = ordenesActivas[0].Nhcl;
-        }
         if (ordenInput <= 0) return;
         IdOrden = ordenInput;
         var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
@@ -492,10 +477,16 @@ else if (paciente != null)
 
     private async Task AgregarProductoPreAnestesiaAsync()
     {
-        if (string.IsNullOrWhiteSpace(nuevoProd.ProdDescripcion))
+        if (string.IsNullOrWhiteSpace(nuevoProd.CodigoProd) || string.IsNullOrWhiteSpace(nuevoProd.ProdDescripcion))
         {
             esError = true;
-            mensajeAlerta = "Seleccione o ingrese el fármaco pre-anestésico.";
+            mensajeAlerta = "Seleccione el fármaco o insumo desde los resultados del catálogo.";
+            return;
+        }
+        if (nuevoProd.CantProd <= 0 || nuevoProd.StockProd <= 0 || nuevoProd.CantProd > nuevoProd.StockProd)
+        {
+            esError = true;
+            mensajeAlerta = $"Ingrese una cantidad mayor que cero y no superior al stock disponible ({nuevoProd.StockProd:N2}).";
             return;
         }
         nuevoProd.OrdenId = IdOrden;
@@ -517,6 +508,11 @@ else if (paciente != null)
             listaPremedicacion = await QuirofanoService.ObtenerProductosQuirofanoAsync(IdOrden, "PreAnestesia");
             esError = false;
             mensajeAlerta = "Pre-medicación registrada y reservada en inventario.";
+        }
+        else
+        {
+            esError = true;
+            mensajeAlerta = "No se pudo registrar el producto o reservar su stock.";
         }
     }
 

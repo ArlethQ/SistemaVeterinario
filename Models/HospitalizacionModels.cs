@@ -345,4 +345,44 @@ public class MonitoreoHospitalarioSheetDto
         (23, "Parámetro Extra 2", ""),
         (24, "Parámetro Extra 3", "")
     ];
+
+    public static readonly IReadOnlyDictionary<int, MonitoreoParametroReglaDto> ReglasParametros =
+        new Dictionary<int, MonitoreoParametroReglaDto>
+        {
+            [1] = new(true, 0, 800, 1, "0–800 lpm"),
+            [2] = new(false, null, null, null, "Fu, Mo o De", ["FU", "MO", "DE"]),
+            [3] = new(true, 0, 300, 1, "0–300 rpm"),
+            [4] = new(false, null, null, null, "Eu, Ta o Dis", ["EU", "TA", "DIS"]),
+            [5] = new(true, 0, 100, 1, "0–100 %"),
+            [6] = new(true, 0, 30, 0.1m, "0–30 segundos"),
+            [7] = new(true, 0, 60, 0.1m, "0–60 segundos"),
+            [8] = new(true, 0, 100, 0.1m, "0–100 %"),
+            [9] = new(true, 20, 45, 0.1m, "20–45 °C"),
+            [10] = new(true, 0, 350, 1, "0–350 mmHg"),
+            [11] = new(true, 0, 24, 1, "Glasgow dolor: 0–24"),
+            [12] = new(true, 3, 18, 1, "Glasgow conciencia: 3–18"),
+            [13] = new(false, null, null, null, "Al, Dep o Com", ["AL", "DEP", "COM"]),
+            [14] = new(true, 0, 10000, 0.1m, "0–10000 ml"),
+            [15] = new(true, 0, 100, 0.1m, "0–100 ml/kg/h"),
+            [16] = new(true, 0, 7, 1, "Grado 0–7"),
+            [17] = new(false, null, null, null, "Característica clínica"),
+            [18] = new(true, 0, 100, 0.1m, "0–100 %"),
+            [19] = new(true, 0, 20, 0.1m, "0–20 g/dL"),
+            [20] = new(true, 0, 1500, 1, "0–1500 mg/dL"),
+            [21] = new(true, 0, 30, 0.1m, "0–30 mmol/L"),
+            [22] = new(true, 0, 2000, 0.1m, "0–2000 kg")
+        };
+
+    public static MonitoreoParametroReglaDto ObtenerRegla(int fila) =>
+        ReglasParametros.TryGetValue(fila, out var regla)
+            ? regla
+            : new(false, null, null, null, "Texto libre");
 }
+
+public sealed record MonitoreoParametroReglaDto(
+    bool EsNumerico,
+    decimal? Minimo,
+    decimal? Maximo,
+    decimal? Paso,
+    string Ayuda,
+    string[]? ValoresPermitidos = null);

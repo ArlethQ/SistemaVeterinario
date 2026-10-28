@@ -146,6 +146,16 @@
                     <span class="fw-bold small">1. PARÁMETROS CLÍNICOS DE MONITOREO HORARIO (07:00 A 06:00)</span>
                     <span class="small text-warning">Turno Diurno: 07h–18h | Turno Nocturno: 19h–06h</span>
                 </div>
+                <details class="px-3 py-1 bg-light border-bottom no-print">
+                    <summary class="small fw-semibold text-primary" style="cursor:pointer;">Ver valores y formatos permitidos</summary>
+                    <div class="row row-cols-2 row-cols-md-4 g-1 py-2 small">
+                        @foreach (var parametro in MonitoreoHospitalarioSheetDto.CatalogoParametros.Where(x => x.Fila <= 22))
+                        {
+                            var regla = MonitoreoHospitalarioSheetDto.ObtenerRegla(parametro.Fila);
+                            <div class="col"><strong>@parametro.Parametro:</strong> @regla.Ayuda</div>
+                        }
+                    </div>
+                </details>
                 <div class="table-responsive">
                     <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.74rem;">
                         <thead class="table-light">
@@ -179,12 +189,25 @@
                                     @foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
                                     {
                                         int hLocal = hr;
+                                        var regla = MonitoreoHospitalarioSheetDto.ObtenerRegla(f.Fila);
                                         <td class="p-0">
-                                            <input type="text" class="form-control form-control-sm border-0 px-0 py-1 text-center fw-bold"
-                                                   style="font-size:0.72rem;"
-                                                   value="@f.GetValorHora(hLocal)"
-                                                   @onchange="e => f.SetValorHora(hLocal, e.Value?.ToString())"
-                                                   disabled="@_sheet.Cerrada" />
+                                            @if (regla.EsNumerico)
+                                            {
+                                                <input type="number" min="@regla.Minimo" max="@regla.Maximo" step="@regla.Paso"
+                                                       title="@regla.Ayuda"
+                                                       class="form-control form-control-sm border-0 px-0 py-1 text-center fw-bold"
+                                                       style="font-size:0.72rem;" value="@f.GetValorHora(hLocal)"
+                                                       @onchange="e => f.SetValorHora(hLocal, e.Value?.ToString())"
+                                                       disabled="@_sheet.Cerrada" />
+                                            }
+                                            else
+                                            {
+                                                <input type="text" maxlength="30" title="@regla.Ayuda" placeholder="@regla.Ayuda"
+                                                       class="form-control form-control-sm border-0 px-0 py-1 text-center fw-bold"
+                                                       style="font-size:0.72rem;" value="@f.GetValorHora(hLocal)"
+                                                       @onchange="e => f.SetValorHora(hLocal, e.Value?.ToString())"
+                                                       disabled="@_sheet.Cerrada" />
+                                            }
                                         </td>
                                     }
                                 </tr>
@@ -224,7 +247,8 @@
                         </div>
                         <div class="col-md-1">
                             <label class="form-label mb-0 fw-semibold">Cant.:</label>
-                            <input type="number" class="form-control form-control-sm text-center fw-bold text-danger" @bind="_nuevoMed.Cantidad" />
+                            <input type="number" min="1" max="@Math.Max(1, (int)_nuevoMed.StockDisponible)"
+                                   class="form-control form-control-sm text-center fw-bold text-danger" @bind="_nuevoMed.Cantidad" />
                         </div>
                         <div class="col-md-1">
                             <label class="form-label mb-0 fw-semibold">Vía:</label>
@@ -432,18 +456,6 @@
         _nuevoMed.Via = _vias.FirstOrDefault()?.Via ?? "IV";
         _nuevoMed.Iniciales = _funcionarios.FirstOrDefault()?.UserIniciales ?? "MED";
         _nuevoMed.Funcion = "M";
-
-        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
-        {
-            IdOrden = Session.OrdenActiva.Value;
-            Nhcl = Session.NhclActivo ?? 0;
-        }
-        else if (IdOrden <= 0 && _ordenesActivas.Count > 0)
-        {
-            var primera = _ordenesActivas[0];
-            IdOrden = primera.IdOrdenAtencion;
-            Nhcl = primera.Nhcl;
-        }
 
         if (IdOrden > 0)
         {

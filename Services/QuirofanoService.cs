@@ -217,6 +217,11 @@ public class QuirofanoService : IQuirofanoService
 
     public async Task<bool> AgregarProductoQuirofanoAsync(ProductoQuirofanoDto prod, int idUsuario, int idLocalidad, string origReserva = "QUI")
     {
+        if (prod.OrdenId <= 0 || prod.Nhcl <= 0 || string.IsNullOrWhiteSpace(prod.CodigoProd) || string.IsNullOrWhiteSpace(prod.ProdDescripcion))
+            return false;
+        if (prod.CantProd <= 0 || prod.StockProd <= 0 || prod.CantProd > prod.StockProd)
+            return false;
+
         try
         {
             const string sqlInsert = @"
@@ -258,7 +263,7 @@ public class QuirofanoService : IQuirofanoService
 
             if (idCreado > 0 && !string.IsNullOrWhiteSpace(prod.CodigoProd))
             {
-                await _inventarioService.GuardarReservaStockAsync(
+                var reservado = await _inventarioService.GuardarReservaStockAsync(
                     prod.CodigoProd,
                     idUsuario,
                     prod.CantProd,
@@ -268,6 +273,11 @@ public class QuirofanoService : IQuirofanoService
                     prod.Nhcl,
                     idCreado,
                     origReserva);
+                if (reservado != 1)
+                {
+                    await _db.ExecuteAsync("DELETE FROM qvt_productosUtilizados WHERE id=@Id", new { Id = idCreado });
+                    return false;
+                }
             }
 
             return true;

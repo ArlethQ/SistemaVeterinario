@@ -228,7 +228,7 @@
                                 @foreach (var f in _form.Fechas)
                                 {
                                     <td colspan="2" class="p-1">
-                                        <input type="number" class="form-control form-control-sm px-1 py-0 text-center fw-bold"
+                                        <input type="number" min="0" class="form-control form-control-sm px-1 py-0 text-center fw-bold"
                                                @bind="f.DiasInternacion" />
                                     </td>
                                 }
@@ -238,7 +238,7 @@
                                 @foreach (var f in _form.Fechas)
                                 {
                                     <td colspan="2" class="p-1">
-                                        <input type="number" class="form-control form-control-sm px-1 py-0 text-center"
+                                        <input type="number" min="0" class="form-control form-control-sm px-1 py-0 text-center"
                                                @bind="f.DiasPostQuirurgico" />
                                     </td>
                                 }
@@ -330,14 +330,14 @@
                                         <td class="text-start fw-semibold">Parenteral (cc)</td>
                                         @foreach (var b in _form.BalanceHidrico)
                                         {
-                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Parenteral" @bind:event="oninput" /></td>
+                                            <td class="p-1"><input type="number" min="0" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Parenteral" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr>
                                         <td class="text-start fw-semibold">Vía Oral (cc)</td>
                                         @foreach (var b in _form.BalanceHidrico)
                                         {
-                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.ViaOral" @bind:event="oninput" /></td>
+                                            <td class="p-1"><input type="number" min="0" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.ViaOral" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr class="table-success fw-bold">
@@ -351,21 +351,21 @@
                                         <td class="text-start fw-semibold">Orina (cc)</td>
                                         @foreach (var b in _form.BalanceHidrico)
                                         {
-                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Orina" @bind:event="oninput" /></td>
+                                            <td class="p-1"><input type="number" min="0" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Orina" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr>
                                         <td class="text-start fw-semibold">Drenaje (cc)</td>
                                         @foreach (var b in _form.BalanceHidrico)
                                         {
-                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Drenaje" @bind:event="oninput" /></td>
+                                            <td class="p-1"><input type="number" min="0" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Drenaje" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr>
                                         <td class="text-start fw-semibold">Otros (cc)</td>
                                         @foreach (var b in _form.BalanceHidrico)
                                         {
-                                            <td class="p-1"><input type="number" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Otros" @bind:event="oninput" /></td>
+                                            <td class="p-1"><input type="number" min="0" step="0.1" class="form-control form-control-sm px-1 py-0 text-center" @bind="b.Otros" @bind:event="oninput" /></td>
                                         }
                                     </tr>
                                     <tr class="table-warning fw-bold">
@@ -492,18 +492,6 @@
         _cargandoInicial = true;
         await Task.Yield();
         _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
-
-        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
-        {
-            IdOrden = Session.OrdenActiva.Value;
-            Nhcl = Session.NhclActivo ?? 0;
-        }
-        else if (IdOrden <= 0 && _ordenesActivas.Count > 0)
-        {
-            var primera = _ordenesActivas[0];
-            IdOrden = primera.IdOrdenAtencion;
-            Nhcl = primera.Nhcl;
-        }
 
         if (IdOrden > 0)
         {
