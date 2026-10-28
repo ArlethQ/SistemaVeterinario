@@ -60,7 +60,12 @@
         <div class="col-6 col-xl-3"><div class="agenda-kpi red"><span>CAN</span><div><strong>@CitasCanceladas</strong><small>Canceladas</small><em>@Porcentaje(CitasCanceladas)% del total</em></div></div></div>
     </div>
 
-    <div class="row g-3 agenda-workspace">
+    <nav class="agenda-tabs mb-3">
+        <button class="@(_vistaAgenda == "agenda" ? "active" : "")" @onclick='() => _vistaAgenda = "agenda"'>Agenda diaria</button>
+        <button class="@(_vistaAgenda == "tabla" ? "active" : "")" @onclick='() => _vistaAgenda = "tabla"'>Citas programadas <span>@_citas.Count</span></button>
+    </nav>
+
+    <div class="@(_vistaAgenda == "agenda" ? "row g-3 agenda-workspace" : "d-none")">
         <div class="col-xl-9">
             <section class="calendar-card">
                 <header><span>│</span><strong>Médicos Veterinarios</strong></header>
@@ -117,6 +122,36 @@
             </section>
         </div>
     </div>
+
+    @if (_vistaAgenda == "tabla")
+    {
+        <section class="scheduled-table-card">
+            <header><div><small>PROGRAMACIÓN DEL DÍA</small><h5>Citas programadas</h5></div><div><span>@_fechaAgenda.ToString("dd/MM/yyyy")</span><button class="btn btn-primary btn-sm" @onclick="AbrirFormularioCita">+ Agendar cita</button></div></header>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead><tr><th>Hora</th><th>Paciente</th><th>Propietario / Contacto</th><th>Médico</th><th>Tipo / Motivo</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
+                    <tbody>
+                        @foreach (var cita in _citas.OrderBy(c => c.CiHora))
+                        {
+                            <tr>
+                                <td><strong class="scheduled-time">@cita.CiHora</strong></td>
+                                <td><div class="scheduled-patient"><span class="appointment-photo">@if(!string.IsNullOrEmpty(ObtenerFotoPaciente(cita.CiNhcl))){<img src="@ObtenerFotoPaciente(cita.CiNhcl)" alt="Foto de @cita.CiNombreMas"/>}else{<b>@Iniciales(cita.CiNombreMas)</b>}</span><div><strong>@cita.CiNombreMas</strong><small>@(cita.CiNhcl > 0 ? $"NHCL #{cita.CiNhcl}" : "Sin NHCL")</small></div></div></td>
+                                <td><strong>@cita.CiNombre</strong><small>@cita.CiTelefono</small></td>
+                                <td><strong>@cita.NombreMedico</strong><small>@cita.Especialidad</small></td>
+                                <td><strong>@TextoTipoConsulta(cita.CiTipoConsulta)</strong><small>@cita.CiObservacion</small></td>
+                                <td><span class="table-status @ClaseEstadoCita(cita.CiEstadoCita)">@TextoEstadoCita(cita.CiEstadoCita)</span></td>
+                                <td class="text-end"><button class="btn btn-info btn-sm" @onclick="() => VerDetalleCita(cita)">Ver detalle</button> <button class="btn btn-success btn-sm" title="Confirmar" @onclick='() => CambiarEstadoCitaAsync(cita.CiId, "C")'>Confirmar</button> <button class="btn btn-danger btn-sm" title="Cancelar" @onclick='() => CambiarEstadoCitaAsync(cita.CiId, "X")'>Cancelar</button></td>
+                            </tr>
+                        }
+                        @if (_citas.Count == 0)
+                        {
+                            <tr><td colspan="7" class="text-center text-muted py-5">No hay citas programadas para esta fecha.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
 
     @if (_mostrarFormularioCita)
     {
@@ -399,6 +434,7 @@
     private string _mensaje = string.Empty;
     private bool _mostrarFormularioCita;
     private CitaMedicaDto? _citaDetalle;
+    private string _vistaAgenda = "agenda";
     private int CitasConfirmadas => _citas.Count(c => c.CiEstadoCita == "C");
     private int CitasCanceladas => _citas.Count(c => c.CiEstadoCita == "X");
     private int CitasPendientes => _citas.Count(c => c.CiEstadoCita is not ("C" or "X" or "A"));
