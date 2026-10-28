@@ -130,18 +130,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         try
         {
             var result = (await _db.QueryAsync<ClienteDto>(sql, new { Filtro = filtro?.Trim() ?? string.Empty })).ToList();
-            if (result.Count > 0) return result;
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Modo Demo activado en BuscarClientesAsync");
+            _logger.LogError(ex, "Error consultando clientes en SQL Server");
+            throw;
         }
-
-        if (string.IsNullOrWhiteSpace(filtro)) return _clientesDemo.ToList();
-        return _clientesDemo
-            .Where(c => c.NombreCompleto.Contains(filtro, StringComparison.OrdinalIgnoreCase) ||
-                        c.PaCedula.Contains(filtro, StringComparison.OrdinalIgnoreCase))
-            .ToList();
     }
 
     public async Task<ClienteDto?> ObtenerClientePorIdAsync(int idCliente)
@@ -299,17 +294,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             throw;
         }
 
-        if (cliente.PaCodigo == 0)
-        {
-            cliente.PaCodigo = _clientesDemo.Count > 0 ? _clientesDemo.Max(c => c.PaCodigo) + 1 : 101;
-            _clientesDemo.Insert(0, cliente);
-        }
-        else
-        {
-            var idx = _clientesDemo.FindIndex(c => c.PaCodigo == cliente.PaCodigo);
-            if (idx >= 0) _clientesDemo[idx] = cliente;
-        }
-        return cliente.PaCodigo;
+        throw new InvalidOperationException("SQL Server no confirmó el guardado del propietario.");
     }
 
     public async Task<List<PacienteMascotaDto>> ObtenerMascotasPorClienteAsync(int idCliente)
@@ -350,14 +335,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         try
         {
             var result = (await _db.QueryAsync<PacienteMascotaDto>(sql, new { IdCliente = idCliente })).ToList();
-            if (result.Count > 0) return result;
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Fallback en ObtenerMascotasPorClienteAsync");
+            _logger.LogError(ex, "Error consultando pacientes del propietario en SQL Server");
+            throw;
         }
-
-        return _mascotasDemo.Where(m => m.MasIdCliente == idCliente).ToList();
     }
 
     public async Task<List<PacienteMascotaDto>> BuscarMascotasAsync(string filtro, string origen = "")
@@ -404,23 +388,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 Filtro = filtro?.Trim() ?? string.Empty,
                 Origen = origen?.Trim() ?? string.Empty
             })).ToList();
-            if (result.Count > 0) return result;
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Fallback en BuscarMascotasAsync");
+            _logger.LogError(ex, "Error consultando pacientes en SQL Server");
+            throw;
         }
-
-        var query = _mascotasDemo.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(origen))
-            query = query.Where(m => m.MasOrigen.Equals(origen, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(filtro))
-            query = query.Where(m =>
-                m.MasNombre.Contains(filtro, StringComparison.OrdinalIgnoreCase) ||
-                m.ClienteNombre.Contains(filtro, StringComparison.OrdinalIgnoreCase) ||
-                m.ClienteCedula.Contains(filtro, StringComparison.OrdinalIgnoreCase) ||
-                m.MasNhcl.ToString() == filtro.Trim());
-        return query.ToList();
     }
 
     public async Task<int> GuardarMascotaAsync(PacienteMascotaDto mascota, int idUsuario)
@@ -520,128 +494,78 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             throw;
         }
 
-        if (mascota.MasNhcl == 0)
-        {
-            mascota.MasNhcl = _mascotasDemo.Count > 0 ? _mascotasDemo.Max(m => m.MasNhcl) + 1 : 5001;
-            _mascotasDemo.Insert(0, mascota);
-        }
-        else
-        {
-            var idx = _mascotasDemo.FindIndex(m => m.MasNhcl == mascota.MasNhcl);
-            if (idx >= 0) _mascotasDemo[idx] = mascota;
-        }
-        return mascota.MasNhcl;
+        throw new InvalidOperationException("SQL Server no confirmó el guardado del paciente.");
     }
 
     public async Task<List<CatalogoItemGenericoDto>> ObtenerEspeciesAsync()
     {
         try
         {
-            var res = (await _db.QueryAsync<CatalogoItemGenericoDto>(
+            return (await _db.QueryAsync<CatalogoItemGenericoDto>(
                 "SELECT especie_id AS Id, especie_descripcion AS Descripcion FROM vt_especie WHERE especie_estado = 'A' ORDER BY especie_descripcion")).ToList();
-            if (res.Count > 0) return res;
         }
-        catch { }
-
-        return new List<CatalogoItemGenericoDto>
+        catch (Exception ex)
         {
-            new() { Id = 1, Descripcion = "Canino" },
-            new() { Id = 2, Descripcion = "Felino" },
-            new() { Id = 3, Descripcion = "Ave Silvestre / Exótico" },
-            new() { Id = 4, Descripcion = "Reptil / Quelonios" },
-            new() { Id = 5, Descripcion = "Mamífero Silvestre" }
-        };
+            _logger.LogError(ex, "Error consultando especies en SQL Server");
+            throw;
+        }
     }
 
     public async Task<List<CatalogoItemGenericoDto>> ObtenerRazasPorEspecieAsync(int idEspecie)
     {
         try
         {
-            var res = (await _db.QueryAsync<CatalogoItemGenericoDto>(
+            return (await _db.QueryAsync<CatalogoItemGenericoDto>(
                 "SELECT id_raza AS Id, des_raza AS Descripcion, id_especie AS IdPadre FROM vt_razas WHERE id_especie = @IdEspecie AND estado = 'A' ORDER BY des_raza",
                 new { IdEspecie = idEspecie })).ToList();
-            if (res.Count > 0) return res;
         }
-        catch { }
-
-        return idEspecie switch
+        catch (Exception ex)
         {
-            1 => new()
-            {
-                new() { Id = 10, Descripcion = "Golden Retriever", IdPadre = 1 },
-                new() { Id = 11, Descripcion = "Pastor Alemán", IdPadre = 1 },
-                new() { Id = 12, Descripcion = "Bulldog Francés", IdPadre = 1 },
-                new() { Id = 13, Descripcion = "Mestizo Canino", IdPadre = 1 },
-                new() { Id = 14, Descripcion = "Schnauzer", IdPadre = 1 }
-            },
-            2 => new()
-            {
-                new() { Id = 20, Descripcion = "Siamés", IdPadre = 2 },
-                new() { Id = 21, Descripcion = "Mestizo Europeo Pelo Corto", IdPadre = 2 },
-                new() { Id = 22, Descripcion = "Persa", IdPadre = 2 }
-            },
-            _ => new()
-            {
-                new() { Id = 30, Descripcion = "Fauna Silvestre / TUERI", IdPadre = idEspecie }
-            }
-        };
+            _logger.LogError(ex, "Error consultando razas en SQL Server");
+            throw;
+        }
     }
 
     public async Task<List<CatalogoItemGenericoDto>> ObtenerColoresAsync()
     {
         try
         {
-            var res = (await _db.QueryAsync<CatalogoItemGenericoDto>(
+            return (await _db.QueryAsync<CatalogoItemGenericoDto>(
                 "SELECT id AS Id, color AS Descripcion FROM vt_color ORDER BY color")).ToList();
-            if (res.Count > 0) return res;
         }
-        catch { }
-
-        return new List<CatalogoItemGenericoDto>
+        catch (Exception ex)
         {
-            new() { Id = 1, Descripcion = "Dorado / Miel" },
-            new() { Id = 2, Descripcion = "Blanco / Crema" },
-            new() { Id = 3, Descripcion = "Negro / Fuego" },
-            new() { Id = 4, Descripcion = "Verde Amazónico" },
-            new() { Id = 5, Descripcion = "Atigrado / Tricolor" }
-        };
+            _logger.LogError(ex, "Error consultando colores en SQL Server");
+            throw;
+        }
     }
 
     public async Task<List<CatalogoItemGenericoDto>> ObtenerSexosAsync()
     {
         try
         {
-            var res = (await _db.QueryAsync<CatalogoItemGenericoDto>(
+            return (await _db.QueryAsync<CatalogoItemGenericoDto>(
                 "SELECT CASE WHEN RTRIM(id) = 'M' THEN 1 WHEN RTRIM(id) = 'H' THEN 2 ELSE 3 END AS Id, RTRIM(sexo) AS Descripcion FROM vt_sexo ORDER BY id DESC")).ToList();
-            if (res.Count > 0) return res;
         }
-        catch { }
-
-        return new List<CatalogoItemGenericoDto>
+        catch (Exception ex)
         {
-            new() { Id = 1, Descripcion = "Macho" },
-            new() { Id = 2, Descripcion = "Hembra" },
-            new() { Id = 3, Descripcion = "Indeterminado (TUERI)" }
-        };
+            _logger.LogError(ex, "Error consultando sexos en SQL Server");
+            throw;
+        }
     }
 
     public async Task<List<CatalogoItemGenericoDto>> ObtenerClasesTueriAsync()
     {
         try
         {
-            var res = (await _db.QueryAsync<CatalogoItemGenericoDto>(
+            return (await _db.QueryAsync<CatalogoItemGenericoDto>(
                 "SELECT id_clas AS Id, des_clas AS Descripcion FROM vt_clase ORDER BY des_clas")).ToList();
-            if (res.Count > 0) return res;
         }
-        catch { }
-
-        return new List<CatalogoItemGenericoDto>
+        catch (Exception ex)
         {
-            new() { Id = 1, Descripcion = "Aves (Avifauna)" },
-            new() { Id = 2, Descripcion = "Mamíferos Silvestres" },
-            new() { Id = 3, Descripcion = "Reptiles" },
-            new() { Id = 4, Descripcion = "Anfibios" }
-        };
+            _logger.LogError(ex, "Error consultando clases TUERI en SQL Server");
+            throw;
+        }
     }
 
     // =========================================================================
@@ -652,48 +576,33 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         try
         {
-            var res = (await _db.QueryAsync<CatalogoItemGenericoDto>(
+            return (await _db.QueryAsync<CatalogoItemGenericoDto>(
                 "SELECT es_id AS Id, es_descripcion AS Descripcion FROM vt_especialidades WHERE es_estado = 'A' ORDER BY es_descripcion")).ToList();
-            if (res.Count > 0) return res;
         }
-        catch { }
-
-        return new List<CatalogoItemGenericoDto>
+        catch (Exception ex)
         {
-            new() { Id = 1, Descripcion = "Medicina Interna" },
-            new() { Id = 2, Descripcion = "Consulta General y Preventiva" },
-            new() { Id = 3, Descripcion = "Cirugía y Tejidos Blandos" },
-            new() { Id = 4, Descripcion = "Fauna Silvestre (TUERI)" },
-            new() { Id = 5, Descripcion = "Imagenología y Ecografía" },
-            new() { Id = 6, Descripcion = "Laboratorio Clínico" }
-        };
+            _logger.LogError(ex, "Error consultando especialidades en SQL Server");
+            throw;
+        }
     }
 
     public async Task<List<CatalogoItemGenericoDto>> ObtenerMedicosPorEspecialidadAsync(int idEspecialidad)
     {
         try
         {
-            var res = (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
+            return (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
                 SELECT user_numero AS Id, user_nombre AS Descripcion, user_esp_numero AS IdPadre
                 FROM vt_usuarios
                 WHERE user_estado = 'A'
                   AND ISNULL(user_esp_numero, 0) > 0
                   AND (@IdEsp = 0 OR user_esp_numero = @IdEsp)
                 ORDER BY user_nombre", new { IdEsp = idEspecialidad })).ToList();
-            if (res.Count > 0) return res;
         }
-        catch { }
-
-        var todos = new List<CatalogoItemGenericoDto>
+        catch (Exception ex)
         {
-            new() { Id = 1, Descripcion = "Dr. Gabriel Vintimilla", IdPadre = 1 },
-            new() { Id = 2, Descripcion = "Dra. Valeria Andrade", IdPadre = 2 },
-            new() { Id = 3, Descripcion = "Dr. Sebastián Cordero", IdPadre = 3 },
-            new() { Id = 4, Descripcion = "Dra. Carolina Páez (TUERI)", IdPadre = 4 },
-            new() { Id = 5, Descripcion = "Dr. Mateo Roldán (Imagen)", IdPadre = 5 }
-        };
-
-        return idEspecialidad == 0 ? todos : todos.Where(m => m.IdPadre == idEspecialidad || m.Id == 1).ToList();
+            _logger.LogError(ex, "Error consultando médicos en SQL Server");
+            throw;
+        }
     }
 
     public async Task<List<ConteoMedicoEsperaDto>> ObtenerConteoMedicosEsperaAsync(DateTime fecha, int idLocalidad)
@@ -715,22 +624,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
         try
         {
-            var res = (await _db.QueryAsync<ConteoMedicoEsperaDto>(sql, new { Fecha = fecha.Date, IdLocalidad = idLocalidad })).ToList();
-            if (res.Count > 0) return res;
+            return (await _db.QueryAsync<ConteoMedicoEsperaDto>(sql, new { Fecha = fecha.Date, IdLocalidad = idLocalidad })).ToList();
         }
-        catch { }
-
-        return _ordenesDemo
-            .Where(o => o.Fecha.Date == fecha.Date && o.Estado == "A")
-            .GroupBy(o => new { o.IdMedico, o.Medico, o.Especialidad })
-            .Select(g => new ConteoMedicoEsperaDto
-            {
-                IdMedico = g.Key.IdMedico,
-                Medico = g.Key.Medico,
-                Especialidad = g.Key.Especialidad,
-                EnEspera = g.Count()
-            })
-            .ToList();
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error consultando la espera por médico en SQL Server");
+            throw;
+        }
     }
 
     public async Task<bool> TieneOrdenActivaHoyAsync(int nhcl, int idEspecialidad, DateTime fecha)
@@ -748,9 +648,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             int count = await _db.ExecuteScalarAsync<int>(sql, new { Nhcl = nhcl, IdEsp = idEspecialidad, Fecha = fecha.Date });
             return count > 0;
         }
-        catch
+        catch (Exception ex)
         {
-            return _ordenesDemo.Any(o => o.Nhcl == nhcl && o.Fecha.Date == fecha.Date && o.Estado == "A");
+            _logger.LogError(ex, "Error validando órdenes activas en SQL Server");
+            throw;
         }
     }
 
@@ -774,13 +675,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     ordenAten_nombre, ordenAten_idcliente, ordenAten_nhcl, ordenAten_idMedico,
                     ordenAten_estado, ordenAten_fecha, ordenAten_esp_numero, ordenAten_idlocalidad,
                     ordenAten_hora, ordenAten_IdUsuario, ordenaten_IPOrigen, ordenAten_etapa,
-                    ordenAten_Tipo, ordenAten_Despacho, ordenaten_factura
+                    ordenAten_Tipo, ordenAten_Despacho
                 )
                 VALUES (
                     @NombrePropietario, @IdCliente, @Nhcl, @IdMedico,
                     'A', @FechaOrden, @IdEspecialidad, @IdLocalidad,
                     @HoraOrden, @IdUsuario, @IpOrigen, @Etapa,
-                    @TipoOrigen, @TipoDespacho, 'N'
+                    @TipoOrigen, @TipoDespacho
                 );
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -806,35 +707,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Fallback en memoria para CrearOrdenAtencionAsync");
+            _logger.LogError(ex, "Error creando orden de atención en SQL Server");
+            throw;
         }
-
-        int nuevoId = _ordenesDemo.Count > 0 ? _ordenesDemo.Max(o => o.IdOrden) + 1 : 24001;
-        var medicos = await ObtenerMedicosPorEspecialidadAsync(0);
-        var esps = await ObtenerEspecialidadesAsync();
-
-        _ordenesDemo.Insert(0, new OrdenAtencionResumenDto
-        {
-            IdOrden = nuevoId,
-            Nhcl = orden.Nhcl,
-            IdCliente = orden.IdCliente,
-            Propietario = orden.NombrePropietario,
-            Mascota = orden.NombreMascota,
-            Especie = orden.TipoOrigen == "T" ? "Fauna Silvestre" : "Canino / Felino",
-            Especialidad = esps.FirstOrDefault(e => e.Id == orden.IdEspecialidad)?.Descripcion ?? "Consulta General",
-            IdMedico = orden.IdMedico,
-            Medico = medicos.FirstOrDefault(m => m.Id == orden.IdMedico)?.Descripcion ?? "Médico de Turno",
-            Fecha = orden.FechaOrden.Date,
-            Hora = orden.HoraOrden,
-            Estado = "A",
-            Etapa = etapaInicial,
-            TipoOrigen = orden.TipoOrigen,
-            TipoDespacho = orden.TipoDespacho,
-            ColorTriaje = orden.ColorTriaje,
-            Facturado = "N"
-        });
-
-        return nuevoId;
+        throw new InvalidOperationException("SQL Server no confirmó la creación de la orden de atención.");
     }
 
     public async Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "")
@@ -847,7 +723,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(o.ordenAten_nombre, '') AS Propietario,
                 ISNULL(c.pa_cedula, '') AS Cedula,
                 ISNULL(p.mas_nombre, '') AS Mascota,
-                ISNULL(esp.esp_descripcion, '') AS Especie,
+                ISNULL(esp.especie_descripcion, '') AS Especie,
                 ISNULL(es.es_descripcion, '') AS Especialidad,
                 o.ordenAten_idMedico AS IdMedico,
                 ISNULL(u.user_nombre, '') AS Medico,
@@ -858,12 +734,12 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(o.ordenAten_Tipo, 'M') AS TipoOrigen,
                 ISNULL(o.ordenAten_Despacho, 0) AS TipoDespacho,
                 ISNULL(p.mas_colortriaje, 'green') AS ColorTriaje,
-                ISNULL(o.ordenaten_factura, 'N') AS Facturado,
-                ISNULL(o.ordenaten_numfacBC, '') AS NumFacturaBc
+                'N' AS Facturado,
+                '' AS NumFacturaBc
             FROM vt_ordenAtencion o
             LEFT JOIN vt_pacientes p ON o.ordenAten_nhcl = p.mas_nhcl
             LEFT JOIN vt_clientes c ON o.ordenAten_idcliente = c.pa_codigo
-            LEFT JOIN vt_especie esp ON p.mas_especie = esp.esp_codigo
+            LEFT JOIN vt_especie esp ON p.mas_especie = esp.especie_id
             LEFT JOIN vt_especialidades es ON o.ordenAten_esp_numero = es.es_id
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             WHERE o.ordenAten_fecha = @Fecha
@@ -879,19 +755,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 Filtro = filtro?.Trim() ?? string.Empty,
                 Etapa = etapa?.Trim() ?? string.Empty
             })).ToList();
-            if (res.Count > 0) return res;
+            return res;
         }
-        catch { }
-
-        var q = _ordenesDemo.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(etapa))
-            q = q.Where(o => o.Etapa.Equals(etapa, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(filtro))
-            q = q.Where(o =>
-                o.Propietario.Contains(filtro, StringComparison.OrdinalIgnoreCase) ||
-                o.Mascota.Contains(filtro, StringComparison.OrdinalIgnoreCase) ||
-                o.IdOrden.ToString() == filtro.Trim());
-        return q.ToList();
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error consultando órdenes de atención en SQL Server");
+            throw;
+        }
     }
 
     public async Task<bool> CambiarEstadoOrdenAsync(int idOrden, string nuevoEstado, string nuevaEtapa)
@@ -903,16 +773,12 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 new { IdOrden = idOrden, Estado = nuevoEstado, Etapa = nuevaEtapa });
             if (rows > 0) return true;
         }
-        catch { }
-
-        var ord = _ordenesDemo.FirstOrDefault(o => o.IdOrden == idOrden);
-        if (ord != null)
+        catch (Exception ex)
         {
-            ord.Estado = nuevoEstado;
-            ord.Etapa = nuevaEtapa;
-            return true;
+            _logger.LogError(ex, "Error cambiando el estado de la orden en SQL Server");
+            throw;
         }
-        return false;
+        throw new InvalidOperationException("SQL Server no confirmó la actualización de la orden.");
     }
 
     // =========================================================================
@@ -986,14 +852,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 Hasta = fechaHasta.Date,
                 IdMedico = idMedico
             })).ToList();
-            if (res.Count > 0) return res;
+            return res;
         }
-        catch { }
-
-        return _citasDemo
-            .Where(c => c.CiFecha.Date >= fechaDesde.Date && c.CiFecha.Date <= fechaHasta.Date && (idMedico == 0 || c.CiUsuario == idMedico))
-            .OrderBy(c => c.CiFecha).ThenBy(c => c.CiHora)
-            .ToList();
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error consultando citas en SQL Server");
+            throw;
+        }
     }
 
     public async Task<int> AgendarCitaAsync(CitaMedicaDto cita, int idUsuario)
@@ -1035,12 +900,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Fallback en memoria para AgendarCitaAsync");
+            _logger.LogError(ex, "Error registrando cita en SQL Server");
+            throw;
         }
-
-        cita.CiId = _citasDemo.Count > 0 ? _citasDemo.Max(c => c.CiId) + 1 : 701;
-        _citasDemo.Add(cita);
-        return cita.CiId;
+        throw new InvalidOperationException("SQL Server no confirmó el registro de la cita.");
     }
 
     public async Task<bool> ActualizarEstadoCitaAsync(int idCita, string nuevoEstado)
@@ -1052,31 +915,30 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 new { IdCita = idCita, Estado = nuevoEstado });
             if (rows > 0) return true;
         }
-        catch { }
-
-        var cita = _citasDemo.FirstOrDefault(c => c.CiId == idCita);
-        if (cita != null)
+        catch (Exception ex)
         {
-            cita.CiEstadoCita = nuevoEstado;
-            return true;
+            _logger.LogError(ex, "Error actualizando el estado de la cita en SQL Server");
+            throw;
         }
-        return false;
+        throw new InvalidOperationException("SQL Server no confirmó la actualización de la cita.");
     }
 
     public async Task<bool> BloquearHorarioMedicoAsync(int idMedico, DateTime fecha, string horaDesde, string horaHasta, int idLocalidad)
     {
         try
         {
-            await _db.ExecuteAsync(@"
+            int rows = await _db.ExecuteAsync(@"
                 INSERT INTO vt_calendarizacionHorariosMedicos (cal_idmedico, cal_fecha, cal_desde, cal_hasta, cal_localidad, cal_estado)
                 VALUES (@IdMedico, @Fecha, @Desde, @Hasta, @IdLocalidad, 'A')",
                 new { IdMedico = idMedico, Fecha = fecha.Date, Desde = horaDesde, Hasta = horaHasta, IdLocalidad = idLocalidad });
-            return true;
+            if (rows > 0) return true;
         }
-        catch
+        catch (Exception ex)
         {
-            return true;
+            _logger.LogError(ex, "Error bloqueando el horario médico en SQL Server");
+            throw;
         }
+        throw new InvalidOperationException("SQL Server no confirmó el bloqueo del horario.");
     }
 
     // =========================================================================

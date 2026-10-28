@@ -45,7 +45,7 @@ public class SqlDataService : ISqlDataService
     {
         if (DateTime.UtcNow < _circuitOpenUntil)
         {
-            throw new InvalidOperationException("Circuit breaker activo: SQL Server remoto no alcanzable (Modo Demo en memoria activo).");
+            throw new InvalidOperationException("Circuit breaker activo: SQL Server remoto no alcanzable.");
         }
 
         var connection = new SqlConnection(_connectionString);
@@ -89,8 +89,8 @@ public class SqlDataService : ISqlDataService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Modo Demo activo para comando SQL.");
-            return -1;
+            _logger.LogError(ex, "Error ejecutando comando en SQL Server.");
+            throw;
         }
     }
 
