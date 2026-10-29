@@ -18,6 +18,10 @@ public interface IAdmisionFacturacionService
     Task<List<CatalogoItemGenericoDto>> ObtenerColoresAsync();
     Task<List<CatalogoItemGenericoDto>> ObtenerSexosAsync();
     Task<List<CatalogoItemGenericoDto>> ObtenerClasesTueriAsync();
+    Task<List<CatalogoItemGenericoDto>> ObtenerCategoriasIngresoTueriAsync();
+    Task<List<CatalogoItemGenericoDto>> ObtenerFormasObtencionTueriAsync();
+    Task<List<CatalogoItemGenericoDto>> ObtenerNombresCientificosAsync(int? idClase = null);
+    Task<List<CatalogoItemGenericoDto>> ObtenerMotivosMuerteAsync();
 
     // 2. Recepción y Órdenes de Atención (vt_OrdenesMenu)
     Task<List<CatalogoItemGenericoDto>> ObtenerEspecialidadesAsync();
@@ -27,12 +31,16 @@ public interface IAdmisionFacturacionService
     Task<int> CrearOrdenAtencionAsync(NuevaOrdenAtencionDto orden, int idUsuario, string ipOrigen);
     Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "");
     Task<bool> CambiarEstadoOrdenAsync(int idOrden, string nuevoEstado, string nuevaEtapa);
+    Task<bool> CambiarAsignacionOrdenAsync(int idOrden, int idMedico, int idEspecialidad, int idUsuario);
+    Task<bool> AnularOrdenAsync(int idOrden, int idUsuario);
 
     // 3. Agenda de Citas Médicas (vt_administracionCitasnew)
     Task<List<SlotHorarioMedicoDto>> ObtenerSlotsHorarioMedicoAsync(int idMedico, DateTime fecha, int idLocalidad);
     Task<List<CitaMedicaDto>> ObtenerCitasPorFechaAsync(DateTime fechaDesde, DateTime fechaHasta, int idMedico = 0);
     Task<int> AgendarCitaAsync(CitaMedicaDto cita, int idUsuario);
     Task<bool> ActualizarEstadoCitaAsync(int idCita, string nuevoEstado);
+    Task<bool> ReagendarCitaAsync(int idCita, DateTime fecha, string hora, int idMedico, int idLocalidad, int idUsuario);
+    Task<bool> CancelarCitaAsync(int idCita, string motivo, int idUsuario);
     Task<bool> BloquearHorarioMedicoAsync(int idMedico, DateTime fecha, string horaDesde, string horaHasta, int idLocalidad);
 
     // 4. Facturación consolidada / proformas
@@ -51,42 +59,25 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 {
     private readonly ISqlDataService _db;
     private readonly ILogger<AdmisionFacturacionService> _logger;
-
-    // Estado en memoria para modo demostrativo si SQL Server no está disponible
-    private static readonly List<ClienteDto> _clientesDemo = new()
-    {
-        new() { PaCodigo = 101, PaApellidos = "Mendoza Vintimilla", PaNombres = "Carlos Andrés", PaCedula = "1718293045", PaDocumento = "CEDULA", PaMovil = "0998123456", PaTelefono = "022456789", PaEmail = "cmendoza@usfq.edu.ec", PaEmailFactura = "facturas.cmendoza@gmail.com", PaDireccion = "Cumbayá, Urb. La Primavera II Calle A N4-12", PaTipoCli = "R", PaGrupoCliente = "NAC", PaTerminosPago = "CONTADO", PaFormaPago = "TARJETA" },
-        new() { PaCodigo = 102, PaApellidos = "Salazar Gómez", PaNombres = "María Fernanda", PaCedula = "1723456789001", PaDocumento = "RUC", PaMovil = "0987654321", PaTelefono = "022890123", PaEmail = "mfsalazar@corporacion.ec", PaEmailFactura = "contabilidad@corporacion.ec", PaDireccion = "Tumbaco, Vía Interoceánica Km 14", PaTipoCli = "C", PaGrupoCliente = "NAC", PaTerminosPago = "CONTADO", PaFormaPago = "TRANSFERENCIA" },
-        new() { PaCodigo = 103, PaApellidos = "Ministerio del Ambiente (Silvestre)", PaNombres = "Unidad de Rescate Fauna Silvestre", PaCedula = "1760001230001", PaDocumento = "RUC", PaMovil = "0991112233", PaTelefono = "023987600", PaEmail = "tueri@usfq.edu.ec", PaEmailFactura = "tueri@usfq.edu.ec", PaDireccion = "Campus USFQ Cumbayá - Hospital Fauna Silvestre", PaTipoCli = "C", PaGrupoCliente = "NAC", PaTerminosPago = "CREDITO", PaFormaPago = "CONVENIO" }
-    };
-
-    private static readonly List<PacienteMascotaDto> _mascotasDemo = new()
-    {
-        new() { MasNhcl = 5001, MasIdCliente = 101, ClienteNombre = "Mendoza Vintimilla Carlos Andrés", ClienteCedula = "1718293045", ClienteTelefono = "0998123456", MasNombre = "MAX", MasOrigen = "M", MasSexo = 1, SexoDescripcion = "Macho", MasCastrado = "SI", MasEspecie = 1, EspecieDescripcion = "Canino", MasRaza = 10, RazaDescripcion = "Golden Retriever", MasColor = 1, ColorDescripcion = "Dorado", MasFechaNace = DateTime.Today.AddYears(-4), MasColorTriaje = "green", MasObservacion = "Alergia leve a AINES" },
-        new() { MasNhcl = 5002, MasIdCliente = 101, ClienteNombre = "Mendoza Vintimilla Carlos Andrés", ClienteCedula = "1718293045", ClienteTelefono = "0998123456", MasNombre = "LUNA", MasOrigen = "M", MasSexo = 2, SexoDescripcion = "Hembra", MasCastrado = "SI", MasEspecie = 2, EspecieDescripcion = "Felino", MasRaza = 20, RazaDescripcion = "Siamés", MasColor = 2, ColorDescripcion = "Crema / Café", MasFechaNace = DateTime.Today.AddYears(-2), MasColorTriaje = "yellow", MasObservacion = "Nerviosa en manejo clínico" },
-        new() { MasNhcl = 5003, MasIdCliente = 102, ClienteNombre = "Salazar Gómez María Fernanda", ClienteCedula = "1723456789001", ClienteTelefono = "0987654321", MasNombre = "ROCKY", MasOrigen = "M", MasSexo = 1, SexoDescripcion = "Macho", MasCastrado = "NO", MasEspecie = 1, EspecieDescripcion = "Canino", MasRaza = 12, RazaDescripcion = "Bulldog Francés", MasColor = 3, ColorDescripcion = "Atigrado", MasFechaNace = DateTime.Today.AddYears(-3), MasColorTriaje = "red", MasObservacion = "Paciente braquicéfalo, precaución en sujeción" },
-        new() { MasNhcl = 9001, MasIdCliente = 103, ClienteNombre = "Ministerio del Ambiente (Silvestre)", ClienteCedula = "1760001230001", ClienteTelefono = "0991112233", MasNombre = "AMAZONA FARINOSA #42", MasOrigen = "T", MasSexo = 3, SexoDescripcion = "Indeterminado", MasCastrado = "NO", MasEspecie = 3, EspecieDescripcion = "Ave Silvestre", MasRaza = 30, RazaDescripcion = "Psittacidae", MasColor = 4, ColorDescripcion = "Verde Amazónico", MasFechaNace = DateTime.Today.AddYears(-1), MasColorTriaje = "yellow", TueClase = 1, TuePeso = "620 g", TueCientifico = "Amazona farinosa", TueSectorBarrio = "Reserva Cayambe-Coca", MasObservacion = "Rescate por decomiso ambiental - fractura alar derecha" }
-    };
-
-    private static readonly List<OrdenAtencionResumenDto> _ordenesDemo = new()
-    {
-        new() { IdOrden = 24001, Nhcl = 5001, IdCliente = 101, Propietario = "Mendoza Vintimilla Carlos Andrés", Cedula = "1718293045", Mascota = "MAX", Especie = "Canino", Especialidad = "Medicina Interna", IdMedico = 1, Medico = "Dr. Gabriel Vintimilla", Fecha = DateTime.Today, Hora = "08:30", Estado = "A", Etapa = "Hospitalización", TipoOrigen = "M", TipoDespacho = 3, ColorTriaje = "green", Facturado = "N" },
-        new() { IdOrden = 24002, Nhcl = 5002, IdCliente = 101, Propietario = "Mendoza Vintimilla Carlos Andrés", Cedula = "1718293045", Mascota = "LUNA", Especie = "Felino", Especialidad = "Consulta General", IdMedico = 2, Medico = "Dra. Valeria Andrade", Fecha = DateTime.Today, Hora = "09:15", Estado = "A", Etapa = "Consulta", TipoOrigen = "M", TipoDespacho = 0, ColorTriaje = "yellow", Facturado = "N" },
-        new() { IdOrden = 24003, Nhcl = 5003, IdCliente = 102, Propietario = "Salazar Gómez María Fernanda", Cedula = "1723456789001", Mascota = "ROCKY", Especie = "Canino", Especialidad = "Cirugía y Tejidos Blandos", IdMedico = 3, Medico = "Dr. Sebastián Cordero", Fecha = DateTime.Today, Hora = "10:00", Estado = "A", Etapa = "Quirófano", TipoOrigen = "M", TipoDespacho = 4, ColorTriaje = "red", Facturado = "N" },
-        new() { IdOrden = 24004, Nhcl = 9001, IdCliente = 103, Propietario = "Ministerio del Ambiente (Silvestre)", Cedula = "1760001230001", Mascota = "AMAZONA FARINOSA #42", Especie = "Ave Silvestre", Especialidad = "Fauna Silvestre", IdMedico = 4, Medico = "Dra. Carolina Páez", Fecha = DateTime.Today, Hora = "10:45", Estado = "A", Etapa = "Imagenología", TipoOrigen = "T", TipoDespacho = 1, ColorTriaje = "yellow", Facturado = "S", NumFacturaBc = "PROF-BC-008941" }
-    };
-
-    private static readonly List<CitaMedicaDto> _citasDemo = new()
-    {
-        new() { CiId = 701, CiNhcl = 5001, CiNombre = "Mendoza Vintimilla Carlos Andrés", CiNombreMas = "MAX", CiFecha = DateTime.Today, CiHora = "09:00", CiEstadoCita = "C", CiTelefono = "0998123456", CiEmail = "cmendoza@usfq.edu.ec", CiObservacion = "Control post-operatorio y retiro de puntos", CiUsuario = 1, NombreMedico = "Dr. Gabriel Vintimilla", Especialidad = "Medicina Interna", CiTipoConsulta = 4, CiTipo = "M" },
-        new() { CiId = 702, CiNhcl = 5002, CiNombre = "Mendoza Vintimilla Carlos Andrés", CiNombreMas = "LUNA", CiFecha = DateTime.Today, CiHora = "10:30", CiEstadoCita = "N", CiTelefono = "0998123456", CiEmail = "cmendoza@usfq.edu.ec", CiObservacion = "Vacunación anual y desparasitación", CiUsuario = 2, NombreMedico = "Dra. Valeria Andrade", Especialidad = "Consulta General", CiTipoConsulta = 1, CiTipo = "M" },
-        new() { CiId = 703, CiNhcl = 5003, CiNombre = "Salazar Gómez María Fernanda", CiNombreMas = "ROCKY", CiFecha = DateTime.Today, CiHora = "11:30", CiEstadoCita = "C", CiTelefono = "0987654321", CiEmail = "mfsalazar@corporacion.ec", CiObservacion = "Evaluación prequirúrgica síndrome braquicefálico", CiUsuario = 3, NombreMedico = "Dr. Sebastián Cordero", Especialidad = "Cirugía y Tejidos Blandos", CiTipoConsulta = 3, CiTipo = "M" }
-    };
+    private readonly Dictionary<string, HashSet<string>> _columnCache = new(StringComparer.OrdinalIgnoreCase);
 
     public AdmisionFacturacionService(ISqlDataService db, ILogger<AdmisionFacturacionService> logger)
     {
         _db = db;
         _logger = logger;
+    }
+
+    private async Task<HashSet<string>> ObtenerColumnasTablaAsync(string tableName)
+    {
+        if (_columnCache.TryGetValue(tableName, out var cached)) return cached;
+
+        var columns = (await _db.QueryAsync<string>(@"
+            SELECT c.name
+            FROM sys.columns c
+            WHERE c.object_id = OBJECT_ID(@TableName)", new { TableName = tableName }))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _columnCache[tableName] = columns;
+        return columns;
     }
 
     // =========================================================================
@@ -95,7 +86,19 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<List<ClienteDto>> BuscarClientesAsync(string filtro)
     {
-        const string sql = @"
+        var columns = await ObtenerColumnasTablaAsync("vt_clientes");
+        string[] expectedOptionalColumns =
+        [
+            "pa_emailfactura", "pa_grupocliente", "pa_terminospago", "pa_tipopersona",
+            "pa_genero", "pa_formapago", "pa_estadocivil"
+        ];
+        var missingColumns = expectedOptionalColumns.Where(x => !columns.Contains(x)).ToArray();
+        if (missingColumns.Length > 0)
+        {
+            _logger.LogWarning("La tabla vt_clientes no contiene columnas opcionales de paridad: {MissingColumns}", string.Join(", ", missingColumns));
+        }
+        string Optional(string column, string expression, string fallback) => columns.Contains(column) ? expression : fallback;
+        string sql = $@"
             SELECT TOP 100
                 pa_codigo AS PaCodigo,
                 RTRIM(ISNULL(pa_nombres, '')) AS PaNombres,
@@ -104,24 +107,26 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 RTRIM(ISNULL(pa_telefono, '')) AS PaTelefono,
                 RTRIM(ISNULL(pa_movil, '')) AS PaMovil,
                 RTRIM(ISNULL(pa_email, '')) AS PaEmail,
-                RTRIM(ISNULL(pa_email, '')) AS PaEmailFactura,
+                {Optional("pa_emailfactura", "RTRIM(ISNULL(pa_emailfactura, ''))", "CAST('' AS VARCHAR(150))")} AS PaEmailFactura,
                 RTRIM(ISNULL(pa_direccion, '')) AS PaDireccion,
                 RTRIM(ISNULL(pa_observaciones, '')) AS PaObservaciones,
                 ISNULL(pa_fechaingreso, GETDATE()) AS PaFechaIngreso,
                 RTRIM(ISNULL(pa_estado, 'A')) AS PaEstado,
                 RTRIM(ISNULL(pa_tipocli, '1')) AS PaTipoCli,
-                CASE RTRIM(ISNULL(pa_documento, 'C'))
+                CASE RTRIM(ISNULL(pa_documento, '05'))
+                    WHEN '04' THEN 'RUC'
                     WHEN 'R' THEN 'RUC'
+                    WHEN '06' THEN 'PASAPORTE'
                     WHEN 'P' THEN 'PASAPORTE'
                     ELSE 'CEDULA'
                 END AS PaDocumento,
                 RTRIM(ISNULL(pa_notas, '')) AS PaNotas,
-                'NAC' AS PaGrupoCliente,
-                'CONTADO' AS PaTerminosPago,
-                'NATURAL' AS PaTipoPersona,
-                'M' AS PaGenero,
-                'EFECTIVO' AS PaFormaPago,
-                'SOLTERO' AS PaEstadoCivil
+                {Optional("pa_grupocliente", "RTRIM(ISNULL(pa_grupocliente, ''))", "CAST('' AS VARCHAR(50))")} AS PaGrupoCliente,
+                {Optional("pa_terminospago", "RTRIM(ISNULL(pa_terminospago, ''))", "CAST('' AS VARCHAR(50))")} AS PaTerminosPago,
+                {Optional("pa_tipopersona", "RTRIM(ISNULL(pa_tipopersona, ''))", "CAST('' AS VARCHAR(50))")} AS PaTipoPersona,
+                {Optional("pa_genero", "CONVERT(VARCHAR(10), ISNULL(pa_genero, 1))", "CAST('1' AS VARCHAR(10))")} AS PaGenero,
+                {Optional("pa_formapago", "RTRIM(ISNULL(pa_formapago, ''))", "CAST('' AS VARCHAR(50))")} AS PaFormaPago,
+                {Optional("pa_estadocivil", "CONVERT(VARCHAR(10), ISNULL(pa_estadocivil, 1))", "CAST('1' AS VARCHAR(10))")} AS PaEstadoCivil
             FROM vt_clientes
             WHERE pa_estado = 'A'
               AND (@Filtro = '' OR pa_apellidos LIKE '%' + @Filtro + '%' OR pa_nombres LIKE '%' + @Filtro + '%' OR pa_cedula LIKE '%' + @Filtro + '%')
@@ -180,11 +185,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         cliente.PaApellidos = NombreValidador.Sanitizar(cliente.PaApellidos);
         cliente.PaNombres = NombreValidador.Sanitizar(cliente.PaNombres);
 
-        string docChar = cliente.PaDocumento?.Trim().ToUpperInvariant() switch
+        string documentoCodigo = cliente.PaDocumento?.Trim().ToUpperInvariant() switch
         {
-            "RUC" or "R" => "R",
-            "PASAPORTE" or "P" => "P",
-            _ => "C"
+            "RUC" or "R" or "04" => "04",
+            "PASAPORTE" or "P" or "06" => "06",
+            _ => "05"
         };
 
         try
@@ -216,22 +221,38 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     throw new DocumentoDuplicadoException($"El correo {emailDup} ya está registrado en el propietario #{idEmail}.", "EMAIL");
             }
 
+            var columns = await ObtenerColumnasTablaAsync("vt_clientes");
+            var optionalValues = new (string Column, string Parameter)[]
+            {
+                ("pa_emailfactura", "@PaEmailFactura"),
+                ("pa_grupocliente", "@PaGrupoCliente"),
+                ("pa_terminospago", "@PaTerminosPago"),
+                ("pa_tipopersona", "@PaTipoPersona"),
+                ("pa_genero", "@PaGenero"),
+                ("pa_formapago", "@PaFormaPago"),
+                ("pa_estadocivil", "@PaEstadoCivil")
+            };
+
             if (cliente.PaCodigo == 0)
             {
-                const string insertSql = @"
-                    INSERT INTO vt_clientes (
-                        pa_nombres, pa_apellidos, pa_cedula, pa_telefono, pa_movil,
-                        pa_email, pa_direccion, pa_observaciones,
-                        pa_fechaingreso, pa_fechaMod, pa_estado, pa_usuarioModifico,
-                        pa_tipocli, pa_documento, pa_notas
-                    )
-                    VALUES (
-                        @PaNombres, @PaApellidos, @PaCedula, @PaTelefono, @PaMovil,
-                        @PaEmail, @PaDireccion, @PaObservaciones,
-                        GETDATE(), GETDATE(), 'A', @IdUsuario,
-                        @PaTipoCli, @DocChar, @PaNotas
-                    );
-                    SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                var insertColumns = new List<string>
+                {
+                    "pa_nombres", "pa_apellidos", "pa_cedula", "pa_telefono", "pa_movil",
+                    "pa_email", "pa_direccion", "pa_observaciones", "pa_fechaingreso", "pa_fechaMod",
+                    "pa_estado", "pa_usuarioModifico", "pa_tipocli", "pa_documento", "pa_notas"
+                };
+                var insertValues = new List<string>
+                {
+                    "@PaNombres", "@PaApellidos", "@PaCedula", "@PaTelefono", "@PaMovil",
+                    "@PaEmail", "@PaDireccion", "@PaObservaciones", "GETDATE()", "GETDATE()",
+                    "'A'", "@IdUsuario", "@PaTipoCli", "@DocumentoCodigo", "@PaNotas"
+                };
+                foreach (var optional in optionalValues.Where(x => columns.Contains(x.Column)))
+                {
+                    insertColumns.Add(optional.Column);
+                    insertValues.Add(optional.Parameter);
+                }
+                string insertSql = $"INSERT INTO vt_clientes ({string.Join(",", insertColumns)}) VALUES ({string.Join(",", insertValues)}); SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
                 int nuevoId = await _db.ExecuteScalarAsync<int>(insertSql, new
                 {
@@ -245,27 +266,30 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     cliente.PaObservaciones,
                     IdUsuario = idUsuario.ToString(),
                     PaTipoCli = string.IsNullOrWhiteSpace(cliente.PaTipoCli) ? "1" : (cliente.PaTipoCli.Length > 3 ? cliente.PaTipoCli[..3] : cliente.PaTipoCli),
-                    DocChar = docChar,
-                    PaNotas = string.IsNullOrWhiteSpace(cliente.PaNotas) ? "1" : (cliente.PaNotas.Length > 1 ? cliente.PaNotas[..1] : cliente.PaNotas)
+                    DocumentoCodigo = documentoCodigo,
+                    PaNotas = string.IsNullOrWhiteSpace(cliente.PaNotas) ? "1" : (cliente.PaNotas.Length > 1 ? cliente.PaNotas[..1] : cliente.PaNotas),
+                    PaGrupoCliente = cliente.PaGrupoCliente?.Trim() ?? string.Empty,
+                    PaTerminosPago = cliente.PaTerminosPago?.Trim() ?? string.Empty,
+                    PaTipoPersona = cliente.PaTipoPersona?.Trim() ?? string.Empty,
+                    PaGenero = int.TryParse(cliente.PaGenero, out int genero) ? genero : 1,
+                    PaFormaPago = cliente.PaFormaPago?.Trim() ?? string.Empty,
+                    PaEstadoCivil = int.TryParse(cliente.PaEstadoCivil, out int estadoCivil) ? estadoCivil : 1,
+                    PaEmailFactura = cliente.PaEmailFactura?.Trim() ?? string.Empty
                 });
                 if (nuevoId > 0) return nuevoId;
             }
             else
             {
-                const string updateSql = @"
-                    UPDATE vt_clientes SET
-                        pa_nombres = @PaNombres,
-                        pa_apellidos = @PaApellidos,
-                        pa_cedula = @PaCedula,
-                        pa_telefono = @PaTelefono,
-                        pa_movil = @PaMovil,
-                        pa_email = @PaEmail,
-                        pa_direccion = @PaDireccion,
-                        pa_observaciones = @PaObservaciones,
-                        pa_fechaMod = GETDATE(),
-                        pa_usuarioModifico = @IdUsuario,
-                        pa_documento = @DocChar
-                    WHERE pa_codigo = @PaCodigo;";
+                var updates = new List<string>
+                {
+                    "pa_nombres=@PaNombres", "pa_apellidos=@PaApellidos", "pa_cedula=@PaCedula",
+                    "pa_telefono=@PaTelefono", "pa_movil=@PaMovil", "pa_email=@PaEmail",
+                    "pa_direccion=@PaDireccion", "pa_observaciones=@PaObservaciones", "pa_fechaMod=GETDATE()",
+                    "pa_usuarioModifico=@IdUsuario", "pa_tipocli=@PaTipoCli", "pa_documento=@DocumentoCodigo",
+                    "pa_notas=@PaNotas", "pa_estado=@PaEstado"
+                };
+                updates.AddRange(optionalValues.Where(x => columns.Contains(x.Column)).Select(x => $"{x.Column}={x.Parameter}"));
+                string updateSql = $"UPDATE vt_clientes SET {string.Join(",", updates)} WHERE pa_codigo=@PaCodigo;";
 
                 int rows = await _db.ExecuteAsync(updateSql, new
                 {
@@ -276,10 +300,20 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     cliente.PaTelefono,
                     cliente.PaMovil,
                     cliente.PaEmail,
+                    PaEmailFactura = cliente.PaEmailFactura?.Trim() ?? string.Empty,
                     cliente.PaDireccion,
                     cliente.PaObservaciones,
                     IdUsuario = idUsuario.ToString(),
-                    DocChar = docChar
+                    PaTipoCli = string.IsNullOrWhiteSpace(cliente.PaTipoCli) ? "1" : (cliente.PaTipoCli.Length > 3 ? cliente.PaTipoCli[..3] : cliente.PaTipoCli),
+                    DocumentoCodigo = documentoCodigo,
+                    PaNotas = string.IsNullOrWhiteSpace(cliente.PaNotas) ? "1" : (cliente.PaNotas.Length > 1 ? cliente.PaNotas[..1] : cliente.PaNotas),
+                    PaGrupoCliente = cliente.PaGrupoCliente?.Trim() ?? string.Empty,
+                    PaTerminosPago = cliente.PaTerminosPago?.Trim() ?? string.Empty,
+                    PaTipoPersona = cliente.PaTipoPersona?.Trim() ?? string.Empty,
+                    PaGenero = int.TryParse(cliente.PaGenero, out int genero) ? genero : 1,
+                    PaFormaPago = cliente.PaFormaPago?.Trim() ?? string.Empty,
+                    PaEstadoCivil = int.TryParse(cliente.PaEstadoCivil, out int estadoCivil) ? estadoCivil : 1,
+                    PaEstado = string.Equals(cliente.PaEstado, "I", StringComparison.OrdinalIgnoreCase) ? "I" : "A"
                 });
                 if (rows > 0) return cliente.PaCodigo;
             }
@@ -316,13 +350,25 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(p.mas_raza, 1) AS MasRaza,
                 RTRIM(ISNULL(r.des_raza, '')) AS RazaDescripcion,
                 RTRIM(ISNULL(p.mas_otros, '')) AS MasOtros,
+                RTRIM(ISNULL(p.mas_microchip, '')) AS MasMicrochip,
                 ISNULL(p.mas_fechanace, GETDATE()) AS MasFechaNace,
                 RTRIM(ISNULL(p.mas_observacion, '')) AS MasObservacion,
                 RTRIM(ISNULL(p.mas_estado, 'A')) AS MasEstado,
                 RTRIM(ISNULL(p.mas_colortriaje, 'green')) AS MasColorTriaje,
+                CAST(CASE WHEN CONVERT(VARCHAR(10), ISNULL(p.fallecido, 0)) IN ('1','True','TRUE') THEN 1 ELSE 0 END AS BIT) AS Fallecido,
+                p.fechafallecido AS FechaFallecido,
+                p.motivofallece AS MotivoFallece,
                 p.tue_clase AS TueClase,
+                RTRIM(ISNULL(p.tue_otraclase, '')) AS TueOtraClase,
                 CAST(ISNULL(p.tue_peso, 0) AS VARCHAR(30)) AS TuePeso,
                 CAST(ISNULL(p.tue_cientifico, 0) AS VARCHAR(50)) AS TueCientifico,
+                p.tue_categoria AS TueCategoria,
+                RTRIM(ISNULL(p.tue_otracategoria, '')) AS TueOtraCategoria,
+                p.tue_formaobtension AS TueFormaObtencion,
+                RTRIM(ISNULL(p.tue_otraobtension, '')) AS TueOtraObtencion,
+                RTRIM(ISNULL(p.tue_region, '')) AS TueRegion,
+                p.tue_provincia AS TueProvincia,
+                p.tue_ciudad AS TueCiudad,
                 RTRIM(ISNULL(p.tue_sectorbarrio, '')) AS TueSectorBarrio
             FROM vt_pacientes p
             LEFT JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
@@ -363,13 +409,25 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(p.mas_raza, 1) AS MasRaza,
                 RTRIM(ISNULL(r.des_raza, '')) AS RazaDescripcion,
                 RTRIM(ISNULL(p.mas_otros, '')) AS MasOtros,
+                RTRIM(ISNULL(p.mas_microchip, '')) AS MasMicrochip,
                 ISNULL(p.mas_fechanace, GETDATE()) AS MasFechaNace,
                 RTRIM(ISNULL(p.mas_observacion, '')) AS MasObservacion,
                 RTRIM(ISNULL(p.mas_estado, 'A')) AS MasEstado,
                 RTRIM(ISNULL(p.mas_colortriaje, 'green')) AS MasColorTriaje,
+                CAST(CASE WHEN CONVERT(VARCHAR(10), ISNULL(p.fallecido, 0)) IN ('1','True','TRUE') THEN 1 ELSE 0 END AS BIT) AS Fallecido,
+                p.fechafallecido AS FechaFallecido,
+                p.motivofallece AS MotivoFallece,
                 p.tue_clase AS TueClase,
+                RTRIM(ISNULL(p.tue_otraclase, '')) AS TueOtraClase,
                 CAST(ISNULL(p.tue_peso, 0) AS VARCHAR(30)) AS TuePeso,
                 CAST(ISNULL(p.tue_cientifico, 0) AS VARCHAR(50)) AS TueCientifico,
+                p.tue_categoria AS TueCategoria,
+                RTRIM(ISNULL(p.tue_otracategoria, '')) AS TueOtraCategoria,
+                p.tue_formaobtension AS TueFormaObtencion,
+                RTRIM(ISNULL(p.tue_otraobtension, '')) AS TueOtraObtencion,
+                RTRIM(ISNULL(p.tue_region, '')) AS TueRegion,
+                p.tue_provincia AS TueProvincia,
+                p.tue_ciudad AS TueCiudad,
                 RTRIM(ISNULL(p.tue_sectorbarrio, '')) AS TueSectorBarrio
             FROM vt_pacientes p
             INNER JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
@@ -417,13 +475,19 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         mas_idcliente, mas_nombre, mas_sexo, mas_castrado, mas_especie,
                         mas_raza, mas_otros, mas_fechanace, mas_observacion, mas_estado,
                         mas_fechaingreso, mas_ultimamodi, mas_usuariomodi, mas_origen, mas_colortriaje,
-                        tue_clase, tue_peso, tue_cientifico, tue_sectorbarrio
+                        mas_microchip, fallecido, fechafallecido, motivofallece,
+                        tue_clase, tue_otraclase, tue_peso, tue_cientifico, tue_categoria,
+                        tue_otracategoria, tue_formaobtension, tue_otraobtension, tue_region,
+                        tue_sectorbarrio, tue_provincia, tue_ciudad
                     )
                     VALUES (
                         @MasIdCliente, @MasNombre, @MasSexo, @MasCastrado, @MasEspecie,
                         @MasRaza, @MasOtros, @MasFechaNace, @MasObservacion, 'A',
                         GETDATE(), GETDATE(), @IdUsuario, @MasOrigen, @MasColorTriaje,
-                        @TueClase, @TuePeso, @TueCientifico, @TueSectorBarrio
+                        @MasMicrochip, @Fallecido, @FechaFallecido, @MotivoFallece,
+                        @TueClase, @TueOtraClase, @TuePeso, @TueCientifico, @TueCategoria,
+                        @TueOtraCategoria, @TueFormaObtencion, @TueOtraObtencion, @TueRegion,
+                        @TueSectorBarrio, @TueProvincia, @TueCiudad
                     );
                     SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -436,15 +500,27 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     mascota.MasEspecie,
                     mascota.MasRaza,
                     mascota.MasOtros,
+                    mascota.MasMicrochip,
                     mascota.MasFechaNace,
                     mascota.MasObservacion,
                     IdUsuario = idUsuario.ToString(),
                     mascota.MasOrigen,
                     mascota.MasColorTriaje,
+                    mascota.Fallecido,
+                    FechaFallecido = mascota.Fallecido ? mascota.FechaFallecido : null,
+                    MotivoFallece = mascota.Fallecido ? mascota.MotivoFallece : null,
                     mascota.TueClase,
+                    mascota.TueOtraClase,
                     TuePeso = tuePesoVal,
                     TueCientifico = tueCientificoVal,
-                    mascota.TueSectorBarrio
+                    mascota.TueCategoria,
+                    mascota.TueOtraCategoria,
+                    mascota.TueFormaObtencion,
+                    mascota.TueOtraObtencion,
+                    mascota.TueRegion,
+                    mascota.TueSectorBarrio,
+                    mascota.TueProvincia,
+                    mascota.TueCiudad
                 });
                 if (nuevoNhcl > 0) return nuevoNhcl;
             }
@@ -464,10 +540,22 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         mas_usuariomodi = @IdUsuario,
                         mas_origen = @MasOrigen,
                         mas_colortriaje = @MasColorTriaje,
+                        mas_microchip = @MasMicrochip,
+                        fallecido = @Fallecido,
+                        fechafallecido = @FechaFallecido,
+                        motivofallece = @MotivoFallece,
                         tue_clase = @TueClase,
+                        tue_otraclase = @TueOtraClase,
                         tue_peso = @TuePeso,
                         tue_cientifico = @TueCientifico,
-                        tue_sectorbarrio = @TueSectorBarrio
+                        tue_categoria = @TueCategoria,
+                        tue_otracategoria = @TueOtraCategoria,
+                        tue_formaobtension = @TueFormaObtencion,
+                        tue_otraobtension = @TueOtraObtencion,
+                        tue_region = @TueRegion,
+                        tue_sectorbarrio = @TueSectorBarrio,
+                        tue_provincia = @TueProvincia,
+                        tue_ciudad = @TueCiudad
                     WHERE mas_nhcl = @MasNhcl;";
 
                 int rows = await _db.ExecuteAsync(updateSql, new
@@ -479,15 +567,27 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     mascota.MasEspecie,
                     mascota.MasRaza,
                     mascota.MasOtros,
+                    mascota.MasMicrochip,
                     mascota.MasFechaNace,
                     mascota.MasObservacion,
                     IdUsuario = idUsuario.ToString(),
                     mascota.MasOrigen,
                     mascota.MasColorTriaje,
+                    mascota.Fallecido,
+                    FechaFallecido = mascota.Fallecido ? mascota.FechaFallecido : null,
+                    MotivoFallece = mascota.Fallecido ? mascota.MotivoFallece : null,
                     mascota.TueClase,
+                    mascota.TueOtraClase,
                     TuePeso = tuePesoVal,
                     TueCientifico = tueCientificoVal,
-                    mascota.TueSectorBarrio
+                    mascota.TueCategoria,
+                    mascota.TueOtraCategoria,
+                    mascota.TueFormaObtencion,
+                    mascota.TueOtraObtencion,
+                    mascota.TueRegion,
+                    mascota.TueSectorBarrio,
+                    mascota.TueProvincia,
+                    mascota.TueCiudad
                 });
                 if (rows > 0) return mascota.MasNhcl;
             }
@@ -571,6 +671,26 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             throw;
         }
     }
+
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerCategoriasIngresoTueriAsync() =>
+        (await _db.QueryAsync<CatalogoItemGenericoDto>(
+            "SELECT id AS Id, RTRIM(ingreso) AS Descripcion FROM vt_ingreso WHERE estado='A' ORDER BY ingreso")).ToList();
+
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerFormasObtencionTueriAsync() =>
+        (await _db.QueryAsync<CatalogoItemGenericoDto>(
+            "SELECT id AS Id, RTRIM(obtension) AS Descripcion FROM vt_obtension WHERE estado='A' ORDER BY obtension")).ToList();
+
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerNombresCientificosAsync(int? idClase = null) =>
+        (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
+            SELECT id AS Id, RTRIM(nombre_cientifico) +
+                CASE WHEN NULLIF(RTRIM(ISNULL(nombre_comun,'')), '') IS NULL THEN '' ELSE ' / ' + RTRIM(nombre_comun) END AS Descripcion
+            FROM vt_nombres_cientificos
+            WHERE estado_cientifico='A' AND (@IdClase IS NULL OR clas_id=@IdClase)
+            ORDER BY nombre_cientifico", new { IdClase = idClase })).ToList();
+
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerMotivosMuerteAsync() =>
+        (await _db.QueryAsync<CatalogoItemGenericoDto>(
+            "SELECT sec AS Id, RTRIM(motivo) AS Descripcion FROM vt_motivomuerte WHERE estado='A' ORDER BY motivo")).ToList();
 
     // =========================================================================
     // 2. RECEPCIÓN Y ÓRDENES DE ATENCIÓN (vt_OrdenesMenu)
@@ -662,6 +782,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<int> CrearOrdenAtencionAsync(NuevaOrdenAtencionDto orden, int idUsuario, string ipOrigen)
     {
+        if (orden.IdLocalidad <= 0) throw new InvalidOperationException("La localidad de la orden es obligatoria.");
+        if (orden.TipoDespacho is < 0 or > 4) throw new InvalidOperationException("El tipo de despacho seleccionado no es válido.");
+
         string etapaInicial = orden.TipoDespacho switch
         {
             1 => "Imagenología",
@@ -786,6 +909,27 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         throw new InvalidOperationException("SQL Server no confirmó la actualización de la orden.");
     }
 
+    public async Task<bool> CambiarAsignacionOrdenAsync(int idOrden, int idMedico, int idEspecialidad, int idUsuario)
+    {
+        if (idOrden <= 0 || idMedico <= 0 || idEspecialidad <= 0) return false;
+        var columnas = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
+        string anterior = columnas.Contains("ordenaten_anteriorIdMed") ? "ordenaten_anteriorIdMed=ordenAten_idMedico," : string.Empty;
+        int rows = await _db.ExecuteAsync($@"UPDATE vt_ordenAtencion SET {anterior}
+            ordenAten_idMedico=@IdMedico, ordenAten_esp_numero=@IdEspecialidad
+            WHERE ordenAten_id=@IdOrden", new { IdOrden = idOrden, IdMedico = idMedico, IdEspecialidad = idEspecialidad });
+        if (rows > 0) await _db.RegistrarBitacoraAsync($"Cambio de médico/especialidad en orden #{idOrden}: médico {idMedico}, especialidad {idEspecialidad}", idUsuario);
+        return rows > 0;
+    }
+
+    public async Task<bool> AnularOrdenAsync(int idOrden, int idUsuario)
+    {
+        var columnas = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
+        string auditoria = columnas.Contains("ordenAten_borra") ? ", ordenAten_borra=@IdUsuario" : string.Empty;
+        int rows = await _db.ExecuteAsync($"UPDATE vt_ordenAtencion SET ordenAten_estado='I'{auditoria} WHERE ordenAten_id=@IdOrden AND ISNULL(ordenAten_estado,'A')<>'I'", new { IdOrden = idOrden, IdUsuario = idUsuario });
+        if (rows > 0) await _db.RegistrarBitacoraAsync($"Anulación de orden #{idOrden}", idUsuario);
+        return rows > 0;
+    }
+
     // =========================================================================
     // 3. AGENDA DE CITAS MÉDICAS (vt_administracionCitasnew)
     // =========================================================================
@@ -795,34 +939,88 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         var citasExistentes = await ObtenerCitasPorFechaAsync(fecha.Date, fecha.Date, idMedico);
         var slots = new List<SlotHorarioMedicoDto>();
 
-        // Genera grilla de 08:00 a 17:30 en intervalos de 30 minutos (según vt_horariosmedicos)
-        var horaActual = new TimeSpan(8, 0, 0);
-        var horaFin = new TimeSpan(17, 30, 0);
-
-        while (horaActual <= horaFin)
+        var columnasHorario = await ObtenerColumnasTablaAsync("vt_horariosMedicos");
+        string[] requeridasHorario = ["hr_iduser", "hr_localidad", "hr_dia", "hr_desde", "hr_hasta", "hr_intervalo"];
+        if (requeridasHorario.Any(c => !columnasHorario.Contains(c)))
         {
-            string textoHora = $"{horaActual.Hours:D2}:{horaActual.Minutes:D2}";
-            var citaEnSlot = citasExistentes.FirstOrDefault(c => c.CiHora == textoHora && c.CiEstado != "I" && c.CiEstadoCita != "X");
-            bool almuerzo = horaActual.Hours == 13;
-
-            slots.Add(new SlotHorarioMedicoDto
-            {
-                Hora = textoHora,
-                Bloqueado = almuerzo,
-                Disponible = !almuerzo && citaEnSlot == null,
-                CitaExistente = citaEnSlot,
-                MotivoEstado = almuerzo ? "Receso / Almuerzo" : (citaEnSlot != null ? $"Reservado: {citaEnSlot.CiNombreMas} ({citaEnSlot.CiNombre})" : "Disponible")
-            });
-
-            horaActual = horaActual.Add(TimeSpan.FromMinutes(30));
+            _logger.LogWarning("No se generaron slots: vt_horariosMedicos no contiene todas las columnas requeridas ({Columnas}).", string.Join(", ", requeridasHorario));
+            return slots;
         }
 
-        return slots;
+        string columnaDia = columnasHorario.Contains("hr_dia2") ? "hr_dia2" : "hr_dia";
+        var bloques = (await _db.QueryAsync<(string Desde, string Hasta, int Intervalo)>($@"
+            SELECT RTRIM(hr_desde) Desde, RTRIM(hr_hasta) Hasta, ISNULL(hr_intervalo, 30) Intervalo
+            FROM vt_horariosMedicos
+            WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad
+              AND UPPER(RTRIM({columnaDia})) IN (UPPER(@DiaIngles), UPPER(@DiaEspanol))
+            ORDER BY TRY_CONVERT(time, hr_desde)", new
+            {
+                IdMedico = idMedico,
+                IdLocalidad = idLocalidad,
+                DiaIngles = fecha.DayOfWeek.ToString(),
+                DiaEspanol = DiaSemanaEspanol(fecha.DayOfWeek)
+            })).ToList();
+
+        var bloqueos = new List<(string Desde, string Hasta)>();
+        var columnasExcepcion = await ObtenerColumnasTablaAsync("vt_calendarizacionHorariosMedicos");
+        string[] requeridasExcepcion = ["cal_idmedico", "cal_fecha", "cal_desde", "cal_hasta", "cal_localidad"];
+        if (requeridasExcepcion.All(c => columnasExcepcion.Contains(c)))
+        {
+            string estado = columnasExcepcion.Contains("cal_estado") ? "AND ISNULL(cal_estado, 'A')='A'" : string.Empty;
+            bloqueos = (await _db.QueryAsync<(string Desde, string Hasta)>($@"
+                SELECT RTRIM(cal_desde) Desde, RTRIM(cal_hasta) Hasta
+                FROM vt_calendarizacionHorariosMedicos
+                WHERE cal_idmedico=@IdMedico AND cal_localidad=@IdLocalidad
+                  AND CAST(cal_fecha AS date)=@Fecha {estado}", new { IdMedico = idMedico, IdLocalidad = idLocalidad, Fecha = fecha.Date })).ToList();
+        }
+
+        foreach (var bloque in bloques)
+        {
+            if (!TimeSpan.TryParse(bloque.Desde, out var horaActual) || !TimeSpan.TryParse(bloque.Hasta, out var horaFin)) continue;
+            int intervalo = bloque.Intervalo is >= 5 and <= 240 ? bloque.Intervalo : 30;
+            while (horaActual < horaFin)
+            {
+                string textoHora = $"{horaActual.Hours:D2}:{horaActual.Minutes:D2}";
+                var citaEnSlot = citasExistentes.FirstOrDefault(c => c.CiLocalidad == idLocalidad && c.CiHora.StartsWith(textoHora, StringComparison.Ordinal) && c.CiEstado != "I" && c.CiEstadoCita != "X");
+                bool bloqueado = bloqueos.Any(b => EstaEnRango(horaActual, b.Desde, b.Hasta));
+                if (slots.All(s => s.Hora != textoHora))
+                {
+                    slots.Add(new SlotHorarioMedicoDto
+                    {
+                        Hora = textoHora,
+                        Bloqueado = bloqueado,
+                        Disponible = !bloqueado && citaEnSlot == null,
+                        CitaExistente = citaEnSlot,
+                        MotivoEstado = bloqueado ? "Bloqueo / excepción" : (citaEnSlot != null ? $"Reservado: {citaEnSlot.CiNombreMas} ({citaEnSlot.CiNombre})" : "Disponible")
+                    });
+                }
+
+                horaActual = horaActual.Add(TimeSpan.FromMinutes(intervalo));
+            }
+        }
+
+        return slots.OrderBy(s => s.Hora).ToList();
+    }
+
+    private static string DiaSemanaEspanol(DayOfWeek dia) => dia switch
+    {
+        DayOfWeek.Monday => "Lunes", DayOfWeek.Tuesday => "Martes", DayOfWeek.Wednesday => "Miércoles",
+        DayOfWeek.Thursday => "Jueves", DayOfWeek.Friday => "Viernes", DayOfWeek.Saturday => "Sábado",
+        _ => "Domingo"
+    };
+
+    private static bool EstaEnRango(TimeSpan hora, string desde, string hasta)
+    {
+        if (!TimeSpan.TryParse(desde, out var inicio)) return false;
+        if (hasta == "24:00") return hora >= inicio;
+        return TimeSpan.TryParse(hasta, out var fin) && hora >= inicio && hora < fin;
     }
 
     public async Task<List<CitaMedicaDto>> ObtenerCitasPorFechaAsync(DateTime fechaDesde, DateTime fechaHasta, int idMedico = 0)
     {
-        const string sql = @"
+        var columnas = await ObtenerColumnasTablaAsync("vt_citas");
+        string motivoCancelacion = columnas.Contains("ci_refeliminacion") ? "ISNULL(c.ci_refeliminacion, '')" : "CAST('' AS VARCHAR(250))";
+        string sql = $@"
             SELECT
                 c.ci_id AS CiId,
                 ISNULL(c.ci_nombre, '') AS CiNombre,
@@ -830,10 +1028,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(c.ci_nhcl, 0) AS CiNhcl,
                 c.ci_fecha AS CiFecha,
                 ISNULL(c.ci_hora, '08:00') AS CiHora,
-                ISNULL(c.ci_estadocita, 'N') AS CiEstadoCita,
+                CASE WHEN ISNULL(c.ci_estado,'A')='I' THEN 'X'
+                     WHEN UPPER(ISNULL(c.ci_estadocita,'')) LIKE 'CONFIRM%' THEN 'C'
+                     WHEN UPPER(ISNULL(c.ci_estadocita,'')) LIKE 'ATEND%' THEN 'A'
+                     WHEN UPPER(ISNULL(c.ci_estadocita,'')) LIKE 'CANCEL%' THEN 'X'
+                     ELSE ISNULL(c.ci_estadocita, 'N') END AS CiEstadoCita,
                 ISNULL(c.ci_telefono, '') AS CiTelefono,
                 ISNULL(c.ci_email, '') AS CiEmail,
                 ISNULL(c.ci_observacion, '') AS CiObservacion,
+                {motivoCancelacion} AS CiMotivoCancelacion,
                 ISNULL(c.ci_localidad, 1) AS CiLocalidad,
                 ISNULL(c.ci_usuario, 0) AS CiUsuario,
                 ISNULL(u.user_nombre, '') AS NombreMedico,
@@ -845,7 +1048,6 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LEFT JOIN vt_usuarios u ON c.ci_usuario = u.user_numero
             LEFT JOIN vt_especialidades e ON u.user_esp_numero = e.es_id
             WHERE c.ci_fecha BETWEEN @Desde AND @Hasta
-              AND c.ci_estado = 'A'
               AND (@IdMedico = 0 OR c.ci_usuario = @IdMedico)
             ORDER BY c.ci_fecha, c.ci_hora;";
 
@@ -870,6 +1072,20 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         try
         {
+            int superpuestas = await _db.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(1) FROM vt_citas
+                WHERE ci_usuario=@CiUsuario AND ci_localidad=@CiLocalidad
+                  AND CAST(ci_fecha AS date)=@CiFecha AND LEFT(RTRIM(ci_hora),5)=LEFT(@CiHora,5)
+                  AND ISNULL(ci_estado,'A')='A'", new
+            {
+                cita.CiUsuario,
+                cita.CiLocalidad,
+                CiFecha = cita.CiFecha.Date,
+                cita.CiHora
+            });
+            if (superpuestas > 0)
+                throw new InvalidOperationException("El médico ya tiene una cita activa en ese horario y localidad.");
+
             const string insertSql = @"
                 INSERT INTO vt_citas (
                     ci_nombre, ci_nombremas, ci_fecha, ci_hora, ci_estadocita,
@@ -928,6 +1144,40 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         throw new InvalidOperationException("SQL Server no confirmó la actualización de la cita.");
     }
 
+    public async Task<bool> ReagendarCitaAsync(int idCita, DateTime fecha, string hora, int idMedico, int idLocalidad, int idUsuario)
+    {
+        if (idCita <= 0 || idMedico <= 0 || idLocalidad <= 0 || !TimeSpan.TryParse(hora, out _)) return false;
+        int cruces = await _db.ExecuteScalarAsync<int>(@"SELECT COUNT(1) FROM vt_citas
+            WHERE ci_id<>@IdCita AND ci_usuario=@IdMedico AND ci_localidad=@IdLocalidad
+              AND CAST(ci_fecha AS date)=@Fecha AND LEFT(RTRIM(ci_hora),5)=LEFT(@Hora,5) AND ISNULL(ci_estado,'A')='A'",
+            new { IdCita = idCita, IdMedico = idMedico, IdLocalidad = idLocalidad, Fecha = fecha.Date, Hora = hora });
+        if (cruces > 0) return false;
+        var columnas = await ObtenerColumnasTablaAsync("vt_citas");
+        var adicionales = new List<string>();
+        if (columnas.Contains("ci_refeliminacion")) adicionales.Add("ci_refeliminacion='Reagendamiento'");
+        if (columnas.Contains("ci_HoraModificacion")) adicionales.Add("ci_HoraModificacion=GETDATE()");
+        if (columnas.Contains("ci_usuarioPrincipal")) adicionales.Add("ci_usuarioPrincipal=@IdUsuario");
+        string extra = adicionales.Count == 0 ? string.Empty : "," + string.Join(',', adicionales);
+        int rows = await _db.ExecuteAsync($@"UPDATE vt_citas SET ci_fecha=@Fecha,ci_hora=@Hora,ci_usuario=@IdMedico,
+            ci_localidad=@IdLocalidad,ci_estado='A'{extra} WHERE ci_id=@IdCita",
+            new { IdCita = idCita, Fecha = fecha.Date, Hora = hora, IdMedico = idMedico, IdLocalidad = idLocalidad, IdUsuario = idUsuario });
+        if (rows > 0) await _db.RegistrarBitacoraAsync($"Reagendamiento de cita #{idCita} para {fecha:yyyy-MM-dd} {hora}", idUsuario);
+        return rows > 0;
+    }
+
+    public async Task<bool> CancelarCitaAsync(int idCita, string motivo, int idUsuario)
+    {
+        if (idCita <= 0 || string.IsNullOrWhiteSpace(motivo)) return false;
+        var columnas = await ObtenerColumnasTablaAsync("vt_citas");
+        var cambios = new List<string> { "ci_estado='I'", "ci_estadocita='X'" };
+        if (columnas.Contains("ci_refeliminacion")) cambios.Add("ci_refeliminacion=@Motivo");
+        if (columnas.Contains("ci_delete")) cambios.Add("ci_delete=@IdUsuario");
+        if (columnas.Contains("ci_HoraModificacion")) cambios.Add("ci_HoraModificacion=GETDATE()");
+        int rows = await _db.ExecuteAsync($"UPDATE vt_citas SET {string.Join(',', cambios)} WHERE ci_id=@IdCita", new { IdCita = idCita, Motivo = motivo.Trim(), IdUsuario = idUsuario });
+        if (rows > 0) await _db.RegistrarBitacoraAsync($"Cancelación de cita #{idCita}: {motivo.Trim()}", idUsuario);
+        return rows > 0;
+    }
+
     public async Task<bool> BloquearHorarioMedicoAsync(int idMedico, DateTime fecha, string horaDesde, string horaHasta, int idLocalidad)
     {
         try
@@ -967,7 +1217,33 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<OrdenProformaResumenDto?> ObtenerDetalleProformaOrdenAsync(int idOrden)
     {
-        var ord = _ordenesDemo.FirstOrDefault(o => o.IdOrden == idOrden) ?? _ordenesDemo.First();
+        const string sqlOrden = @"
+            SELECT TOP 1
+                o.ordenAten_id AS IdOrden,
+                o.ordenAten_nhcl AS Nhcl,
+                o.ordenAten_idcliente AS IdCliente,
+                RTRIM(ISNULL(c.pa_apellidos, '')) + ' ' + RTRIM(ISNULL(c.pa_nombres, '')) AS ClienteNombre,
+                RTRIM(ISNULL(c.pa_cedula, '')) AS ClienteCedula,
+                RTRIM(ISNULL(c.pa_email, '')) AS ClienteEmail,
+                RTRIM(ISNULL(c.pa_movil, ISNULL(c.pa_telefono, ''))) AS ClienteTelefono,
+                RTRIM(ISNULL(p.mas_nombre, '')) AS MascotaNombre,
+                RTRIM(ISNULL(e.especie_descripcion, '')) AS Especie,
+                RTRIM(ISNULL(u.user_nombre, '')) AS MedicoTratante,
+                ISNULL(o.ordenAten_fecha, GETDATE()) AS FechaOrden,
+                RTRIM(ISNULL(o.ordenAten_etapa, '')) AS EtapaActual,
+                RTRIM(ISNULL(o.ordenaten_factura, 'N')) AS FacturadoBc,
+                RTRIM(ISNULL(o.ordenaten_numfacBC, '')) AS NumeroFacturaBc
+            FROM vt_ordenAtencion o
+            LEFT JOIN vt_pacientes p ON p.mas_nhcl = o.ordenAten_nhcl
+            LEFT JOIN vt_clientes c ON c.pa_codigo = o.ordenAten_idcliente
+            LEFT JOIN vt_especie e ON e.especie_id = p.mas_especie
+            LEFT JOIN vt_usuarios u ON u.user_numero = o.ordenAten_idMedico
+            WHERE o.ordenAten_id = @IdOrden;";
+
+        var orden = await _db.QueryFirstOrDefaultAsync<OrdenProformaResumenDto>(sqlOrden, new { IdOrden = idOrden });
+        if (orden is null)
+            return null;
+
         var items = new List<ItemFacturableProformaDto>();
 
         try
@@ -989,40 +1265,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             var dbItems = (await _db.QueryAsync<ItemFacturableProformaDto>(sqlItems, new { IdOrden = idOrden })).ToList();
             if (dbItems.Count > 0) items.AddRange(dbItems);
         }
-        catch { }
-
-        if (items.Count == 0)
+        catch (Exception ex)
         {
-            // Consolidado multi-módulo demostrativo (Hospitalización + Quirófano + Laboratorio + Imagenología)
-            items = new List<ItemFacturableProformaDto>
-            {
-                new() { IdRegistro = 1, IdOrden = idOrden, OrigenModulo = "HOSPITALIZACION", CodigoItemBc = "HOSP-DIA-24H", DescripcionItem = "Día de Hospitalización Monitorizada 24 Horas (Jaula UCI)", Cantidad = 2, PrecioUnitario = 45.00m, FechaCargo = DateTime.Now.AddHours(-24) },
-                new() { IdRegistro = 2, IdOrden = idOrden, OrigenModulo = "HOSPITALIZACION", CodigoItemBc = "MED-OME-40MG", DescripcionItem = "Omeprazol IV 40mg (Kardex Enfermería)", Cantidad = 3, PrecioUnitario = 6.50m, FechaCargo = DateTime.Now.AddHours(-12) },
-                new() { IdRegistro = 3, IdOrden = idOrden, OrigenModulo = "QUIROFANO", CodigoItemBc = "QUIR-ANES-ISO", DescripcionItem = "Derecho de Quirófano + Anestesia Inhalatoria Isoflurano", Cantidad = 1, PrecioUnitario = 120.00m, FechaCargo = DateTime.Now.AddHours(-6) },
-                new() { IdRegistro = 4, IdOrden = idOrden, OrigenModulo = "QUIROFANO", CodigoItemBc = "INS-PROPOFOL", DescripcionItem = "Propofol 1% Ampolla 20ml (Inducción Anestésica)", Cantidad = 1, PrecioUnitario = 18.75m, FechaCargo = DateTime.Now.AddHours(-6) },
-                new() { IdRegistro = 5, IdOrden = idOrden, OrigenModulo = "LABORATORIO", CodigoItemBc = "LAB-HEMO-COMP", DescripcionItem = "Biometría Hemática Completa + Perfil Bioquímico Renal/Hepático", Cantidad = 1, PrecioUnitario = 38.00m, FechaCargo = DateTime.Now.AddHours(-18) },
-                new() { IdRegistro = 6, IdOrden = idOrden, OrigenModulo = "IMAGEN", CodigoItemBc = "IMG-RX-2PROY", DescripcionItem = "Estudio Radiográfico Digital (2 Proyecciones VD / LL)", Cantidad = 1, PrecioUnitario = 35.00m, FechaCargo = DateTime.Now.AddHours(-15) }
-            };
+            _logger.LogError(ex, "Error consultando cargos de la proforma para la orden {IdOrden}", idOrden);
+            throw;
         }
 
-        return new OrdenProformaResumenDto
-        {
-            IdOrden = ord.IdOrden,
-            Nhcl = ord.Nhcl,
-            IdCliente = ord.IdCliente,
-            ClienteNombre = ord.Propietario,
-            ClienteCedula = ord.Cedula,
-            ClienteEmail = "facturacion.cliente@usfq.edu.ec",
-            ClienteTelefono = "0998123456",
-            MascotaNombre = ord.Mascota,
-            Especie = ord.Especie,
-            MedicoTratante = ord.Medico,
-            FechaOrden = ord.Fecha,
-            EtapaActual = ord.Etapa,
-            FacturadoBc = ord.Facturado,
-            NumeroFacturaBc = string.IsNullOrEmpty(ord.NumFacturaBc) ? "PENDIENTE" : ord.NumFacturaBc,
-            Items = items
-        };
+        orden.Items = items;
+        return orden;
     }
 
     public Task<bool> AgregarCargoProformaManualAsync(ItemFacturableProformaDto cargo, int idUsuario)
@@ -1037,23 +1287,20 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
         try
         {
-            await _db.ExecuteAsync(@"
+            int actualizados = await _db.ExecuteAsync(@"
                 UPDATE vt_ordenAtencion
                 SET ordenaten_factura = 'S',
                     ordenaten_numfacBC = @NumFac
                 WHERE ordenAten_id = @IdOrden",
                 new { IdOrden = idOrden, NumFac = numeroGenerado });
+
+            if (actualizados == 0)
+                return (false, string.Empty, "No se encontró la orden para emitir la proforma.");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Modo demostrativo al actualizar la proforma de la orden");
-        }
-
-        var ord = _ordenesDemo.FirstOrDefault(o => o.IdOrden == idOrden);
-        if (ord != null)
-        {
-            ord.Facturado = "S";
-            ord.NumFacturaBc = numeroGenerado;
+            _logger.LogError(ex, "Error actualizando la proforma de la orden {IdOrden}", idOrden);
+            return (false, string.Empty, "No se pudo emitir la proforma en la base de datos.");
         }
 
         decimal total = itemsSeleccionados.Where(i => i.Seleccionado).Sum(i => i.Subtotal);

@@ -33,6 +33,8 @@ public interface IReportExportService
     byte[] GenerarProformaConsolidadaPdf(OrdenProformaResumenDto proforma);
     byte[] GenerarProformaConsolidadaExcel(OrdenProformaResumenDto proforma);
     byte[] GenerarAgendaCitasPdf(List<CitaMedicaDto> citas, DateTime desde, DateTime hasta);
+    byte[] GenerarOrdenesAtencionPdf(List<OrdenAtencionResumenDto> ordenes, DateTime desde, DateTime hasta);
+    byte[] GenerarOrdenesAtencionExcel(List<OrdenAtencionResumenDto> ordenes, DateTime desde, DateTime hasta);
     byte[] GenerarCodigoQrPng(string texto);
 }
 
@@ -51,6 +53,33 @@ public class ReportExportService : IReportExportService
         using var qrData = qrGenerator.CreateQrCode(texto, QRCodeGenerator.ECCLevel.Q);
         using var qrCode = new PngByteQRCode(qrData);
         return qrCode.GetGraphic(8);
+    }
+
+    public byte[] GenerarOrdenesAtencionPdf(List<OrdenAtencionResumenDto> ordenes, DateTime desde, DateTime hasta)
+    {
+        return Document.Create(doc => doc.Page(page =>
+        {
+            page.Size(PageSizes.A4.Landscape()); page.Margin(24); page.DefaultTextStyle(x => x.FontSize(8));
+            page.Header().Text($"Órdenes de atención · {desde:dd/MM/yyyy} - {hasta:dd/MM/yyyy}").Bold().FontSize(15);
+            page.Content().PaddingTop(10).Table(t =>
+            {
+                t.ColumnsDefinition(c => { c.ConstantColumn(55); c.ConstantColumn(60); c.RelativeColumn(1.4f); c.RelativeColumn(1.4f); c.RelativeColumn(1.3f); c.RelativeColumn(1.3f); c.RelativeColumn(1); });
+                t.Header(h => { foreach (var x in new[] { "Orden", "Fecha", "Paciente", "Propietario", "Médico", "Especialidad", "Etapa" }) h.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text(x).Bold(); });
+                foreach (var o in ordenes) foreach (var x in new[] { o.IdOrden.ToString(), o.Fecha.ToString("dd/MM/yyyy"), $"{o.Mascota} ({o.Nhcl})", o.Propietario, o.Medico, o.Especialidad, o.Etapa }) t.Cell().BorderBottom(.5f).Padding(3).Text(x ?? "");
+            });
+            page.Footer().AlignCenter().Text(x => { x.Span("Generado "); x.Span(DateTime.Now.ToString("dd/MM/yyyy HH:mm")); });
+        })).GeneratePdf();
+    }
+
+    public byte[] GenerarOrdenesAtencionExcel(List<OrdenAtencionResumenDto> ordenes, DateTime desde, DateTime hasta)
+    {
+        using var wb = new XLWorkbook(); var ws = wb.Worksheets.Add("Órdenes");
+        string[] headers = ["Orden", "Fecha", "Hora", "NHCL", "Paciente", "Propietario", "Médico", "Especialidad", "Etapa", "Estado", "Despacho"];
+        for (int i = 0; i < headers.Length; i++) ws.Cell(1, i + 1).Value = headers[i];
+        ws.Range(1, 1, 1, headers.Length).Style.Font.Bold = true; ws.Range(1, 1, 1, headers.Length).Style.Fill.BackgroundColor = XLColor.LightBlue;
+        int row = 2; foreach (var o in ordenes) { object[] values = [o.IdOrden, o.Fecha, o.Hora, o.Nhcl, o.Mascota, o.Propietario, o.Medico, o.Especialidad, o.Etapa, o.Estado, o.DespachoDescripcion]; for (int i = 0; i < values.Length; i++) ws.Cell(row, i + 1).Value = XLCellValue.FromObject(values[i]); row++; }
+        ws.Column(2).Style.DateFormat.Format = "dd/mm/yyyy"; ws.Columns().AdjustToContents(); ws.SheetView.FreezeRows(1); ws.RangeUsed()?.SetAutoFilter();
+        using var stream = new MemoryStream(); wb.SaveAs(stream); return stream.ToArray();
     }
 
     // ========================================================================

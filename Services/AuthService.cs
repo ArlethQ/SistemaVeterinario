@@ -5,21 +5,26 @@ namespace HosvetKardex.Web.Services;
 
 public class SessionStateService
 {
-    public int IdUser { get; private set; } = 1;
-    public int TipoUser { get; private set; } = 1;
-    public int EspUser { get; private set; } = 1;
+    private static readonly TimeSpan SessionTimeout = TimeSpan.FromMinutes(30);
+    private DateTimeOffset? _lastActivityUtc;
+
+    public int IdUser { get; private set; }
+    public int TipoUser { get; private set; }
+    public int EspUser { get; private set; }
     public int Localidad { get; private set; } = 1;
-    public string LocalidadDescripcion { get; private set; } = "HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ";
-    public string Apostrofe { get; private set; } = "HV";
-    public string LoginUser { get; private set; } = "admin";
-    public string NombreUsuario { get; private set; } = "Médico / Enfermería e-ForVets";
-    public string Iniciales { get; private set; } = "HV";
-    public bool IsAuthenticated { get; private set; } = true;
+    public string LocalidadDescripcion { get; private set; } = string.Empty;
+    public string Apostrofe { get; private set; } = string.Empty;
+    public string LoginUser { get; private set; } = string.Empty;
+    public string NombreUsuario { get; private set; } = string.Empty;
+    public string Iniciales { get; private set; } = string.Empty;
+    public bool IsAuthenticated => IdUser > 0 && _lastActivityUtc.HasValue && DateTimeOffset.UtcNow - _lastActivityUtc.Value < SessionTimeout;
     public int? OrdenActiva { get; private set; }
     public int? NhclActivo { get; private set; }
     public string? PacienteActivo { get; private set; }
 
-    public SessionUserProxy? CurrentUser => new(IdUser, NombreUsuario, Iniciales, Localidad, Apostrofe);
+    public SessionUserProxy? CurrentUser => IsAuthenticated
+        ? new(IdUser, NombreUsuario, Iniciales, Localidad, Apostrofe)
+        : null;
     public SessionUserProxy? UsuarioActual => CurrentUser;
 
     public record SessionUserProxy(int IdUsuario, string NombreCompleto, string Iniciales, int IdLocalidad, string PrefijoLocalidad)
@@ -48,15 +53,42 @@ public class SessionStateService
         Localidad = localidad;
         LocalidadDescripcion = localidadDesc;
         Apostrofe = localidad == 2 ? "EQ" : "HV";
-        IsAuthenticated = true;
+        _lastActivityUtc = DateTimeOffset.UtcNow;
         NotifyStateChanged();
+    }
+
+    public bool ValidateAndTouch()
+    {
+        if (!IsAuthenticated)
+        {
+            ClearSession();
+            return false;
+        }
+
+        _lastActivityUtc = DateTimeOffset.UtcNow;
+        return true;
     }
 
     public void Logout()
     {
-        IdUser = 0;
-        IsAuthenticated = false;
+        ClearSession();
         NotifyStateChanged();
+    }
+
+    private void ClearSession()
+    {
+        IdUser = 0;
+        TipoUser = 0;
+        EspUser = 0;
+        LoginUser = string.Empty;
+        NombreUsuario = string.Empty;
+        Iniciales = string.Empty;
+        Apostrofe = string.Empty;
+        LocalidadDescripcion = string.Empty;
+        OrdenActiva = null;
+        NhclActivo = null;
+        PacienteActivo = null;
+        _lastActivityUtc = null;
     }
 
     private void NotifyStateChanged() => OnChange?.Invoke();
@@ -84,6 +116,9 @@ public interface IAuthService
 
 public class AuthService : IAuthService
 {
+    private const int MaxLoginAttempts = 5;
+    private static readonly TimeSpan LoginWindow = TimeSpan.FromMinutes(15);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, LoginAttempt> LoginAttempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ISqlDataService _sql;
     private readonly SessionStateService _session;
 
@@ -96,7 +131,15 @@ public class AuthService : IAuthService
     public async Task<(bool Exito, string Mensaje, UsuarioModel? Usuario, bool RequiereCambioClave)> LoginAsync(string username, string password, int localidad = 1)
     {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
-            return (false, "Usuario y contraseña requeridos.", null, false);
+            return (false, "Los datos introducidos no son válidos.", null, false);
+
+        string loginKey = username.Trim().ToUpperInvariant();
+        if (LoginAttempts.TryGetValue(loginKey, out var attempt) &&
+            attempt.WindowStartedUtc.Add(LoginWindow) > DateTimeOffset.UtcNow &&
+            attempt.Count >= MaxLoginAttempts)
+        {
+            return (false, "No fue posible iniciar sesión. Inténtalo nuevamente más tarde.", null, false);
+        }
 
         string claveHash = _sql.HashPasswordSha1(password);
 
@@ -120,15 +163,24 @@ public class AuthService : IAuthService
         var user = await _sql.QueryFirstOrDefaultAsync<UsuarioModel>(query, new { Login = username.Trim(), Clave = claveHash });
         if (user is null)
         {
+            LoginAttempts.AddOrUpdate(
+                loginKey,
+                _ => new LoginAttempt(1, DateTimeOffset.UtcNow),
+                (_, current) => current.WindowStartedUtc.Add(LoginWindow) <= DateTimeOffset.UtcNow
+                    ? new LoginAttempt(1, DateTimeOffset.UtcNow)
+                    : current with { Count = current.Count + 1 });
             await _sql.RegistrarBitacoraAsync($"Datos introducidos no válidos: {username}", 0);
             return (false, "Los datos introducidos no son válidos.", null, false);
         }
 
+        LoginAttempts.TryRemove(loginKey, out _);
         await _sql.RegistrarBitacoraAsync($"Ingresa al Sistema: {user.UserNombre}", user.UserNumero);
         _session.SetSession(user, localidad);
 
         return (true, "Bienvenido", user, false);
     }
+
+    private sealed record LoginAttempt(int Count, DateTimeOffset WindowStartedUtc);
 
     public async Task<List<MenuItemModel>> ObtenerMenuUsuarioAsync(int idUser, int tipoUser)
     {

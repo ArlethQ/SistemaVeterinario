@@ -28,6 +28,12 @@ public interface IGestionMigradaService
 
 public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogService eFactCatalog) : IGestionMigradaService
 {
+    private async Task VerificarColumnasAsync(string tabla, params string[] requeridas)
+    {
+        var disponibles = (await db.QueryAsync<string>("SELECT name FROM sys.columns WHERE object_id=OBJECT_ID(@Tabla)", new { Tabla = tabla })).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var faltantes = requeridas.Where(c => !disponibles.Contains(c)).ToArray();
+        if (faltantes.Length > 0) throw new InvalidOperationException($"{tabla} no contiene las columnas requeridas: {string.Join(", ", faltantes)}.");
+    }
     public async Task<List<ReporteAtencionDto>> ObtenerAtencionesAsync(DateTime desde, DateTime hasta) => (await db.QueryAsync<ReporteAtencionDto>(@"
         SELECT o.ordenAten_id Orden,f.med_nhcl Nhcl,f.med_fecha Fecha,RTRIM(ISNULL(u.user_nombre,'')) Medico,
         RTRIM(p.mas_nombre) Paciente,RTRIM(c.pa_apellidos+' '+c.pa_nombres) Cliente,
@@ -55,13 +61,18 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         LEFT JOIN vt_clientes c ON c.pa_codigo=p.mas_idcliente
         WHERE q.fecha>=@Desde AND q.fecha<DATEADD(day,1,@Hasta) ORDER BY q.fecha DESC",new{Desde=desde.Date,Hasta=hasta.Date})).ToList();
 
-    public async Task<List<HorarioMedicoDto>> ObtenerHorariosAsync() => (await db.QueryAsync<HorarioMedicoDto>(@"
+    public async Task<List<HorarioMedicoDto>> ObtenerHorariosAsync()
+    {
+        await VerificarColumnasAsync("vt_horariosMedicos", "hr_id", "hr_iduser", "hr_dia", "hr_dia2", "hr_desde", "hr_hasta", "hr_intervalo", "hr_localidad");
+        return (await db.QueryAsync<HorarioMedicoDto>(@"
         SELECT h.hr_id Id,h.hr_iduser IdMedico,RTRIM(ISNULL(u.user_nombre,'')) Medico,RTRIM(h.hr_dia) Dia,RTRIM(ISNULL(h.hr_dia2,'')) DiaIngles,
         RTRIM(h.hr_desde) Desde,RTRIM(h.hr_hasta) Hasta,h.hr_intervalo Intervalo,h.hr_localidad IdLocalidad,RTRIM(ISNULL(l.loc_descripcion,'')) Localidad
         FROM vt_horariosMedicos h LEFT JOIN vt_usuarios u ON u.user_numero=h.hr_iduser LEFT JOIN vt_localidades l ON l.loc_id=h.hr_localidad ORDER BY u.user_nombre,h.hr_id")).ToList();
+    }
 
     public async Task<bool> GuardarHorarioAsync(HorarioMedicoDto x,int idUsuario)
     {
+        await VerificarColumnasAsync("vt_horariosMedicos", "hr_id", "hr_iduser", "hr_dia", "hr_dia2", "hr_desde", "hr_hasta", "hr_intervalo", "hr_localidad");
         if(x.IdMedico<=0||x.IdLocalidad<=0||!HoraValida(x.Desde,x.Hasta)) return false;
         var repetido=await db.QueryFirstOrDefaultAsync<int>("SELECT COUNT(1) FROM vt_horariosMedicos WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad AND hr_dia2=@DiaIngles AND hr_id<>@Id AND CAST(hr_desde AS time)<CAST(@Hasta AS time) AND CAST(hr_hasta AS time)>CAST(@Desde AS time)",x);
         if(repetido>0)return false;
@@ -70,16 +81,21 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     }
     public async Task<bool> EliminarHorarioAsync(int id,int idUsuario){var ok=await db.ExecuteAsync("DELETE FROM vt_horariosMedicos WHERE hr_id=@Id",new{Id=id})>0;if(ok)await db.RegistrarBitacoraAsync($"Elimina horario médico {id}",idUsuario);return ok;}
 
-    public async Task<List<ExcepcionHorarioDto>> ObtenerExcepcionesAsync(DateTime desde,DateTime hasta)=>(await db.QueryAsync<ExcepcionHorarioDto>(@"
+    public async Task<List<ExcepcionHorarioDto>> ObtenerExcepcionesAsync(DateTime desde,DateTime hasta)
+    {
+        await VerificarColumnasAsync("vt_calendarizacionHorariosMedicos", "cal_id", "cal_idMedico", "cal_detalle", "cal_fecha", "cal_desde", "cal_hasta", "cal_localidad", "cal_estado");
+        return (await db.QueryAsync<ExcepcionHorarioDto>(@"
         SELECT c.cal_id Id,c.cal_idMedico IdMedico,RTRIM(ISNULL(u.user_nombre,'')) Medico,RTRIM(ISNULL(c.cal_detalle,'')) Motivo,
         c.cal_fecha Fecha,RTRIM(ISNULL(c.cal_desde,'')) Desde,RTRIM(ISNULL(c.cal_hasta,'')) Hasta,c.cal_localidad IdLocalidad,
         RTRIM(ISNULL(l.loc_descripcion,'')) Localidad,ISNULL(c.cal_estado,'A') Estado
         FROM vt_calendarizacionHorariosMedicos c LEFT JOIN vt_usuarios u ON u.user_numero=c.cal_idMedico
         LEFT JOIN vt_localidades l ON l.loc_id=c.cal_localidad WHERE c.cal_fecha>=@Desde AND c.cal_fecha<DATEADD(day,1,@Hasta)
         ORDER BY c.cal_fecha,c.cal_desde",new{Desde=desde.Date,Hasta=hasta.Date})).ToList();
+    }
 
     public async Task<bool> GuardarExcepcionAsync(ExcepcionHorarioDto x,int idUsuario)
     {
+        await VerificarColumnasAsync("vt_calendarizacionHorariosMedicos", "cal_id", "cal_idMedico", "cal_detalle", "cal_fecha", "cal_idUsuario", "cal_fechaIng", "cal_desde", "cal_hasta", "cal_localidad", "cal_estado");
         if(x.IdMedico<=0||x.IdLocalidad<=0||x.Fecha.Date<DateTime.Today||string.IsNullOrWhiteSpace(x.Motivo)||!HoraValida(x.Desde,x.Hasta,true))return false;
         var repetido=await db.QueryFirstOrDefaultAsync<int>("SELECT COUNT(1) FROM vt_calendarizacionHorariosMedicos WHERE cal_estado='A' AND cal_idMedico=@IdMedico AND cal_localidad=@IdLocalidad AND CAST(cal_fecha AS date)=CAST(@Fecha AS date) AND cal_id<>@Id AND TRY_CONVERT(time,cal_desde)<TRY_CONVERT(time,CASE WHEN @Hasta='24:00' THEN '23:59:59' ELSE @Hasta END) AND TRY_CONVERT(time,CASE WHEN cal_hasta='24:00' THEN '23:59:59' ELSE cal_hasta END)>TRY_CONVERT(time,@Desde)",x);
         if(repetido>0)return false;
@@ -88,14 +104,19 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     }
     public async Task<bool> DesactivarExcepcionAsync(int id,int idUsuario){var ok=await db.ExecuteAsync("UPDATE vt_calendarizacionHorariosMedicos SET cal_estado='I' WHERE cal_id=@Id",new{Id=id})>0;if(ok)await db.RegistrarBitacoraAsync($"Desactiva excepción de horario {id}",idUsuario);return ok;}
 
-    public async Task<List<CirugiaProgramadaDto>> ObtenerCirugiasAsync(DateTime desde,DateTime hasta)=>(await db.QueryAsync<CirugiaProgramadaDto>(@"
+    public async Task<List<CirugiaProgramadaDto>> ObtenerCirugiasAsync(DateTime desde,DateTime hasta)
+    {
+        await VerificarColumnasAsync("qvt_calendario_cirugias", "sec", "codmed", "nhcl", "codprocedimiento", "fechacirugia", "horainicio", "horafinalizacion", "localidad", "estado");
+        return (await db.QueryAsync<CirugiaProgramadaDto>(@"
         SELECT sec Id,codmed IdMedico,RTRIM(ISNULL(nommedico,'')) Medico,nhcl Nhcl,RTRIM(ISNULL(nompaciente,'')) Paciente,
         codprocedimiento IdProcedimiento,RTRIM(ISNULL(nomprocedimiento,'')) Procedimiento,fechacirugia Fecha,RTRIM(horainicio) HoraInicio,
         RTRIM(horafinalizacion) HoraFin,localidad IdLocalidad,estado Estado FROM qvt_calendario_cirugias
         WHERE fechacirugia>=@Desde AND fechacirugia<DATEADD(day,1,@Hasta) ORDER BY fechacirugia,horainicio",new{Desde=desde.Date,Hasta=hasta.Date})).ToList();
+    }
 
     public async Task<bool> GuardarCirugiaAsync(CirugiaProgramadaDto x,int idUsuario)
     {
+        await VerificarColumnasAsync("qvt_calendario_cirugias", "sec", "codmed", "nhcl", "codprocedimiento", "idcliente", "fechacirugia", "horainicio", "horafinalizacion", "usering", "localidad", "nommedico", "nompaciente", "nomprocedimiento", "estado");
         if(x.IdMedico<=0||x.Nhcl<=0||x.IdProcedimiento<=0||x.IdLocalidad<=0||x.Fecha.Date<DateTime.Today||!HoraValida(x.HoraInicio,x.HoraFin))return false;
         var conflicto=await db.QueryFirstOrDefaultAsync<int>(@"SELECT COUNT(1) FROM qvt_calendario_cirugias WHERE estado='A' AND sec<>@Id AND CAST(fechacirugia AS date)=CAST(@Fecha AS date) AND (codmed=@IdMedico OR localidad=@IdLocalidad) AND CAST(horainicio AS time)<CAST(@HoraFin AS time) AND CAST(horafinalizacion AS time)>CAST(@HoraInicio AS time)",x);
         var bloqueo=await db.QueryFirstOrDefaultAsync<int>(@"SELECT COUNT(1) FROM vt_calendarizacionHorariosMedicos WHERE cal_estado='A' AND cal_idMedico=@IdMedico AND cal_localidad=@IdLocalidad AND CAST(cal_fecha AS date)=CAST(@Fecha AS date) AND TRY_CONVERT(time,cal_desde)<TRY_CONVERT(time,@HoraFin) AND TRY_CONVERT(time,CASE WHEN cal_hasta='24:00' THEN '23:59:59' ELSE cal_hasta END)>TRY_CONVERT(time,@HoraInicio)",x);

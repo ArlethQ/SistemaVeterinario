@@ -23,4 +23,16 @@
 
 <div id="blazor-error-ui" data-nosnippet>Ha ocurrido un error inesperado. <a href="." class="reload">Recargar</a><span class="dismiss">🗙</span></div>
 
-@code { private void CerrarSesion() { Session.Logout(); Nav.NavigateTo("/login"); } }
+@code {
+    protected override void OnParametersSet()
+    {
+        if (!Session.ValidateAndTouch())
+            Nav.NavigateTo("/login");
+    }
+
+    private void CerrarSesion()
+    {
+        Session.Logout();
+        Nav.NavigateTo("/login");
+    }
+}

@@ -1,6 +1,24 @@
-﻿<Router AppAssembly="typeof(Program).Assembly">
+@inject SessionStateService Session
+
+<Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        @if (IsPublicPage(routeData.PageType) || Session.ValidateAndTouch())
+        {
+            <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        }
+        else
+        {
+            <RedirectToLogin />
+        }
     </Found>
 </Router>
+
+@code {
+    private static bool IsPublicPage(Type pageType) => pageType == typeof(Pages.Landing)
+        || pageType == typeof(Pages.Login)
+        || pageType == typeof(Pages.OlvideContrasena)
+        || pageType == typeof(Pages.RecuperarContrasena)
+        || pageType == typeof(Pages.Registro)
+        || pageType == typeof(Pages.Error);
+}

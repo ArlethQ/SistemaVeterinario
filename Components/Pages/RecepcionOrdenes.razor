@@ -2,6 +2,8 @@
 @using HosvetKardex.Web.Models
 @using HosvetKardex.Web.Services
 @inject IAdmisionFacturacionService AdmisionService
+@inject IReportExportService ReportService
+@inject IJSRuntime JS
 @inject SessionStateService SessionState
 @inject NavigationManager NavManager
 @inject IWebHostEnvironment Env
@@ -22,6 +24,8 @@
             </div>
         </div>
         <div class="d-flex gap-2">
+            <button class="btn btn-outline-danger btn-sm" @onclick="ExportarPdfAsync">PDF</button>
+            <button class="btn btn-outline-success btn-sm" @onclick="ExportarExcelAsync">Excel</button>
             <button type="button" class="btn btn-success btn-sm" @onclick="AbrirFormularioOrden">+ Nueva orden</button>
             <a href="/admision/clientes-pacientes" class="btn btn-outline-primary btn-sm">
                 <i class="bi bi-people me-1"></i>Clientes / Mascotas
@@ -295,6 +299,8 @@
                                                 <a href="/facturacion/proformas?ordenId=@o.IdOrden" class="btn btn-outline-success" title="Gestionar proforma">
                                                     $
                                                 </a>
+                                                <button class="btn btn-outline-secondary" title="Cambiar médico/especialidad" @onclick="()=>AbrirCambioAsignacion(o)">Asignar</button>
+                                                <button class="btn btn-outline-danger" title="Anular orden" @onclick="()=>AnularOrdenAsync(o.IdOrden)">Anular</button>
                                             </div>
                                         </td>
                                     </tr>
@@ -327,6 +333,11 @@
             }
         </div>
     </section>
+
+    @if (_ordenCambio is not null)
+    {
+        <div class="order-drawer-backdrop"></div><div class="order-drawer"><div class="card"><div class="card-header"><strong>Cambiar asignación de orden #@_ordenCambio.IdOrden</strong></div><div class="card-body"><label>Especialidad</label><select class="form-select" value="@_cambioEspecialidad" @onchange="CambiarEspecialidadCambioAsync">@foreach(var e in _especialidades){<option value="@e.Id">@e.Descripcion</option>}</select><label class="mt-2">Médico</label><select class="form-select" @bind="_cambioMedico">@foreach(var m in _medicosCambio){<option value="@m.Id">@m.Descripcion</option>}</select><div class="mt-3 d-flex gap-2"><button class="btn btn-secondary" @onclick="()=>_ordenCambio=null">Cancelar</button><button class="btn btn-primary" @onclick="GuardarCambioAsignacionAsync">Guardar cambio auditable</button></div></div></div></div>
+    }
 </div>
 
 @code {
@@ -337,6 +348,9 @@
     private List<ConteoMedicoEsperaDto> _conteoMedicos = new();
     private List<PacienteMascotaDto> _pacientesEncontrados = new();
     private List<OrdenAtencionResumenDto> _ordenes = new();
+    private OrdenAtencionResumenDto? _ordenCambio;
+    private List<CatalogoItemGenericoDto> _medicosCambio = new();
+    private int _cambioEspecialidad, _cambioMedico;
 
     private NuevaOrdenAtencionDto _nuevaOrden = new();
     private string _filtroPaciente = string.Empty;
@@ -477,6 +491,7 @@
             return;
         }
 
+        _nuevaOrden.IdLocalidad = SessionState.Localidad;
         int idUsuario = SessionState.UsuarioActual?.IdUsuario ?? 1;
         int idCreada = await AdmisionService.CrearOrdenAtencionAsync(_nuevaOrden, idUsuario, "127.0.0.1");
         await CargarOrdenesAsync();
@@ -506,6 +521,38 @@
         _ordenes = await AdmisionService.ObtenerOrdenesDelDiaAsync(_fechaConsulta, _filtroOrdenTexto, _filtroEtapa);
         _conteoMedicos = await AdmisionService.ObtenerConteoMedicosEsperaAsync(_fechaConsulta, 0);
     }
+
+    private async Task AbrirCambioAsignacion(OrdenAtencionResumenDto orden)
+    {
+        _ordenCambio = orden;
+        _cambioEspecialidad = _especialidades.FirstOrDefault(e => e.Descripcion == orden.Especialidad)?.Id ?? _especialidades.FirstOrDefault()?.Id ?? 1;
+        _medicosCambio = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(_cambioEspecialidad);
+        _cambioMedico = _medicosCambio.Any(m => m.Id == orden.IdMedico) ? orden.IdMedico : _medicosCambio.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private async Task CambiarEspecialidadCambioAsync(ChangeEventArgs e)
+    {
+        if(!int.TryParse(e.Value?.ToString(),out _cambioEspecialidad))return;
+        _medicosCambio=await AdmisionService.ObtenerMedicosPorEspecialidadAsync(_cambioEspecialidad);
+        _cambioMedico=_medicosCambio.FirstOrDefault()?.Id??0;
+    }
+
+    private async Task GuardarCambioAsignacionAsync()
+    {
+        if(_ordenCambio is null)return;
+        bool ok=await AdmisionService.CambiarAsignacionOrdenAsync(_ordenCambio.IdOrden,_cambioMedico,_cambioEspecialidad,SessionState.IdUser);
+        _esError=!ok;_mensajeAlerta=ok?"Asignación actualizada y auditada.":"No se pudo actualizar la asignación.";if(ok)_ordenCambio=null;await CargarOrdenesAsync();
+    }
+
+    private async Task AnularOrdenAsync(int idOrden)
+    {
+        bool confirmar=await JS.InvokeAsync<bool>("confirm",$"¿Anular la orden #{idOrden}?");if(!confirmar)return;
+        bool ok=await AdmisionService.AnularOrdenAsync(idOrden,SessionState.IdUser);_esError=!ok;_mensajeAlerta=ok?"Orden anulada.":"No se pudo anular la orden.";await CargarOrdenesAsync();
+    }
+
+    private async Task ExportarPdfAsync(){var bytes=ReportService.GenerarOrdenesAtencionPdf(_ordenes,_fechaConsulta,_fechaConsulta);await DescargarAsync(bytes,"application/pdf",$"Ordenes_{_fechaConsulta:yyyyMMdd}.pdf");}
+    private async Task ExportarExcelAsync(){var bytes=ReportService.GenerarOrdenesAtencionExcel(_ordenes,_fechaConsulta,_fechaConsulta);await DescargarAsync(bytes,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",$"Ordenes_{_fechaConsulta:yyyyMMdd}.xlsx");}
+    private async Task DescargarAsync(byte[] bytes,string mime,string nombre){var b64=Convert.ToBase64String(bytes);await JS.InvokeVoidAsync("eval",$"{{const a=document.createElement('a');a.href='data:{mime};base64,{b64}';a.download='{nombre}';a.click();}}");}
 
     private static string ObtenerColorHexTriaje(string color) => color switch
     {

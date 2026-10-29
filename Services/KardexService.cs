@@ -33,23 +33,6 @@ public class KardexService : IKardexService
     private static List<FuncionEnfermeriaDto>? _cacheFunciones;
     private static readonly ConcurrentDictionary<string, (DateTime Expira, PacienteHeaderDto Dto)> _cacheCabeceras = new();
 
-    private static readonly List<OrdenActivaResumenDto> _ordenesDemo =
-    [
-        new() { OrdenAtencionId = 24001, Nhcl = 5001, Paciente = "MAX", Cliente = "Mendoza Vintimilla Carlos Andrés", Especie = "Canino", Sexo = "Macho", Medico = "Dr. Gabriel Vintimilla", Especialidad = "Medicina Interna", FechaOrden = DateTime.Today, Estado = "A" },
-        new() { OrdenAtencionId = 24002, Nhcl = 5002, Paciente = "LUNA", Cliente = "Mendoza Vintimilla Carlos Andrés", Especie = "Felino", Sexo = "Hembra", Medico = "Dra. Valeria Andrade", Especialidad = "Consulta General", FechaOrden = DateTime.Today, Estado = "A" },
-        new() { OrdenAtencionId = 24003, Nhcl = 5003, Paciente = "ROCKY", Cliente = "Salazar Gómez María Fernanda", Especie = "Canino", Sexo = "Macho", Medico = "Dr. Sebastián Cordero", Especialidad = "Cirugía y Tejidos Blandos", FechaOrden = DateTime.Today, Estado = "A" },
-        new() { OrdenAtencionId = 24004, Nhcl = 9001, Paciente = "AMAZONA FARINOSA #42", Cliente = "Ministerio del Ambiente (Silvestre)", Especie = "Ave Silvestre", Sexo = "Indefinido", Medico = "Dra. Carolina Páez", Especialidad = "Fauna Silvestre", FechaOrden = DateTime.Today, Estado = "A" }
-    ];
-
-    private static readonly List<ProductoUtilizadoDto> _productosDemo =
-    [
-        new() { Id = 1, Orden = 24001, Nhcl = 5001, Codigo = "MED-OME-40", Producto = "OMEPRAZOL 40MG FRASCO AMPOLLA", Cantidad = 1, Precio = 6.50m, Indicaciones = "1 mg/kg cada 12 horas diluido lento", Via = "INTRAVENOSA (IV)", Fecha = DateTime.Today.ToString("yyyy-MM-dd"), FechaRaw = DateTime.Today, Hora = "08:00", Iniciales = "GV", Funcion = "MEDICO", Funcionario = "Dr. Gabriel Vintimilla", Bodega = "HOSP" },
-        new() { Id = 2, Orden = 24001, Nhcl = 5001, Codigo = "MED-OME-40", Producto = "OMEPRAZOL 40MG FRASCO AMPOLLA", Cantidad = 1, Precio = 6.50m, Indicaciones = "1 mg/kg cada 12 horas diluido lento", Via = "INTRAVENOSA (IV)", Fecha = DateTime.Today.ToString("yyyy-MM-dd"), FechaRaw = DateTime.Today, Hora = "20:00", Iniciales = "VA", Funcion = "ENFERMERA", Funcionario = "Dra. Valeria Andrade", Bodega = "HOSP" },
-        new() { Id = 3, Orden = 24001, Nhcl = 5001, Codigo = "MED-AMP-SUL", Producto = "AMPICILINA + SULBACTAM 1.5G IV", Cantidad = 1, Precio = 11.20m, Indicaciones = "22 mg/kg cada 8 horas IV lento", Via = "INTRAVENOSA (IV)", Fecha = DateTime.Today.ToString("yyyy-MM-dd"), FechaRaw = DateTime.Today, Hora = "08:30", Iniciales = "GV", Funcion = "MEDICO", Funcionario = "Dr. Gabriel Vintimilla", Bodega = "HOSP" },
-        new() { Id = 4, Orden = 24001, Nhcl = 5001, Codigo = "MED-AMP-SUL", Producto = "AMPICILINA + SULBACTAM 1.5G IV", Cantidad = 1, Precio = 11.20m, Indicaciones = "22 mg/kg cada 8 horas IV lento", Via = "INTRAVENOSA (IV)", Fecha = DateTime.Today.ToString("yyyy-MM-dd"), FechaRaw = DateTime.Today, Hora = "16:30", Iniciales = "VA", Funcion = "ENFERMERA", Funcionario = "Dra. Valeria Andrade", Bodega = "HOSP" },
-        new() { Id = 5, Orden = 24001, Nhcl = 5001, Codigo = "MED-MEL-05", Producto = "MELOXICAM INYECTABLE 0.5% 10ML", Cantidad = 1, Precio = 8.40m, Indicaciones = "0.1 mg/kg cada 24 horas control dolor", Via = "SUBCUTANEA (SC)", Fecha = DateTime.Today.ToString("yyyy-MM-dd"), FechaRaw = DateTime.Today, Hora = "10:00", Iniciales = "SC", Funcion = "MEDICO", Funcionario = "Dr. Sebastián Cordero", Bodega = "HOSP" }
-    ];
-
     public KardexService(ISqlDataService sql, IInventarioService inventarioService, ILogger<KardexService> logger)
     {
         _sql = sql;
@@ -95,27 +78,18 @@ public class KardexService : IKardexService
                 ORDER BY o.ordenAten_id DESC";
 
             var lista = (await _sql.QueryAsync<OrdenActivaResumenDto>(sql, new { Filtro = $"%{filtro?.Trim()}%" })).ToList();
-            if (lista.Count > 0)
+            if (sinFiltro)
             {
-                if (sinFiltro)
-                {
-                    _cacheOrdenesActivas = lista;
-                    _cacheOrdenesExpira = DateTime.UtcNow.AddSeconds(90);
-                }
-                return lista;
+                _cacheOrdenesActivas = lista;
+                _cacheOrdenesExpira = DateTime.UtcNow.AddSeconds(90);
             }
+            return lista;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Modo Demo activo en ObtenerOrdenesActivasAsync.");
+            _logger.LogError(ex, "Error consultando las órdenes activas en SQL Server.");
+            throw;
         }
-
-        if (sinFiltro) return _ordenesDemo.ToList();
-        return _ordenesDemo.Where(o =>
-            o.Paciente.Contains(filtro!, StringComparison.OrdinalIgnoreCase) ||
-            o.Cliente.Contains(filtro!, StringComparison.OrdinalIgnoreCase) ||
-            o.OrdenAtencionId.ToString().Contains(filtro!) ||
-            o.Nhcl.ToString().Contains(filtro!)).ToList();
     }
 
     public async Task<PacienteHeaderDto?> ObtenerCabeceraPacienteAsync(int ordenId, int nhcl)
@@ -183,50 +157,10 @@ public class KardexService : IKardexService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error en ObtenerCabeceraPacienteAsync Orden={OrdenId} NHCL={Nhcl}", ordenId, nhcl);
+            _logger.LogError(ex, "Error en ObtenerCabeceraPacienteAsync Orden={OrdenId} NHCL={Nhcl}", ordenId, nhcl);
+            throw;
         }
-
-        var demo = _ordenesDemo.FirstOrDefault(o => o.Nhcl == nhcl || o.OrdenAtencionId == ordenId);
-        if (demo is not null)
-        {
-            return new PacienteHeaderDto
-            {
-                Nhcl = demo.Nhcl,
-                OrdenAtencionId = demo.OrdenAtencionId,
-                PacienteNombre = demo.Paciente,
-                ClienteNombre = demo.Cliente,
-                ClienteCedula = "1718293045",
-                ClienteCodigo = 101,
-                Sexo = demo.Sexo,
-                Especie = demo.Especie,
-                Raza = demo.Especie == "Canino" ? "Golden Retriever" : "Europeo Pelo Corto",
-                Origen = demo.Nhcl >= 9000 ? "Silvestre" : "Doméstico",
-                FechaNacimiento = DateTime.Today.AddYears(-4),
-                EdadAnios = 4,
-                EdadMeses = 2,
-                MedicoResponsable = demo.Medico,
-                Cierre = "N"
-            };
-        }
-
-        return new PacienteHeaderDto
-        {
-            Nhcl = nhcl > 0 ? nhcl : 1,
-            OrdenAtencionId = ordenId > 0 ? ordenId : 1,
-            PacienteNombre = ordenId > 0 ? $"Paciente Orden #{ordenId}" : "Paciente",
-            ClienteNombre = "Sin Propietario Registrado",
-            ClienteCedula = "",
-            ClienteCodigo = 0,
-            Sexo = "Indefinido",
-            Especie = "Canino",
-            Raza = "Mestizo",
-            Origen = "Doméstico",
-            FechaNacimiento = DateTime.Today.AddYears(-2),
-            EdadAnios = 2,
-            EdadMeses = 0,
-            MedicoResponsable = "Médico de Turno",
-            Cierre = "N"
-        };
+        return null;
     }
 
     public async Task<List<ViaAdministracionDto>> ObtenerViasAdministracionAsync()
@@ -346,17 +280,13 @@ public class KardexService : IKardexService
                 WHERE ordenId = @OrdenId AND (modulo = @Modulo OR modulo = 'EnfermeriaIng' OR @Modulo = '' OR @Modulo IS NULL)
                 ORDER BY fecha DESC, hora DESC, proddescripcion";
 
-            var res = (await _sql.QueryAsync<ProductoUtilizadoDto>(sql, new { OrdenId = ordenId, Modulo = modulo })).ToList();
-            if (res.Count > 0) return res;
+            return (await _sql.QueryAsync<ProductoUtilizadoDto>(sql, new { OrdenId = ordenId, Modulo = modulo })).ToList();
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error en ObtenerProductosUtilizadosAsync de la orden {OrdenId}", ordenId);
+            _logger.LogError(ex, "Error en ObtenerProductosUtilizadosAsync de la orden {OrdenId}", ordenId);
+            throw;
         }
-
-        // Si es la orden de demostración 24001, retornamos los demo; si es cualquier otra orden real, retornamos lista vacía para no mezclar pacientes
-        var itemsOrden = _productosDemo.Where(p => p.Orden == ordenId).ToList();
-        return itemsOrden;
     }
 
     public async Task<(bool Exito, string Mensaje)> RegistrarAdministracionMedicamentoAsync(
@@ -451,10 +381,12 @@ public class KardexService : IKardexService
                 return (true, "Registro eliminado y reserva de stock liberada con éxito.");
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error eliminando el registro de Kardex {IdRegistro}", idRegistro);
+        }
 
-        _productosDemo.RemoveAll(p => p.Id == idRegistro);
-        return (true, "Registro eliminado del Kardex.");
+        return (false, "No se pudo eliminar el registro del Kardex en la base de datos.");
     }
 
     public async Task<List<KardexSabanaItemDto>> ConstruirSabanaKardex5DiasAsync(

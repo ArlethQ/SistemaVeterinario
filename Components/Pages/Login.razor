@@ -23,12 +23,15 @@
                 <label>Localidad / Sucursal<select @bind="_localidad"><option value="1">Hospital de Especialidades Veterinarias</option><option value="2">Clínica Equina / Fauna Silvestre</option></select></label>
                 <button type="submit" disabled="@_cargando">@(_cargando ? "Validando credenciales..." : "Ingresar")</button>
             </form>
-            <p class="register-prompt">¿Aún no tienes una cuenta? <a href="/registro">Regístrate</a></p>
+            <p class="register-prompt">Las cuentas son administradas por personal autorizado.</p>
         </div>
     </section>
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnUrl { get; set; }
+
     private string _username = string.Empty;
     private string _password = string.Empty;
     private int _localidad = 1;
@@ -37,8 +40,18 @@
     private bool _mostrarClave;
     private async Task IngresarAsync() {
         _mensajeError = null; _cargando = true;
-        try { var resultado = await AuthService.LoginAsync(_username, _password, _localidad); if (!resultado.Exito) { _mensajeError = resultado.Mensaje; return; } Nav.NavigateTo("/dashboard"); }
-        catch (Exception ex) { _mensajeError = $"Error al conectar con el servidor: {ex.Message}"; }
+        try
+        {
+            var resultado = await AuthService.LoginAsync(_username, _password, _localidad);
+            if (!resultado.Exito) { _mensajeError = resultado.Mensaje; return; }
+            Nav.NavigateTo(EsRutaLocalSegura(ReturnUrl) ? ReturnUrl! : "/dashboard");
+        }
+        catch { _mensajeError = "No fue posible iniciar sesión. Inténtalo nuevamente más tarde."; }
         finally { _cargando = false; }
     }
+
+    private static bool EsRutaLocalSegura(string? ruta) => !string.IsNullOrWhiteSpace(ruta)
+        && ruta.StartsWith('/')
+        && !ruta.StartsWith("//", StringComparison.Ordinal)
+        && !ruta.Contains("\\", StringComparison.Ordinal);
 }

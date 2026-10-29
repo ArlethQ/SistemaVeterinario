@@ -36,7 +36,7 @@ public class GrupoLaboratorioCatalogoDto
 public class PruebaCatalogoDto
 {
     public string CodigoProd { get; set; } = string.Empty;
-    public string IdDynamics { get; set; } = string.Empty;
+    public string IdEfact { get; set; } = string.Empty;
     public string Descripcion { get; set; } = string.Empty;
     public int GrupoId { get; set; }
     public string Categoria { get; set; } = "LAB"; // LAB, RX, ECOS
@@ -62,7 +62,7 @@ public class OrdenLaboratorioItemDto
     public string Prioridad { get; set; } = "Rutina"; // Rutina, Emergente (labO_tipo)
     public DateTime Fecha { get; set; } = DateTime.Today;
     public string Iva { get; set; } = string.Empty;
-    public string IdDynamics { get; set; } = string.Empty;
+    public string IdEfact { get; set; } = string.Empty;
     public string Medida { get; set; } = "UND";
     public decimal Precio { get; set; }
     public int? IdEvolucion { get; set; }
@@ -83,7 +83,7 @@ public class OrdenImagenItemDto
     public string Estado { get; set; } = "Por Facturar"; // Por Facturar, POR REALIZAR, REALIZADO
     public DateTime Fecha { get; set; } = DateTime.Today;
     public string Iva { get; set; } = string.Empty;
-    public string IdDynamics { get; set; } = string.Empty;
+    public string IdEfact { get; set; } = string.Empty;
     public string Medida { get; set; } = "UND";
     public decimal Precio { get; set; }
     public int? IdEvolucion { get; set; }

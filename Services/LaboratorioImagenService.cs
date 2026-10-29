@@ -62,7 +62,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
             const string sql = @"
                 SELECT TOP 80
                     CAST(lab_id AS VARCHAR(30)) AS CodigoProd,
-                    RTRIM(ISNULL(NULLIF(RTRIM(lab_fenix), ''), CAST(lab_id AS VARCHAR(30)))) AS IdDynamics,
+                    RTRIM(ISNULL(NULLIF(RTRIM(lab_fenix), ''), CAST(lab_id AS VARCHAR(30)))) AS IdEfact,
                     RTRIM(ISNULL(lab_descripcion, 'Prueba de Laboratorio')) AS Descripcion,
                     CAST(ISNULL(lab_grupo, 1) AS INT) AS GrupoId,
                     'LAB' AS Categoria,
@@ -136,7 +136,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
             const string sql = @"
                 SELECT TOP 60
                     CAST(prod_id AS VARCHAR(50)) AS CodigoProd,
-                    RTRIM(ISNULL(NULLIF(RTRIM(prod_fenix), ''), CAST(prod_id AS VARCHAR(50)))) AS IdDynamics,
+                    RTRIM(ISNULL(NULLIF(RTRIM(prod_fenix), ''), CAST(prod_id AS VARCHAR(50)))) AS IdEfact,
                     RTRIM(ISNULL(prod_descripcion, 'Estudio de Imagen')) AS Descripcion,
                     0 AS GrupoId,
                     CASE WHEN prod_descripcion LIKE '%ECO%' THEN 'ECOS' ELSE 'RX' END AS Categoria,
@@ -206,7 +206,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 RTRIM(ISNULL(l.labO_tipo, 'Rutina')) AS Prioridad,
                 ISNULL(l.labO_fecha, GETDATE()) AS Fecha,
                 'IVA0' AS Iva,
-                RTRIM(ISNULL(pl.lab_fenix, CAST(ISNULL(l.labO_idProdu, 0) AS VARCHAR(50)))) AS IdDynamics,
+                RTRIM(ISNULL(pl.lab_fenix, CAST(ISNULL(l.labO_idProdu, 0) AS VARCHAR(50)))) AS IdEfact,
                 'UND' AS Medida,
                 CAST(15.00 AS DECIMAL(18,2)) AS Precio,
                 l.labO_evolucion AS IdEvolucion
@@ -303,7 +303,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 RTRIM(ISNULL(r.rxO_estado, 'Por Facturar')) AS Estado,
                 ISNULL(r.rxO_fecha, GETDATE()) AS Fecha,
                 'IVA0' AS Iva,
-                RTRIM(ISNULL(pr.prod_fenix, CAST(CAST(ISNULL(r.rxO_idProdu, 0) AS INT) AS VARCHAR(50)))) AS IdDynamics,
+                RTRIM(ISNULL(pr.prod_fenix, CAST(CAST(ISNULL(r.rxO_idProdu, 0) AS INT) AS VARCHAR(50)))) AS IdEfact,
                 'UND' AS Medida,
                 CAST(35.00 AS DECIMAL(18,2)) AS Precio,
                 r.rxO_evolucion AS IdEvolucion

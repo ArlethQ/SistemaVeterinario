@@ -28,6 +28,7 @@ public class ClienteDto
     [EmailAddress(ErrorMessage = "Formato de correo electrónico inválido.")]
     public string PaEmail { get; set; } = string.Empty;
 
+    [EmailAddress(ErrorMessage = "Formato de correo de facturación inválido.")]
     public string PaEmailFactura { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "La dirección domiciliaria es obligatoria.")]
@@ -39,12 +40,12 @@ public class ClienteDto
     public string PaTipoCli { get; set; } = "R"; // R=Regular, C=Convenio, E=Empleado
     public string PaDocumento { get; set; } = "CEDULA"; // CEDULA, RUC, PASAPORTE
     public string PaNotas { get; set; } = string.Empty;
-    public string PaGrupoCliente { get; set; } = "NAC"; // NAC=Nacionales
+    public string PaGrupoCliente { get; set; } = "CL-LOC";
     public string PaTerminosPago { get; set; } = "CONTADO";
     public string PaTipoPersona { get; set; } = "NATURAL"; // NATURAL, JURIDICA
-    public string PaGenero { get; set; } = "M";
+    public string PaGenero { get; set; } = "1";
     public string PaFormaPago { get; set; } = "EFECTIVO";
-    public string PaEstadoCivil { get; set; } = "SOLTERO";
+    public string PaEstadoCivil { get; set; } = "1";
 
     public string NombreCompleto => $"{PaApellidos} {PaNombres}".Trim();
 }
@@ -77,12 +78,16 @@ public class PacienteMascotaDto
     public string ColorDescripcion { get; set; } = string.Empty;
 
     public string MasOtros { get; set; } = string.Empty;
+    public string MasMicrochip { get; set; } = string.Empty;
     public DateTime MasFechaNace { get; set; } = DateTime.Today.AddYears(-1);
     public string MasObservacion { get; set; } = string.Empty;
     public string MasEstado { get; set; } = "A";
 
     // Triaje / Temperamento ('green', 'yellow', 'red')
     public string MasColorTriaje { get; set; } = "green";
+    public bool Fallecido { get; set; }
+    public DateTime? FechaFallecido { get; set; }
+    public int? MotivoFallece { get; set; }
 
     // Campos exclusivos TUERI (Fauna Silvestre)
     public int? TueClase { get; set; }
@@ -93,7 +98,7 @@ public class PacienteMascotaDto
     public string TueOtraCategoria { get; set; } = string.Empty;
     public int? TueFormaObtencion { get; set; }
     public string TueOtraObtencion { get; set; } = string.Empty;
-    public int? TueRegion { get; set; }
+    public string TueRegion { get; set; } = string.Empty;
     public string TueSectorBarrio { get; set; } = string.Empty;
     public int? TueProvincia { get; set; }
     public int? TueCiudad { get; set; }
@@ -216,6 +221,7 @@ public class CitaMedicaDto
     public string CiTelefono { get; set; } = string.Empty;
     public string CiEmail { get; set; } = string.Empty;
     public string CiObservacion { get; set; } = string.Empty;
+    public string CiMotivoCancelacion { get; set; } = string.Empty;
     public int CiLocalidad { get; set; } = 1;
     public int CiUsuario { get; set; } // Médico asignado
     public string NombreMedico { get; set; } = string.Empty;
