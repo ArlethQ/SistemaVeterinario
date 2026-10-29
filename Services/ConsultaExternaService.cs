@@ -272,7 +272,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 RTRIM(ISNULL(d.dig_codigoDiag, '')) AS CodigoDiag,
                 RTRIM(ISNULL(c.cie_diagnostico, ISNULL(CAST(d.dig_descripcion AS VARCHAR(MAX)), ''))) AS NombreCie10,
                 RTRIM(ISNULL(CAST(d.dig_descripcion AS VARCHAR(MAX)), '')) AS DescripcionObservacion,
-                RTRIM(ISNULL(d.dig_tipo, 'Definitivo')) AS TipoDiag
+                CASE WHEN RTRIM(ISNULL(d.dig_tipo, 'D')) = 'P' THEN 'Presuntivo' ELSE 'Definitivo' END AS TipoDiag
             FROM vt_diagnosticos d
             LEFT JOIN vt_cie10 c ON CAST(c.cie_codigo AS VARCHAR(20)) = RTRIM(d.dig_codigoDiag)
             WHERE d.dig_id_orden = @IdOrden
@@ -284,11 +284,22 @@ public class ConsultaExternaService : IConsultaExternaService
 
     public async Task<bool> AgregarDiagnosticoOrdenAsync(DiagnosticoCie10Dto diag)
     {
+        string tipoChar = (diag.TipoDiag?.Trim().ToUpper().StartsWith("P") == true) ? "P" : "D";
+        string cod = diag.CodigoDiag?.Trim() ?? "";
+        if (cod.Length > 10) cod = cod.Substring(0, 10);
+
         const string sql = @"
             INSERT INTO vt_diagnosticos (dig_nhcl, dig_codigoDiag, dig_id_orden, dig_descripcion, dig_tipo)
-            VALUES (@Nhcl, @CodigoDiag, @IdOrden, @DescripcionObservacion, @TipoDiag)";
+            VALUES (@Nhcl, @CodigoDiag, @IdOrden, @DescripcionObservacion, @TipoChar)";
 
-        await _db.ExecuteAsync(sql, diag);
+        await _db.ExecuteAsync(sql, new
+        {
+            diag.Nhcl,
+            CodigoDiag = cod,
+            diag.IdOrden,
+            DescripcionObservacion = diag.DescripcionObservacion?.Trim() ?? "",
+            TipoChar = tipoChar
+        });
         return true;
     }
 

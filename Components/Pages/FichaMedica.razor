@@ -853,18 +853,55 @@
 
     private async Task AgregarDiagnosticoAsync()
     {
-        if (string.IsNullOrWhiteSpace(NuevoDiagnostico.CodigoDiag)) return;
-        NuevoDiagnostico.IdOrden = Ficha.MedOrden;
-        NuevoDiagnostico.Nhcl = Ficha.MedNhcl;
-        await ConsultaService.AgregarDiagnosticoOrdenAsync(NuevoDiagnostico);
-        NuevoDiagnostico = new DiagnosticoCie10Dto();
-        Diagnosticos = await ConsultaService.ObtenerDiagnosticosOrdenAsync(Ficha.MedOrden);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(NuevoDiagnostico.CodigoDiag))
+            {
+                EsError = true;
+                MensajeAlerta = "Por favor seleccione o ingrese un c?digo de diagn?stico CIE-10.";
+                return;
+            }
+
+            int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+            int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
+
+            if (ordenTarget <= 0)
+            {
+                EsError = true;
+                MensajeAlerta = "No hay una orden activa seleccionada para vincular el diagn?stico.";
+                return;
+            }
+
+            NuevoDiagnostico.IdOrden = ordenTarget;
+            NuevoDiagnostico.Nhcl = nhclTarget;
+            await ConsultaService.AgregarDiagnosticoOrdenAsync(NuevoDiagnostico);
+            NuevoDiagnostico = new DiagnosticoCie10Dto { TipoDiag = "Definitivo" };
+            Diagnosticos = await ConsultaService.ObtenerDiagnosticosOrdenAsync(ordenTarget);
+            EsError = false;
+            MensajeAlerta = "Diagn?stico CIE-10 agregado correctamente.";
+        }
+        catch (Exception ex)
+        {
+            EsError = true;
+            MensajeAlerta = $"Error al registrar diagn?stico: {ex.Message}";
+        }
     }
 
     private async Task EliminarDiagnosticoAsync(int sec)
     {
-        await ConsultaService.EliminarDiagnosticoOrdenAsync(sec);
-        Diagnosticos = await ConsultaService.ObtenerDiagnosticosOrdenAsync(Ficha.MedOrden);
+        try
+        {
+            int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+            await ConsultaService.EliminarDiagnosticoOrdenAsync(sec);
+            Diagnosticos = await ConsultaService.ObtenerDiagnosticosOrdenAsync(ordenTarget);
+            EsError = false;
+            MensajeAlerta = "Diagn?stico eliminado correctamente.";
+        }
+        catch (Exception ex)
+        {
+            EsError = true;
+            MensajeAlerta = $"Error al eliminar diagn?stico: {ex.Message}";
+        }
     }
 
     private async Task AgregarAntecedenteAsync()
