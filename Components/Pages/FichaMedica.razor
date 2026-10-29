@@ -1,4 +1,4 @@
-@page "/consulta/fichamedica"
+﻿@page "/consulta/fichamedica"
 @page "/consulta/fichamedica/{IdOrden:int}/{Nhcl:int}"
 @page "/consulta/fichamedica/paciente/{Nhcl:int}"
 @inject IConsultaExternaService ConsultaService
@@ -351,7 +351,10 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">Próximo Control Sugerido</label>
-                        <input type="date" class="form-control form-control-sm" @bind="Ficha.MedFechaControl" />
+                        <input type="date" class="form-control form-control-sm"
+                               min="@DateTime.Today.ToString("yyyy-MM-dd")"
+                               value="@(Ficha.MedFechaControl?.ToString("yyyy-MM-dd"))"
+                               @onchange="OnFechaControlChanged" />
                     </div>
                 </div>
             </div>
@@ -789,6 +792,28 @@
         Vacunas = await tVac;
     }
 
+    private void OnFechaControlChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+        {
+            if (dt.Date < DateTime.Today)
+            {
+                EsError = true;
+                MensajeAlerta = "La fecha de próximo control sugerido no puede ser anterior al día de hoy.";
+                Ficha.MedFechaControl = DateTime.Today;
+            }
+            else
+            {
+                Ficha.MedFechaControl = dt.Date;
+                MensajeAlerta = null;
+            }
+        }
+        else
+        {
+            Ficha.MedFechaControl = null;
+        }
+    }
+
     private void SeleccionarTemperamento(string temperamento, string rutaImagen)
     {
         Ficha.Temperamento = temperamento;
@@ -827,6 +852,13 @@
         Ficha.FrecuenciaRespiratoria = Math.Max(0, Ficha.FrecuenciaRespiratoria);
         Ficha.TiempoLlenadoCapilar = Math.Max(0, Ficha.TiempoLlenadoCapilar);
         Ficha.Deshidratacion = Math.Clamp(Ficha.Deshidratacion, 0, 100);
+
+        if (Ficha.MedFechaControl.HasValue && Ficha.MedFechaControl.Value.Date < DateTime.Today)
+        {
+            EsError = true;
+            MensajeAlerta = "La fecha de próximo control sugerido no puede ser anterior al día de hoy.";
+            return;
+        }
 
         Guardando = true;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
