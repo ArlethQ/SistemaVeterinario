@@ -111,22 +111,22 @@
     <!-- Navegación por Pestañas Clínicas -->
     <ul class="nav nav-tabs mb-3 fw-semibold">
         <li class="nav-item">
-            <button class="nav-link @(TabActiva == 1 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => TabActiva = 1">
+            <button class="nav-link @(TabActiva == 1 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(1)">
                 <i class="bi bi-heart-pulse me-1"></i>1. Examen Físico, Constantes y Temperamento
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(TabActiva == 2 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => TabActiva = 2">
+            <button class="nav-link @(TabActiva == 2 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(2)">
                 <i class="bi bi-journal-medical me-1"></i>2. Evaluación Clínica SOAP & Plan
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(TabActiva == 3 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => TabActiva = 3">
+            <button class="nav-link @(TabActiva == 3 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(3)">
                 <i class="bi bi-tags-fill me-1"></i>3. Diagnósticos CIE-10 (@Diagnosticos.Count) y Prescripción (@RecetaItems.Count)
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(TabActiva == 4 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => TabActiva = 4">
+            <button class="nav-link @(TabActiva == 4 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(4)">
                 <i class="bi bi-shield-plus me-1"></i>4. Antecedentes (@Antecedentes.Count) y Carnet Vacunas (@Vacunas.Count)
             </button>
         </li>
@@ -578,7 +578,10 @@
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small fw-semibold">Próx. Refuerzo</label>
-                                <input type="date" class="form-control form-control-sm" @bind="NuevaVacuna.FechaRevacunacion" />
+                                <input type="date" class="form-control form-control-sm"
+                                       min="@DateTime.Today.ToString("yyyy-MM-dd")"
+                                       value="@(NuevaVacuna.FechaRevacunacion?.ToString("yyyy-MM-dd"))"
+                                       @onchange="OnFechaRevacunacionChanged" />
                             </div>
                             <div class="col-md-2 d-flex align-items-end">
                                 <button class="btn btn-sm btn-success w-100" @onclick="AgregarVacunaAsync">
@@ -766,8 +769,17 @@
         }
     }
 
+    private void SeleccionarTab(int tab)
+    {
+        TabActiva = tab;
+        MensajeAlerta = null;
+        EsError = false;
+    }
+
     private async Task CargarDatosCompletosAsync()
     {
+        MensajeAlerta = null;
+        EsError = false;
         Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
         if (Paciente != null && Nhcl <= 0)
         {
@@ -813,6 +825,28 @@
         else
         {
             Ficha.MedFechaControl = null;
+        }
+    }
+
+    private void OnFechaRevacunacionChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+        {
+            if (dt.Date < DateTime.Today)
+            {
+                EsError = true;
+                MensajeAlerta = "La fecha de próximo refuerzo no puede ser anterior al día de hoy.";
+                NuevaVacuna.FechaRevacunacion = DateTime.Today;
+            }
+            else
+            {
+                NuevaVacuna.FechaRevacunacion = dt.Date;
+                MensajeAlerta = null;
+            }
+        }
+        else
+        {
+            NuevaVacuna.FechaRevacunacion = null;
         }
     }
 
@@ -955,11 +989,21 @@
         await ConsultaService.AgregarAntecedenteAsync(NuevoAntecedente, idUser, clienteTarget);
         NuevoAntecedente = new AntecedenteClinicoDto();
         Antecedentes = await ConsultaService.ObtenerAntecedentesPacienteAsync(nhclTarget);
+        EsError = false;
+        MensajeAlerta = null;
     }
 
     private async Task AgregarVacunaAsync()
     {
         if (string.IsNullOrWhiteSpace(NuevaVacuna.ObservacionVacuna)) return;
+
+        if (NuevaVacuna.FechaRevacunacion.HasValue && NuevaVacuna.FechaRevacunacion.Value.Date < DateTime.Today)
+        {
+            EsError = true;
+            MensajeAlerta = "La fecha de próximo refuerzo no puede ser anterior al día de hoy.";
+            return;
+        }
+
         int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
         int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
         int clienteTarget = Ficha.MedCliente > 0 ? Ficha.MedCliente : (Paciente?.ClienteCodigo ?? 0);
@@ -970,6 +1014,8 @@
         await ConsultaService.AgregarVacunaAsync(NuevaVacuna, idUser, clienteTarget);
         NuevaVacuna = new VacunaPacienteDto();
         Vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(nhclTarget);
+        EsError = false;
+        MensajeAlerta = null;
     }
 
     private async Task EliminarVacunaAsync(int vacunaId)
@@ -978,6 +1024,8 @@
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
         await ConsultaService.EliminarVacunaAsync(vacunaId, idUser);
         Vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(nhclTarget);
+        EsError = false;
+        MensajeAlerta = null;
     }
 
     private async Task ExportarPdfAsync()
