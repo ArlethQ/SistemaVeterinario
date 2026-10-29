@@ -1146,23 +1146,42 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<bool> ReagendarCitaAsync(int idCita, DateTime fecha, string hora, int idMedico, int idLocalidad, int idUsuario)
     {
-        if (idCita <= 0 || idMedico <= 0 || idLocalidad <= 0 || !TimeSpan.TryParse(hora, out _)) return false;
+        if (idCita <= 0 || idMedico <= 0 || idLocalidad <= 0 || !TimeSpan.TryParse(hora, out var horaNueva)) return false;
+        string horaNormalizada = $"{horaNueva.Hours:D2}:{horaNueva.Minutes:D2}";
         int cruces = await _db.ExecuteScalarAsync<int>(@"SELECT COUNT(1) FROM vt_citas
             WHERE ci_id<>@IdCita AND ci_usuario=@IdMedico AND ci_localidad=@IdLocalidad
               AND CAST(ci_fecha AS date)=@Fecha AND LEFT(RTRIM(ci_hora),5)=LEFT(@Hora,5) AND ISNULL(ci_estado,'A')='A'",
-            new { IdCita = idCita, IdMedico = idMedico, IdLocalidad = idLocalidad, Fecha = fecha.Date, Hora = hora });
+            new { IdCita = idCita, IdMedico = idMedico, IdLocalidad = idLocalidad, Fecha = fecha.Date, Hora = horaNormalizada });
         if (cruces > 0) return false;
         var columnas = await ObtenerColumnasTablaAsync("vt_citas");
-        var adicionales = new List<string>();
-        if (columnas.Contains("ci_refeliminacion")) adicionales.Add("ci_refeliminacion='Reagendamiento'");
+        var adicionales = new List<string> { "ci_estadocita='N'" };
         if (columnas.Contains("ci_HoraModificacion")) adicionales.Add("ci_HoraModificacion=GETDATE()");
         if (columnas.Contains("ci_usuarioPrincipal")) adicionales.Add("ci_usuarioPrincipal=@IdUsuario");
-        string extra = adicionales.Count == 0 ? string.Empty : "," + string.Join(',', adicionales);
+        string extra = "," + string.Join(',', adicionales);
         int rows = await _db.ExecuteAsync($@"UPDATE vt_citas SET ci_fecha=@Fecha,ci_hora=@Hora,ci_usuario=@IdMedico,
-            ci_localidad=@IdLocalidad,ci_estado='A'{extra} WHERE ci_id=@IdCita",
-            new { IdCita = idCita, Fecha = fecha.Date, Hora = hora, IdMedico = idMedico, IdLocalidad = idLocalidad, IdUsuario = idUsuario });
-        if (rows > 0) await _db.RegistrarBitacoraAsync($"Reagendamiento de cita #{idCita} para {fecha:yyyy-MM-dd} {hora}", idUsuario);
-        return rows > 0;
+            ci_localidad=@IdLocalidad,ci_estado='A'{extra} WHERE ci_id=@IdCita AND ISNULL(ci_estado,'A')='A'",
+            new { IdCita = idCita, Fecha = fecha.Date, Hora = horaNormalizada, IdMedico = idMedico, IdLocalidad = idLocalidad, IdUsuario = idUsuario });
+        if (rows <= 0) return false;
+
+        var confirmacion = await _db.QueryFirstOrDefaultAsync<CitaMedicaDto>(@"
+            SELECT ci_id AS CiId, ci_fecha AS CiFecha, LEFT(RTRIM(ci_hora), 5) AS CiHora,
+                   ci_usuario AS CiUsuario, ci_localidad AS CiLocalidad, ci_estado AS CiEstado
+            FROM vt_citas
+            WHERE ci_id = @IdCita;", new { IdCita = idCita });
+        bool confirmado = confirmacion is not null &&
+                         confirmacion.CiFecha.Date == fecha.Date &&
+                         string.Equals(confirmacion.CiHora, horaNormalizada, StringComparison.Ordinal) &&
+                         confirmacion.CiUsuario == idMedico &&
+                         confirmacion.CiLocalidad == idLocalidad &&
+                         string.Equals(confirmacion.CiEstado, "A", StringComparison.OrdinalIgnoreCase);
+        if (!confirmado)
+        {
+            _logger.LogError("La actualización de reagendamiento de la cita {IdCita} no pudo verificarse.", idCita);
+            return false;
+        }
+
+        await _db.RegistrarBitacoraAsync($"Reagendamiento de cita #{idCita} para {fecha:yyyy-MM-dd} {horaNormalizada}", idUsuario);
+        return true;
     }
 
     public async Task<bool> CancelarCitaAsync(int idCita, string motivo, int idUsuario)
