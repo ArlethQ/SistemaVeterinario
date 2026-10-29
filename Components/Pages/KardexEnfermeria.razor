@@ -5,7 +5,7 @@
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject NavigationManager Nav
-@inject IJSRuntime JS@inject IWebHostEnvironment Environment
+@inject IJSRuntime JS
 
 <PageTitle>e-ForVets - Kardex de Enfermería (Administración de Medicamentos)</PageTitle>
 
@@ -149,7 +149,7 @@
                                 {
                                     <tr>
                                         <td class="text-center">
-                                            <button type="button" class="btn btn-sm @(prod.Inventory <= 0 ? "btn-warning" : "btn-success") py-0 px-2"                                                    disabled="@(prod.Inventory <= 0 && !Environment.IsDevelopment())"                                                    title="@(prod.Inventory <= 0 ? "Producto sin stock habilitado únicamente en pruebas" : "Seleccionar producto")"
+                                            <button type="button" class="btn btn-sm @(prod.Inventory <= 0 ? "btn-warning" : "btn-success") py-0 px-2"                                                    disabled="@(prod.Inventory <= 0)"                                                    title="@(prod.Inventory <= 0 ? "Producto sin stock disponible" : "Seleccionar producto")"
                                                     @onclick="() => SeleccionarProducto(prod)">
                                                 Seleccionar
                                             </button>
@@ -522,15 +522,7 @@ else
             Nhcl = header.Nhcl;
         }
 
-        _paciente = header ?? new PacienteHeaderDto
-        {
-            OrdenAtencionId = Orden,
-            Nhcl = Nhcl,
-            PacienteNombre = $"Paciente #{Nhcl}",
-            ClienteNombre = "Propietario e-ForVets",
-            Sexo = "Indefinido",
-            Especie = "Canino / Felino"
-        };
+        _paciente = header ?? new PacienteHeaderDto();        if (header is null || header.Nhcl <= 0)            MostrarAlerta("No se encontraron los datos reales del paciente para esta orden.", false);
 
         _registros = await tReg;
         _sabana = await tSab;
@@ -595,7 +587,7 @@ else
     private void SeleccionarProducto(FarmacoStockDto prod)
     {
         _alertaMensaje = null;
-        if (prod.Inventory <= 0 && !Environment.IsDevelopment())
+        if (prod.Inventory <= 0)
         {
             MostrarAlerta("No se puede seleccionar productos con stock 0.", false);
             return;
@@ -616,9 +608,10 @@ else
 
     private async Task GuardarAdministracionAsync()
     {
-        if (string.IsNullOrWhiteSpace(_formInput.CodigoProd))
+        if (_paciente.Nhcl <= 0 || string.IsNullOrWhiteSpace(_formInput.CodigoProd))
         {
-            _formInput.CodigoProd = "MAN-001";
+            MostrarAlerta("Seleccione una orden y un producto reales antes de guardar.", false);
+            return;
         }
 
         _guardando = true;
@@ -666,6 +659,11 @@ else
 
     private async Task DescargarPdfAsync()
     {
+        if (_paciente.Nhcl <= 0)
+        {
+            MostrarAlerta("No se puede exportar sin los datos reales del paciente.", false);
+            return;
+        }
         _exportando = true;
         _alertaMensaje = null;
         try
@@ -690,6 +688,11 @@ else
 
     private async Task DescargarExcelAsync()
     {
+        if (_paciente.Nhcl <= 0)
+        {
+            MostrarAlerta("No se puede exportar sin los datos reales del paciente.", false);
+            return;
+        }
         _exportando = true;
         _alertaMensaje = null;
         try
