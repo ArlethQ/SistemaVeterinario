@@ -362,3 +362,48 @@ public class ObservacionRecuperacionDto
     public int Usuario { get; set; }
     public string NombreUsuario { get; set; } = string.Empty;
 }
+
+// ============================================================================
+// 5. PAUSA DE SEGURIDAD Y LISTA DE CHEQUEO QUIRÚRGICO (vt_ControlIngreso + qvt_verificacion)
+// ============================================================================
+public class PausaSeguridadDto
+{
+    public int Id { get; set; }
+    public int IdOrden { get; set; }
+    public int Nhcl { get; set; }
+    public DateTime Fecha { get; set; } = DateTime.Today;
+    public string Hora { get; set; } = DateTime.Now.ToString("HH:mm:ss");
+    public int IdUsuario { get; set; }
+    public int IdLocalidad { get; set; }
+
+    // Fase 1: Antes de la Inducción de Anestesia (Enfermero y Anestesista)
+    public string Rpta1 { get; set; } = "S"; // Confirmación identidad, sitio, procedimiento, consentimiento
+    public string Rpta2 { get; set; } = "S"; // Marcación de sitio quirúrgico / No procede
+    public string Rpta3 { get; set; } = "S"; // Comprobación aparatos y medicación anestésica
+    public string Rpta4 { get; set; } = "S"; // Pulsioxímetro colocado y funcionando
+    public string Rpta5 { get; set; } = "N"; // Alergias conocidas
+    public string Rpta6 { get; set; } = "N"; // Vía aérea difícil / riesgo aspiración
+    public string Rpta7 { get; set; } = "N"; // Riesgo hemorragia > 500ml
+
+    // Fase 2: Antes de la Incisión Cutánea - Pausa Quirúrgica (Enfermero, Anestesista y Cirujano)
+    public string Rpta8 { get; set; } = "S"; // Presentación de miembros del equipo
+    public string Rpta9 { get; set; } = "S"; // Confirmación verbal identidad, sitio, procedimiento
+    public string Rpta10 { get; set; } = "S"; // Profilaxis antibiótica últimos 60 min / No procede
+    public string EventosCriticos { get; set; } = string.Empty; // Cirujano: Pasos críticos o imprevistos
+    public string TiempoOperacion { get; set; } = string.Empty; // Cirujano: Duración prevista
+    public string PerdidaSangre { get; set; } = string.Empty; // Cirujano: Pérdida de sangre prevista
+    public string Rpta14 { get; set; } = "N"; // Anestesista: Problema específico
+    public string ProblemaEspecifico { get; set; } = string.Empty; // Anestesista: Detalle
+    public string Rpta15 { get; set; } = "S"; // Enfermería: Esterilidad confirmada
+    public string Rpta16 { get; set; } = "N"; // Enfermería: Dudas instrumental/equipos
+    public string ProblemasInstrumental { get; set; } = string.Empty; // Enfermería: Detalle dudas
+    public string Rpta17 { get; set; } = "S"; // Imágenes diagnósticas esenciales visualizables
+
+    // Fase 3: Antes de salir de Quirófano (Enfermero, Anestesista y Cirujano)
+    public string Rpta18 { get; set; } = "S"; // Nombre del procedimiento confirmado
+    public string Rpta19 { get; set; } = "S"; // Recuento instrumentos, gasas, agujas
+    public string Rpta20 { get; set; } = "S"; // Etiquetado de muestras en voz alta
+    public string Rpta21 { get; set; } = "N"; // Problemas instrumental a resolver
+    public string AspectosRecuperacion { get; set; } = string.Empty; // Aspectos críticos de recuperación
+    public string Cerrado { get; set; } = "S";
+}

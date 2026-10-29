@@ -23,6 +23,10 @@ public interface IQuirofanoService
     Task<bool> EliminarMiembroEquipoAsync(int sec);
 
     // 4. Sala de Recuperación y Post-Operatorio (qvt_recuperacion + qvt_post_operatorio + qvt_ingliqadm + qvt_observaciones_recuperacion)
+    // 5. Pausa de Seguridad / Lista de Chequeo Quirúrgico OMS (vt_ControlIngreso + qvt_verificacion)
+    Task<PausaSeguridadDto> ObtenerPausaSeguridadAsync(int idOrden, int nhcl);
+    Task<(bool Ok, string? Mensaje)> GuardarPausaSeguridadAsync(PausaSeguridadDto dto, int idUsuario, int idLocalidad);
+
     Task<List<RecuperacionSignoVitalDto>> ObtenerSignosRecuperacionAsync(int idOrden);
     Task<bool> GuardarSignoRecuperacionAsync(RecuperacionSignoVitalDto signo, int idLocalidad);
     Task<bool> EliminarSignoRecuperacionAsync(int id);
@@ -1431,5 +1435,155 @@ public class QuirofanoService : IQuirofanoService
     public async Task<bool> EliminarObservacionRecuperacionAsync(int id)
     {
         return await _db.ExecuteAsync("UPDATE qvt_observaciones_recuperacion SET estado = 'I' WHERE id = @Id", new { Id = id }) > 0;
+    }
+
+    // ========================================================================
+    // 5. PAUSA DE SEGURIDAD / LISTA DE CHEQUEO QUIRÚRGICO OMS (vt_ControlIngreso)
+    // ========================================================================
+    public async Task<PausaSeguridadDto> ObtenerPausaSeguridadAsync(int idOrden, int nhcl)
+    {
+        var dto = new PausaSeguridadDto { IdOrden = idOrden, Nhcl = nhcl };
+        try
+        {
+            var row = await _db.QueryFirstOrDefaultAsync<dynamic>(
+                "SELECT TOP 1 * FROM qvt_verificacion WHERE fichamedr = @IdOrden ORDER BY id DESC",
+                new { IdOrden = idOrden });
+
+            if (row != null)
+            {
+                dto.Id = (int)row.id;
+                dto.Fecha = row.fechar != null ? (DateTime)row.fechar : DateTime.Today;
+                dto.Hora = row.horar?.ToString() ?? DateTime.Now.ToString("HH:mm:ss");
+                dto.Rpta1 = Char1(row.rpta1?.ToString(), "S");
+                dto.Rpta2 = Char1(row.rpta2?.ToString(), "S");
+                dto.Rpta3 = Char1(row.rpta3?.ToString(), "S");
+                dto.Rpta4 = Char1(row.rpta4?.ToString(), "S");
+                dto.Rpta5 = Char1(row.rpta5?.ToString(), "N");
+                dto.Rpta6 = Char1(row.rpta6?.ToString(), "N");
+                dto.Rpta7 = Char1(row.rpta7?.ToString(), "N");
+                dto.Rpta8 = Char1(row.rpta8?.ToString(), "S");
+                dto.Rpta9 = Char1(row.rpta9?.ToString(), "S");
+                dto.Rpta10 = Char1(row.rpta10?.ToString(), "S");
+                dto.EventosCriticos = row.eventosCriticos?.ToString() ?? string.Empty;
+                dto.TiempoOperacion = row.tiempoOperacion?.ToString() ?? string.Empty;
+                dto.PerdidaSangre = row.perdidaSangre?.ToString() ?? string.Empty;
+                dto.Rpta14 = Char1(row.rpta14?.ToString(), "N");
+                dto.ProblemaEspecifico = row.problemaEspecifico?.ToString() ?? string.Empty;
+                dto.Rpta15 = Char1(row.rpta15?.ToString(), "S");
+                dto.Rpta16 = Char1(row.rpta16?.ToString(), "N");
+                dto.ProblemasInstrumental = row.problemasInstrumental?.ToString() ?? string.Empty;
+                dto.Rpta17 = Char1(row.rpta17?.ToString(), "S");
+                dto.Rpta18 = Char1(row.rpta18?.ToString(), "S");
+                dto.Rpta19 = Char1(row.rpta19?.ToString(), "S");
+                dto.Rpta20 = Char1(row.rpta20?.ToString(), "S");
+                dto.Rpta21 = Char1(row.rpta21?.ToString(), "N");
+                dto.AspectosRecuperacion = row.aspectosRecuperacion?.ToString() ?? string.Empty;
+                dto.Cerrado = Char1(row.cerrado?.ToString(), "S");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error al obtener Pausa de Seguridad para Orden {IdOrden}", idOrden);
+        }
+
+        return dto;
+    }
+
+    public async Task<(bool Ok, string? Mensaje)> GuardarPausaSeguridadAsync(PausaSeguridadDto dto, int idUsuario, int idLocalidad)
+    {
+        try
+        {
+            var existe = await _db.ExecuteScalarAsync<int?>(
+                "SELECT TOP 1 id FROM qvt_verificacion WHERE fichamedr = @IdOrden",
+                new { dto.IdOrden });
+
+            var p = new
+            {
+                dto.IdOrden,
+                dto.Nhcl,
+                Hora = Truncate(dto.Hora, 50),
+                Fecha = dto.Fecha,
+                Rpta1 = Char1(dto.Rpta1, "S"),
+                Rpta2 = Char1(dto.Rpta2, "S"),
+                Rpta3 = Char1(dto.Rpta3, "S"),
+                Rpta4 = Char1(dto.Rpta4, "S"),
+                Rpta5 = Char1(dto.Rpta5, "N"),
+                Rpta6 = Char1(dto.Rpta6, "N"),
+                Rpta7 = Char1(dto.Rpta7, "N"),
+                Rpta8 = Char1(dto.Rpta8, "S"),
+                Rpta9 = Char1(dto.Rpta9, "S"),
+                Rpta10 = Char1(dto.Rpta10, "S"),
+                EventosCriticos = Truncate(dto.EventosCriticos, 150),
+                TiempoOperacion = Truncate(dto.TiempoOperacion, 150),
+                PerdidaSangre = Truncate(dto.PerdidaSangre, 150),
+                Rpta14 = Char1(dto.Rpta14, "N"),
+                ProblemaEspecifico = Truncate(dto.ProblemaEspecifico, 150),
+                Rpta15 = Char1(dto.Rpta15, "S"),
+                Rpta16 = Char1(dto.Rpta16, "N"),
+                ProblemasInstrumental = Truncate(dto.ProblemasInstrumental, 150),
+                Rpta17 = Char1(dto.Rpta17, "S"),
+                Rpta18 = Char1(dto.Rpta18, "S"),
+                Rpta19 = Char1(dto.Rpta19, "S"),
+                Rpta20 = Char1(dto.Rpta20, "S"),
+                Rpta21 = Char1(dto.Rpta21, "N"),
+                AspectosRecuperacion = Truncate(dto.AspectosRecuperacion, 150),
+                Cerrado = "S",
+                IdUsuario = idUsuario,
+                IdLocalidad = idLocalidad,
+                Id = existe ?? 0
+            };
+
+            if (existe.HasValue && existe.Value > 0)
+            {
+                await _db.ExecuteAsync(@"
+                    UPDATE qvt_verificacion SET
+                        rpta1 = @Rpta1, rpta2 = @Rpta2, rpta3 = @Rpta3, rpta4 = @Rpta4, rpta5 = @Rpta5,
+                        rpta6 = @Rpta6, rpta7 = @Rpta7, rpta8 = @Rpta8, rpta9 = @Rpta9, rpta10 = @Rpta10,
+                        rpta14 = @Rpta14, rpta15 = @Rpta15, rpta16 = @Rpta16, rpta17 = @Rpta17,
+                        eventosCriticos = @EventosCriticos, tiempoOperacion = @TiempoOperacion,
+                        perdidaSangre = @PerdidaSangre, problemaEspecifico = @ProblemaEspecifico,
+                        problemasInstrumental = @ProblemasInstrumental, aspectosRecuperacion = @AspectosRecuperacion,
+                        rpta18 = @Rpta18, rpta19 = @Rpta19, rpta20 = @Rpta20, rpta21 = @Rpta21,
+                        cerrado = @Cerrado
+                    WHERE fichamedr = @IdOrden", p);
+            }
+            else
+            {
+                await _db.ExecuteAsync(@"
+                    INSERT INTO qvt_verificacion (
+                        fichamedr, nhclr, horar, fechar,
+                        rpta1, rpta2, rpta3, rpta4, rpta5, rpta6, rpta7,
+                        rpta8, rpta9, rpta10, rpta14, rpta15, rpta16, rpta17,
+                        eventosCriticos, tiempoOperacion, perdidaSangre, problemaEspecifico,
+                        problemasInstrumental, aspectosRecuperacion,
+                        rpta18, rpta19, rpta20, rpta21,
+                        usuarior, localidadr, cerrado
+                    ) VALUES (
+                        @IdOrden, @Nhcl, @Hora, GETDATE(),
+                        @Rpta1, @Rpta2, @Rpta3, @Rpta4, @Rpta5, @Rpta6, @Rpta7,
+                        @Rpta8, @Rpta9, @Rpta10, @Rpta14, @Rpta15, @Rpta16, @Rpta17,
+                        @EventosCriticos, @TiempoOperacion, @PerdidaSangre, @ProblemaEspecifico,
+                        @ProblemasInstrumental, @AspectosRecuperacion,
+                        @Rpta18, @Rpta19, @Rpta20, @Rpta21,
+                        @IdUsuario, @IdLocalidad, @Cerrado
+                    )", p);
+            }
+
+            try
+            {
+                await _db.RegistrarBitacoraAsync($"Pausa de Seguridad quirúrgica guardada Orden {dto.IdOrden}", idUsuario);
+            }
+            catch
+            {
+                // Bitácora no bloqueante
+            }
+
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al guardar Pausa de Seguridad Orden {IdOrden}", dto.IdOrden);
+            return (false, ex.Message);
+        }
     }
 }

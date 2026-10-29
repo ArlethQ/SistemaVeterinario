@@ -1,0 +1,463 @@
+@page "/quirofano/pausa-seguridad"
+@page "/quirofano/pausa-seguridad/{IdOrden:int}/{Nhcl:int}"
+@inject IKardexService KardexService
+@inject IQuirofanoService QuirofanoService
+@inject SessionStateService Session
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Pausa de Seguridad Quirúrgica - e-ForVets</PageTitle>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h4 class="mb-0 fw-bold text-primary">Pausa de Seguridad Quirúrgica (Checklist OMS)</h4>
+        <small class="text-muted">Lista de chequeo y verificación de cirugía segura: Entrada, Pausa Quirúrgica y Salida.</small>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+            <option value="0">-- Seleccionar Orden Activa --</option>
+            @foreach (var ord in ordenesActivas)
+            {
+                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
+            }
+        </select>
+
+        <div class="input-group input-group-sm" style="width: auto;">
+            <span class="input-group-text">Ord:</span>
+            <input type="number" class="form-control" style="width: 95px; min-width: 85px;" @bind="ordenInput" @bind:event="oninput" @onkeydown="OnInputKeyDown" placeholder="Orden" />
+            <span class="input-group-text">NHCL:</span>
+            <input type="number" class="form-control" style="width: 95px; min-width: 85px;" @bind="nhclInput" @bind:event="oninput" @onkeydown="OnInputKeyDown" placeholder="NHCL" />
+            <button class="btn btn-primary" @onclick="CargarPorInputAsync">Buscar</button>
+        </div>
+
+        @if (paciente != null)
+        {
+            <button class="btn btn-sm btn-success fw-semibold" @onclick="GuardarPausaAsync" disabled="@guardando">
+                @(guardando ? "Guardando..." : "Guardar Pausa de Seguridad")
+            </button>
+            <a class="btn btn-sm btn-outline-primary" href="/quirofano/anestesia/@IdOrden/@Nhcl">Hoja Anestesia</a>
+            <a class="btn btn-sm btn-outline-info" href="/quirofano/protocolo/@IdOrden/@Nhcl">Protocolo</a>
+            <a class="btn btn-sm btn-outline-secondary" href="/quirofano/recuperacion/@IdOrden/@Nhcl">Recuperación</a>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(mensajeAlerta))
+{
+    <div class="alert @(esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small" role="alert">
+        @mensajeAlerta
+        <button type="button" class="btn-close py-2" @onclick="() => mensajeAlerta = string.Empty"></button>
+    </div>
+}
+
+@if (cargandoInicial)
+{
+    <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span class="fw-semibold small">Cargando verificación de pausa de seguridad quirúrgica...</span>
+    </div>
+}
+else if (paciente != null)
+{
+    <!-- Cabecera del Paciente -->
+    <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
+        <div class="card-body py-2 px-3">
+            <div class="row g-2 align-items-center small">
+                <div class="col-md-3">
+                    <span class="text-muted">Orden / NHCL:</span>
+                    <strong class="ms-1 text-primary">#@paciente.OrdenAtencionId / @paciente.Nhcl</strong>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Paciente:</span>
+                    <strong class="ms-1">@paciente.PacienteNombre</strong> (@paciente.Especie - @paciente.Raza)
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Edad / Sexo:</span>
+                    <strong class="ms-1">@paciente.EdadTexto / @paciente.Sexo</strong>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Propietario:</span>
+                    <strong class="ms-1">@paciente.PropietarioNombre</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3 FASES DE LA PAUSA DE SEGURIDAD (OMS) -->
+    <div class="row g-3">
+        <!-- FASE 1: ENTRADA (Antes de la inducción) -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100 border-top border-4 border-primary">
+                <div class="card-header bg-white py-2">
+                    <span class="badge bg-primary mb-1">1. ENTRADA</span>
+                    <h6 class="mb-0 fw-bold text-primary">Antes de la Inducción de Anestesia</h6>
+                    <small class="text-muted">Con el enfermero y el anestesista, como mínimo</small>
+                </div>
+                <div class="card-body small d-flex flex-column gap-3">
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">1. ¿Ha confirmado la identidad del paciente, sitio quirúrgico, procedimiento y consentimiento?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta1">
+                            <option value="S">SÍ</option>
+                            <option value="N">NO</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">2. ¿Se ha marcado el sitio quirúrgico?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta2">
+                            <option value="S">SÍ</option>
+                            <option value="N">NO PROCEDE</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">3. ¿Se ha completado la comprobación de los aparatos y la medicación anestésica?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta3">
+                            <option value="S">SÍ</option>
+                            <option value="N">NO</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">4. ¿Se ha colocado el pulsioxímetro al paciente y funciona?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta4">
+                            <option value="S">SÍ</option>
+                            <option value="N">NO</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">5. ¿Tiene el paciente alergias conocidas?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta5">
+                            <option value="N">NO</option>
+                            <option value="S">SÍ</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">6. ¿Vía aérea difícil / riesgo de aspiración?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta6">
+                            <option value="N">NO</option>
+                            <option value="S">SÍ (Equipos y ayuda disponible)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">7. ¿Riesgo de hemorragia > 500 ml (7 ml/kg)?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta7">
+                            <option value="N">NO</option>
+                            <option value="S">SÍ (Líquidos y accesos previstos)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FASE 2: PAUSA QUIRÚRGICA (Antes de la incisión) -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100 border-top border-4 border-warning">
+                <div class="card-header bg-white py-2">
+                    <span class="badge bg-warning text-dark mb-1">2. PAUSA QUIRÚRGICA</span>
+                    <h6 class="mb-0 fw-bold text-warning-emphasis">Antes de la Incisión Cutánea</h6>
+                    <small class="text-muted">Con el enfermero, el anestesista y el cirujano</small>
+                </div>
+                <div class="card-body small d-flex flex-column gap-2">
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">8. ¿Todos los miembros se han presentado por nombre y función?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta8">
+                            <option value="S">SÍ</option>
+                            <option value="N">NO</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">9. ¿Confirmar identidad, sitio quirúrgico y procedimiento?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta9">
+                            <option value="S">SÍ</option>
+                            <option value="N">NO</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">10. ¿Profilaxis antibiótica en los últimos 60 minutos?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta10">
+                            <option value="S">SÍ</option>
+                            <option value="N">NO PROCEDE</option>
+                        </select>
+                    </div>
+
+                    <div class="bg-light p-2 rounded">
+                        <strong class="text-primary d-block mb-1">Previsión de Eventos Críticos - Cirujano:</strong>
+                        <div class="mb-1">
+                            <label class="form-label mb-0">Pasos críticos o imprevistos:</label>
+                            <input type="text" class="form-control form-control-sm" @bind="pausaDto.EventosCriticos" placeholder="Descripción pasos críticos..." />
+                        </div>
+                        <div class="row g-1">
+                            <div class="col-6">
+                                <label class="form-label mb-0">Duración estimada:</label>
+                                <input type="text" class="form-control form-control-sm" @bind="pausaDto.TiempoOperacion" placeholder="Ej: 90 min" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label mb-0">Pérdida sangre:</label>
+                                <input type="text" class="form-control form-control-sm" @bind="pausaDto.PerdidaSangre" placeholder="Ej: 50 ml" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-light p-2 rounded">
+                        <strong class="text-primary d-block mb-1">Equipo de Anestesia:</strong>
+                        <div class="row g-1 align-items-center">
+                            <div class="col-5">
+                                <label class="form-label mb-0">¿Problema específico?</label>
+                                <select class="form-select form-select-sm" @bind="pausaDto.Rpta14">
+                                    <option value="N">NO</option>
+                                    <option value="S">SÍ</option>
+                                </select>
+                            </div>
+                            <div class="col-7">
+                                <label class="form-label mb-0">Detalle:</label>
+                                <input type="text" class="form-control form-control-sm" @bind="pausaDto.ProblemaEspecifico" placeholder="Detalle problema..." />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-light p-2 rounded">
+                        <strong class="text-primary d-block mb-1">Equipo de Enfermería:</strong>
+                        <div class="mb-1">
+                            <label class="form-label mb-0">¿Esterilidad confirmada (indicadores)?</label>
+                            <select class="form-select form-select-sm" @bind="pausaDto.Rpta15">
+                                <option value="S">SÍ</option>
+                                <option value="N">NO</option>
+                            </select>
+                        </div>
+                        <div class="row g-1 align-items-center">
+                            <div class="col-5">
+                                <label class="form-label mb-0">¿Dudas instrumental?</label>
+                                <select class="form-select form-select-sm" @bind="pausaDto.Rpta16">
+                                    <option value="N">NO</option>
+                                    <option value="S">SÍ</option>
+                                </select>
+                            </div>
+                            <div class="col-7">
+                                <label class="form-label mb-0">Detalle dudas:</label>
+                                <input type="text" class="form-control form-control-sm" @bind="pausaDto.ProblemasInstrumental" placeholder="Detalle dudas..." />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label mb-1 fw-semibold">17. ¿Imágenes diagnósticas esenciales visualizables?</label>
+                        <select class="form-select form-select-sm" @bind="pausaDto.Rpta17">
+                            <option value="S">SÍ</option>
+                            <option value="N">NO PROCEDE</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FASE 3: SALIDA (Antes de salir de quirófano) -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100 border-top border-4 border-success">
+                <div class="card-header bg-white py-2">
+                    <span class="badge bg-success mb-1">3. SALIDA</span>
+                    <h6 class="mb-0 fw-bold text-success">Antes de Salir de Quirófano</h6>
+                    <small class="text-muted">Con el enfermero, el anestesista y el cirujano</small>
+                </div>
+                <div class="card-body small d-flex flex-column gap-3">
+                    <div class="bg-light p-2 rounded">
+                        <strong class="text-success d-block mb-2">El enfermero confirma verbalmente:</strong>
+
+                        <div class="mb-2">
+                            <label class="form-label mb-1 fw-semibold">18. Nombre del procedimiento realizado:</label>
+                            <select class="form-select form-select-sm" @bind="pausaDto.Rpta18">
+                                <option value="S">SÍ (Confirmado)</option>
+                                <option value="N">NO</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label mb-1 fw-semibold">19. Recuento de instrumentos, gasas y agujas:</label>
+                            <select class="form-select form-select-sm" @bind="pausaDto.Rpta19">
+                                <option value="S">SÍ (Completo)</option>
+                                <option value="N">NO / DISCREPANCIA</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label mb-1 fw-semibold">20. Etiquetado de muestras en voz alta:</label>
+                            <select class="form-select form-select-sm" @bind="pausaDto.Rpta20">
+                                <option value="S">SÍ (Correcto)</option>
+                                <option value="N">NO PROCEDE / NO</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="form-label mb-1 fw-semibold">21. Problemas de instrumental a resolver:</label>
+                            <select class="form-select form-select-sm" @bind="pausaDto.Rpta21">
+                                <option value="N">NO</option>
+                                <option value="S">SÍ</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="bg-light p-2 rounded">
+                        <strong class="text-success d-block mb-1">Cirujano, Anestesista y Enfermero:</strong>
+                        <label class="form-label mb-1 fw-semibold">Aspectos críticos de recuperación y tratamiento:</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="pausaDto.AspectosRecuperacion" placeholder="Detalle analgesia post-op, fluidos, monitoreo, posición..."></textarea>
+                    </div>
+
+                    <div class="mt-auto d-grid">
+                        <button class="btn btn-success fw-bold py-2" @onclick="GuardarPausaAsync" disabled="@guardando">
+                            @(guardando ? "Guardando..." : "✓ Registrar Pausa de Seguridad")
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private int ordenInput;
+    private int nhclInput;
+    private List<OrdenActivaResumenDto> ordenesActivas = new();
+    private PacienteHeaderDto? paciente;
+    private PausaSeguridadDto pausaDto = new();
+
+    private bool cargandoInicial = true;
+    private bool guardando;
+    private string mensajeAlerta = string.Empty;
+    private bool esError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        cargandoInicial = true;
+        await Task.Yield();
+
+        ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0 && ordenesActivas.Count > 0)
+        {
+            IdOrden = ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = ordenesActivas[0].Nhcl;
+        }
+
+        if (IdOrden > 0)
+        {
+            ordenInput = IdOrden;
+            nhclInput = Nhcl;
+            await CargarDatosAsync();
+        }
+        cargandoInicial = false;
+    }
+
+    private async Task OnInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CargarPorInputAsync();
+        }
+    }
+
+    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int selOrden) && selOrden > 0)
+        {
+            mensajeAlerta = string.Empty;
+            esError = false;
+            var ord = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == selOrden);
+            IdOrden = selOrden;
+            Nhcl = ord?.Nhcl ?? 0;
+            ordenInput = IdOrden;
+            nhclInput = Nhcl;
+            await CargarDatosAsync();
+        }
+    }
+
+    private async Task CargarPorInputAsync()
+    {
+        mensajeAlerta = string.Empty;
+        esError = false;
+
+        if (ordenInput > 0)
+        {
+            IdOrden = ordenInput;
+            var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
+            if (match != null)
+            {
+                Nhcl = match.Nhcl;
+                nhclInput = Nhcl;
+            }
+        }
+        else if (nhclInput > 0)
+        {
+            Nhcl = nhclInput;
+            var match = ordenesActivas.FirstOrDefault(x => x.Nhcl == Nhcl);
+            if (match != null)
+            {
+                IdOrden = match.IdOrdenAtencion;
+                ordenInput = IdOrden;
+            }
+        }
+        else if (ordenesActivas.Count > 0)
+        {
+            IdOrden = ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = ordenesActivas[0].Nhcl;
+            ordenInput = IdOrden;
+            nhclInput = Nhcl;
+        }
+
+        if (IdOrden <= 0 && Nhcl <= 0) return;
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        var p = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
+        if (p != null)
+        {
+            Nhcl = p.Nhcl;
+            nhclInput = Nhcl;
+            ordenInput = IdOrden;
+            Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
+            pausaDto = await QuirofanoService.ObtenerPausaSeguridadAsync(IdOrden, Nhcl);
+            paciente = p;
+            Nav.NavigateTo($"/quirofano/pausa-seguridad/{IdOrden}/{Nhcl}", false);
+        }
+        else
+        {
+            paciente = null;
+            esError = true;
+            mensajeAlerta = $"No se encontró la Orden #{IdOrden}.";
+        }
+    }
+
+    private async Task GuardarPausaAsync()
+    {
+        if (paciente == null) return;
+        guardando = true;
+        pausaDto.IdOrden = IdOrden;
+        pausaDto.Nhcl = Nhcl;
+
+        var result = await QuirofanoService.GuardarPausaSeguridadAsync(
+            pausaDto,
+            Session.CurrentUser?.IdUsuario ?? 1,
+            Session.CurrentUser?.IdLocalidad ?? 1);
+
+        guardando = false;
+        esError = !result.Ok;
+        mensajeAlerta = result.Ok
+            ? "Pausa de Seguridad Quirúrgica guardada correctamente."
+            : $"Error al guardar la Pausa de Seguridad: {result.Mensaje}";
+    }
+}
