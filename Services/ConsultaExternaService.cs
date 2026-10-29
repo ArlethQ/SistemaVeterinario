@@ -488,8 +488,13 @@ public class ConsultaExternaService : IConsultaExternaService
                     fecha = @Fecha, hora = @Hora, descripcion = @Descripcion,
                     idEscogido = @IdEscogido, idUser = @IdUser
                 WHERE idEvolucion = @IdEvolucion";
-            await _db.ExecuteAsync(sqlUpdate, dto);
-            return dto.IdEvolucion;
+            int filas = await _db.ExecuteAsync(sqlUpdate, dto);
+            if (filas > 0)
+            {
+                await _db.RegistrarBitacoraAsync($"Evolución Médica #{dto.IdEvolucion} actualizada Orden #{dto.IdOrden}", idUsuario);
+                return dto.IdEvolucion;
+            }
+            return 0;
         }
         else
         {

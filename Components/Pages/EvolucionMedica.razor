@@ -5,6 +5,7 @@
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject IJSRuntime JS
+@inject NavigationManager Nav
 
 <PageTitle>e-ForVets - Evoluciones Médicas y Órdenes Complementarias</PageTitle>
 
@@ -17,19 +18,39 @@
             </h4>
             <small class="text-muted">Seguimiento clínico cronológico y solicitud de exámenes complementarios.</small>
         </div>
-        <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
-            <div class="input-group input-group-sm" style="width: 270px;">
-                <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
-                <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
-                <input type="number" class="form-control" placeholder="NHCL" @bind="NhclInput" />
-                <button class="btn btn-primary" @onclick="CargarPorInputAsync">
+        <div class="d-flex flex-wrap gap-2 align-items-center mt-2 mt-xl-0">
+            <!-- Selector Dropbox de Órdenes -->
+            <div class="d-flex align-items-center gap-1">
+                <label class="small fw-bold text-secondary text-nowrap mb-0">Órdenes:</label>
+                <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;"
+                        value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+                    <option value="0">-- Seleccionar Orden --</option>
+                    @foreach (var ord in _ordenesActivas)
+                    {
+                        <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Búsqueda Manual por Orden / NHCL con espacio amplio para números -->
+            <div class="input-group input-group-sm" style="width: auto;">
+                <span class="input-group-text bg-light fw-semibold text-secondary">Ord:</span>
+                <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
+                       min="1" placeholder="Orden" @bind="IdOrdenInput" @onkeydown="OnInputKeyDown" />
+                <span class="input-group-text bg-light fw-semibold text-secondary">NHCL:</span>
+                <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
+                       min="1" placeholder="NHCL" @bind="NhclInput" @onkeydown="OnInputKeyDown" />
+                <button class="btn btn-primary fw-semibold px-3 d-flex align-items-center gap-1" @onclick="CargarPorInputAsync" title="Buscar y Cargar Paciente">
                     <i class="bi bi-search"></i>
+                    <span>Buscar</span>
                 </button>
             </div>
-            <div class="form-check form-switch ms-2">
+
+            <div class="form-check form-switch ms-1">
                 <input class="form-check-input" type="checkbox" id="chkSoloOrden" @bind="FiltrarSoloOrdenActual" @bind:after="RecargarEvolucionesAsync" />
                 <label class="form-check-label small fw-semibold" for="chkSoloOrden">Solo Orden #@IdOrden</label>
             </div>
+
             <button class="btn btn-sm btn-outline-danger" @onclick="ExportarPdfAsync">
                 <i class="bi bi-file-earmark-pdf-fill me-1"></i>Imprimir Evoluciones PDF
             </button>
@@ -94,7 +115,7 @@
                         </div>
                         <div class="col-6">
                             <label class="form-label small fw-semibold">Hora</label>
-                            <input type="text" class="form-control form-control-sm" @bind="EvolucionForm.Hora" placeholder="HH:mm" />
+                            <input type="time" class="form-control form-control-sm" value="@EvolucionForm.Hora" @onchange="@(e => EvolucionForm.Hora = e.Value?.ToString() ?? "")" />
                         </div>
                         <div class="col-12">
                             <label class="form-label small fw-semibold">Nota de Evolución Clínica (Subjetivo / Objetivo / Plan del Turno) *</label>
@@ -224,6 +245,7 @@
 
     private int IdOrdenInput { get; set; }
     private int NhclInput { get; set; }
+    private List<OrdenActivaResumenDto> _ordenesActivas = new();
     private bool FiltrarSoloOrdenActual { get; set; }
     private bool CargandoInicial { get; set; } = true;
     private string? MensajeAlerta { get; set; }
@@ -238,18 +260,30 @@
         CargandoInicial = true;
         await Task.Yield();
 
-        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        if (_ordenesActivas.Count == 0)
+        {
+            _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(top: 50);
+        }
+
+        if (IdOrden <= 0 && Nhcl > 0)
+        {
+            var ordenPaciente = _ordenesActivas.FirstOrDefault(o => o.Nhcl == Nhcl);
+            if (ordenPaciente != null)
+            {
+                IdOrden = ordenPaciente.IdOrdenAtencion;
+            }
+        }
+        else if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
         {
             IdOrden = Session.OrdenActiva.Value;
             Nhcl = Session.NhclActivo ?? 0;
         }
-        else if (IdOrden <= 0 && Nhcl <= 0)
+        else if (IdOrden <= 0)
         {
-            var activas = await KardexService.ObtenerOrdenesActivasAsync();
-            if (activas.Count > 0)
+            if (_ordenesActivas.Count > 0)
             {
-                IdOrden = activas[0].IdOrdenAtencion;
-                Nhcl = activas[0].Nhcl;
+                IdOrden = _ordenesActivas[0].IdOrdenAtencion;
+                Nhcl = _ordenesActivas[0].Nhcl;
             }
         }
 
@@ -258,19 +292,89 @@
             IdOrdenInput = IdOrden;
             NhclInput = Nhcl;
             await CargarDatosAsync();
+
+            if (Paciente != null && !_ordenesActivas.Any(o => o.IdOrdenAtencion == IdOrden))
+            {
+                _ordenesActivas.Insert(0, new OrdenActivaResumenDto
+                {
+                    OrdenAtencionId = IdOrden,
+                    Nhcl = Nhcl,
+                    Paciente = Paciente.PacienteNombre,
+                    Cliente = Paciente.PropietarioNombre,
+                    Especie = Paciente.Especie,
+                    Sexo = Paciente.Sexo
+                });
+            }
         }
         CargandoInicial = false;
     }
 
     private async Task CargarPorInputAsync()
     {
-        IdOrden = IdOrdenInput;
-        Nhcl = NhclInput;
-        await CargarDatosAsync();
+        if (IdOrdenInput <= 0 && NhclInput > 0)
+        {
+            var ordenPaciente = _ordenesActivas.FirstOrDefault(o => o.Nhcl == NhclInput);
+            if (ordenPaciente != null)
+            {
+                IdOrdenInput = ordenPaciente.IdOrdenAtencion;
+            }
+        }
+
+        if (IdOrdenInput > 0 || NhclInput > 0)
+        {
+            IdOrden = IdOrdenInput;
+            Nhcl = NhclInput;
+            CargandoInicial = true;
+            await Task.Yield();
+            await CargarDatosAsync();
+
+            if (Paciente != null && !_ordenesActivas.Any(o => o.IdOrdenAtencion == IdOrden))
+            {
+                _ordenesActivas.Insert(0, new OrdenActivaResumenDto
+                {
+                    OrdenAtencionId = IdOrden,
+                    Nhcl = Nhcl,
+                    Paciente = Paciente.PacienteNombre,
+                    Cliente = Paciente.PropietarioNombre,
+                    Especie = Paciente.Especie,
+                    Sexo = Paciente.Sexo
+                });
+            }
+
+            CargandoInicial = false;
+            Nav.NavigateTo($"/consulta/evoluciones/{IdOrden}/{Nhcl}", replace: true);
+        }
+    }
+
+    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var ordenId) && ordenId > 0)
+        {
+            var ord = _ordenesActivas.FirstOrDefault(o => o.IdOrdenAtencion == ordenId);
+            IdOrden = ordenId;
+            IdOrdenInput = ordenId;
+            Nhcl = ord?.Nhcl ?? 0;
+            NhclInput = Nhcl;
+
+            CargandoInicial = true;
+            await Task.Yield();
+            await CargarDatosAsync();
+            CargandoInicial = false;
+            Nav.NavigateTo($"/consulta/evoluciones/{IdOrden}/{Nhcl}", replace: true);
+        }
+    }
+
+    private async Task OnInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CargarPorInputAsync();
+        }
     }
 
     private async Task CargarDatosAsync()
     {
+        MensajeAlerta = null;
         if (IdOrden > 0)
         {
             Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
@@ -306,13 +410,16 @@
 
     private void SeleccionarParaEditar(EvolucionMedicaDto ev)
     {
+        string hora = ev.Hora?.Trim() ?? "";
+        if (hora.Length >= 5) hora = hora.Substring(0, 5);
+
         EvolucionForm = new EvolucionMedicaDto
         {
             IdEvolucion = ev.IdEvolucion,
             IdOrden = ev.IdOrden,
             Nhcl = ev.Nhcl,
             Fecha = ev.Fecha,
-            Hora = ev.Hora,
+            Hora = !string.IsNullOrEmpty(hora) ? hora : DateTime.Now.ToString("HH:mm"),
             Descripcion = ev.Descripcion,
             IdEscogido = ev.IdEscogido
         };
@@ -321,11 +428,25 @@
     private async Task GuardarEvolucionAsync()
     {
         if (string.IsNullOrWhiteSpace(EvolucionForm.Descripcion)) return;
+        if (string.IsNullOrWhiteSpace(EvolucionForm.Hora))
+        {
+            EvolucionForm.Hora = DateTime.Now.ToString("HH:mm");
+        }
         EvolucionForm.IdOrden = IdOrden;
         EvolucionForm.Nhcl = Nhcl;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        bool eraEdicion = EvolucionForm.IdEvolucion > 0;
         int idCreado = await ConsultaService.GuardarEvolucionMedicaAsync(EvolucionForm, idUser);
-        MensajeAlerta = $"Evolución médica #{idCreado} guardada correctamente.";
+        if (idCreado > 0)
+        {
+            MensajeAlerta = eraEdicion
+                ? $"Evolución médica #{idCreado} actualizada correctamente."
+                : $"Evolución médica #{idCreado} guardada correctamente.";
+        }
+        else
+        {
+            MensajeAlerta = "No se pudo actualizar la evolución clínica seleccionada.";
+        }
         await RecargarEvolucionesAsync();
         LimpiarFormulario();
     }
@@ -333,6 +454,11 @@
     private async Task EliminarEvolucionAsync(int idEvolucion)
     {
         await ConsultaService.EliminarEvolucionMedicaAsync(idEvolucion);
+        if (EvolucionForm.IdEvolucion == idEvolucion)
+        {
+            LimpiarFormulario();
+        }
+        MensajeAlerta = null;
         await RecargarEvolucionesAsync();
     }
 
