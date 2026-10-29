@@ -719,9 +719,51 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             WHERE estado_cientifico='A' AND (@IdClase IS NULL OR clas_id=@IdClase)
             ORDER BY nombre_cientifico", new { IdClase = idClase })).ToList();
 
-    public async Task<List<CatalogoItemGenericoDto>> ObtenerMotivosMuerteAsync() =>
-        (await _db.QueryAsync<CatalogoItemGenericoDto>(
-            "SELECT sec AS Id, RTRIM(motivo) AS Descripcion FROM vt_motivomuerte WHERE estado='A' ORDER BY motivo")).ToList();
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerMotivosMuerteAsync()
+    {
+        const string sql = @"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            DECLARE @Motivos TABLE (motivo VARCHAR(200));
+            INSERT INTO @Motivos (motivo) VALUES
+                ('Accidente'),
+                ('Causa desconocida'),
+                ('Complicaciones posoperatorias'),
+                ('Enfermedad crónica'),
+                ('Enfermedad infecciosa'),
+                ('Enfermedad terminal'),
+                ('Envenenamiento o intoxicación'),
+                ('Eutanasia humanitaria'),
+                ('Falla multiorgánica'),
+                ('Muerte natural por edad avanzada'),
+                ('Paro cardiorrespiratorio'),
+                ('Traumatismo grave');
+
+            UPDATE existente
+            SET estado='A'
+            FROM vt_motivomuerte existente
+            INNER JOIN @Motivos requerido
+                ON UPPER(LTRIM(RTRIM(existente.motivo)))=UPPER(requerido.motivo)
+            WHERE ISNULL(existente.estado, 'I')<>'A';
+
+            INSERT INTO vt_motivomuerte (motivo, estado)
+            SELECT requerido.motivo, 'A'
+            FROM @Motivos requerido
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM vt_motivomuerte existente WITH (UPDLOCK, HOLDLOCK)
+                WHERE UPPER(LTRIM(RTRIM(existente.motivo)))=UPPER(requerido.motivo));
+
+            COMMIT TRANSACTION;
+
+            SELECT sec AS Id, RTRIM(motivo) AS Descripcion
+            FROM vt_motivomuerte
+            WHERE estado='A'
+            ORDER BY motivo;";
+
+        return (await _db.QueryAsync<CatalogoItemGenericoDto>(sql)).ToList();
+    }
 
     // =========================================================================
     // 2. RECEPCIÓN Y ÓRDENES DE ATENCIÓN (vt_OrdenesMenu)

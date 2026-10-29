@@ -120,26 +120,10 @@ public class HospitalizacionService : IHospitalizacionService
         if (_cacheCondiciones is not null && _cacheCondiciones.Count > 0)
             return _cacheCondiciones;
 
-        try
-        {
-            var res = (await _db.QueryAsync<CondicionHospitalDto>(
-                "SELECT id AS Id, condicion AS Condicion FROM vt_condicionHospital WHERE estado = 'A' ORDER BY id")).ToList();
-
-            if (res.Count > 0)
-            {
-                _cacheCondiciones = res;
-                return res;
-            }
-        }
-        catch { }
-
-        return
-        [
-            new() { Id = 1, Condicion = "ESTABLE" },
-            new() { Id = 2, Condicion = "GRAVE" },
-            new() { Id = 3, Condicion = "CRÍTICO" },
-            new() { Id = 4, Condicion = "RESERVADO" }
-        ];
+        var res = (await _db.QueryAsync<CondicionHospitalDto>(
+            "SELECT id AS Id, condicion AS Condicion FROM vt_condicionHospital WHERE estado = 'A' ORDER BY id")).ToList();
+        _cacheCondiciones = res;
+        return res;
     }
 
     public async Task<List<RitmoHorarioDto>> ObtenerRitmosHorariosAsync()
@@ -147,26 +131,25 @@ public class HospitalizacionService : IHospitalizacionService
         if (_cacheRitmos is not null && _cacheRitmos.Count > 0)
             return _cacheRitmos;
 
-        try
-        {
-            var res = (await _db.QueryAsync<RitmoHorarioDto>(
-                "SELECT id AS Id, des_ritmo AS Des_Ritmo FROM vt_ritmoHorario ORDER BY id")).ToList();
+        var res = (await _db.QueryAsync<RitmoHorarioDto>(
+            "SELECT id AS Id, des_ritmo AS Des_Ritmo FROM vt_ritmoHorario ORDER BY id")).ToList();
+        _cacheRitmos = res;
+        return res;
+    }
 
-            if (res.Count > 0)
-            {
-                _cacheRitmos = res;
-                return res;
-            }
-        }
-        catch { }
+    private async Task ValidarOrdenPacienteAsync(int idOrden, int nhcl)
+    {
+        if (idOrden <= 0 || nhcl <= 0)
+            throw new ArgumentException("La orden y el NHCL deben corresponder a un paciente registrado.");
 
-        return
-        [
-            new() { Id = 1, Des_Ritmo = "Q6H (Cada 6h)" },
-            new() { Id = 2, Des_Ritmo = "Q8H (Cada 8h)" },
-            new() { Id = 3, Des_Ritmo = "Q12H (Cada 12h)" },
-            new() { Id = 4, Des_Ritmo = "Q24H (Cada 24h)" }
-        ];
+        int existe = await _db.ExecuteScalarAsync<int>(@"
+            SELECT COUNT(1)
+            FROM vt_ordenAtencion
+            WHERE ordenAten_id=@IdOrden AND ordenAten_nhcl=@Nhcl",
+            new { IdOrden = idOrden, Nhcl = nhcl });
+
+        if (existe == 0)
+            throw new InvalidOperationException("La orden y el NHCL indicados no existen o no corresponden al mismo paciente.");
     }
 
     // ========================================================================
@@ -175,8 +158,7 @@ public class HospitalizacionService : IHospitalizacionService
 
     public async Task<FormularioSignosEnfermeriaDto> CargarSignosEnfermeriaAsync(int idOrdenAtencion, int nhcl, int numFormulario = 1)
     {
-        if (idOrdenAtencion <= 0) idOrdenAtencion = 1;
-        if (nhcl <= 0) nhcl = 1;
+        await ValidarOrdenPacienteAsync(idOrdenAtencion, nhcl);
         if (numFormulario <= 0) numFormulario = 1;
 
         string cacheKey = $"{idOrdenAtencion}_{numFormulario}";
@@ -192,17 +174,13 @@ public class HospitalizacionService : IHospitalizacionService
         }
 
         var forms = new List<int>();
-        try
-        {
-            const string sqlForms = @"
+        const string sqlForms = @"
                 SELECT DISTINCT numFormulario 
                 FROM qvt_enfSignosVitales 
                 WHERE idOrdenAtencion = @IdOrden AND tipo = 'SIGNOS' AND numFormulario IS NOT NULL
                 ORDER BY numFormulario";
 
-            forms = (await _db.QueryAsync<int>(sqlForms, new { IdOrden = idOrdenAtencion })).ToList();
-        }
-        catch { }
+        forms = (await _db.QueryAsync<int>(sqlForms, new { IdOrden = idOrdenAtencion })).ToList();
 
         // Incluir las hojas registradas en el almacén en memoria
         if (_hojasPorOrden.TryGetValue(idOrdenAtencion, out var setHojas))
@@ -307,7 +285,7 @@ public class HospitalizacionService : IHospitalizacionService
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Advertencia cargando datos de Signos Vitales para Orden={IdOrden} Form={NumForm}", idOrdenAtencion, numFormulario);
+            throw new InvalidOperationException("No se pudieron cargar los signos vitales desde SQL Server.", ex);
         }
 
         if (encontradoEnDb)
@@ -390,8 +368,7 @@ public class HospitalizacionService : IHospitalizacionService
 
     public async Task GuardarSignosEnfermeriaAsync(FormularioSignosEnfermeriaDto dto, int idUsuario)
     {
-        if (dto.IdOrdenAtencion <= 0) dto.IdOrdenAtencion = 1;
-        if (dto.Nhcl <= 0) dto.Nhcl = 1;
+        await ValidarOrdenPacienteAsync(dto.IdOrdenAtencion, dto.Nhcl);
         if (dto.NumFormulario <= 0) dto.NumFormulario = 1;
 
         // Persistir todo el formulario en un único viaje a SQL Server.
@@ -517,18 +494,13 @@ public class HospitalizacionService : IHospitalizacionService
 
     public async Task<int> CrearNuevoFormularioSignosAsync(int idOrdenAtencion, int nhcl, int idUsuario)
     {
-        if (idOrdenAtencion <= 0) idOrdenAtencion = 1;
-        if (nhcl <= 0) nhcl = 1;
+        await ValidarOrdenPacienteAsync(idOrdenAtencion, nhcl);
 
         int maxForm = 0;
-        try
-        {
-            maxForm = await _db.ExecuteScalarAsync<int?>(@"
+        maxForm = await _db.ExecuteScalarAsync<int?>(@"
                 SELECT MAX(numFormulario) FROM qvt_enfSignosVitales 
                 WHERE idOrdenAtencion = @IdOrden AND tipo = 'SIGNOS'",
                 new { IdOrden = idOrdenAtencion }) ?? 0;
-        }
-        catch { }
 
         if (_hojasPorOrden.TryGetValue(idOrdenAtencion, out var setHojas))
         {
@@ -570,8 +542,7 @@ public class HospitalizacionService : IHospitalizacionService
 
     public async Task<FichaHospitalizacionSheetDto> CargarFichaHospitalizacionAsync(int idOrden, int nhcl, int hoja = 1, int idUsuario = 0)
     {
-        if (idOrden <= 0) idOrden = 1;
-        if (nhcl <= 0) nhcl = 1;
+        await ValidarOrdenPacienteAsync(idOrden, nhcl);
         if (hoja <= 0) hoja = 1;
 
         var hojas = new List<int> { 1 };
@@ -735,6 +706,8 @@ public class HospitalizacionService : IHospitalizacionService
 
     public async Task<int> CrearNuevaHojaFichaAsync(int idOrden, int nhcl, int idUsuario)
     {
+        await ValidarOrdenPacienteAsync(idOrden, nhcl);
+
         var maxHoja = await _db.ExecuteScalarAsync<int?>(
             "SELECT MAX(hoja) FROM hvt_bloque1ficha WHERE idorden = @IdOrden AND nhcl = @Nhcl",
             new { IdOrden = idOrden, Nhcl = nhcl }) ?? 0;
@@ -749,6 +722,7 @@ public class HospitalizacionService : IHospitalizacionService
         ArgumentNullException.ThrowIfNull(sheet);
         if (sheet.IdOrden <= 0 || sheet.Nhcl <= 0 || sheet.Hoja <= 0)
             throw new ArgumentException("La orden, NHCL y hoja son obligatorios para guardar la ficha.");
+        await ValidarOrdenPacienteAsync(sheet.IdOrden, sheet.Nhcl);
         if (sheet.DiasHospitalizacion <= 0)
             throw new ArgumentException("El día de hospitalización debe ser mayor que cero.");
         if (sheet.Peso is < 0)
@@ -868,8 +842,7 @@ public class HospitalizacionService : IHospitalizacionService
 
     public async Task<MonitoreoHospitalarioSheetDto> CargarMonitoreoHospitalarioAsync(int idOrden, int nhcl, int hoja = 1, int idUsuario = 0)
     {
-        if (idOrden <= 0) idOrden = 1;
-        if (nhcl <= 0) nhcl = 1;
+        await ValidarOrdenPacienteAsync(idOrden, nhcl);
         if (hoja <= 0) hoja = 1;
 
         var hojas = new List<int> { 1 };
@@ -954,7 +927,10 @@ public class HospitalizacionService : IHospitalizacionService
             notasChequeo = (await tNotas).ToList();
             obsHoras = (await tObs).ToList();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("No se pudo cargar el monitoreo hospitalario desde SQL Server.", ex);
+        }
 
         if (filas.Count == 0)
             filas = Enumerable.Range(1, 24).Select(i => new MonitoreoFilaDto { Fila = i, IdOrden = idOrden, Nhcl = nhcl, Hoja = hoja }).ToList();
@@ -1000,6 +976,8 @@ public class HospitalizacionService : IHospitalizacionService
 
     public async Task<int> CrearNuevaHojaMonitoreoAsync(int idOrden, int nhcl, int idUsuario)
     {
+        await ValidarOrdenPacienteAsync(idOrden, nhcl);
+
         var maxHoja = await _db.ExecuteScalarAsync<int?>(
             "SELECT MAX(hoja) FROM hvt_bloqueMonitoreo WHERE idorden = @IdOrden AND nhcl = @Nhcl",
             new { IdOrden = idOrden, Nhcl = nhcl }) ?? 0;
@@ -1011,6 +989,8 @@ public class HospitalizacionService : IHospitalizacionService
 
     public async Task GuardarMonitoreoHospitalarioAsync(MonitoreoHospitalarioSheetDto sheet, int idUsuario)
     {
+        ArgumentNullException.ThrowIfNull(sheet);
+        await ValidarOrdenPacienteAsync(sheet.IdOrden, sheet.Nhcl);
         ValidarFilas(sheet.FilasMonitoreo, 24, "monitoreo");
         ValidarValoresMonitoreo(sheet.FilasMonitoreo);
 

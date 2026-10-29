@@ -5,6 +5,11 @@
 
 <PageTitle>e-ForVets - Panel Principal</PageTitle>
 
+@if (!string.IsNullOrWhiteSpace(_mensajeAccesoRapido))
+{
+    <div class="alert alert-warning">@_mensajeAccesoRapido</div>
+}
+
 <!-- Welcome / Header Banner -->
 <div class="card shadow-sm border-0 mb-4 bg-primary text-white" style="border-radius: 14px; background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%) !important;">
     <div class="card-body p-4">
@@ -463,10 +468,11 @@
     private int _totalOrdenesActivas;
     private int _totalCitasHoy;
     private int _totalHospitalizados;
-    private int _ordenDefault = 1;
-    private int _nhclDefault = 1;
-    private int _ordenManual = 1;
-    private int _nhclManual = 1;
+    private int _ordenDefault;
+    private int _nhclDefault;
+    private int _ordenManual;
+    private int _nhclManual;
+    private string _mensajeAccesoRapido = string.Empty;
     private List<OrdenActivaResumenDto> _pacientesRecientes = [];
 
     protected override async Task OnInitializedAsync()
@@ -498,7 +504,7 @@
         }
         catch (Exception)
         {
-            // Continuar con valores por defecto
+            _mensajeAccesoRapido = "No se pudieron cargar las órdenes desde la base de datos.";
         }
         finally
         {
@@ -510,6 +516,14 @@
     {
         var ord = _ordenManual > 0 ? _ordenManual : _ordenDefault;
         var nhcl = _nhclManual > 0 ? _nhclManual : _nhclDefault;
+
+        if (ord <= 0 || nhcl <= 0)
+        {
+            _mensajeAccesoRapido = "Seleccione una orden real e ingrese su NHCL antes de abrir el módulo.";
+            return;
+        }
+
+        _mensajeAccesoRapido = string.Empty;
 
         var url = modulo switch
         {
