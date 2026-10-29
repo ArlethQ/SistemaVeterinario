@@ -1,40 +1,571 @@
 @page "/consulta/historial/{Nhcl:int}"
+@page "/consulta/curvacrecimiento/{Nhcl:int}"
+@page "/consulta/historial/{Nhcl:int}/{TabInicial}"
 @inject SessionStateService Session
 @inject IAdministracionClinicaService AdminService
 @inject IWebHostEnvironment Environment
 @inject NavigationManager Nav
-<PageTitle>Historial del paciente | e-ForVets</PageTitle>
+@inject IJSRuntime JS
+<PageTitle>Historial y Curva de Crecimiento | e-ForVets</PageTitle>
 
 @if (_autorizado)
 {
 <div class="container-fluid py-3">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3"><div><small class="text-primary fw-bold">HISTORIA LONGITUDINAL</small><h2 class="mb-0">Paciente NHCL @Nhcl</h2></div><a class="btn btn-outline-secondary" href="/admision/clientes-pacientes">Volver a pacientes</a></div>
-    @if(!string.IsNullOrWhiteSpace(_error)){<div class="alert alert-danger">@_error</div>}
-    <ul class="nav nav-tabs mb-3"><li class="nav-item"><button class="nav-link @(_tab=="resumen"?"active":"")" @onclick='()=>_tab="resumen"'>Resumen clínico</button></li><li class="nav-item"><button class="nav-link @(_tab=="crecimiento"?"active":"")" @onclick='()=>_tab="crecimiento"'>Curva de crecimiento</button></li><li class="nav-item"><button class="nav-link @(_tab=="archivos"?"active":"")" @onclick='()=>_tab="archivos"'>Archivos (@_archivos.Count)</button></li></ul>
-    @if(_cargando){<div class="text-muted">Cargando historial...</div>}
-    else if(_tab=="resumen")
+    <!-- CABECERA DEL PACIENTE -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <small class="text-primary fw-bold text-uppercase">Historia Longitudinal y Biometría</small>
+            <h2 class="mb-0 fw-bold">
+                @if (_pacienteInfo is not null)
+                {
+                    <span>@_pacienteInfo.Nombre</span>
+                    <span class="fs-5 text-muted fw-normal ms-2">(NHCL: #@Nhcl)</span>
+                }
+                else
+                {
+                    <span>Paciente NHCL #@Nhcl</span>
+                }
+            </h2>
+            @if (_pacienteInfo is not null)
+            {
+                <div class="d-flex flex-wrap gap-2 text-muted small mt-1">
+                    <span><strong>Especie:</strong> @_pacienteInfo.Especie</span>
+                    <span>•</span>
+                    <span><strong>Raza:</strong> @_pacienteInfo.Raza</span>
+                    <span>•</span>
+                    <span><strong>Sexo:</strong> @_pacienteInfo.Sexo</span>
+                    <span>•</span>
+                    <span><strong>Propietario:</strong> @_pacienteInfo.Cliente</span>
+                    @if (_pacienteInfo.FechaNacimiento.HasValue)
+                    {
+                        <span>•</span>
+                        <span><strong>Nacimiento:</strong> @_pacienteInfo.FechaNacimiento.Value.ToString("yyyy-MM-dd")</span>
+                    }
+                </div>
+            }
+        </div>
+        <div class="d-flex gap-2">
+            @if (_tab == "crecimiento")
+            {
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ImprimirGraficoAsync">
+                    <i class="bi bi-printer me-1"></i>Imprimir Curva
+                </button>
+            }
+            <a class="btn btn-outline-primary btn-sm" href="/admision/clientes-pacientes">
+                <i class="bi bi-arrow-left me-1"></i>Volver a Pacientes
+            </a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="row g-3">@foreach(var grupo in _historial.GroupBy(x=>x.Categoria)){<div class="col-lg-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-white fw-bold">@grupo.Key</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Descripción</th><th class="text-end">Registros</th></tr></thead><tbody>@foreach(var x in grupo.OrderByDescending(x=>x.NumeroVeces)){<tr><td>@if(!string.IsNullOrWhiteSpace(x.Codigo)){<code>@x.Codigo</code>} @x.Descripcion</td><td class="text-end">@x.NumeroVeces</td></tr>}</tbody></table></div></div></div>}</div>
+        <div class="alert alert-danger py-2">@_error</div>
     }
-    else if(_tab=="crecimiento")
+
+    <!-- PESTAÑAS -->
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <button class="nav-link @(_tab=="resumen"?"active fw-bold":"")" @onclick='()=>_tab="resumen"'>
+                Resumen Clínico
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(_tab=="crecimiento"?"active fw-bold text-primary":"")" @onclick='()=>_tab="crecimiento"'>
+                📈 Curva de Crecimiento y Constantes (@_mediciones.Count)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(_tab=="archivos"?"active fw-bold":"")" @onclick='()=>_tab="archivos"'>
+                Archivos Adjuntos (@_archivos.Count)
+            </button>
+        </li>
+    </ul>
+
+    @if (_cargando)
     {
-        <div class="card border-0 shadow-sm"><div class="card-header bg-white"><strong>Evolución de peso</strong><small class="d-block text-muted">Datos provenientes de fichas médicas.</small></div><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Fecha</th><th>Edad</th><th>Peso (kg)</th><th>FC</th><th>FR</th></tr></thead><tbody>@foreach(var x in _mediciones){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td>@(x.EdadMeses/12) años @(x.EdadMeses%12) meses</td><td><strong>@x.Peso?.ToString("N2")</strong></td><td>@x.FrecuenciaCardiaca?.ToString("N0")</td><td>@x.FrecuenciaRespiratoria?.ToString("N0")</td></tr>}</tbody></table></div></div>
+        <div class="d-flex align-items-center gap-2 text-muted py-4">
+            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+            <span>Cargando historial y registros biométricos del paciente...</span>
+        </div>
+    }
+    else if (_tab == "resumen")
+    {
+        <div class="row g-3">
+            @foreach (var grupo in _historial.GroupBy(x => x.Categoria))
+            {
+                <div class="col-lg-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-white fw-bold">@grupo.Key</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr><th>Descripción</th><th class="text-end">Registros</th></tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var x in grupo.OrderByDescending(x => x.NumeroVeces))
+                                    {
+                                        <tr>
+                                            <td>
+                                                @if (!string.IsNullOrWhiteSpace(x.Codigo))
+                                                {
+                                                    <code class="me-1">@x.Codigo</code>
+                                                }
+                                                @x.Descripcion
+                                            </td>
+                                            <td class="text-end fw-semibold">@x.NumeroVeces</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (_tab == "crecimiento")
+    {
+        <!-- PESTAÑA: CURVA DE CRECIMIENTO VISUAL E INTERACTIVA (MIGRACIÓN curvaCrecimiento.aspx) -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body pb-2">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <div>
+                        <h5 class="fw-bold mb-0 text-dark">@TituloMetricaActual</h5>
+                        <small class="text-muted">Evolución longitudinal registrada en atenciones y fichas médicas.</small>
+                    </div>
+
+                    <!-- SELECTOR DE CONSTANTE (PESO, FC, FR) -->
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn @(_metricaActiva == "peso" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarMetrica("peso")'>
+                            ⚖️ Peso (kg) — Crecimiento
+                        </button>
+                        <button type="button" class="btn @(_metricaActiva == "fc" ? "btn-danger" : "btn-outline-danger")" @onclick='() => CambiarMetrica("fc")'>
+                            ❤️ Frecuencia Cardíaca (lpm)
+                        </button>
+                        <button type="button" class="btn @(_metricaActiva == "fr" ? "btn-success" : "btn-outline-success")" @onclick='() => CambiarMetrica("fr")'>
+                            🫁 Frecuencia Respiratoria (rpm)
+                        </button>
+                    </div>
+                </div>
+
+                @{
+                    var puntos = ObtenerPuntosValidos();
+                }
+
+                @if (puntos.Count == 0)
+                {
+                    <div class="alert alert-light border text-center py-4 my-2">
+                        <div class="fs-4 text-muted mb-1">📉</div>
+                        <h6 class="text-muted fw-semibold">Sin datos suficientes para esta métrica</h6>
+                        <small class="text-muted">No se registran mediciones numéricas mayores a cero en las fichas médicas de este paciente.</small>
+                    </div>
+                }
+                else
+                {
+                    <!-- TARJETAS DE RESUMEN KPI -->
+                    var primerPunto = puntos.First();
+                    var ultimoPunto = puntos.Last();
+                    var dif = ultimoPunto.Valor - primerPunto.Valor;
+                    var maxPunto = puntos.MaxBy(p => p.Valor)!;
+                    var minPunto = puntos.MinBy(p => p.Valor)!;
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6 col-md-3">
+                            <div class="p-2 border rounded bg-light">
+                                <small class="text-muted d-block">Último valor (@ultimoPunto.Fecha.ToString("dd/MM/yyyy"))</small>
+                                <strong class="fs-5 text-dark">@ultimoPunto.Valor.ToString("N2") @UnidadMetricaActual</strong>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="p-2 border rounded bg-light">
+                                <small class="text-muted d-block">Primer registro (@primerPunto.Fecha.ToString("dd/MM/yyyy"))</small>
+                                <strong class="fs-5 text-dark">@primerPunto.Valor.ToString("N2") @UnidadMetricaActual</strong>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="p-2 border rounded bg-light">
+                                <small class="text-muted d-block">Variación total</small>
+                                <strong class="fs-5 @(dif >= 0 ? "text-success" : "text-danger")">
+                                    @(dif >= 0 ? "+" : "")@dif.ToString("N2") @UnidadMetricaActual
+                                    @if (primerPunto.Valor > 0)
+                                    {
+                                        <small class="fs-6 text-muted">(@((dif / primerPunto.Valor * 100).ToString("N1"))%)</small>
+                                    }
+                                </strong>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="p-2 border rounded bg-light">
+                                <small class="text-muted d-block">Rango registrado</small>
+                                <span class="fs-6 fw-bold text-secondary">
+                                    Min: @minPunto.Valor.ToString("N2") — Max: @maxPunto.Valor.ToString("N2")
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GRÁFICO SVG NATIVO E INTERACTIVO -->
+                    <div class="border rounded p-2 bg-white position-relative mb-2">
+                        @{
+                            const double svgW = 900;
+                            const double svgH = 340;
+                            const double padL = 70;
+                            const double padR = 40;
+                            const double padT = 30;
+                            const double padB = 45;
+                            const double plotW = svgW - padL - padR;
+                            const double plotH = svgH - padT - padB;
+
+                            decimal vMin = minPunto.Valor;
+                            decimal vMax = maxPunto.Valor;
+                            if (vMin == vMax)
+                            {
+                                vMin = vMin > 0 ? vMin * 0.8m : 0m;
+                                vMax = vMax > 0 ? vMax * 1.2m : 10m;
+                            }
+                            else
+                            {
+                                var margin = (vMax - vMin) * 0.1m;
+                                vMin = Math.Max(0m, vMin - margin);
+                                vMax = vMax + margin;
+                            }
+                            decimal vRange = vMax - vMin <= 0 ? 1m : vMax - vMin;
+
+                            // Coordenadas calculadas
+                            var coords = new List<(double X, double Y, PuntoGrafico P)>();
+                            for (int i = 0; i < puntos.Count; i++)
+                            {
+                                var p = puntos[i];
+                                double cx = puntos.Count == 1 ? padL + (plotW / 2.0) : padL + (i * plotW / (puntos.Count - 1));
+                                double norm = (double)((p.Valor - vMin) / vRange);
+                                double cy = padT + plotH - (norm * plotH);
+                                coords.Add((cx, cy, p));
+                            }
+
+                            // Construcción de trazado de línea y área sombreada
+                            var pathLine = new System.Text.StringBuilder();
+                            for (int i = 0; i < coords.Count; i++)
+                            {
+                                if (i == 0) pathLine.Append(System.Globalization.CultureInfo.InvariantCulture, $"M {coords[i].X:F1} {coords[i].Y:F1}");
+                                else pathLine.Append(System.Globalization.CultureInfo.InvariantCulture, $" L {coords[i].X:F1} {coords[i].Y:F1}");
+                            }
+
+                            var pathArea = new System.Text.StringBuilder(pathLine.ToString());
+                            if (coords.Count > 0)
+                            {
+                                double groundY = padT + plotH;
+                                pathArea.Append(System.Globalization.CultureInfo.InvariantCulture, $" L {coords.Last().X:F1} {groundY:F1} L {coords.First().X:F1} {groundY:F1} Z");
+                            }
+
+                            string strokeColor = _metricaActiva switch
+                            {
+                                "fc" => "#dc2626",
+                                "fr" => "#059669",
+                                _ => "#2563eb"
+                            };
+                            string gradId = $"grad_{_metricaActiva}";
+                        }
+
+                        <svg viewBox="0 0 @svgW @svgH" class="w-100" style="max-height: 380px; display: block;" preserveAspectRatio="xMidYMid meet">
+                            <defs>
+                                <linearGradient id="@gradId" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="@strokeColor" stop-opacity="0.35" />
+                                    <stop offset="100%" stop-color="@strokeColor" stop-opacity="0.02" />
+                                </linearGradient>
+                            </defs>
+
+                            <!-- LÍNEAS DE GUÍA HORIZONTALES (EJE Y) -->
+                            @for (int step = 0; step <= 4; step++)
+                            {
+                                double yPos = padT + (step * plotH / 4.0);
+                                decimal refVal = vMax - (step * (vRange / 4m));
+                                <line x1="@padL" y1="@yPos" x2="@(svgW - padR)" y2="@yPos" stroke="#e2e8f0" stroke-dasharray="4 4" stroke-width="1" />
+                                @((MarkupString)$"<text x='{padL - 10}' y='{yPos + 4:F1}' text-anchor='end' fill='#64748b' font-size='11' font-family='sans-serif'>{refVal:N1}</text>")
+                            }
+
+                            <!-- ÁREA BAJO LA CURVA -->
+                            @if (coords.Count > 1)
+                            {
+                                <path d="@pathArea.ToString()" fill="url(#@gradId)" />
+                                <path d="@pathLine.ToString()" fill="none" stroke="@strokeColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                            }
+                            else if (coords.Count == 1)
+                            {
+                                <line x1="@padL" y1="@coords[0].Y" x2="@(svgW - padR)" y2="@coords[0].Y" stroke="@strokeColor" stroke-width="2" stroke-dasharray="2 2" />
+                            }
+
+                            <!-- PUNTOS INTERACTIVOS (CIRCULOS) -->
+                            @foreach (var pt in coords)
+                            {
+                                bool isSelected = _puntoSeleccionado == pt.P;
+                                <g style="cursor: pointer;" @onclick="() => _puntoSeleccionado = pt.P">
+                                    @if (isSelected)
+                                    {
+                                        <circle cx="@pt.X" cy="@pt.Y" r="11" fill="@strokeColor" fill-opacity="0.25" />
+                                        <circle cx="@pt.X" cy="@pt.Y" r="7" fill="@strokeColor" />
+                                    }
+                                    else
+                                    {
+                                        <circle cx="@pt.X" cy="@pt.Y" r="5" fill="#ffffff" stroke="@strokeColor" stroke-width="2.5" />
+                                    }
+                                </g>
+
+                                <!-- ETIQUETAS EJE X (FECHA Y EDAD) -->
+                                @if (coords.Count <= 8 || pt.P == primerPunto || pt.P == ultimoPunto || isSelected)
+                                {
+                                    @((MarkupString)$"<text x='{pt.X:F1}' y='{svgH - padB + 16:F1}' text-anchor='middle' fill='#475569' font-size='10' font-weight='{(isSelected ? "bold" : "normal")}'>{pt.P.Fecha:dd/MM/yy}</text>")
+                                    @((MarkupString)$"<text x='{pt.X:F1}' y='{svgH - padB + 28:F1}' text-anchor='middle' fill='#94a3b8' font-size='9'>{pt.P.EdadMeses}m</text>")
+                                }
+                            }
+                        </svg>
+
+                        <!-- TOOLTIP / DETALLE DE PUNTO SELECCIONADO -->
+                        @if (_puntoSeleccionado is not null)
+                        {
+                            <div class="alert alert-primary py-2 px-3 mb-0 mt-2 d-flex justify-content-between align-items-center small">
+                                <div>
+                                    <strong>Punto seleccionado:</strong>
+                                    <span class="ms-1">Fecha: @_puntoSeleccionado.Fecha.ToString("yyyy-MM-dd")</span>
+                                    <span class="ms-2">| Edad: @(_puntoSeleccionado.EdadMeses / 12)a @(_puntoSeleccionado.EdadMeses % 12)m</span>
+                                    <span class="ms-2 text-primary fw-bold">| @TituloMetricaActual: @_puntoSeleccionado.Valor.ToString("N2") @UnidadMetricaActual</span>
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary py-0 px-2" @onclick="() => _puntoSeleccionado = null">
+                                    Cerrar detalle
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- TABLA COMPLETA HISTÓRICA (CONSERVA LOS DATOS ORIGINALES) -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>Tabla Histórica de Fichas Médicas</strong>
+                    <small class="d-block text-muted">Historial secuencial de pesajes y constantes vitales por orden médica.</small>
+                </div>
+                <span class="badge bg-secondary">@_mediciones.Count registros</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Edad del Paciente</th>
+                            <th class="@(_metricaActiva == "peso" ? "table-primary fw-bold" : "")">Peso (kg)</th>
+                            <th class="@(_metricaActiva == "fc" ? "table-danger fw-bold" : "")">FC (lpm)</th>
+                            <th class="@(_metricaActiva == "fr" ? "table-success fw-bold" : "")">FR (rpm)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var x in _mediciones.OrderByDescending(m => m.Fecha))
+                        {
+                            bool rowSelected = _puntoSeleccionado?.Fecha == x.Fecha;
+                            <tr class="@(rowSelected ? "table-active border-primary" : "")" style="cursor: pointer;" @onclick='() => SeleccionarPuntoPorFecha(x.Fecha)'>
+                                <td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>@(x.EdadMeses / 12) año(s) @(x.EdadMeses % 12) mes(es)</td>
+                                <td class="@(_metricaActiva == "peso" ? "fw-bold text-primary" : "")">
+                                    @(x.Peso.HasValue ? x.Peso.Value.ToString("N2") : "-")
+                                </td>
+                                <td class="@(_metricaActiva == "fc" ? "fw-bold text-danger" : "")">
+                                    @(x.FrecuenciaCardiaca.HasValue ? x.FrecuenciaCardiaca.Value.ToString("N0") : "-")
+                                </td>
+                                <td class="@(_metricaActiva == "fr" ? "fw-bold text-success" : "")">
+                                    @(x.FrecuenciaRespiratoria.HasValue ? x.FrecuenciaRespiratoria.Value.ToString("N0") : "-")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
     }
     else
     {
-        <div class="card border-0 shadow-sm"><div class="card-body"><label class="form-label fw-semibold">Adjuntar archivo clínico</label><InputFile OnChange="SubirArchivoAsync" class="form-control mb-3" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.docx" />@if(!string.IsNullOrWhiteSpace(_mensaje)){<div class="alert alert-success py-2">@_mensaje</div>}<div class="list-group">@foreach(var archivo in _archivos){<a class="list-group-item list-group-item-action d-flex justify-content-between" href="@archivo.Url" target="_blank"><span>📎 @archivo.Nombre</span><small>@archivo.Fecha.ToString("yyyy-MM-dd HH:mm")</small></a>}</div></div></div>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <label class="form-label fw-semibold">Adjuntar archivo clínico</label>
+                <InputFile OnChange="SubirArchivoAsync" class="form-control mb-3" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.docx" />
+                @if (!string.IsNullOrWhiteSpace(_mensaje))
+                {
+                    <div class="alert alert-success py-2">@_mensaje</div>
+                }
+                <div class="list-group">
+                    @foreach (var archivo in _archivos)
+                    {
+                        <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="@archivo.Url" target="_blank">
+                            <span>📎 @archivo.Nombre</span>
+                            <small class="text-muted">@archivo.Fecha.ToString("yyyy-MM-dd HH:mm")</small>
+                        </a>
+                    }
+                </div>
+            </div>
+        </div>
     }
 </div>
 }
 
 @code {
     [Parameter] public int Nhcl { get; set; }
-    private bool _autorizado,_cargando=true; private string _tab="resumen",_error="",_mensaje="";
-    private List<HistorialPacienteItemDto> _historial=[]; private List<MedicionCrecimientoDto> _mediciones=[]; private List<ArchivoPaciente> _archivos=[];
-    private sealed record ArchivoPaciente(string Nombre,string Url,DateTime Fecha);
-    protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated){Nav.NavigateTo("/login");return;}_autorizado=true;try{var h=AdminService.ObtenerResumenHistorialAsync(Nhcl);var c=AdminService.ObtenerCurvaCrecimientoAsync(Nhcl);await Task.WhenAll(h,c);_historial=h.Result;_mediciones=c.Result;CargarArchivos();}catch(Exception){_error="No se pudo cargar el historial del paciente.";}_cargando=false;}
-    private string DirectorioRelativo=>$"archivosPacientes/{Nhcl}/ingreso";
-    private string DirectorioFisico=>Path.Combine(Environment.WebRootPath,"archivosPacientes",Nhcl.ToString(),"ingreso");
-    private void CargarArchivos(){Directory.CreateDirectory(DirectorioFisico);_archivos=Directory.EnumerateFiles(DirectorioFisico).Select(x=>new ArchivoPaciente(Path.GetFileName(x),$"/{DirectorioRelativo}/{Uri.EscapeDataString(Path.GetFileName(x))}",File.GetLastWriteTime(x))).OrderByDescending(x=>x.Fecha).ToList();}
-    private async Task SubirArchivoAsync(InputFileChangeEventArgs e){var archivo=e.File;if(archivo.Size>15*1024*1024){_error="El archivo supera el límite de 15 MB.";return;}var extensiones=new HashSet<string>(StringComparer.OrdinalIgnoreCase){".pdf",".png",".jpg",".jpeg",".xlsx",".docx"};var ext=Path.GetExtension(archivo.Name);if(!extensiones.Contains(ext)){_error="Tipo de archivo no permitido.";return;}Directory.CreateDirectory(DirectorioFisico);var nombre=$"{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileNameWithoutExtension(archivo.Name)}{ext}";await using var entrada=archivo.OpenReadStream(15*1024*1024);await using var salida=File.Create(Path.Combine(DirectorioFisico,nombre));await entrada.CopyToAsync(salida);_error="";_mensaje="Archivo cargado correctamente.";CargarArchivos();}
+    [Parameter] public string? TabInicial { get; set; }
+
+    private bool _autorizado, _cargando = true;
+    private string _tab = "resumen", _error = "", _mensaje = "";
+    private string _metricaActiva = "peso"; // "peso", "fc", "fr"
+    private PuntoGrafico? _puntoSeleccionado;
+
+    private PacienteResumenCrecimientoDto? _pacienteInfo;
+    private List<HistorialPacienteItemDto> _historial = [];
+    private List<MedicionCrecimientoDto> _mediciones = [];
+    private List<ArchivoPaciente> _archivos = [];
+
+    public sealed record ArchivoPaciente(string Nombre, string Url, DateTime Fecha);
+    public sealed record PuntoGrafico(int Indice, DateTime Fecha, int EdadMeses, decimal Valor);
+
+    private string TituloMetricaActual => _metricaActiva switch
+    {
+        "fc" => "Frecuencia Cardíaca (lpm)",
+        "fr" => "Frecuencia Respiratoria (rpm)",
+        _ => "Curva de Crecimiento — Evolución de Peso (kg)"
+    };
+
+    private string UnidadMetricaActual => _metricaActiva switch
+    {
+        "fc" => "lpm",
+        "fr" => "rpm",
+        _ => "kg"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+        _autorizado = true;
+
+        if (!string.IsNullOrWhiteSpace(TabInicial) && TabInicial.Equals("crecimiento", StringComparison.OrdinalIgnoreCase))
+        {
+            _tab = "crecimiento";
+        }
+        else if (Nav.Uri.Contains("curvacrecimiento", StringComparison.OrdinalIgnoreCase))
+        {
+            _tab = "crecimiento";
+        }
+
+        try
+        {
+            var h = AdminService.ObtenerResumenHistorialAsync(Nhcl);
+            var c = AdminService.ObtenerCurvaCrecimientoAsync(Nhcl);
+            var p = AdminService.ObtenerInfoPacienteCrecimientoAsync(Nhcl);
+
+            await Task.WhenAll(h, c, p);
+
+            _historial = h.Result;
+            _mediciones = c.Result;
+            _pacienteInfo = p.Result;
+
+            CargarArchivos();
+        }
+        catch (Exception)
+        {
+            _error = "No se pudo cargar el historial del paciente.";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private void CambiarMetrica(string metrica)
+    {
+        _metricaActiva = metrica;
+        _puntoSeleccionado = null;
+    }
+
+    private List<PuntoGrafico> ObtenerPuntosValidos()
+    {
+        var lista = new List<PuntoGrafico>();
+        int idx = 0;
+        foreach (var m in _mediciones.OrderBy(x => x.Fecha))
+        {
+            decimal? val = _metricaActiva switch
+            {
+                "fc" => m.FrecuenciaCardiaca,
+                "fr" => m.FrecuenciaRespiratoria,
+                _ => m.Peso
+            };
+
+            if (val.HasValue && val.Value > 0)
+            {
+                lista.Add(new PuntoGrafico(idx++, m.Fecha, m.EdadMeses, val.Value));
+            }
+        }
+        return lista;
+    }
+
+    private void SeleccionarPuntoPorFecha(DateTime fecha)
+    {
+        var puntos = ObtenerPuntosValidos();
+        _puntoSeleccionado = puntos.FirstOrDefault(p => p.Fecha == fecha);
+    }
+
+    private async Task ImprimirGraficoAsync()
+    {
+        await JS.InvokeVoidAsync("window.print");
+    }
+
+    private string DirectorioRelativo => $"archivosPacientes/{Nhcl}/ingreso";
+    private string DirectorioFisico => Path.Combine(Environment.WebRootPath, "archivosPacientes", Nhcl.ToString(), "ingreso");
+
+    private void CargarArchivos()
+    {
+        try
+        {
+            Directory.CreateDirectory(DirectorioFisico);
+            _archivos = Directory.EnumerateFiles(DirectorioFisico)
+                .Select(x => new ArchivoPaciente(
+                    Path.GetFileName(x),
+                    $"/{DirectorioRelativo}/{Uri.EscapeDataString(Path.GetFileName(x))}",
+                    File.GetLastWriteTime(x)))
+                .OrderByDescending(x => x.Fecha)
+                .ToList();
+        }
+        catch
+        {
+            _archivos = [];
+        }
+    }
+
+    private async Task SubirArchivoAsync(InputFileChangeEventArgs e)
+    {
+        var archivo = e.File;
+        if (archivo.Size > 15 * 1024 * 1024)
+        {
+            _error = "El archivo supera el límite de 15 MB.";
+            return;
+        }
+
+        var extensiones = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf", ".png", ".jpg", ".jpeg", ".xlsx", ".docx" };
+        var ext = Path.GetExtension(archivo.Name);
+        if (!extensiones.Contains(ext))
+        {
+            _error = "Tipo de archivo no permitido.";
+            return;
+        }
+
+        Directory.CreateDirectory(DirectorioFisico);
+        var nombre = $"{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileNameWithoutExtension(archivo.Name)}{ext}";
+
+        await using var entrada = archivo.OpenReadStream(15 * 1024 * 1024);
+        await using var salida = File.Create(Path.Combine(DirectorioFisico, nombre));
+        await entrada.CopyToAsync(salida);
+
+        _error = "";
+        _mensaje = "Archivo cargado correctamente.";
+        CargarArchivos();
+    }
 }

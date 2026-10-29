@@ -64,6 +64,17 @@ public sealed class MedicionCrecimientoDto
     public int EdadMeses { get; set; }
 }
 
+public sealed class PacienteResumenCrecimientoDto
+{
+    public int Nhcl { get; set; }
+    public string Nombre { get; set; } = string.Empty;
+    public string Especie { get; set; } = string.Empty;
+    public string Raza { get; set; } = string.Empty;
+    public string Sexo { get; set; } = string.Empty;
+    public DateTime? FechaNacimiento { get; set; }
+    public string Cliente { get; set; } = string.Empty;
+}
+
 public sealed class LocalidadAdministrativaDto
 {
     public int Id { get; set; }

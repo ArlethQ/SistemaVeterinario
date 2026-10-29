@@ -13,6 +13,7 @@ public interface IAdministracionClinicaService
     Task<List<PacienteFallecidoDto>> ObtenerFallecidosAsync(DateTime desde, DateTime hasta);
     Task<List<HistorialPacienteItemDto>> ObtenerResumenHistorialAsync(int nhcl);
     Task<List<MedicionCrecimientoDto>> ObtenerCurvaCrecimientoAsync(int nhcl);
+    Task<PacienteResumenCrecimientoDto?> ObtenerInfoPacienteCrecimientoAsync(int nhcl);
     Task<List<LocalidadAdministrativaDto>> ObtenerLocalidadesAsync();
     Task<List<CatalogoItemGenericoDto>> ObtenerProvinciasAsync();
     Task<List<CatalogoItemGenericoDto>> ObtenerCiudadesAsync(int idProvincia);
@@ -204,6 +205,25 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
             FROM vt_fichaMedica f INNER JOIN vt_pacientes p ON f.med_nhcl=p.mas_nhcl
             WHERE f.med_nhcl=@Nhcl ORDER BY f.med_fecha";
         return (await _db.QueryAsync<MedicionCrecimientoDto>(sql, new { Nhcl = nhcl })).ToList();
+    }
+
+    public async Task<PacienteResumenCrecimientoDto?> ObtenerInfoPacienteCrecimientoAsync(int nhcl)
+    {
+        const string sql = @"
+            SELECT 
+                p.mas_nhcl AS Nhcl,
+                RTRIM(ISNULL(p.mas_nombre, '')) AS Nombre,
+                RTRIM(ISNULL(e.especie_descripcion, '')) AS Especie,
+                RTRIM(ISNULL(r.des_raza, '')) AS Raza,
+                CASE WHEN RTRIM(p.mas_sexo) = 'H' THEN 'Hembra' WHEN RTRIM(p.mas_sexo) = 'M' THEN 'Macho' ELSE 'Indeterminado' END AS Sexo,
+                p.mas_fechanace AS FechaNacimiento,
+                RTRIM(ISNULL(c.pa_nombres, '') + ' ' + ISNULL(c.pa_apellidos, '')) AS Cliente
+            FROM vt_pacientes p
+            LEFT JOIN vt_especie e ON p.mas_especie = e.especie_id
+            LEFT JOIN vt_razas r ON p.mas_raza = r.id_raza
+            LEFT JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
+            WHERE p.mas_nhcl = @Nhcl";
+        return await _db.QueryFirstOrDefaultAsync<PacienteResumenCrecimientoDto>(sql, new { Nhcl = nhcl });
     }
 
     public async Task<List<LocalidadAdministrativaDto>> ObtenerLocalidadesAsync()
