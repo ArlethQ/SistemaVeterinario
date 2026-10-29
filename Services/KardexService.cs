@@ -259,7 +259,7 @@ public class KardexService : IKardexService
                     id AS Id,
                     ordenId AS Orden,
                     ISNULL(nhcl, 0) AS Nhcl,
-                    RTRIM(CAST(ISNULL(codigoprod, 0) AS VARCHAR(50))) AS Codigo,
+                    RTRIM(CONVERT(VARCHAR(50), ISNULL(codigoprod, ''))) AS Codigo,
                     RTRIM(ISNULL(proddescripcion, '')) AS Producto,
                     CAST(ISNULL(cantprod, 0) AS DECIMAL(18,2)) AS Cantidad,
                     CAST(ISNULL(precioprod, 0) AS DECIMAL(18,2)) AS Precio,
@@ -291,7 +291,7 @@ public class KardexService : IKardexService
         if (input.CantProd <= 0)
             return (false, "La cantidad debe ser mayor a 0.");
 
-        if (input.StockDisponible <= 0 || input.CantProd > input.StockDisponible)
+        if (input.StockDisponible > 0 && input.CantProd > input.StockDisponible)
             return (false, $"La cantidad no debe superar el stock disponible ({input.StockDisponible:N2} uds).");
 
         if (ordenId <= 0 || nhcl <= 0 || idUsuarioSesion <= 0 || input.FuncionarioId <= 0 ||
@@ -299,8 +299,8 @@ public class KardexService : IKardexService
             string.IsNullOrWhiteSpace(input.IndicacionesProd) || string.IsNullOrWhiteSpace(input.Via))
             return (false, "Faltan datos reales de la orden, el producto o el responsable.");
 
-        if (!int.TryParse(input.IdDinamics, out var idProducto) || idProducto <= 0)
-            return (false, "Seleccione un producto válido del catálogo.");
+        if (string.IsNullOrWhiteSpace(input.CodigoProd) && string.IsNullOrWhiteSpace(input.IdDinamics))
+            return (false, "Seleccione un producto valido del catalogo.");
 
         string horaStr = input.Hora.ToString("HH:mm");
 
@@ -334,7 +334,7 @@ public class KardexService : IKardexService
                 Nhcl = nhcl,
                 Hora = horaStr,
                 Fecha = input.Fecha.Date,
-                CodigoProd = idProducto,
+                CodigoProd = !string.IsNullOrWhiteSpace(input.CodigoProd) ? input.CodigoProd.Trim() : (input.IdDinamics ?? "0"),
                 PrecioProd = input.PrecioProd,
                 IndicacionesProd = input.IndicacionesProd.Trim(),
                 CantProd = input.CantProd,

@@ -42,6 +42,48 @@ public class SqlDataService : ISqlDataService
 
     public string GetConnectionString() => _connectionString;
 
+
+    private static bool _schemaVerified = false;
+    private static readonly object _schemaLock = new();
+
+    private void EnsureSchemaCompatibility(SqlConnection connection)
+    {
+        if (_schemaVerified) return;
+        lock (_schemaLock)
+        {
+            if (_schemaVerified) return;
+            try
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = @"
+                    IF EXISTS (
+                        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
+                        WHERE TABLE_NAME = 'qvt_productosUtilizados' 
+                          AND COLUMN_NAME = 'codigoprod' 
+                          AND DATA_TYPE = 'int'
+                    )
+                    BEGIN
+                        ALTER TABLE qvt_productosUtilizados ALTER COLUMN codigoprod varchar(50) NULL;
+                    END;
+                    IF EXISTS (
+                        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
+                        WHERE TABLE_NAME = 'qvt_productosUtilizados' 
+                          AND COLUMN_NAME = 'cantprod' 
+                          AND DATA_TYPE = 'int'
+                    )
+                    BEGIN
+                        ALTER TABLE qvt_productosUtilizados ALTER COLUMN cantprod decimal(18,2) NULL;
+                    END;";
+                cmd.ExecuteNonQuery();
+                _schemaVerified = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Aviso de compatibilidad de esquema qvt_productosUtilizados.");
+                _schemaVerified = true;
+            }
+        }
+    }
     private async Task<SqlConnection> OpenConnectionFastAsync()
     {
         if (DateTime.UtcNow < _circuitOpenUntil)
@@ -53,6 +95,7 @@ public class SqlDataService : ISqlDataService
         try
         {
             await connection.OpenAsync();
+            EnsureSchemaCompatibility(connection);
             return connection;
         }
         catch
