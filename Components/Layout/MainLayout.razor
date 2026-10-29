@@ -14,7 +14,7 @@
     </aside>
     <main class="workspace">
         <header class="workspace-header">
-            <div class="workspace-brand"><span class="mobile-mark">H</span><div><small>Hospital Veterinario</small><strong>@Session.LocalidadDescripcion</strong></div></div>
+            <div class="workspace-brand"><span class="mobile-mark">H</span><div><small>Hospital Veterinario</small><strong>@(Session.LocalidadDescripcion?.Replace(" USFQ", "", StringComparison.OrdinalIgnoreCase).Replace("USFQ", "", StringComparison.OrdinalIgnoreCase).Trim())</strong></div></div>
             <div class="session-actions"><div class="user-avatar">@Session.Iniciales</div><div class="user-copy"><strong>@Session.NombreUsuario</strong><small>@Session.LoginUser</small></div><button type="button" class="logout-button" @onclick="CerrarSesion">Salir</button></div>
         </header>
         <article class="workspace-content">@Body</article>

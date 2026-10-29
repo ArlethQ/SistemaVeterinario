@@ -42,7 +42,7 @@ public class SessionStateService
 
     public event Action? OnChange;
 
-    public void SetSession(UsuarioModel user, int localidad = 1, string localidadDesc = "HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ")
+    public void SetSession(UsuarioModel user, int localidad = 1, string localidadDesc = "HOSPITAL DE ESPECIALIDADES VETERINARIAS")
     {
         IdUser = user.UserNumero;
         TipoUser = user.UserTipoUserNumero;
@@ -51,6 +51,10 @@ public class SessionStateService
         NombreUsuario = user.UserNombre;
         Iniciales = string.IsNullOrWhiteSpace(user.UserIniciales) ? "HV" : user.UserIniciales.Trim();
         Localidad = localidad;
+        if (!string.IsNullOrWhiteSpace(localidadDesc))
+        {
+            localidadDesc = System.Text.RegularExpressions.Regex.Replace(localidadDesc, @"\bUSFQ\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        }
         LocalidadDescripcion = localidadDesc;
         Apostrofe = localidad == 2 ? "EQ" : "HV";
         _lastActivityUtc = DateTimeOffset.UtcNow;

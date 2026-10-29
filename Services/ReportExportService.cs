@@ -244,7 +244,7 @@ public class ReportExportService : IReportExportService
         using var workbook = new XLWorkbook();
 
         var wsSabana = workbook.Worksheets.Add("Sabana Kardex 5 Dias");
-        wsSabana.Cell(1, 1).Value = "HOSPITAL DE ESPECIALIDADES VETERINARIAS USFQ - KARDEX DE ENFERMERÍA";
+        wsSabana.Cell(1, 1).Value = "HOSPITAL DE ESPECIALIDADES VETERINARIAS - KARDEX DE ENFERMERÍA";
         wsSabana.Range(1, 1, 1, 16).Merge().Style
             .Font.SetBold(true).Font.SetFontSize(13)
             .Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A"))

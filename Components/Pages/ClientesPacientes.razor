@@ -283,6 +283,7 @@
     private IBrowserFile? _fotoMascota;
     private string? _fotoMascotaPreview;
     private string? _errorFotoMascota;
+    private static string MaxFechaNacimiento => DateTime.Today.ToString("yyyy-MM-dd");
     private string _fotoMascotaNombre = "Ningún archivo seleccionado";
     private bool _guardandoMascota;
     private int TotalPacientes => _clientes.Sum(c => ObtenerPacientes(c.PaCodigo).Count);
@@ -1056,6 +1057,12 @@
                 _mensajeAlerta = "La clase y el nombre científico son obligatorios para fauna silvestre.";
                 return;
             }
+            if (_mascotaEditando.MasFechaNace.Date > DateTime.Today)
+            {
+                _esError = true;
+                _mensajeAlerta = "La fecha de nacimiento no puede ser posterior a la fecha actual.";
+                return;
+            }
             if (!string.IsNullOrWhiteSpace(_mascotaEditando.MasNombre))
             {
                 _mascotaEditando.MasNombre = _mascotaEditando.MasNombre.Trim().ToUpperInvariant();
@@ -1336,7 +1343,7 @@
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold">Fecha de Nacimiento Aprox.</label>
-                                    <InputDate class="form-control form-control-sm" @bind-Value="_mascotaEditando.MasFechaNace" />
+                                    <InputDate class="form-control form-control-sm" @bind-Value="_mascotaEditando.MasFechaNace" max="@MaxFechaNacimiento" />
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold">Microchip / identificación</label>

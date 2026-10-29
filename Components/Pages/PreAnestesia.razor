@@ -242,7 +242,7 @@ else
                 <div class="card-body">
                     <div class="input-group input-group-sm mb-2">
                         <input type="text" class="form-control" placeholder="Buscar fármaco o insumo (mín. 3 letras)..."
-                               @bind="filtroProd" @bind:event="oninput" />
+                               @bind="filtroProd" @bind:event="oninput" @onkeydown="OnFiltroProdKeyDown" />
                         <button class="btn btn-outline-primary" @onclick="BuscarStockBcAsync" disabled="@buscandoStock">
                             @(buscandoStock ? "Buscando..." : "Buscar Productos")
                         </button>
@@ -503,6 +503,14 @@ else
             : "Ocurrió un error al guardar la Evaluación Pre-Anestésica.";
     }
 
+    private async Task OnFiltroProdKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await BuscarStockBcAsync();
+        }
+    }
+
     private async Task BuscarStockBcAsync()
     {
         if (string.IsNullOrWhiteSpace(filtroProd) || filtroProd.Trim().Length < 3)
@@ -512,16 +520,23 @@ else
             return;
         }
         buscandoStock = true;
+        mensajeAlerta = string.Empty;
         resultadosStock = await InventarioService.BuscarMedicamentosConStockAsync(
             filtroProd.Trim(),
             Session.CurrentUser?.IdLocalidad ?? 1,
             Session.CurrentUser?.PrefijoLocalidad ?? "HV");
         buscandoStock = false;
+
+        if (resultadosStock.Count == 0)
+        {
+            esError = false;
+            mensajeAlerta = $"No se encontraron fármacos o insumos activos para '{filtroProd.Trim()}'.";
+        }
     }
 
     private void SeleccionarProducto(FarmacoStockDto item)
     {
-        nuevoProd.CodigoProd = item.Id;
+        nuevoProd.CodigoProd = !string.IsNullOrWhiteSpace(item.Number) ? item.Number : item.Id;
         nuevoProd.ProdDescripcion = item.DisplayName;
         nuevoProd.PrecioProd = item.UnitPrice;
         nuevoProd.StockProd = (int)item.Inventory;

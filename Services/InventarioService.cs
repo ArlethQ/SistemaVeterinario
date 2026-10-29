@@ -35,12 +35,13 @@ public class InventarioService : IInventarioService
 
         string termino = filtro.Trim().ToUpperInvariant();
 
-        // El catálogo comercial de E-FACT (usuario configurado) es la fuente principal.
+        // El catálogo comercial de E-FACT (usuario configurado) es la fuente principal de productos e insumos.
         try
         {
             var productosEFact = await ObtenerCatalogoEFactCacheAsync();
             resultados.AddRange(productosEFact
                 .Where(x => x.Estado == "A" &&
+                    (string.Equals(x.Tipo, "PRODUCTO", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(x.Tipo) || !string.Equals(x.Tipo, "SERVICIO", StringComparison.OrdinalIgnoreCase)) &&
                     (x.Descripcion.Contains(termino, StringComparison.OrdinalIgnoreCase) ||
                      x.Codigo.Contains(termino, StringComparison.OrdinalIgnoreCase)))
                 .Take(30)
@@ -59,43 +60,19 @@ public class InventarioService : IInventarioService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo consultar el catálogo E-FACT; se usará el catálogo veterinario local.");
+            _logger.LogWarning(ex, "No se pudo consultar el catálogo E-FACT; se usará el histórico de medicamentos.");
         }
 
-        // Consultar únicamente el catálogo local de productos/medicinas.
-        if (resultados.Count == 0)
-        {
-            try
-            {
-                const string sqlLocal = @"
-                    SELECT TOP 30
-                        CAST(prod_id AS VARCHAR(20)) AS Number,
-                        RTRIM(ISNULL(prod_descripcion, '')) AS DisplayName,
-                        CAST(prod_id AS VARCHAR(50)) AS Id,
-                        'IVA0' AS TaxGroupCode,
-                        CAST(0 AS DECIMAL(18,2)) AS Inventory,
-                        CAST(0 AS DECIMAL(18,2)) AS Available,
-                        CAST(0 AS DECIMAL(18,2)) AS UnitPrice,
-                        'UND' AS BaseUnitOfMeasureCode,
-                        'LOCAL' AS Location
-                    FROM vt_productos p
-                    WHERE prod_descripcion LIKE @Filtro AND prod_estado = 'A'
-                    ORDER BY prod_descripcion";
-
-                resultados.AddRange(await _sql.QueryAsync<FarmacoStockDto>(sqlLocal, new { Filtro = $"%{termino}%" }));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Fallback a vt_productos falló; consultando histórico qvt_productosUtilizados.");
-            }
-        }
-
+        // Si no se encuentra en E-FACT, consultar el histórico de medicamentos e insumos reales
+        // EXCLUSIVAMENTE con tipo = 'M' (Medicamento) o 'I' (Insumo) en qvt_productosUtilizados.
+        // Se excluye terminantemente vt_productos (tarifario CPT: procedimientos/estudios como 'ABDOMEN 2 POSC', 'ABLACIONENDOMETRIAL')
+        // y registros con tipo = 'D' (Diagnósticos) o 'P' (Procedimientos).
         if (resultados.Count == 0)
         {
             try
             {
                 const string sqlHist = @"
-                    SELECT DISTINCT TOP 25
+                    SELECT DISTINCT TOP 30
                         CAST(codigoprod AS VARCHAR(20)) AS Number,
                         RTRIM(ISNULL(proddescripcion, '')) AS DisplayName,
                         CAST(codigoprod AS VARCHAR(20)) AS Id,
@@ -106,14 +83,17 @@ public class InventarioService : IInventarioService
                         'UND' AS BaseUnitOfMeasureCode,
                         'HISTORICO' AS Location
                     FROM qvt_productosUtilizados
-                    WHERE proddescripcion LIKE @Filtro AND codigoprod IS NOT NULL";
+                    WHERE proddescripcion LIKE @Filtro
+                      AND codigoprod IS NOT NULL
+                      AND tipo IN ('M', 'I')
+                    ORDER BY DisplayName";
 
                 var hist = await _sql.QueryAsync<FarmacoStockDto>(sqlHist, new { Filtro = $"%{termino}%" });
                 resultados.AddRange(hist);
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignorar si no hay conexión
+                _logger.LogWarning(ex, "Error al consultar histórico de medicamentos en qvt_productosUtilizados.");
             }
         }
 

@@ -108,6 +108,7 @@ public class PacienteMascotaDto
         get
         {
             var hoy = DateTime.Today;
+            if (MasFechaNace.Date > hoy) return "Fecha futura inválida";
             int anios = hoy.Year - MasFechaNace.Year;
             if (MasFechaNace.Date > hoy.AddYears(-anios)) anios--;
             int meses = ((hoy.Year - MasFechaNace.Year) * 12) + hoy.Month - MasFechaNace.Month;

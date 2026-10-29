@@ -463,6 +463,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             {
                 mascota.MasNombre = mascota.MasNombre.Trim().ToUpperInvariant();
             }
+            if (mascota.MasFechaNace.Date > DateTime.Today)
+            {
+                mascota.MasFechaNace = DateTime.Today;
+            }
             string sexoChar = mascota.MasSexo == 2 ? "H" : (mascota.MasSexo == 1 ? "M" : "I");
             string castradoChar = mascota.MasCastrado?.Trim().ToUpperInvariant().StartsWith("S") == true ? "S" : "N";
             decimal? tuePesoVal = decimal.TryParse(mascota.TuePeso, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var p) ? p : null;
