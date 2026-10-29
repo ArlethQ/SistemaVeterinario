@@ -786,6 +786,8 @@
         Ficha = await tFicha;
         if (Ficha.MedOrden <= 0) Ficha.MedOrden = IdOrden;
         if (Ficha.MedNhcl <= 0) Ficha.MedNhcl = Nhcl;
+        if (Ficha.MedCliente <= 0 && Paciente != null) Ficha.MedCliente = Paciente.ClienteCodigo;
+        if (string.IsNullOrEmpty(Ficha.MedEspecie) && Paciente != null) Ficha.MedEspecie = Paciente.Especie;
         Diagnosticos = await tDiag;
         RecetaItems = await tRec;
         Antecedentes = await tAnt;
@@ -830,6 +832,10 @@
 
     private async Task GuardarFichaCompletaAsync()
     {
+        if (Ficha.MedOrden <= 0) Ficha.MedOrden = IdOrden;
+        if (Ficha.MedNhcl <= 0) Ficha.MedNhcl = Nhcl;
+        if (Ficha.MedCliente <= 0 && Paciente != null) Ficha.MedCliente = Paciente.ClienteCodigo;
+        if (string.IsNullOrEmpty(Ficha.MedEspecie) && Paciente != null) Ficha.MedEspecie = Paciente.Especie;
         if (string.IsNullOrWhiteSpace(Ficha.MedMotivo))
         {
             EsError = true;
@@ -841,7 +847,7 @@
             Ficha.FrecuenciaRespiratoria < 0 || Ficha.TiempoLlenadoCapilar < 0 || Ficha.Deshidratacion < 0)
         {
             EsError = true;
-            MensajeAlerta = "Los valores de constantes fisiol?gicas no pueden ser menores a 0.";
+            MensajeAlerta = "Los valores de constantes fisiológicas no pueden ser menores a 0.";
             return;
         }
 
@@ -890,7 +896,7 @@
             if (string.IsNullOrWhiteSpace(NuevoDiagnostico.CodigoDiag))
             {
                 EsError = true;
-                MensajeAlerta = "Por favor seleccione o ingrese un c?digo de diagn?stico CIE-10.";
+                MensajeAlerta = "Por favor seleccione o ingrese un código de diagnóstico CIE-10.";
                 return;
             }
 
@@ -900,7 +906,7 @@
             if (ordenTarget <= 0)
             {
                 EsError = true;
-                MensajeAlerta = "No hay una orden activa seleccionada para vincular el diagn?stico.";
+                MensajeAlerta = "No hay una orden activa seleccionada para vincular el diagnóstico.";
                 return;
             }
 
@@ -910,12 +916,12 @@
             NuevoDiagnostico = new DiagnosticoCie10Dto { TipoDiag = "Definitivo" };
             Diagnosticos = await ConsultaService.ObtenerDiagnosticosOrdenAsync(ordenTarget);
             EsError = false;
-            MensajeAlerta = "Diagn?stico CIE-10 agregado correctamente.";
+            MensajeAlerta = null;
         }
         catch (Exception ex)
         {
             EsError = true;
-            MensajeAlerta = $"Error al registrar diagn?stico: {ex.Message}";
+            MensajeAlerta = $"Error al registrar diagnóstico: {ex.Message}";
         }
     }
 
@@ -927,42 +933,51 @@
             await ConsultaService.EliminarDiagnosticoOrdenAsync(sec);
             Diagnosticos = await ConsultaService.ObtenerDiagnosticosOrdenAsync(ordenTarget);
             EsError = false;
-            MensajeAlerta = "Diagn?stico eliminado correctamente.";
+            MensajeAlerta = null;
         }
         catch (Exception ex)
         {
             EsError = true;
-            MensajeAlerta = $"Error al eliminar diagn?stico: {ex.Message}";
+            MensajeAlerta = $"Error al eliminar diagnóstico: {ex.Message}";
         }
     }
 
     private async Task AgregarAntecedenteAsync()
     {
         if (string.IsNullOrWhiteSpace(NuevoAntecedente.Descripcion)) return;
-        NuevoAntecedente.Nhcl = Ficha.MedNhcl;
-        NuevoAntecedente.Orden = Ficha.MedOrden;
+        int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        int clienteTarget = Ficha.MedCliente > 0 ? Ficha.MedCliente : (Paciente?.ClienteCodigo ?? 0);
+
+        NuevoAntecedente.Nhcl = nhclTarget;
+        NuevoAntecedente.Orden = ordenTarget;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
-        await ConsultaService.AgregarAntecedenteAsync(NuevoAntecedente, idUser, Ficha.MedCliente);
+        await ConsultaService.AgregarAntecedenteAsync(NuevoAntecedente, idUser, clienteTarget);
         NuevoAntecedente = new AntecedenteClinicoDto();
-        Antecedentes = await ConsultaService.ObtenerAntecedentesPacienteAsync(Ficha.MedNhcl);
+        Antecedentes = await ConsultaService.ObtenerAntecedentesPacienteAsync(nhclTarget);
     }
 
     private async Task AgregarVacunaAsync()
     {
         if (string.IsNullOrWhiteSpace(NuevaVacuna.ObservacionVacuna)) return;
-        NuevaVacuna.Nhcl = Ficha.MedNhcl;
-        NuevaVacuna.Orden = Ficha.MedOrden;
+        int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        int clienteTarget = Ficha.MedCliente > 0 ? Ficha.MedCliente : (Paciente?.ClienteCodigo ?? 0);
+
+        NuevaVacuna.Nhcl = nhclTarget;
+        NuevaVacuna.Orden = ordenTarget;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
-        await ConsultaService.AgregarVacunaAsync(NuevaVacuna, idUser, Ficha.MedCliente);
+        await ConsultaService.AgregarVacunaAsync(NuevaVacuna, idUser, clienteTarget);
         NuevaVacuna = new VacunaPacienteDto();
-        Vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(Ficha.MedNhcl);
+        Vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(nhclTarget);
     }
 
     private async Task EliminarVacunaAsync(int vacunaId)
     {
+        int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
         await ConsultaService.EliminarVacunaAsync(vacunaId, idUser);
-        Vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(Ficha.MedNhcl);
+        Vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(nhclTarget);
     }
 
     private async Task ExportarPdfAsync()

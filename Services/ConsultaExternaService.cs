@@ -111,6 +111,8 @@ public class ConsultaExternaService : IConsultaExternaService
                     ISNULL(cavidadoral, '') AS CavidadOral,
                     ISNULL(otros, '') AS Otros,
                     ISNULL(temperamento, 'TRANQUILO') AS Temperamento,
+                    ISNULL(pronosticotueri, 'Bueno') AS MedPronostico,
+                    TRY_CONVERT(DATETIME, contmtiempo) AS MedFechaControl,
                     ISNULL(med_pregunta, 'N') AS RequiereCirugia,
                     ISNULL(estadoparte, 'PENDIENTE') AS EstadoParte
                 FROM vt_fichamedica
@@ -148,6 +150,27 @@ public class ConsultaExternaService : IConsultaExternaService
         {
             dto.MedIdUser = idUsuario;
 
+            // Asegurar que MedNhcl, MedCliente y MedEspecie esten resueltos
+            if (dto.MedNhcl > 0 && (dto.MedCliente <= 0 || string.IsNullOrEmpty(dto.MedEspecie)))
+            {
+                var pacInfo = await _db.QueryFirstOrDefaultAsync<dynamic>(@"
+                    SELECT p.mas_cli_id, p.mas_especie, p.mas_anios, p.mas_meses
+                    FROM vt_pacientes p
+                    WHERE p.mas_nhcl = @Nhcl", new { Nhcl = dto.MedNhcl });
+
+                if (pacInfo != null)
+                {
+                    if (dto.MedCliente <= 0 && pacInfo.mas_cli_id != null)
+                        dto.MedCliente = (int)pacInfo.mas_cli_id;
+                    if (string.IsNullOrEmpty(dto.MedEspecie) && pacInfo.mas_especie != null)
+                        dto.MedEspecie = pacInfo.mas_especie.ToString();
+                    if (dto.MedEdadAnios <= 0 && pacInfo.mas_anios != null)
+                        dto.MedEdadAnios = (int)pacInfo.mas_anios;
+                    if (dto.MedEdadMeses <= 0 && pacInfo.mas_meses != null)
+                        dto.MedEdadMeses = (int)pacInfo.mas_meses;
+                }
+            }
+
             var existeSec = await _db.ExecuteScalarAsync<int?>(
                 "SELECT TOP 1 sec FROM vt_fichamedica WHERE med_orden = @MedOrden",
                 new { dto.MedOrden });
@@ -157,6 +180,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 dto.Sec = existeSec.Value;
                 const string sqlUpdate = @"
                     UPDATE vt_fichamedica SET
+                        med_tipo = @MedTipo,
                         med_tipoconsulta = @MedTipoConsulta,
                         med_motivo = @MedMotivo,
                         med_anamnesis = @MedAnamnesis,
@@ -185,6 +209,10 @@ public class ConsultaExternaService : IConsultaExternaService
                         observacionesyrecomendaciones = @ObservacionesYRecomendaciones,
                         med_apuntes = @MedApuntes,
                         temperamento = @Temperamento,
+                        pronosticotueri = @MedPronostico,
+                        contmtiempo = @MedFechaControlStr,
+                        contpsi = @ContpSi,
+                        contpno = @ContpNo,
                         med_pregunta = @RequiereCirugia,
                         estadoparte = @EstadoParte,
                         med_idmodifica = @MedIdUser,
@@ -205,7 +233,7 @@ public class ConsultaExternaService : IConsultaExternaService
                         mucosas, tiempollenadocapilar, deshidratacion, reflejotusigeno,
                         auscultacion, palpaciontiroides, indicecondicioncorporal, cp,
                         linfonodos, palpacionabdominal, pielyanexos, cavidadoral, otros,
-                        tratamiento, observacionesyrecomendaciones, med_apuntes, temperamento, med_estado, med_pregunta, estadoparte
+                        tratamiento, observacionesyrecomendaciones, med_apuntes, temperamento, pronosticotueri, contmtiempo, contpsi, contpno, med_estado, med_pregunta, estadoparte
                     ) VALUES (
                         @MedNhcl, @MedOrden, GETDATE(), @MedIdUser, @MedTipo, @MedCliente,
                         @MedEspecialidad, @MedEdadAnios, @MedEdadMeses, @MedLocalidad, @MedEspecie,
@@ -215,22 +243,22 @@ public class ConsultaExternaService : IConsultaExternaService
                         @Mucosas, @TiempoLlenadoCapilar, @Deshidratacion, @ReflejoTusigeno,
                         @Auscultacion, @PalpacionTiroides, @IndiceCondicionCorporal, @Cp,
                         @Linfonodos, @PalpacionAbdominal, @PielYAnexos, @CavidadOral, @Otros,
-                        @Tratamiento, @ObservacionesYRecomendaciones, @MedApuntes, @Temperamento, 'A', @RequiereCirugia, @EstadoParte
+                        @Tratamiento, @ObservacionesYRecomendaciones, @MedApuntes, @Temperamento, @MedPronostico, @MedFechaControlStr, @ContpSi, @ContpNo, 'A', @RequiereCirugia, @EstadoParte
                     )";
 
                 await _db.ExecuteAsync(sqlInsert, dto);
             }
 
             // Actualizar color de triaje y esterilizado en vt_pacientes
-            await _db.ExecuteAsync(
-                "UPDATE vt_pacientes SET mas_castrado = @Esterilizado, mas_colortriaje = @ColorTriaje WHERE mas_nhcl = @MedNhcl",
-                new { dto.Esterilizado, dto.ColorTriaje, dto.MedNhcl });
-
-            // Actualizar indicaciones generales de receta si se ingresaron
-            if (!string.IsNullOrWhiteSpace(dto.IndicacionesGeneralesReceta))
+            if (dto.MedNhcl > 0)
             {
-                await GuardarIndicacionesGeneralesAsync(dto.MedOrden, dto.MedNhcl, dto.IndicacionesGeneralesReceta);
+                await _db.ExecuteAsync(
+                    "UPDATE vt_pacientes SET mas_castrado = @Esterilizado, mas_colortriaje = @ColorTriaje WHERE mas_nhcl = @MedNhcl",
+                    new { dto.Esterilizado, dto.ColorTriaje, dto.MedNhcl });
             }
+
+            // Actualizar indicaciones generales de receta siempre
+            await GuardarIndicacionesGeneralesAsync(dto.MedOrden, dto.MedNhcl, dto.IndicacionesGeneralesReceta ?? "");
 
             await _db.RegistrarBitacoraAsync($"Ficha Médica SOAP guardada Orden #{dto.MedOrden} NHCL #{dto.MedNhcl}", idUsuario);
             return true;

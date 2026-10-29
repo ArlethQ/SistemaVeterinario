@@ -61,6 +61,9 @@ public class FichaMedicaCompletaDto
     public string EstadoParte { get; set; } = "PENDIENTE";
     public string EsEmergencia { get; set; } = "N"; // S = genera control médico
     public DateTime? MedFechaControl { get; set; }
+    public string? MedFechaControlStr => MedFechaControl?.ToString("yyyy-MM-dd");
+    public string ContpSi => MedFechaControl.HasValue ? "S" : "N";
+    public string ContpNo => MedFechaControl.HasValue ? "N" : "S";
     public string IndicacionesGeneralesReceta { get; set; } = string.Empty;
 }
 
