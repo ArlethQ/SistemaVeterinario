@@ -1022,6 +1022,12 @@ public class QuirofanoService : IQuirofanoService
     {
         try
         {
+            if (signo.IdOrden <= 0 || signo.Nhcl <= 0 ||
+                signo.Pulso < 0 || signo.Sistolica < 0 || signo.Diastolica < 0 ||
+                signo.PresionMedia < 0 || signo.Respiracion < 0 || signo.Temperatura < 0 ||
+                signo.Oxigeno < 0 || signo.Saturacion < 0)
+                return false;
+
             if (signo.PresionMedia <= 0 && signo.Sistolica > 0 && signo.Diastolica > 0)
             {
                 signo.PresionMedia = (signo.Sistolica + (2 * signo.Diastolica)) / 3;
@@ -1035,7 +1041,7 @@ public class QuirofanoService : IQuirofanoService
                         respiracion = @Respiracion, temperatura = @Temperatura, oxigeno = @Oxigeno,
                         saturacion = @Saturacion, usuario = @Usuario
                     WHERE id = @Id";
-                await _db.ExecuteAsync(sqlUpdate, signo);
+                return await _db.ExecuteAsync(sqlUpdate, signo) > 0;
             }
             else
             {
@@ -1048,7 +1054,7 @@ public class QuirofanoService : IQuirofanoService
                         @Respiracion, @Temperatura, @Oxigeno, @Saturacion, @Usuario, 'A',
                         DAY(@Fecha), MONTH(@Fecha), YEAR(@Fecha), @Localidad
                     )";
-                await _db.ExecuteAsync(sqlInsert, new
+                return await _db.ExecuteAsync(sqlInsert, new
                 {
                     signo.IdOrden,
                     signo.Nhcl,
@@ -1064,9 +1070,8 @@ public class QuirofanoService : IQuirofanoService
                     signo.Saturacion,
                     signo.Usuario,
                     Localidad = idLocalidad
-                });
+                }) > 0;
             }
-            return true;
         }
         catch (Exception ex)
         {
@@ -1077,8 +1082,7 @@ public class QuirofanoService : IQuirofanoService
 
     public async Task<bool> EliminarSignoRecuperacionAsync(int id)
     {
-        await _db.ExecuteAsync("UPDATE qvt_recuperacion SET estado = 'I' WHERE id = @Id", new { Id = id });
-        return true;
+        return await _db.ExecuteAsync("UPDATE qvt_recuperacion SET estado = 'I' WHERE id = @Id", new { Id = id }) > 0;
     }
 
     public async Task<PostOperatorioChecklistDto> ObtenerPostOperatorioChecklistAsync(int idOrden, int nhcl)
@@ -1090,15 +1094,15 @@ public class QuirofanoService : IQuirofanoService
                 ISNULL(nhcl, @Nhcl) AS Nhcl,
                 fechahorasal AS FechaHoraSalida,
                 ISNULL(destino, 'Hospitalización') AS Destino,
-                ISNULL(ind, 'SI') AS Ind, ISNULL(obsind, '') AS ObsInd,
-                ISNULL(sig, 'SI') AS Sig, ISNULL(obssig, '') AS ObsSig,
-                ISNULL(apo, 'SI') AS Apo, ISNULL(obsapo, '') AS ObsApo,
-                ISNULL(liq, 'SI') AS Liq, ISNULL(obsliq, '') AS ObsLiq,
-                ISNULL(son, 'NO') AS Son, ISNULL(obsson, '') AS ObsSon,
-                ISNULL(drenes, 'NO') AS Drenes, ISNULL(obsdrenes, '') AS ObsDrenes,
-                ISNULL(drena, 'NO') AS Drena, ISNULL(obsdrena, '') AS ObsDrena,
-                ISNULL(sng, 'NO') AS Sng, ISNULL(obssng, '') AS ObsSng,
-                ISNULL(otros, 'NO') AS Otros, ISNULL(obsotros, '') AS ObsOtros
+                CASE WHEN UPPER(ISNULL(ind, 'S')) = 'S' THEN 'SI' ELSE 'NO' END AS Ind, ISNULL(obsind, '') AS ObsInd,
+                CASE WHEN UPPER(ISNULL(sig, 'S')) = 'S' THEN 'SI' ELSE 'NO' END AS Sig, ISNULL(obssig, '') AS ObsSig,
+                CASE WHEN UPPER(ISNULL(apo, 'S')) = 'S' THEN 'SI' ELSE 'NO' END AS Apo, ISNULL(obsapo, '') AS ObsApo,
+                CASE WHEN UPPER(ISNULL(liq, 'S')) = 'S' THEN 'SI' ELSE 'NO' END AS Liq, ISNULL(obsliq, '') AS ObsLiq,
+                CASE WHEN UPPER(ISNULL(son, 'N')) = 'S' THEN 'SI' ELSE 'NO' END AS Son, ISNULL(obsson, '') AS ObsSon,
+                CASE WHEN UPPER(ISNULL(drenes, 'N')) = 'S' THEN 'SI' ELSE 'NO' END AS Drenes, ISNULL(obsdrenes, '') AS ObsDrenes,
+                CASE WHEN UPPER(ISNULL(drena, 'N')) = 'S' THEN 'SI' ELSE 'NO' END AS Drena, ISNULL(obsdrena, '') AS ObsDrena,
+                CASE WHEN UPPER(ISNULL(sng, 'N')) = 'S' THEN 'SI' ELSE 'NO' END AS Sng, ISNULL(obssng, '') AS ObsSng,
+                CASE WHEN UPPER(ISNULL(otros, 'N')) = 'S' THEN 'SI' ELSE 'NO' END AS Otros, ISNULL(obsotros, '') AS ObsOtros
             FROM qvt_post_operatorio
             WHERE idOrden = @IdOrden
             ORDER BY id DESC";
@@ -1118,19 +1122,23 @@ public class QuirofanoService : IQuirofanoService
     {
         try
         {
+            if (dto.IdOrden <= 0 || dto.Nhcl <= 0)
+                return false;
+
+            int filasAfectadas;
             var existeId = await _db.ExecuteScalarAsync<int?>(
                 "SELECT TOP 1 id FROM qvt_post_operatorio WHERE idOrden = @IdOrden", new { dto.IdOrden });
 
             if (existeId.HasValue && existeId.Value > 0)
             {
-                await _db.ExecuteAsync(@"
+                filasAfectadas = await _db.ExecuteAsync(@"
                     UPDATE qvt_post_operatorio SET
                         fechahorasal = @FechaHoraSalida, destino = @Destino,
-                        ind = @Ind, obsind = @ObsInd, sig = @Sig, obssig = @ObsSig,
-                        apo = @Apo, obsapo = @ObsApo, liq = @Liq, obsliq = @ObsLiq,
-                        son = @Son, obsson = @ObsSon, drenes = @Drenes, obsdrenes = @ObsDrenes,
-                        drena = @Drena, obsdrena = @ObsDrena, sng = @Sng, obssng = @ObsSng,
-                        otros = @Otros, obsotros = @ObsOtros, usuario = @Usuario, localidad = @Localidad
+                        ind = LEFT(@Ind, 1), obsind = @ObsInd, sig = LEFT(@Sig, 1), obssig = @ObsSig,
+                        apo = LEFT(@Apo, 1), obsapo = @ObsApo, liq = LEFT(@Liq, 1), obsliq = @ObsLiq,
+                        son = LEFT(@Son, 1), obsson = @ObsSon, drenes = LEFT(@Drenes, 1), obsdrenes = @ObsDrenes,
+                        drena = LEFT(@Drena, 1), obsdrena = @ObsDrena, sng = LEFT(@Sng, 1), obssng = @ObsSng,
+                        otros = LEFT(@Otros, 1), obsotros = @ObsOtros, usuario = @Usuario, localidad = @Localidad
                     WHERE id = @Id",
                     new
                     {
@@ -1145,7 +1153,7 @@ public class QuirofanoService : IQuirofanoService
             }
             else
             {
-                await _db.ExecuteAsync(@"
+                filasAfectadas = await _db.ExecuteAsync(@"
                     INSERT INTO qvt_post_operatorio (
                         idOrden, nhcl, hora, fecha, fechahorasal, destino,
                         ind, obsind, sig, obssig, apo, obsapo, liq, obsliq,
@@ -1153,9 +1161,9 @@ public class QuirofanoService : IQuirofanoService
                         otros, obsotros, usuario, localidad
                     ) VALUES (
                         @IdOrden, @Nhcl, CONVERT(VARCHAR(5), GETDATE(), 108), GETDATE(), @FechaHoraSalida, @Destino,
-                        @Ind, @ObsInd, @Sig, @ObsSig, @Apo, @ObsApo, @Liq, @ObsLiq,
-                        @Son, @ObsSon, @Drenes, @ObsDrenes, @Drena, @ObsDrena, @Sng, @ObsSng,
-                        @Otros, @ObsOtros, @Usuario, @Localidad
+                        LEFT(@Ind, 1), @ObsInd, LEFT(@Sig, 1), @ObsSig, LEFT(@Apo, 1), @ObsApo, LEFT(@Liq, 1), @ObsLiq,
+                        LEFT(@Son, 1), @ObsSon, LEFT(@Drenes, 1), @ObsDrenes, LEFT(@Drena, 1), @ObsDrena, LEFT(@Sng, 1), @ObsSng,
+                        LEFT(@Otros, 1), @ObsOtros, @Usuario, @Localidad
                     )",
                     new
                     {
@@ -1168,7 +1176,7 @@ public class QuirofanoService : IQuirofanoService
                         Usuario = idUsuario, Localidad = idLocalidad
                     });
             }
-            return true;
+            return filasAfectadas > 0;
         }
         catch (Exception ex)
         {
@@ -1189,9 +1197,9 @@ public class QuirofanoService : IQuirofanoService
                 ISNULL(descripcion, '') AS Descripcion,
                 ISNULL(observaciones, '') AS Observaciones,
                 ISNULL(tipo, 'I') AS Tipo,
-                ISNULL(med_idProdu, '') AS MedIdProdu,
-                ISNULL(med_cantidad, 1) AS MedCantidad,
-                ISNULL(med_bodega, '') AS MedBodega
+                '' AS MedIdProdu,
+                CAST(1 AS DECIMAL(18,2)) AS MedCantidad,
+                '' AS MedBodega
             FROM qvt_ingliqadm
             WHERE idOrden = @IdOrden AND tipo = @Tipo AND ISNULL(estado, 'A') = 'A'
             ORDER BY id DESC";
@@ -1211,13 +1219,14 @@ public class QuirofanoService : IQuirofanoService
     {
         try
         {
+            if (dto.IdOrden <= 0 || dto.Nhcl <= 0 || string.IsNullOrWhiteSpace(dto.Descripcion))
+                return false;
+
             const string sqlInsert = @"
                 INSERT INTO qvt_ingliqadm (
-                    idOrden, nhcl, hora, fecha, descripcion, observaciones, estado, usuario, localidad, tipo,
-                    med_idProdu, med_origen, med_stock, med_precio, med_iva, med_iddinamics, med_medida, med_bodega, med_cantidad, etapa
+                    idOrden, nhcl, hora, fecha, descripcion, observaciones, estado, usuario, localidad, tipo
                 ) VALUES (
-                    @IdOrden, @Nhcl, @Hora, @Fecha, @Descripcion, @Observaciones, 'A', @Usuario, @Localidad, @Tipo,
-                    @MedIdProdu, 'F', 0, @MedPrecio, @MedIva, @MedIdDinamics, @MedMedida, @MedBodega, @MedCantidad, 'Recuperacion Quirofanos'
+                    @IdOrden, @Nhcl, @Hora, @Fecha, @Descripcion, @Observaciones, 'A', @Usuario, @Localidad, @Tipo
                 );
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -1231,30 +1240,9 @@ public class QuirofanoService : IQuirofanoService
                 dto.Observaciones,
                 Usuario = idUsuario,
                 Localidad = idLocalidad,
-                dto.Tipo,
-                dto.MedIdProdu,
-                dto.MedPrecio,
-                dto.MedIva,
-                dto.MedIdDinamics,
-                dto.MedMedida,
-                dto.MedBodega,
-                dto.MedCantidad
+                dto.Tipo
             });
-
-            if (dto.Tipo == "I" && idCreado > 0 && !string.IsNullOrWhiteSpace(dto.MedIdProdu))
-            {
-                await _inventarioService.GuardarReservaStockAsync(
-                    dto.MedIdProdu,
-                    idUsuario,
-                    dto.MedCantidad,
-                    idLocalidad,
-                    dto.MedBodega,
-                    dto.IdOrden,
-                    dto.Nhcl,
-                    idCreado,
-                    "LIQ");
-            }
-            return true;
+            return idCreado > 0;
         }
         catch (Exception ex)
         {
@@ -1265,7 +1253,12 @@ public class QuirofanoService : IQuirofanoService
 
     public async Task<bool> EliminarLiquidoRecuperacionAsync(int id, string codigoProd, int idOrden, int nhcl)
     {
-        await _db.ExecuteAsync("UPDATE qvt_ingliqadm SET estado = 'I' WHERE id = @Id", new { Id = id });
+        var filasAfectadas = await _db.ExecuteAsync(
+            "UPDATE qvt_ingliqadm SET estado = 'I' WHERE id = @Id AND idOrden = @IdOrden AND nhcl = @Nhcl",
+            new { Id = id, IdOrden = idOrden, Nhcl = nhcl });
+        if (filasAfectadas <= 0)
+            return false;
+
         if (!string.IsNullOrWhiteSpace(codigoProd))
         {
             await _inventarioService.EliminarReservaStockAsync(codigoProd, idOrden, id, "LIQ");
@@ -1303,26 +1296,33 @@ public class QuirofanoService : IQuirofanoService
 
     public async Task<bool> AgregarObservacionRecuperacionAsync(int idOrden, int nhcl, string observacion, int idUsuario, int idLocalidad)
     {
-        if (string.IsNullOrWhiteSpace(observacion)) return false;
+        if (idOrden <= 0 || nhcl <= 0 || string.IsNullOrWhiteSpace(observacion)) return false;
 
         const string sql = @"
             INSERT INTO qvt_observaciones_recuperacion (idOrden, nhcl, hora, fecha, observacion, estado, usuario, localidad)
             VALUES (@IdOrden, @Nhcl, CONVERT(VARCHAR(5), GETDATE(), 108), GETDATE(), @Observacion, 'A', @Usuario, @Localidad)";
 
-        await _db.ExecuteAsync(sql, new
+        try
         {
-            IdOrden = idOrden,
-            Nhcl = nhcl,
-            Observacion = observacion.Trim(),
-            Usuario = idUsuario,
-            Localidad = idLocalidad
-        });
-        return true;
+            var filasAfectadas = await _db.ExecuteAsync(sql, new
+            {
+                IdOrden = idOrden,
+                Nhcl = nhcl,
+                Observacion = observacion.Trim(),
+                Usuario = idUsuario,
+                Localidad = idLocalidad
+            });
+            return filasAfectadas > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al guardar observación de recuperación Orden {IdOrden}", idOrden);
+            return false;
+        }
     }
 
     public async Task<bool> EliminarObservacionRecuperacionAsync(int id)
     {
-        await _db.ExecuteAsync("UPDATE qvt_observaciones_recuperacion SET estado = 'I' WHERE id = @Id", new { Id = id });
-        return true;
+        return await _db.ExecuteAsync("UPDATE qvt_observaciones_recuperacion SET estado = 'I' WHERE id = @Id", new { Id = id }) > 0;
     }
 }

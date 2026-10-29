@@ -5,7 +5,7 @@
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject NavigationManager Nav
-@inject IJSRuntime JS
+@inject IJSRuntime JS@inject IWebHostEnvironment Environment
 
 <PageTitle>e-ForVets - Kardex de Enfermería (Administración de Medicamentos)</PageTitle>
 
@@ -149,8 +149,7 @@
                                 {
                                     <tr>
                                         <td class="text-center">
-                                            <button type="button" class="btn btn-sm btn-success py-0 px-2"
-                                                    disabled="@(prod.Inventory <= 0)"
+                                            <button type="button" class="btn btn-sm @(prod.Inventory <= 0 ? "btn-warning" : "btn-success") py-0 px-2"                                                    disabled="@(prod.Inventory <= 0 && !Environment.IsDevelopment())"                                                    title="@(prod.Inventory <= 0 ? "Producto sin stock habilitado únicamente en pruebas" : "Seleccionar producto")"
                                                     @onclick="() => SeleccionarProducto(prod)">
                                                 Seleccionar
                                             </button>
@@ -596,7 +595,7 @@ else
     private void SeleccionarProducto(FarmacoStockDto prod)
     {
         _alertaMensaje = null;
-        if (prod.Inventory <= 0)
+        if (prod.Inventory <= 0 && !Environment.IsDevelopment())
         {
             MostrarAlerta("No se puede seleccionar productos con stock 0.", false);
             return;

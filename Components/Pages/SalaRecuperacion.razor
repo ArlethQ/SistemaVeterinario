@@ -120,35 +120,35 @@ else if (paciente != null)
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0 fw-semibold text-danger">Pulso / FC (lpm)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.Pulso" />
+                                <input type="number" min="0" class="form-control form-control-sm" onkeydown="return event.key !== '-'" @bind="nuevoSigno.Pulso" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0 fw-semibold text-success">SpO2 (%)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.Saturacion" />
+                                <input type="number" min="0" max="100" class="form-control form-control-sm" onkeydown="return event.key !== '-'" @bind="nuevoSigno.Saturacion" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label mb-0 fw-semibold text-primary">PAS (mmHg)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.Sistolica" @bind:after="RecalcularPam" />
+                                <input type="number" min="0" class="form-control form-control-sm" onkeydown="return event.key !== '-'" @bind="nuevoSigno.Sistolica" @bind:after="RecalcularPam" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label mb-0 fw-semibold text-info">PAD (mmHg)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.Diastolica" @bind:after="RecalcularPam" />
+                                <input type="number" min="0" class="form-control form-control-sm" onkeydown="return event.key !== '-'" @bind="nuevoSigno.Diastolica" @bind:after="RecalcularPam" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label mb-0 fw-semibold">PAM (mmHg)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.PresionMedia" />
+                                <input type="number" min="0" class="form-control form-control-sm" onkeydown="return event.key !== '-'" @bind="nuevoSigno.PresionMedia" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label mb-0 fw-semibold">Resp. (rpm)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="nuevoSigno.Respiracion" />
+                                <input type="number" min="0" class="form-control form-control-sm" onkeydown="return event.key !== '-'" @bind="nuevoSigno.Respiracion" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label mb-0 fw-semibold">Temp. (°C)</label>
-                                <input type="number" step="0.1" class="form-control form-control-sm" @bind="nuevoSigno.Temperatura" />
+                                <input type="number" min="0" step="0.1" class="form-control form-control-sm" onkeydown="return event.key !== '-'" @bind="nuevoSigno.Temperatura" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label mb-0 fw-semibold">O2 (L/min)</label>
-                                <input type="number" step="0.5" class="form-control form-control-sm" @bind="nuevoSigno.Oxigeno" />
+                                <input type="number" min="0" step="0.5" class="form-control form-control-sm" onkeydown="return event.key !== '-'" @bind="nuevoSigno.Oxigeno" />
                             </div>
                             <div class="col-12 d-flex gap-2 mt-2">
                                 <button class="btn btn-sm btn-primary flex-grow-1 fw-semibold" @onclick="GuardarSignoAsync">
@@ -518,6 +518,19 @@ else if (paciente != null)
 
         ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
 
+        if (IdOrden <= 0)
+        {
+            var ordenInicial = Session.OrdenActiva.HasValue
+                ? ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == Session.OrdenActiva.Value)
+                : ordenesActivas.FirstOrDefault();
+
+            if (ordenInicial != null)
+            {
+                IdOrden = ordenInicial.IdOrdenAtencion;
+                Nhcl = ordenInicial.Nhcl;
+            }
+        }
+
         if (IdOrden > 0)
         {
             ordenInput = IdOrden;
@@ -619,6 +632,13 @@ else if (paciente != null)
 
     private async Task GuardarSignoAsync()
     {
+        if (TieneSignosNegativos())
+        {
+            esError = true;
+            mensajeAlerta = "Los valores de signos vitales no pueden ser negativos.";
+            return;
+        }
+
         nuevoSigno.IdOrden = IdOrden;
         nuevoSigno.Nhcl = Nhcl;
         nuevoSigno.Usuario = Session.CurrentUser?.IdUsuario ?? 1;
@@ -634,7 +654,22 @@ else if (paciente != null)
             esError = false;
             mensajeAlerta = "Control de signos vitales guardado en Sala de Recuperación.";
         }
+        else
+        {
+            esError = true;
+            mensajeAlerta = "No se guardó el control de signos vitales. Verifique los datos e inténtelo nuevamente.";
+        }
     }
+
+    private bool TieneSignosNegativos() =>
+        nuevoSigno.Pulso < 0 ||
+        nuevoSigno.Saturacion < 0 ||
+        nuevoSigno.Sistolica < 0 ||
+        nuevoSigno.Diastolica < 0 ||
+        nuevoSigno.PresionMedia < 0 ||
+        nuevoSigno.Respiracion < 0 ||
+        nuevoSigno.Temperatura < 0 ||
+        nuevoSigno.Oxigeno < 0;
 
     private async Task EliminarSignoAsync(int id)
     {
@@ -665,14 +700,23 @@ else if (paciente != null)
         nuevoLiquido.IdOrden = IdOrden;
         nuevoLiquido.Nhcl = Nhcl;
 
-        await QuirofanoService.AgregarLiquidoRecuperacionAsync(
+        var ok = await QuirofanoService.AgregarLiquidoRecuperacionAsync(
             nuevoLiquido,
             Session.CurrentUser?.IdUsuario ?? 1,
             Session.CurrentUser?.IdLocalidad ?? 1);
 
+        if (!ok)
+        {
+            esError = true;
+            mensajeAlerta = "No se guardó el registro de líquidos. Verifique los datos e inténtelo nuevamente.";
+            return;
+        }
+
         nuevoLiquido = new LiquidoRecuperacionDto { Tipo = nuevoLiquido.Tipo, Hora = DateTime.Now.ToString("HH:mm") };
         liquidosIngresados = await QuirofanoService.ObtenerLiquidosRecuperacionAsync(IdOrden, "I");
         liquidosEliminados = await QuirofanoService.ObtenerLiquidosRecuperacionAsync(IdOrden, "E");
+        esError = false;
+        mensajeAlerta = "Registro de líquidos guardado correctamente.";
     }
 
     private async Task EliminarLiquidoAsync(LiquidoRecuperacionDto l)
@@ -685,13 +729,22 @@ else if (paciente != null)
     private async Task AgregarObservacionAsync()
     {
         if (string.IsNullOrWhiteSpace(nuevaObservacion)) return;
-        await QuirofanoService.AgregarObservacionRecuperacionAsync(
+        var ok = await QuirofanoService.AgregarObservacionRecuperacionAsync(
             IdOrden, Nhcl, nuevaObservacion,
             Session.CurrentUser?.IdUsuario ?? 1,
             Session.CurrentUser?.IdLocalidad ?? 1);
 
+        if (!ok)
+        {
+            esError = true;
+            mensajeAlerta = "No se guardó la nota de recuperación. Inténtelo nuevamente.";
+            return;
+        }
+
         nuevaObservacion = string.Empty;
         observacionesRecuperacion = await QuirofanoService.ObtenerObservacionesRecuperacionAsync(IdOrden);
+        esError = false;
+        mensajeAlerta = "Nota de recuperación guardada correctamente.";
     }
 
     private async Task EliminarObservacionAsync(int id)
@@ -713,6 +766,9 @@ else if (paciente != null)
         mensajeAlerta = ok
             ? "Checklist de entrega post-operatoria guardado exitosamente."
             : "Error al guardar el checklist post-operatorio.";
+
+        if (ok)
+            postChecklist = await QuirofanoService.ObtenerPostOperatorioChecklistAsync(IdOrden, Nhcl);
     }
 
     private async Task ExportarPdfAsync()
