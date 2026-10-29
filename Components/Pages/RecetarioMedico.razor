@@ -434,7 +434,13 @@
 
     private async Task ExportarRecetaPdfAsync()
     {
-        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente e-ForVets" };
+        var pac = Paciente;
+        if (pac is null || pac.Nhcl <= 0)
+        {
+            EsError = true;
+            MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
+            return;
+        }
         var pdfBytes = ReportService.GenerarRecetaMedicaPdf(pac, ItemsReceta, DiagnosticosOrden, IndicacionesGenerales);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"Receta_e-ForVets_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }

@@ -356,7 +356,12 @@
 
     private async Task ExportarAltaPdfAsync()
     {
-        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente e-ForVets" };
+        var pac = Paciente;
+        if (pac is null || pac.Nhcl <= 0)
+        {
+            MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
+            return;
+        }
         var pdfBytes = ReportService.GenerarAltaMedicaPdf(pac, AltaForm);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"PlanAlta_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }

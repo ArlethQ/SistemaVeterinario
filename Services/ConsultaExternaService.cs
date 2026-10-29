@@ -562,25 +562,21 @@ public class ConsultaExternaService : IConsultaExternaService
             WHERE r.rxO_id_orden = @IdOrden
               AND (@IdEvolucion IS NULL OR ISNULL(r.rxO_evolucion, 0) = @IdEvolucion)";
 
-        try
-        {
-            var labs = await _db.QueryAsync<OrdenExamenEvolucionDto>(sqlLab, new { IdOrden = idOrden, IdEvolucion = idEvolucion });
-            resultado.AddRange(labs);
-        }
-        catch { }
+        var labs = await _db.QueryAsync<OrdenExamenEvolucionDto>(sqlLab, new { IdOrden = idOrden, IdEvolucion = idEvolucion });
+        resultado.AddRange(labs);
 
-        try
-        {
-            var rxs = await _db.QueryAsync<OrdenExamenEvolucionDto>(sqlRx, new { IdOrden = idOrden, IdEvolucion = idEvolucion });
-            resultado.AddRange(rxs);
-        }
-        catch { }
+        var rxs = await _db.QueryAsync<OrdenExamenEvolucionDto>(sqlRx, new { IdOrden = idOrden, IdEvolucion = idEvolucion });
+        resultado.AddRange(rxs);
 
         return resultado;
     }
 
     public async Task<bool> AgregarOrdenExamenAsync(OrdenExamenEvolucionDto orden)
     {
+        if (orden.IdOrden <= 0 || orden.Nhcl <= 0 || orden.Cantidad <= 0 ||
+            !int.TryParse(orden.CodigoProd, out int codigoProd) || codigoProd <= 0 ||
+            orden.TipoCategoria is not ("LAB" or "RX")) return false;
+
         if (orden.TipoCategoria == "LAB")
         {
             const string sql = @"
@@ -591,15 +587,15 @@ public class ConsultaExternaService : IConsultaExternaService
                     @Nhcl, @CodigoProd, @Observaciones, @Cantidad,
                     @IdOrden, 'Por Facturar', GETDATE(), @IdEvolucion
                 )";
-            await _db.ExecuteAsync(sql, new
+            return await _db.ExecuteAsync(sql, new
             {
                 orden.Nhcl,
-                CodigoProd = int.TryParse(orden.CodigoProd, out var c) ? c : 1,
+                CodigoProd = codigoProd,
                 Observaciones = $"{orden.DescripcionExamen} - {orden.Observaciones}".Trim(' ', '-'),
                 orden.Cantidad,
                 orden.IdOrden,
                 orden.IdEvolucion
-            });
+            }) > 0;
         }
         else
         {
@@ -611,17 +607,16 @@ public class ConsultaExternaService : IConsultaExternaService
                     @Nhcl, @CodigoProd, @Observaciones, @Cantidad,
                     @IdOrden, 'Por Facturar', GETDATE(), @IdEvolucion
                 )";
-            await _db.ExecuteAsync(sql, new
+            return await _db.ExecuteAsync(sql, new
             {
                 orden.Nhcl,
-                CodigoProd = int.TryParse(orden.CodigoProd, out var c) ? c : 1,
+                CodigoProd = codigoProd,
                 Observaciones = $"{orden.DescripcionExamen} - {orden.Observaciones}".Trim(' ', '-'),
                 orden.Cantidad,
                 orden.IdOrden,
                 orden.IdEvolucion
-            });
+            }) > 0;
         }
-        return true;
     }
 
     public async Task<bool> EliminarOrdenExamenAsync(int sec, string tipoCategoria)

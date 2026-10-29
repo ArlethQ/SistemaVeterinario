@@ -356,7 +356,13 @@
 
     private async Task ExportarPdfAsync()
     {
-        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente e-ForVets" };
+        var pac = Paciente;
+        if (pac is null || pac.Nhcl <= 0)
+        {
+            EsError = true;
+            MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
+            return;
+        }
         var pdfBytes = ReportService.GenerarOrdenImagenPdf(pac, OrdenesActuales, DiagnosticosOrden);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"PedidoImagenologia_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }
