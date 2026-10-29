@@ -459,6 +459,33 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         try
         {
+            if (mascota.Fallecido && mascota.MotivoFallece == -1)
+            {
+                string motivoOtro = mascota.MotivoFalleceOtro.Trim();
+                if (string.IsNullOrWhiteSpace(motivoOtro))
+                    throw new InvalidOperationException("Debe ingresar el motivo de muerte.");
+
+                int? motivoExistente = await _db.ExecuteScalarAsync<int?>(@"
+                    SELECT TOP (1) sec
+                    FROM vt_motivomuerte
+                    WHERE UPPER(LTRIM(RTRIM(motivo))) = UPPER(@Motivo)", new { Motivo = motivoOtro });
+
+                if (motivoExistente.HasValue)
+                {
+                    await _db.ExecuteAsync(
+                        "UPDATE vt_motivomuerte SET estado='A' WHERE sec=@Id",
+                        new { Id = motivoExistente.Value });
+                    mascota.MotivoFallece = motivoExistente.Value;
+                }
+                else
+                {
+                    mascota.MotivoFallece = await _db.ExecuteScalarAsync<int>(@"
+                        INSERT INTO vt_motivomuerte (motivo, estado)
+                        VALUES (@Motivo, 'A');
+                        SELECT CAST(SCOPE_IDENTITY() AS INT);", new { Motivo = motivoOtro });
+                }
+            }
+
             if (!string.IsNullOrWhiteSpace(mascota.MasNombre))
             {
                 mascota.MasNombre = mascota.MasNombre.Trim().ToUpperInvariant();

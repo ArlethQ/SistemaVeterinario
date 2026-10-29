@@ -88,6 +88,7 @@ public class PacienteMascotaDto
     public bool Fallecido { get; set; }
     public DateTime? FechaFallecido { get; set; }
     public int? MotivoFallece { get; set; }
+    public string MotivoFalleceOtro { get; set; } = string.Empty;
 
     // Campos exclusivos TUERI (Fauna Silvestre)
     public int? TueClase { get; set; }
