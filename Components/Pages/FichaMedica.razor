@@ -19,13 +19,31 @@
             </h4>
             <small class="text-muted">Examen físico general, metodología clínica orientada a problemas (SOAP), diagnósticos CIE-10, antecedentes y vacunación.</small>
         </div>
-        <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
-            <div class="input-group input-group-sm" style="width: 270px;">
-                <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
-                <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
-                <input type="number" class="form-control" placeholder="NHCL" @bind="NhclInput" />
-                <button class="btn btn-primary" @onclick="CargarPorInputAsync" title="Cargar Paciente">
+        <div class="d-flex flex-wrap gap-2 align-items-center mt-2 mt-xl-0">
+            <!-- Selector Dropbox de Órdenes -->
+            <div class="d-flex align-items-center gap-1">
+                <label class="small fw-bold text-secondary text-nowrap mb-0">Órdenes:</label>
+                <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;"
+                        value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+                    <option value="0">-- Seleccionar Orden --</option>
+                    @foreach (var ord in _ordenesActivas)
+                    {
+                        <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Búsqueda Manual por Orden / NHCL con espacio amplio para números -->
+            <div class="input-group input-group-sm" style="width: auto;">
+                <span class="input-group-text bg-light fw-semibold text-secondary">Ord:</span>
+                <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
+                       placeholder="Orden" @bind="IdOrdenInput" @onkeydown="OnInputKeyDown" />
+                <span class="input-group-text bg-light fw-semibold text-secondary">NHCL:</span>
+                <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
+                       placeholder="NHCL" @bind="NhclInput" @onkeydown="OnInputKeyDown" />
+                <button class="btn btn-primary fw-semibold px-3 d-flex align-items-center gap-1" @onclick="CargarPorInputAsync" title="Buscar y Cargar Paciente">
                     <i class="bi bi-search"></i>
+                    <span>Buscar</span>
                 </button>
             </div>
             <button class="btn btn-sm btn-success" @onclick="GuardarFichaCompletaAsync" disabled="@Guardando">
@@ -608,6 +626,7 @@
 
     private int IdOrdenInput { get; set; }
     private int NhclInput { get; set; }
+    private List<OrdenActivaResumenDto> _ordenesActivas = new();
     private int TabActiva { get; set; } = 1;
     private bool CargandoInicial { get; set; } = true;
     private bool Guardando { get; set; }
@@ -632,10 +651,14 @@
         CargandoInicial = true;
         await Task.Yield();
 
+        if (_ordenesActivas.Count == 0)
+        {
+            _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(top: 50);
+        }
+
         if (IdOrden <= 0 && Nhcl > 0)
         {
-            var activas = await KardexService.ObtenerOrdenesActivasAsync();
-            var ordenPaciente = activas.FirstOrDefault(o => o.Nhcl == Nhcl);
+            var ordenPaciente = _ordenesActivas.FirstOrDefault(o => o.Nhcl == Nhcl);
             if (ordenPaciente != null)
             {
                 IdOrden = ordenPaciente.IdOrdenAtencion;
@@ -648,11 +671,10 @@
         }
         else if (IdOrden <= 0)
         {
-            var activas = await KardexService.ObtenerOrdenesActivasAsync();
-            if (activas.Count > 0)
+            if (_ordenesActivas.Count > 0)
             {
-                IdOrden = activas[0].IdOrdenAtencion;
-                Nhcl = activas[0].Nhcl;
+                IdOrden = _ordenesActivas[0].IdOrdenAtencion;
+                Nhcl = _ordenesActivas[0].Nhcl;
             }
         }
 
@@ -661,20 +683,83 @@
             IdOrdenInput = IdOrden;
             NhclInput = Nhcl;
             await CargarDatosCompletosAsync();
+
+            if (Paciente != null && !_ordenesActivas.Any(o => o.IdOrdenAtencion == IdOrden))
+            {
+                _ordenesActivas.Insert(0, new OrdenActivaResumenDto
+                {
+                    OrdenAtencionId = IdOrden,
+                    Nhcl = Nhcl,
+                    Paciente = Paciente.PacienteNombre,
+                    Cliente = Paciente.PropietarioNombre,
+                    Especie = Paciente.Especie,
+                    Sexo = Paciente.Sexo
+                });
+            }
         }
         CargandoInicial = false;
     }
 
     private async Task CargarPorInputAsync()
     {
-        if (IdOrdenInput > 0)
+        if (IdOrdenInput <= 0 && NhclInput > 0)
+        {
+            var ordenPaciente = _ordenesActivas.FirstOrDefault(o => o.Nhcl == NhclInput);
+            if (ordenPaciente != null)
+            {
+                IdOrdenInput = ordenPaciente.IdOrdenAtencion;
+            }
+        }
+
+        if (IdOrdenInput > 0 || NhclInput > 0)
         {
             IdOrden = IdOrdenInput;
             Nhcl = NhclInput;
             CargandoInicial = true;
             await Task.Yield();
             await CargarDatosCompletosAsync();
+
+            if (Paciente != null && !_ordenesActivas.Any(o => o.IdOrdenAtencion == IdOrden))
+            {
+                _ordenesActivas.Insert(0, new OrdenActivaResumenDto
+                {
+                    OrdenAtencionId = IdOrden,
+                    Nhcl = Nhcl,
+                    Paciente = Paciente.PacienteNombre,
+                    Cliente = Paciente.PropietarioNombre,
+                    Especie = Paciente.Especie,
+                    Sexo = Paciente.Sexo
+                });
+            }
+
             CargandoInicial = false;
+            Nav.NavigateTo($"/consulta/fichamedica/{IdOrden}/{Nhcl}", replace: true);
+        }
+    }
+
+    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var ordenId) && ordenId > 0)
+        {
+            var ord = _ordenesActivas.FirstOrDefault(o => o.IdOrdenAtencion == ordenId);
+            IdOrden = ordenId;
+            IdOrdenInput = ordenId;
+            Nhcl = ord?.Nhcl ?? 0;
+            NhclInput = Nhcl;
+
+            CargandoInicial = true;
+            await Task.Yield();
+            await CargarDatosCompletosAsync();
+            CargandoInicial = false;
+            Nav.NavigateTo($"/consulta/fichamedica/{IdOrden}/{Nhcl}", replace: true);
+        }
+    }
+
+    private async Task OnInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CargarPorInputAsync();
         }
     }
 
