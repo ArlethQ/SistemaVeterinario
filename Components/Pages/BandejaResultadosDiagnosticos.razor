@@ -564,7 +564,12 @@
 
     private async Task ExportarInformePdfAsync(InformeDiagnosticoDto inf)
     {
-        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = inf.Nhcl, PacienteNombre = "Paciente e-ForVets" };
+        var pac = Paciente;
+        if (pac is null || pac.Nhcl <= 0)
+        {
+            MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
+            return;
+        }
         var pdfBytes = ReportService.GenerarInformeDiagnosticoPdf(pac, inf);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"Informe_{inf.TipoInforme}_{inf.IdInforme}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }

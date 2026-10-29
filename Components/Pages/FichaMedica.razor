@@ -1030,7 +1030,13 @@
 
     private async Task ExportarPdfAsync()
     {
-        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = Ficha.MedOrden, Nhcl = Ficha.MedNhcl, PacienteNombre = "Paciente e-ForVets" };
+        var pac = Paciente;
+        if (pac is null || pac.Nhcl <= 0)
+        {
+            EsError = true;
+            MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
+            return;
+        }
         var pdfBytes = ReportService.GenerarFichaMedicaPdf(pac, Ficha, Diagnosticos, RecetaItems);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"HistoriaClinica_Orden_{Ficha.MedOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }

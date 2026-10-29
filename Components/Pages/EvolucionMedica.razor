@@ -162,6 +162,10 @@
                             <input type="text" class="form-control form-control-sm" @bind="NuevaOrdenExamen.DescripcionExamen" placeholder="Ej: Hemograma, Eco Abdominal..." />
                         </div>
                         <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Código del examen en el catálogo</label>
+                            <input type="number" min="1" class="form-control form-control-sm" @bind="NuevaOrdenExamen.CodigoProd" />
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label small fw-semibold">Indicación Clínica / Muestra</label>
                             <input type="text" class="form-control form-control-sm" @bind="NuevaOrdenExamen.Observaciones" placeholder="Ayuno, región anatómica..." />
                         </div>
@@ -464,14 +468,23 @@
 
     private async Task AgregarExamenEvolucionAsync()
     {
-        if (string.IsNullOrWhiteSpace(NuevaOrdenExamen.DescripcionExamen)) return;
+        if (string.IsNullOrWhiteSpace(NuevaOrdenExamen.DescripcionExamen) ||
+            !int.TryParse(NuevaOrdenExamen.CodigoProd, out int codigo) || codigo <= 0)
+        {
+            MensajeAlerta = "Seleccione un examen real e ingrese su código válido del catálogo.";
+            return;
+        }
         NuevaOrdenExamen.IdOrden = IdOrden;
         NuevaOrdenExamen.Nhcl = Nhcl;
         if (NuevaOrdenExamen.IdEvolucion == 0 && Evoluciones.Any())
         {
             NuevaOrdenExamen.IdEvolucion = Evoluciones.First().IdEvolucion;
         }
-        await ConsultaService.AgregarOrdenExamenAsync(NuevaOrdenExamen);
+        if (!await ConsultaService.AgregarOrdenExamenAsync(NuevaOrdenExamen))
+        {
+            MensajeAlerta = "No se pudo registrar la orden de examen.";
+            return;
+        }
         NuevaOrdenExamen = new OrdenExamenEvolucionDto { TipoCategoria = NuevaOrdenExamen.TipoCategoria, IdEvolucion = NuevaOrdenExamen.IdEvolucion };
         await RecargarEvolucionesAsync();
     }
@@ -484,7 +497,12 @@
 
     private async Task ExportarPdfAsync()
     {
-        var pac = Paciente ?? new PacienteHeaderDto { OrdenAtencionId = IdOrden, Nhcl = Nhcl, PacienteNombre = "Paciente e-ForVets" };
+        var pac = Paciente;
+        if (pac is null || pac.Nhcl <= 0)
+        {
+            MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
+            return;
+        }
         var pdfBytes = ReportService.GenerarEvolucionesPdf(pac, Evoluciones);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"Evoluciones_NHCL_{Nhcl}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }

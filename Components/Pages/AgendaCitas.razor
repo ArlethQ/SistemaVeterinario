@@ -39,8 +39,8 @@
 
     @if (!string.IsNullOrEmpty(_mensaje))
     {
-        <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
-            <i class="bi bi-check-circle-fill me-2"></i>@_mensaje
+        <div class="alert @(_mensajeEsError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2" role="alert">
+            <i class="bi @(_mensajeEsError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@_mensaje
             <button type="button" class="btn-close" @onclick="() => _mensaje = string.Empty"></button>
         </div>
     }
@@ -466,6 +466,7 @@
     private DateTime _fechaAgenda = DateTime.Today;
     private bool _cargandoInicial = true;
     private string _mensaje = string.Empty;
+    private bool _mensajeEsError;
     private bool _mostrarFormularioCita;
     private CitaMedicaDto? _citaDetalle;
     private CitaMedicaDto? _citaReagendar, _citaCancelar;
@@ -524,7 +525,29 @@
     private async Task CargarHistorialAsync(){if(_historialHasta<_historialDesde){_mensaje="El rango de historial no es válido.";return;}_historial=await AdmisionService.ObtenerCitasPorFechaAsync(_historialDesde,_historialHasta,0);}
     private void AbrirReagendar(CitaMedicaDto c){_citaReagendar=c;_reagendaFecha=c.CiFecha;_reagendaHora=c.CiHora;_reagendaMedico=c.CiUsuario;}
     private void AbrirCancelar(CitaMedicaDto c){_citaCancelar=c;_motivoCancelacion="";}
-    private async Task ReagendarAsync(){if(_citaReagendar is null)return;var ok=await AdmisionService.ReagendarCitaAsync(_citaReagendar.CiId,_reagendaFecha,_reagendaHora,_reagendaMedico,SessionState.Localidad,SessionState.IdUser);_mensaje=ok?"Cita reagendada.":"No se pudo reagendar: verifique horario y superposición.";if(ok)_citaReagendar=null;await CargarAgendaAsync();await CargarHistorialAsync();}
+    private async Task ReagendarAsync()
+    {
+        if (_citaReagendar is null) return;
+        try
+        {
+            int localidad = _citaReagendar.CiLocalidad > 0 ? _citaReagendar.CiLocalidad : SessionState.Localidad;
+            var ok = await AdmisionService.ReagendarCitaAsync(_citaReagendar.CiId, _reagendaFecha, _reagendaHora, _reagendaMedico, localidad, SessionState.IdUser);
+            _mensajeEsError = !ok;
+            _mensaje = ok ? "Cita reagendada y verificada." : "No se guardó el reagendamiento. El horario puede estar ocupado o la cita ya no está activa.";
+            if (!ok) return;
+
+            _fechaAgenda = _reagendaFecha;
+            _idMedicoFiltro = _reagendaMedico;
+            _citaReagendar = null;
+            await CargarAgendaAsync();
+            await CargarHistorialAsync();
+        }
+        catch (Exception ex)
+        {
+            _mensajeEsError = true;
+            _mensaje = $"No se pudo reagendar la cita: {ex.Message}";
+        }
+    }
     private async Task CancelarCitaAsync(){if(_citaCancelar is null)return;var ok=await AdmisionService.CancelarCitaAsync(_citaCancelar.CiId,_motivoCancelacion,SessionState.IdUser);_mensaje=ok?"Cita cancelada.":"No se pudo cancelar la cita.";if(ok)_citaCancelar=null;await CargarAgendaAsync();await CargarHistorialAsync();}
     private async Task DiaAnterior() { _fechaAgenda = _fechaAgenda.AddDays(-1); await CargarAgendaAsync(); }
     private async Task DiaSiguiente() { _fechaAgenda = _fechaAgenda.AddDays(1); await CargarAgendaAsync(); }
