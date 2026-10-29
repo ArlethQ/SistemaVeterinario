@@ -335,3 +335,33 @@ document.addEventListener('paste', function (e) {
         }
     }
 });
+
+// Prevenir n?meros negativos (-) en inputs num?ricos con min >= 0
+document.addEventListener('keydown', function (e) {
+    const target = e.target;
+    if (target && target.tagName === 'INPUT' && target.type === 'number') {
+        const minAttr = target.getAttribute('min');
+        if (minAttr !== null && parseFloat(minAttr) >= 0) {
+            if (e.key === '-' || e.key === 'Subtract') {
+                e.preventDefault();
+            }
+        }
+    }
+});
+
+document.addEventListener('paste', function (e) {
+    const target = e.target;
+    if (target && target.tagName === 'INPUT' && target.type === 'number') {
+        const minAttr = target.getAttribute('min');
+        if (minAttr !== null && parseFloat(minAttr) >= 0) {
+            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+            if (pasteData && pasteData.includes('-')) {
+                e.preventDefault();
+                const cleaned = pasteData.replace(/-/g, '');
+                target.value = cleaned;
+                target.dispatchEvent(new Event('input', { bubbles: true }));
+                target.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+    }
+});

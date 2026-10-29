@@ -37,10 +37,10 @@
             <div class="input-group input-group-sm" style="width: auto;">
                 <span class="input-group-text bg-light fw-semibold text-secondary">Ord:</span>
                 <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
-                       placeholder="Orden" @bind="IdOrdenInput" @onkeydown="OnInputKeyDown" />
+                       min="1" placeholder="Orden" @bind="IdOrdenInput" @onkeydown="OnInputKeyDown" />
                 <span class="input-group-text bg-light fw-semibold text-secondary">NHCL:</span>
                 <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
-                       placeholder="NHCL" @bind="NhclInput" @onkeydown="OnInputKeyDown" />
+                       min="1" placeholder="NHCL" @bind="NhclInput" @onkeydown="OnInputKeyDown" />
                 <button class="btn btn-primary fw-semibold px-3 d-flex align-items-center gap-1" @onclick="CargarPorInputAsync" title="Buscar y Cargar Paciente">
                     <i class="bi bi-search"></i>
                     <span>Buscar</span>
@@ -194,27 +194,27 @@
                         <div class="row g-2">
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">Peso (kg)</label>
-                                <input type="number" step="0.01" class="form-control form-control-sm fw-bold text-primary" @bind="Ficha.Peso" />
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm fw-bold text-primary" @bind="Ficha.Peso" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">Temp (°C)</label>
-                                <input type="number" step="0.1" class="form-control form-control-sm" @bind="Ficha.Temperatura" />
+                                <input type="number" step="0.1" min="0" class="form-control form-control-sm" @bind="Ficha.Temperatura" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">FC (lpm)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="Ficha.FrecuenciaCardiaca" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="Ficha.FrecuenciaCardiaca" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">FR (rpm)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="Ficha.FrecuenciaRespiratoria" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="Ficha.FrecuenciaRespiratoria" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">TLLC (seg)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="Ficha.TiempoLlenadoCapilar" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="Ficha.TiempoLlenadoCapilar" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">Deshidratación (%)</label>
-                                <input type="number" class="form-control form-control-sm" @bind="Ficha.Deshidratacion" />
+                                <input type="number" min="0" max="100" class="form-control form-control-sm" @bind="Ficha.Deshidratacion" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label small fw-semibold">Condición Corporal (ICC 1-9)</label>
@@ -811,6 +811,22 @@
             MensajeAlerta = "Por favor ingrese el motivo principal de la consulta antes de guardar.";
             return;
         }
+
+        if (Ficha.Peso < 0 || Ficha.Temperatura < 0 || Ficha.FrecuenciaCardiaca < 0 ||
+            Ficha.FrecuenciaRespiratoria < 0 || Ficha.TiempoLlenadoCapilar < 0 || Ficha.Deshidratacion < 0)
+        {
+            EsError = true;
+            MensajeAlerta = "Los valores de constantes fisiol?gicas no pueden ser menores a 0.";
+            return;
+        }
+
+        // Asegurar valores normalizados >= 0
+        Ficha.Peso = Math.Max(0, Ficha.Peso);
+        Ficha.Temperatura = Math.Max(0, Ficha.Temperatura);
+        Ficha.FrecuenciaCardiaca = Math.Max(0, Ficha.FrecuenciaCardiaca);
+        Ficha.FrecuenciaRespiratoria = Math.Max(0, Ficha.FrecuenciaRespiratoria);
+        Ficha.TiempoLlenadoCapilar = Math.Max(0, Ficha.TiempoLlenadoCapilar);
+        Ficha.Deshidratacion = Math.Clamp(Ficha.Deshidratacion, 0, 100);
 
         Guardando = true;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
