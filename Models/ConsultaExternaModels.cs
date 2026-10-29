@@ -105,6 +105,8 @@ public class VacunaPacienteDto
     public int Orden { get; set; }
     public DateTime Fecha { get; set; } = DateTime.Today;
     public DateTime? FechaRevacunacion { get; set; } = DateTime.Today.AddYears(1);
+    public int IdProducto { get; set; }
+    public string NombreVacuna { get; set; } = string.Empty;
     public string ObservacionVacuna { get; set; } = string.Empty;
     public string Tipo { get; set; } = "Vacunación";
     public string NombreMedico { get; set; } = string.Empty;

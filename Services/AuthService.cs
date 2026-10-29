@@ -106,6 +106,7 @@ public interface IAuthService
     Task<List<UsuarioModel>> ObtenerUsuariosParaPermisosAsync();
     Task<List<MenuItemModel>> ObtenerMenusAdministracionAsync();
     Task<HashSet<int>> ObtenerAccesosUsuarioAsync(int idUser);
+    Task<bool> TieneAccesoRutaAsync(string ruta);
     Task<bool> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId);
     Task<bool> GuardarRolAsync(RolUsuarioModel rol, int adminId);
     Task<bool> GuardarMenuAsync(MenuItemModel menu, int adminId);
@@ -252,6 +253,39 @@ public class AuthService : IAuthService
         const string sql = "SELECT ac_modulo FROM vt_accesos WHERE ac_idusuario = @IdUser";
         try { return (await _sql.QueryAsync<int>(sql, new { IdUser = idUser })).ToHashSet(); }
         catch { return []; }
+    }
+
+    public async Task<bool> TieneAccesoRutaAsync(string ruta)
+    {
+        if (!_session.IsAuthenticated) return false;
+        if (_session.TipoUser == 1) return true;
+
+        string rutaNormalizada = NormalizarRuta(ruta);
+        if (rutaNormalizada == "/dashboard") return true;
+
+        var menus = await ObtenerMenuUsuarioAsync(_session.IdUser, _session.TipoUser);
+        bool autorizado = menus.Any(menu =>
+        {
+            string rutaMenu = NormalizarRuta(menu.Url);
+            return rutaMenu.Length > 1 && (rutaNormalizada == rutaMenu || rutaNormalizada.StartsWith(rutaMenu + "/", StringComparison.OrdinalIgnoreCase));
+        });
+
+        if (!autorizado)
+            await _sql.RegistrarBitacoraAsync($"Acceso denegado a ruta: {rutaNormalizada}", _session.IdUser);
+
+        return autorizado;
+    }
+
+    private static string NormalizarRuta(string? ruta)
+    {
+        if (string.IsNullOrWhiteSpace(ruta)) return string.Empty;
+        string valor = ruta.Trim();
+        if (Uri.TryCreate(valor, UriKind.Absolute, out var uri)) valor = uri.AbsolutePath;
+        int queryIndex = valor.IndexOfAny(['?', '#']);
+        if (queryIndex >= 0) valor = valor[..queryIndex];
+        valor = valor.Replace('\\', '/').TrimStart('~');
+        if (!valor.StartsWith('/')) valor = "/" + valor;
+        return valor.Length > 1 ? valor.TrimEnd('/').ToLowerInvariant() : valor;
     }
 
     public async Task<bool> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId)

@@ -33,6 +33,7 @@ public interface IReportExportService
     byte[] GenerarProformaConsolidadaPdf(OrdenProformaResumenDto proforma);
     byte[] GenerarProformaConsolidadaExcel(OrdenProformaResumenDto proforma);
     byte[] GenerarAgendaCitasPdf(List<CitaMedicaDto> citas, DateTime desde, DateTime hasta);
+    byte[] GenerarPartesOperatoriosPdf(List<ParteOperatorioResumenDto> partes, DateTime desde, DateTime hasta);
     byte[] GenerarOrdenesAtencionPdf(List<OrdenAtencionResumenDto> ordenes, DateTime desde, DateTime hasta);
     byte[] GenerarOrdenesAtencionExcel(List<OrdenAtencionResumenDto> ordenes, DateTime desde, DateTime hasta);
     byte[] GenerarCodigoQrPng(string texto);
@@ -2215,5 +2216,52 @@ public class ReportExportService : IReportExportService
                 page.Footer().AlignCenter().Text("e-ForVets — Agenda médica institucional");
             });
         }).GeneratePdf();
+    }
+
+    public byte[] GenerarPartesOperatoriosPdf(List<ParteOperatorioResumenDto> partes, DateTime desde, DateTime hasta)
+    {
+        return Document.Create(document => document.Page(page =>
+        {
+            page.Size(PageSizes.A4.Landscape());
+            page.Margin(24);
+            page.DefaultTextStyle(x => x.FontSize(8));
+            page.Header().Column(column =>
+            {
+                column.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                column.Item().Text($"PARTE OPERATORIO CONSOLIDADO · {desde:dd/MM/yyyy} - {hasta:dd/MM/yyyy}").Bold().FontSize(14);
+                column.Item().Text($"Registros: {partes.Count}").FontColor(Colors.Grey.Darken1);
+            });
+            page.Content().PaddingTop(10).Table(table =>
+            {
+                table.ColumnsDefinition(columns =>
+                {
+                    columns.ConstantColumn(65);
+                    columns.ConstantColumn(52);
+                    columns.RelativeColumn(1.2f);
+                    columns.RelativeColumn(1.4f);
+                    columns.RelativeColumn(2.2f);
+                    columns.RelativeColumn(2.2f);
+                });
+                table.Header(header =>
+                {
+                    foreach (var title in new[] { "Fecha", "Orden / NHCL", "Paciente", "Propietario", "Procedimiento", "Diagnóstico / hallazgos" })
+                        header.Cell().Background(Colors.Blue.Lighten4).Border(.5f).Padding(4).Text(title).Bold();
+                });
+                foreach (var parte in partes)
+                {
+                    foreach (var value in new[]
+                    {
+                        parte.Fecha.ToString("dd/MM/yyyy HH:mm"), $"{parte.IdOrden} / {parte.Nhcl}", parte.Paciente,
+                        parte.Propietario, parte.Procedimiento, parte.Diagnostico
+                    })
+                        table.Cell().Border(.5f).Padding(4).Text(value ?? string.Empty);
+                }
+            });
+            page.Footer().AlignCenter().Text(text =>
+            {
+                text.Span("e-ForVets · Generado ");
+                text.Span(DateTime.Now.ToString("dd/MM/yyyy HH:mm"));
+            });
+        })).GeneratePdf();
     }
 }

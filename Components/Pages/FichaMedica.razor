@@ -574,7 +574,13 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-semibold">Biológico / Producto</label>
-                                <input type="text" class="form-control form-control-sm" @bind="NuevaVacuna.ObservacionVacuna" placeholder=" Séxtuple, Rabia, Bravecto..." />
+                                <select class="form-select form-select-sm" @bind="NuevaVacuna.IdProducto">
+                                    <option value="0">Seleccione</option>
+                                    @foreach (var producto in CatalogoVacunas)
+                                    {
+                                        <option value="@producto.Id">@producto.Descripcion</option>
+                                    }
+                                </select>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small fw-semibold">Próx. Refuerzo</label>
@@ -589,6 +595,7 @@
                                 </button>
                             </div>
                         </div>
+                        <input type="text" class="form-control form-control-sm mb-3" @bind="NuevaVacuna.ObservacionVacuna" placeholder="Observaciones, lote o reacción (opcional)" />
 
                         <div class="table-responsive">
                             <table class="table table-sm table-hover small mb-0">
@@ -607,7 +614,7 @@
                                         <tr>
                                             <td>@v.Fecha.ToString("yyyy-MM-dd")</td>
                                             <td><span class="badge bg-info text-dark">@v.Tipo</span></td>
-                                            <td class="fw-semibold">@v.ObservacionVacuna</td>
+                                            <td><strong>@(string.IsNullOrWhiteSpace(v.NombreVacuna) ? "Sin producto asociado" : v.NombreVacuna)</strong>@if (!string.IsNullOrWhiteSpace(v.ObservacionVacuna)){<small class="d-block text-muted">@v.ObservacionVacuna</small>}</td>
                                             <td>@(v.FechaRevacunacion?.ToString("yyyy-MM-dd") ?? "-")</td>
                                             <td class="text-end">
                                                 <button class="btn btn-sm btn-link text-danger p-0" @onclick="() => EliminarVacunaAsync(v.VacunaId)">
@@ -646,6 +653,7 @@
     private List<RecetaMedicamentoItemDto> RecetaItems { get; set; } = new();
     private List<AntecedenteClinicoDto> Antecedentes { get; set; } = new();
     private List<VacunaPacienteDto> Vacunas { get; set; } = new();
+    private List<CatalogoItemGenericoDto> CatalogoVacunas { get; set; } = new();
 
     private string FiltroCie10 { get; set; } = string.Empty;
     private DiagnosticoCie10Dto NuevoDiagnostico { get; set; } = new();
@@ -793,7 +801,8 @@
         var tRec = ConsultaService.ObtenerRecetaOrdenAsync(IdOrden);
         var tAnt = ConsultaService.ObtenerAntecedentesPacienteAsync(Nhcl);
         var tVac = ConsultaService.ObtenerVacunasPacienteAsync(Nhcl);
-        await Task.WhenAll(tFicha, tDiag, tRec, tAnt, tVac);
+        var tCatalogoVac = ConsultaService.ObtenerCatalogoVacunasAsync();
+        await Task.WhenAll(tFicha, tDiag, tRec, tAnt, tVac, tCatalogoVac);
 
         Ficha = await tFicha;
         if (Ficha.MedOrden <= 0) Ficha.MedOrden = IdOrden;
@@ -804,6 +813,7 @@
         RecetaItems = await tRec;
         Antecedentes = await tAnt;
         Vacunas = await tVac;
+        CatalogoVacunas = await tCatalogoVac;
     }
 
     private void OnFechaControlChanged(ChangeEventArgs e)
@@ -995,7 +1005,12 @@
 
     private async Task AgregarVacunaAsync()
     {
-        if (string.IsNullOrWhiteSpace(NuevaVacuna.ObservacionVacuna)) return;
+        if (NuevaVacuna.IdProducto <= 0)
+        {
+            EsError = true;
+            MensajeAlerta = "Seleccione la vacuna o producto aplicado.";
+            return;
+        }
 
         if (NuevaVacuna.FechaRevacunacion.HasValue && NuevaVacuna.FechaRevacunacion.Value.Date < DateTime.Today)
         {

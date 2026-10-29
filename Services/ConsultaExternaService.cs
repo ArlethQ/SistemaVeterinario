@@ -19,6 +19,7 @@ public interface IConsultaExternaService
     Task<List<AntecedenteClinicoDto>> ObtenerAntecedentesPacienteAsync(int nhcl);
     Task<bool> AgregarAntecedenteAsync(AntecedenteClinicoDto dto, int idUsuario, int idCliente);
     Task<List<VacunaPacienteDto>> ObtenerVacunasPacienteAsync(int nhcl);
+    Task<List<CatalogoItemGenericoDto>> ObtenerCatalogoVacunasAsync();
     Task<bool> AgregarVacunaAsync(VacunaPacienteDto dto, int idUsuario, int idCliente);
     Task<bool> EliminarVacunaAsync(int vacunaId, int idUsuario);
 
@@ -394,10 +395,13 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(v.vacuna_orden, 0) AS Orden,
                 ISNULL(v.vacuna_fecha, GETDATE()) AS Fecha,
                 v.vacuna_revacunacion AS FechaRevacunacion,
+                ISNULL(v.vacuna_idprod, 0) AS IdProducto,
+                ISNULL(p.prod_descripcion, '') AS NombreVacuna,
                 ISNULL(v.vacuna_observacion, '') AS ObservacionVacuna,
                 ISNULL(v.vacuna_tipo, 'Vacunación') AS Tipo,
                 ISNULL(u.user_nombre, 'Médico') AS NombreMedico
             FROM vt_vacunas v
+            LEFT JOIN vt_productos p ON v.vacuna_idprod = p.prod_id
             LEFT JOIN vt_usuarios u ON v.vacuna_iduser = u.user_numero
             WHERE v.vacuna_nhcl = @Nhcl AND ISNULL(v.vacuna_estado, 'A') = 'A'
             ORDER BY v.vacuna_id DESC";
@@ -406,15 +410,27 @@ public class ConsultaExternaService : IConsultaExternaService
         return lista.ToList();
     }
 
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerCatalogoVacunasAsync()
+    {
+        const string sql = @"
+            SELECT prod_id AS Id, RTRIM(ISNULL(prod_descripcion, '')) AS Descripcion
+            FROM vt_productos
+            WHERE prod_estado = 'A' AND prod_grupo = 10
+            ORDER BY prod_descripcion";
+        return (await _db.QueryAsync<CatalogoItemGenericoDto>(sql)).ToList();
+    }
+
     public async Task<bool> AgregarVacunaAsync(VacunaPacienteDto dto, int idUsuario, int idCliente)
     {
         const string sql = @"
             INSERT INTO vt_vacunas (
                 vacuna_nhcl, vacuna_fecha, vacuna_revacunacion, vacuna_iduser,
                 vacuna_cliente, vacuna_estado, vacuna_observacion, vacuna_orden, vacuna_tipo
+                , vacuna_idprod
             ) VALUES (
                 @Nhcl, @Fecha, @FechaRevacunacion, @IdUser,
                 @IdCliente, 'A', @ObservacionVacuna, @Orden, @Tipo
+                , @IdProducto
             )";
 
         await _db.ExecuteAsync(sql, new
@@ -427,6 +443,7 @@ public class ConsultaExternaService : IConsultaExternaService
             dto.ObservacionVacuna,
             dto.Orden,
             dto.Tipo
+            , dto.IdProducto
         });
         return true;
     }
