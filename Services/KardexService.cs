@@ -291,11 +291,17 @@ public class KardexService : IKardexService
         if (input.CantProd <= 0)
             return (false, "La cantidad debe ser mayor a 0.");
 
-        if (input.StockDisponible > 0 && input.CantProd > input.StockDisponible)
+        if (input.StockDisponible <= 0 || input.CantProd > input.StockDisponible)
             return (false, $"La cantidad no debe superar el stock disponible ({input.StockDisponible:N2} uds).");
 
-        string iniciales = "GV";
-        string nombreFuncionario = "Personal e-ForVets";
+        if (ordenId <= 0 || nhcl <= 0 || idUsuarioSesion <= 0 || input.FuncionarioId <= 0 ||
+            string.IsNullOrWhiteSpace(input.CodigoProd) || string.IsNullOrWhiteSpace(input.ProdDescripcion) ||
+            string.IsNullOrWhiteSpace(input.IndicacionesProd) || string.IsNullOrWhiteSpace(input.Via))
+            return (false, "Faltan datos reales de la orden, el producto o el responsable.");
+
+        if (!int.TryParse(input.IdDinamics, out var idProducto) || idProducto <= 0)
+            return (false, "Seleccione un producto válido del catálogo.");
+
         string horaStr = input.Hora.ToString("HH:mm");
 
         try
@@ -304,8 +310,11 @@ public class KardexService : IKardexService
                 "SELECT user_numero AS UserNumero, RTRIM(user_nombre) AS UserNombre, RTRIM(ISNULL(user_iniciales, 'HV')) AS UserIniciales FROM vt_usuarios WHERE user_numero = @Id",
                 new { Id = input.FuncionarioId });
 
-            iniciales = func?.UserIniciales ?? "HV";
-            nombreFuncionario = func?.UserNombre ?? "Personal e-ForVets";
+            if (func is null)
+                return (false, "El funcionario responsable no existe en la base de datos.");
+
+            string iniciales = func.UserIniciales;
+            string nombreFuncionario = func.UserNombre;
 
             const string insertSql = @"
                 INSERT INTO qvt_productosUtilizados (
@@ -325,9 +334,7 @@ public class KardexService : IKardexService
                 Nhcl = nhcl,
                 Hora = horaStr,
                 Fecha = input.Fecha.Date,
-                CodigoProd = int.TryParse(input.IdDinamics, out var idProducto)
-                    ? idProducto
-                    : int.TryParse(input.CodigoProd, out var codigoProducto) ? codigoProducto : 0,
+                CodigoProd = idProducto,
                 PrecioProd = input.PrecioProd,
                 IndicacionesProd = input.IndicacionesProd.Trim(),
                 CantProd = input.CantProd,
