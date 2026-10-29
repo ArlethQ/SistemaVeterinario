@@ -3,6 +3,8 @@
 @inject IKardexService KardexService
 @inject IQuirofanoService QuirofanoService
 @inject IReportExportService ReportService
+@inject NavigationManager Nav
+@inject IWebHostEnvironment Environment
 @inject SessionStateService Session
 @inject IJSRuntime JS
 
@@ -15,18 +17,20 @@
     </div>
 
     <div class="d-flex flex-wrap gap-2 align-items-center">
-        <select class="form-select form-select-sm" style="width: 260px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+        <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
             <option value="0">-- Seleccionar Orden Activa --</option>
             @foreach (var ord in ordenesActivas)
             {
-                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente</option>
+                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
             }
         </select>
 
-        <div class="input-group input-group-sm" style="width: 210px;">
-            <span class="input-group-text">Orden #</span>
-            <input type="number" class="form-control" @bind="ordenInput" />
-            <button class="btn btn-primary" @onclick="CargarPorInputAsync">Cargar</button>
+        <div class="input-group input-group-sm" style="width: auto;">
+            <span class="input-group-text">Ord:</span>
+            <input type="number" class="form-control" style="width: 95px; min-width: 85px;" @bind="ordenInput" @bind:event="oninput" @onkeydown="OnInputKeyDown" placeholder="Orden" />
+            <span class="input-group-text">NHCL:</span>
+            <input type="number" class="form-control" style="width: 95px; min-width: 85px;" @bind="nhclInput" @bind:event="oninput" @onkeydown="OnInputKeyDown" placeholder="NHCL" />
+            <button class="btn btn-primary" @onclick="CargarPorInputAsync">Buscar</button>
         </div>
 
         @if (paciente != null)
@@ -81,13 +85,34 @@ else if (paciente != null)
         </div>
     </div>
 
-    <div class="row g-3">
-        <!-- Columna Izquierda: Descripción del Acto Quirúrgico (qvt_Protocolo) -->
-        <div class="col-lg-7">
-            <div class="card shadow-sm border-0 mb-3">
-                <div class="card-header bg-white fw-bold text-primary">
-                    1. Protocolo Operatorio
-                </div>
+    <!-- Pestañas del Módulo Quirúrgico -->
+    <ul class="nav nav-tabs mb-3 small fw-semibold">
+        <li class="nav-item">
+            <button class="nav-link @(tabActiva == 1 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(1)">
+                1. Protocolo Operatorio y Chequeo Quirúrgico
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(tabActiva == 2 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(2)">
+                2. Equipo Quirúrgico Interviniente (@protDto.Equipo.Count)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(tabActiva == 3 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(3)">
+                3. Archivos y Fotos de Cirugía (@archivosQuirurgicos.Count)
+            </button>
+        </li>
+    </ul>
+
+    @if (tabActiva == 1)
+    {
+        <div class="row g-3">
+            <!-- Columna Izquierda: Descripción del Acto Quirúrgico (qvt_Protocolo) -->
+            <div class="col-lg-7">
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        1. Protocolo Operatorio
+                    </div>
                 <div class="card-body small">
                     <div class="row g-2">
                         <div class="col-md-4">
@@ -157,151 +182,226 @@ else if (paciente != null)
             </div>
         </div>
 
-        <!-- Columna Derecha: Equipo Quirúrgico y Chequeo de Enfermería -->
-        <div class="col-lg-5">
-            <!-- Equipo Quirúrgico (qvt_team) -->
-            <div class="card shadow-sm border-0 mb-3">
-                <div class="card-header bg-white fw-bold text-primary">
-                    2. Equipo Quirúrgico Interviniente
-                </div>
-                <div class="card-body small">
-                    <div class="row g-2 mb-2">
-                        <div class="col-md-5">
-                            <select class="form-select form-select-sm" @bind="nuevoMiembro.IdUsuario">
-                                <option value="0">-- Profesional --</option>
-                                @foreach (var u in profesionales)
-                                {
-                                    <option value="@u.UserNumero">@u.UserNombre</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <select class="form-select form-select-sm" @bind="nuevoMiembro.RolFuncion">
-                                <option value="Cirujano Principal">Cirujano Principal</option>
-                                <option value="Primer Ayudante">Primer Ayudante</option>
-                                <option value="Segundo Ayudante">Segundo Ayudante</option>
-                                <option value="Anestesiólogo">Anestesiólogo</option>
-                                <option value="Instrumentista">Instrumentista</option>
-                                <option value="Circulante">Circulante</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3 d-grid">
-                            <button class="btn btn-sm btn-primary" @onclick="AgregarMiembroAsync">Añadir</button>
-                        </div>
+            <!-- Columna Derecha: Chequeo de Enfermería Quirúrgica y Conteo de Gasas (qvt_ingresocirugia) -->
+            <div class="col-lg-5">
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        2. Chequeo Quirúrgico y Conteo de Textiles
                     </div>
+                    <div class="card-body small">
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label mb-0 fw-semibold">Quirófano / Sala #</label>
+                                <input type="number" class="form-control form-control-sm" @bind="protDto.Sala" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-0 fw-semibold">Posición Quirúrgica</label>
+                                <input type="text" class="form-control form-control-sm" @bind="protDto.Posicion" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-0 fw-semibold">Clasificación Herida</label>
+                                <select class="form-select form-select-sm" @bind="protDto.CasoContaminado">
+                                    <option value="Limpia">Limpia</option>
+                                    <option value="Limpia-Contaminada">Limpia-Contaminada</option>
+                                    <option value="Contaminada">Contaminada</option>
+                                    <option value="Sucia / Infectada">Sucia / Infectada</option>
+                                </select>
+                            </div>
 
-                    <div class="table-responsive">
-                        <table class="table table-sm table-bordered align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Profesional</th>
-                                    <th>Rol en Quirófano</th>
-                                    <th class="text-center">Titular</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @if (!protDto.Equipo.Any())
-                                {
-                                    <tr>
-                                        <td colspan="4" class="text-center text-muted py-2">Sin integrantes registrados en esta orden.</td>
-                                    </tr>
-                                }
-                                else
-                                {
-                                    @foreach (var m in protDto.Equipo)
-                                    {
-                                        <tr>
-                                            <td class="fw-semibold">@m.NombreProfesional</td>
-                                            <td>@m.RolFuncion</td>
-                                            <td class="text-center">
-                                                @if (m.Principal)
-                                                {
-                                                    <span class="badge bg-success">Principal</span>
-                                                }
-                                            </td>
-                                            <td class="text-center">
-                                                <button class="btn btn-xs btn-outline-danger py-0 px-1"
-                                                        @onclick="() => EliminarMiembroAsync(m.Sec)">×</button>
-                                            </td>
-                                        </tr>
-                                    }
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-0 fw-semibold">Antisepsia / Lavado</label>
+                                <input type="text" class="form-control form-control-sm" @bind="protDto.Lavado" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-0 fw-semibold">Unidad Electrocirugía</label>
+                                <input type="text" class="form-control form-control-sm" @bind="protDto.UnidadElectro" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-0 fw-semibold">Placa Retorno</label>
+                                <input type="text" class="form-control form-control-sm" @bind="protDto.LocalizacionPlaca" />
+                            </div>
 
-            <!-- Chequeo de Enfermería Quirúrgica y Conteo de Gasas (qvt_ingresocirugia) -->
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-white fw-bold text-primary">
-                    3. Chequeo Quirúrgico y Conteo de Textiles
-                </div>
-                <div class="card-body small">
-                    <div class="row g-2">
-                        <div class="col-md-4">
-                            <label class="form-label mb-0 fw-semibold">Quirófano / Sala #</label>
-                            <input type="number" class="form-control form-control-sm" @bind="protDto.Sala" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label mb-0 fw-semibold">Posición Quirúrgica</label>
-                            <input type="text" class="form-control form-control-sm" @bind="protDto.Posicion" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label mb-0 fw-semibold">Clasificación Herida</label>
-                            <select class="form-select form-select-sm" @bind="protDto.CasoContaminado">
-                                <option value="Limpia">Limpia</option>
-                                <option value="Limpia-Contaminada">Limpia-Contaminada</option>
-                                <option value="Contaminada">Contaminada</option>
-                                <option value="Sucia / Infectada">Sucia / Infectada</option>
-                            </select>
-                        </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-0 fw-bold text-primary">Gasas Iniciales</label>
+                                <input type="text" class="form-control form-control-sm" @bind="protDto.GasasIniciales" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-0 fw-bold text-primary">Gasas Adicionales</label>
+                                <input type="text" class="form-control form-control-sm" @bind="protDto.GasasAdicionales" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label mb-0 fw-bold text-success">Recuento Final</label>
+                                <input type="text" class="form-control form-control-sm" @bind="protDto.GasasRecuentoFinal" />
+                            </div>
 
-                        <div class="col-md-4">
-                            <label class="form-label mb-0 fw-semibold">Antisepsia / Lavado</label>
-                            <input type="text" class="form-control form-control-sm" @bind="protDto.Lavado" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label mb-0 fw-semibold">Unidad Electrocirugía</label>
-                            <input type="text" class="form-control form-control-sm" @bind="protDto.UnidadElectro" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label mb-0 fw-semibold">Placa Retorno</label>
-                            <input type="text" class="form-control form-control-sm" @bind="protDto.LocalizacionPlaca" />
-                        </div>
+                            <div class="col-md-6">
+                                <label class="form-label mb-0 fw-semibold">Conteo Compresas / Cotonoides</label>
+                                <input type="text" class="form-control form-control-sm" @bind="protDto.Compresas" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label mb-0 fw-semibold">Paciente Transferido A</label>
+                                <input type="text" class="form-control form-control-sm" @bind="protDto.TransferidoA" />
+                            </div>
 
-                        <div class="col-md-4">
-                            <label class="form-label mb-0 fw-bold text-primary">Gasas Iniciales</label>
-                            <input type="text" class="form-control form-control-sm" @bind="protDto.GasasIniciales" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label mb-0 fw-bold text-primary">Gasas Adicionales</label>
-                            <input type="text" class="form-control form-control-sm" @bind="protDto.GasasAdicionales" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label mb-0 fw-bold text-success">Recuento Final</label>
-                            <input type="text" class="form-control form-control-sm" @bind="protDto.GasasRecuentoFinal" />
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label mb-0 fw-semibold">Conteo Compresas / Cotonoides</label>
-                            <input type="text" class="form-control form-control-sm" @bind="protDto.Compresas" />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label mb-0 fw-semibold">Paciente Transferido A</label>
-                            <input type="text" class="form-control form-control-sm" @bind="protDto.TransferidoA" />
-                        </div>
-
-                        <div class="col-12">
-                            <label class="form-label mb-0 fw-semibold">Observaciones de Enfermería de Quirófano</label>
-                            <textarea class="form-control form-control-sm" rows="2" @bind="protDto.ObservacionesEnfermeria"></textarea>
+                            <div class="col-12">
+                                <label class="form-label mb-0 fw-semibold">Observaciones de Enfermería de Quirófano</label>
+                                <textarea class="form-control form-control-sm" rows="3" @bind="protDto.ObservacionesEnfermeria"></textarea>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    }
+    else if (tabActiva == 2)
+    {
+        <!-- Pestaña 2: Equipo Quirúrgico (qvt_team / vt_quirTeam) -->
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                <span>Equipo Quirúrgico Interviniente (@protDto.Equipo.Count)</span>
+                <small class="text-muted">Asignación de cirujanos, anestesiólogo, instrumentistas y circulante</small>
+            </div>
+            <div class="card-body small">
+                <div class="row g-2 mb-3 align-items-end bg-light p-2 rounded">
+                    <div class="col-md-4">
+                        <label class="form-label mb-1 fw-semibold">Profesional</label>
+                        <select class="form-select form-select-sm" @bind="nuevoMiembro.IdUsuario">
+                            <option value="0">-- Seleccionar Profesional --</option>
+                            @foreach (var u in profesionales)
+                            {
+                                <option value="@u.UserNumero">@u.UserNombre</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label mb-1 fw-semibold">Rol en Quirófano</label>
+                        <select class="form-select form-select-sm" @bind="nuevoMiembro.RolFuncion">
+                            <option value="Cirujano Principal">Cirujano Principal</option>
+                            <option value="Primer Ayudante">Primer Ayudante</option>
+                            <option value="Segundo Ayudante">Segundo Ayudante</option>
+                            <option value="Anestesiólogo">Anestesiólogo</option>
+                            <option value="Instrumentista">Instrumentista</option>
+                            <option value="Circulante">Circulante</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-sm btn-primary w-100 fw-semibold" @onclick="AgregarMiembroAsync">
+                            + Añadir al Equipo Quirúrgico
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Profesional</th>
+                                <th>Rol en Quirófano</th>
+                                <th class="text-center" style="width: 120px;">Condición</th>
+                                <th class="text-center" style="width: 80px;">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!protDto.Equipo.Any())
+                            {
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">No hay integrantes registrados en el equipo de esta cirugía.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var m in protDto.Equipo)
+                                {
+                                    <tr>
+                                        <td class="fw-semibold">@m.NombreProfesional</td>
+                                        <td>@m.RolFuncion</td>
+                                        <td class="text-center">
+                                            @if (m.Principal)
+                                            {
+                                                <span class="badge bg-success">Principal</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary">Asistente</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            <button class="btn btn-xs btn-outline-danger py-0 px-2"
+                                                    title="Eliminar miembro"
+                                                    @onclick="() => EliminarMiembroAsync(m.Sec)">
+                                                <i class="bi bi-trash"></i> Eliminar
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else if (tabActiva == 3)
+    {
+        <!-- Pestaña 3: Archivos Quirúrgicos del Paciente (vt_quirArchivos) -->
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                <span>Archivos, Documentos y Evidencia Quirúrgica (@archivosQuirurgicos.Count)</span>
+                <span class="badge bg-info-subtle text-info border">Ruta: archivosPacientes/@Nhcl/ingreso</span>
+            </div>
+            <div class="card-body small">
+                <div class="row g-2 mb-3 bg-light p-2 rounded align-items-center">
+                    <div class="col-md-7">
+                        <label class="form-label mb-1 fw-semibold">Subir nuevo archivo / foto quirúrgica (PDF, JPG, PNG, DOCX, XLSX máx 15MB):</label>
+                        <InputFile class="form-control form-control-sm" OnChange="SubirArchivoQuirurgicoAsync" />
+                    </div>
+                    <div class="col-md-5 text-muted pt-3">
+                        <small>Los archivos subidos quedan asociados al expediente de ingreso quirúrgico del paciente.</small>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nombre del Archivo</th>
+                                <th style="width: 170px;">Fecha y Hora</th>
+                                <th style="width: 110px;">Tamaño</th>
+                                <th class="text-center" style="width: 140px;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!archivosQuirurgicos.Any())
+                            {
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">No existen archivos quirúrgicos cargados para este paciente.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var arc in archivosQuirurgicos)
+                                {
+                                    <tr>
+                                        <td>
+                                            <a href="@arc.Url" target="_blank" class="fw-semibold text-decoration-none">
+                                                📄 @arc.Nombre
+                                            </a>
+                                        </td>
+                                        <td>@arc.Fecha.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td>@arc.TamanoTexto</td>
+                                        <td class="text-center">
+                                            <a href="@arc.Url" download="@arc.Nombre" class="btn btn-xs btn-outline-primary py-0 px-2 me-1">Descargar</a>
+                                            <button class="btn btn-xs btn-outline-danger py-0 px-2" @onclick="() => EliminarArchivoQuirurgico(arc.Nombre)">Eliminar</button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -309,11 +409,16 @@ else if (paciente != null)
     [Parameter] public int Nhcl { get; set; }
 
     private int ordenInput;
+    private int nhclInput;
     private List<OrdenActivaResumenDto> ordenesActivas = new();
+    private int tabActiva = 1;
     private PacienteHeaderDto? paciente;
     private ProtocoloQuirurgicoCompletoDto protDto = new();
     private List<FuncionarioDto> profesionales = new();
     private MiembroEquipoQuirurgicoDto nuevoMiembro = new() { RolFuncion = "Cirujano Principal" };
+    private List<ArchivoQuirurgicoInfo> archivosQuirurgicos = new();
+
+    private sealed record ArchivoQuirurgicoInfo(string Nombre, string Url, DateTime Fecha, string TamanoTexto);
 
     private bool cargandoInicial = true;
     private bool guardando;
@@ -351,30 +456,168 @@ else if (paciente != null)
         cargandoInicial = false;
     }
 
+    private void CambiarTab(int tab)
+    {
+        tabActiva = tab;
+        mensajeAlerta = string.Empty;
+        esError = false;
+    }
+
+    private async Task OnInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CargarPorInputAsync();
+        }
+    }
+
     private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out int selOrden) && selOrden > 0)
         {
+            mensajeAlerta = string.Empty;
+            esError = false;
             var ord = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == selOrden);
             IdOrden = selOrden;
             Nhcl = ord?.Nhcl ?? 0;
             ordenInput = IdOrden;
+            nhclInput = Nhcl;
             await CargarDatosAsync();
         }
     }
 
     private async Task CargarPorInputAsync()
     {
-        if (ordenInput <= 0 && ordenesActivas.Count > 0)
+        mensajeAlerta = string.Empty;
+        esError = false;
+
+        if (ordenInput > 0)
         {
-            ordenInput = ordenesActivas[0].IdOrdenAtencion;
-            Nhcl = ordenesActivas[0].Nhcl;
+            IdOrden = ordenInput;
+            var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
+            if (match != null)
+            {
+                Nhcl = match.Nhcl;
+                nhclInput = Nhcl;
+            }
         }
-        if (ordenInput <= 0) return;
-        IdOrden = ordenInput;
-        var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
-        if (match != null) Nhcl = match.Nhcl;
+        else if (nhclInput > 0)
+        {
+            Nhcl = nhclInput;
+            var match = ordenesActivas.FirstOrDefault(x => x.Nhcl == Nhcl);
+            if (match != null)
+            {
+                IdOrden = match.IdOrdenAtencion;
+                ordenInput = IdOrden;
+            }
+        }
+        else if (ordenesActivas.Count > 0)
+        {
+            IdOrden = ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = ordenesActivas[0].Nhcl;
+            ordenInput = IdOrden;
+            nhclInput = Nhcl;
+        }
+
+        if (IdOrden <= 0 && Nhcl <= 0) return;
         await CargarDatosAsync();
+    }
+
+    private string DirectorioFisico => Path.Combine(Environment.WebRootPath, "archivosPacientes", Nhcl.ToString(), "ingreso");
+    private string DirectorioRelativo => $"archivosPacientes/{Nhcl}/ingreso";
+
+    private void CargarArchivosQuirurgicos()
+    {
+        archivosQuirurgicos.Clear();
+        if (Nhcl <= 0) return;
+
+        try
+        {
+            Directory.CreateDirectory(DirectorioFisico);
+            var di = new DirectoryInfo(DirectorioFisico);
+            archivosQuirurgicos = di.EnumerateFiles()
+                .Select(f => new ArchivoQuirurgicoInfo(
+                    f.Name,
+                    $"/{DirectorioRelativo}/{Uri.EscapeDataString(f.Name)}",
+                    f.LastWriteTime,
+                    FormatearTamano(f.Length)))
+                .OrderByDescending(x => x.Fecha)
+                .ToList();
+        }
+        catch
+        {
+            // Directorio protegido o no disponible
+        }
+    }
+
+    private static string FormatearTamano(long bytes)
+    {
+        if (bytes >= 1024 * 1024) return $"{(bytes / (1024.0 * 1024.0)):F1} MB";
+        if (bytes >= 1024) return $"{(bytes / 1024.0):F1} KB";
+        return $"{bytes} B";
+    }
+
+    private async Task SubirArchivoQuirurgicoAsync(InputFileChangeEventArgs e)
+    {
+        var archivo = e.File;
+        if (archivo == null) return;
+
+        if (archivo.Size > 15 * 1024 * 1024)
+        {
+            esError = true;
+            mensajeAlerta = "El archivo supera el límite permitido de 15 MB.";
+            return;
+        }
+
+        var extensiones = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".xlsx", ".docx", ".doc"
+        };
+        var ext = Path.GetExtension(archivo.Name);
+        if (!extensiones.Contains(ext))
+        {
+            esError = true;
+            mensajeAlerta = "Tipo de archivo no permitido. Use imágenes (JPG, PNG), PDF o documentos Office.";
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(DirectorioFisico);
+            var safeName = $"{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileNameWithoutExtension(archivo.Name)}{ext}";
+            await using var entrada = archivo.OpenReadStream(15 * 1024 * 1024);
+            await using var salida = File.Create(Path.Combine(DirectorioFisico, safeName));
+            await entrada.CopyToAsync(salida);
+
+            esError = false;
+            mensajeAlerta = $"Archivo '{archivo.Name}' subido correctamente al expediente quirúrgico.";
+            CargarArchivosQuirurgicos();
+        }
+        catch (Exception ex)
+        {
+            esError = true;
+            mensajeAlerta = $"Error al subir el archivo: {ex.Message}";
+        }
+    }
+
+    private void EliminarArchivoQuirurgico(string nombre)
+    {
+        try
+        {
+            var ruta = Path.Combine(DirectorioFisico, nombre);
+            if (File.Exists(ruta))
+            {
+                File.Delete(ruta);
+                esError = false;
+                mensajeAlerta = $"Archivo '{nombre}' eliminado correctamente.";
+                CargarArchivosQuirurgicos();
+            }
+        }
+        catch (Exception ex)
+        {
+            esError = true;
+            mensajeAlerta = $"No se pudo eliminar el archivo: {ex.Message}";
+        }
     }
 
     private async Task CargarDatosAsync()
@@ -383,9 +626,13 @@ else if (paciente != null)
         if (p != null)
         {
             Nhcl = p.Nhcl;
+            nhclInput = Nhcl;
+            ordenInput = IdOrden;
             Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
             protDto = await QuirofanoService.ObtenerProtocoloQuirurgicoAsync(IdOrden, Nhcl);
             paciente = p;
+            CargarArchivosQuirurgicos();
+            Nav.NavigateTo($"/quirofano/protocolo/{IdOrden}/{Nhcl}", false);
         }
         else
         {
@@ -402,16 +649,16 @@ else if (paciente != null)
         protDto.IdOrden = IdOrden;
         protDto.Nhcl = Nhcl;
 
-        var ok = await QuirofanoService.GuardarProtocoloQuirurgicoAsync(
+        var result = await QuirofanoService.GuardarProtocoloQuirurgicoAsync(
             protDto,
             Session.CurrentUser?.IdUsuario ?? 1,
             Session.CurrentUser?.NombreCompleto ?? "Cirujano");
 
         guardando = false;
-        esError = !ok;
-        mensajeAlerta = ok
+        esError = !result.Ok;
+        mensajeAlerta = result.Ok
             ? "Protocolo Operatorio y Chequeo Quirúrgico guardados exitosamente."
-            : "Error al guardar el Protocolo Quirúrgico.";
+            : $"Error al guardar el Protocolo Quirúrgico: {result.Mensaje}";
     }
 
     private async Task AgregarMiembroAsync()

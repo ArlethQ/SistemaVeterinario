@@ -4,6 +4,7 @@
 @inject IKardexService KardexService
 @inject IQuirofanoService QuirofanoService
 @inject IReportExportService ReportService
+@inject NavigationManager Nav
 @inject SessionStateService Session
 @inject IJSRuntime JS
 
@@ -16,18 +17,20 @@
     </div>
 
     <div class="d-flex flex-wrap gap-2 align-items-center">
-        <select class="form-select form-select-sm" style="width: 260px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+        <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
             <option value="0">-- Seleccionar Orden Activa --</option>
             @foreach (var ord in ordenesActivas)
             {
-                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente</option>
+                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
             }
         </select>
 
-        <div class="input-group input-group-sm" style="width: 210px;">
-            <span class="input-group-text">Orden #</span>
-            <input type="number" class="form-control" @bind="ordenInput" />
-            <button class="btn btn-primary" @onclick="CargarPorInputAsync">Cargar</button>
+        <div class="input-group input-group-sm" style="width: auto;">
+            <span class="input-group-text">Ord:</span>
+            <input type="number" class="form-control" style="width: 95px; min-width: 85px;" @bind="ordenInput" @bind:event="oninput" @onkeydown="OnInputKeyDown" placeholder="Orden" />
+            <span class="input-group-text">NHCL:</span>
+            <input type="number" class="form-control" style="width: 95px; min-width: 85px;" @bind="nhclInput" @bind:event="oninput" @onkeydown="OnInputKeyDown" placeholder="NHCL" />
+            <button class="btn btn-primary" @onclick="CargarPorInputAsync">Buscar</button>
         </div>
 
         @if (paciente != null)
@@ -83,17 +86,17 @@ else if (paciente != null)
     <!-- Pestañas de Sala de Recuperación -->
     <ul class="nav nav-tabs mb-3 small fw-semibold">
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 1 ? "active text-primary" : "text-secondary")" @onclick="() => tabActiva = 1">
+            <button class="nav-link @(tabActiva == 1 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(1)">
                 1. Curva y Signos Vitales en Recuperación (@signosRecuperacion.Count)
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 2 ? "active text-primary" : "text-secondary")" @onclick="() => tabActiva = 2">
+            <button class="nav-link @(tabActiva == 2 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(2)">
                 2. Fármacos, Líquidos Administrados/Eliminados y Notas
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 3 ? "active text-primary" : "text-secondary")" @onclick="() => tabActiva = 3">
+            <button class="nav-link @(tabActiva == 3 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(3)">
                 3. Checklist de Entrega Post-Operatoria
             </button>
         </li>
@@ -116,7 +119,7 @@ else if (paciente != null)
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0 fw-semibold">Hora</label>
-                                <input type="text" class="form-control form-control-sm" @bind="nuevoSigno.Hora" placeholder="HH:mm" />
+                                <input type="time" class="form-control form-control-sm" value="@nuevoSigno.Hora" @onchange="@(e => nuevoSigno.Hora = e.Value?.ToString() ?? "")" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label mb-0 fw-semibold text-danger">Pulso / FC (lpm)</label>
@@ -279,7 +282,7 @@ else if (paciente != null)
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label mb-0 fw-semibold">Hora</label>
-                                <input type="text" class="form-control form-control-sm" @bind="nuevoLiquido.Hora" />
+                                <input type="time" class="form-control form-control-sm" value="@nuevoLiquido.Hora" @onchange="@(e => nuevoLiquido.Hora = e.Value?.ToString() ?? "")" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label mb-0 fw-semibold">Descripción Fluido / Egreso</label>
@@ -492,6 +495,7 @@ else if (paciente != null)
     [Parameter] public int Nhcl { get; set; }
 
     private int ordenInput;
+    private int nhclInput;
     private List<OrdenActivaResumenDto> ordenesActivas = new();
     private int tabActiva = 1;
     private PacienteHeaderDto? paciente;
@@ -539,24 +543,70 @@ else if (paciente != null)
         cargandoInicial = false;
     }
 
+    private void CambiarTab(int tab)
+    {
+        tabActiva = tab;
+        mensajeAlerta = string.Empty;
+        esError = false;
+    }
+
+    private async Task OnInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CargarPorInputAsync();
+        }
+    }
+
     private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out int selOrden) && selOrden > 0)
         {
+            mensajeAlerta = string.Empty;
+            esError = false;
             var ord = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == selOrden);
             IdOrden = selOrden;
             Nhcl = ord?.Nhcl ?? 0;
             ordenInput = IdOrden;
+            nhclInput = Nhcl;
             await CargarDatosAsync();
         }
     }
 
     private async Task CargarPorInputAsync()
     {
-        if (ordenInput <= 0) return;
-        IdOrden = ordenInput;
-        var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
-        if (match != null) Nhcl = match.Nhcl;
+        mensajeAlerta = string.Empty;
+        esError = false;
+
+        if (ordenInput > 0)
+        {
+            IdOrden = ordenInput;
+            var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
+            if (match != null)
+            {
+                Nhcl = match.Nhcl;
+                nhclInput = Nhcl;
+            }
+        }
+        else if (nhclInput > 0)
+        {
+            Nhcl = nhclInput;
+            var match = ordenesActivas.FirstOrDefault(x => x.Nhcl == Nhcl);
+            if (match != null)
+            {
+                IdOrden = match.IdOrdenAtencion;
+                ordenInput = IdOrden;
+            }
+        }
+        else if (ordenesActivas.Count > 0)
+        {
+            IdOrden = ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = ordenesActivas[0].Nhcl;
+            ordenInput = IdOrden;
+            nhclInput = Nhcl;
+        }
+
+        if (IdOrden <= 0 && Nhcl <= 0) return;
         await CargarDatosAsync();
     }
 
@@ -582,6 +632,9 @@ else if (paciente != null)
             observacionesRecuperacion = await tObs;
             LimpiarSigno();
             paciente = p;
+            nhclInput = Nhcl;
+            ordenInput = IdOrden;
+            Nav.NavigateTo($"/quirofano/recuperacion/{IdOrden}/{Nhcl}", false);
         }
         else
         {
@@ -673,6 +726,10 @@ else if (paciente != null)
 
     private async Task EliminarSignoAsync(int id)
     {
+        if (nuevoSigno.Id == id)
+        {
+            LimpiarSigno();
+        }
         await QuirofanoService.EliminarSignoRecuperacionAsync(id);
         signosRecuperacion = await QuirofanoService.ObtenerSignosRecuperacionAsync(IdOrden);
     }

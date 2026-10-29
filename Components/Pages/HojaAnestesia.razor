@@ -6,6 +6,7 @@
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject IJSRuntime JS
+@inject NavigationManager Nav
 
 <PageTitle>Hoja de Anestesia Intraoperatoria - e-ForVets</PageTitle>
 
@@ -16,18 +17,31 @@
     </div>
 
     <div class="d-flex flex-wrap gap-2 align-items-center">
-        <select class="form-select form-select-sm" style="width: 260px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
-            <option value="0">-- Seleccionar Orden Activa --</option>
-            @foreach (var ord in ordenesActivas)
-            {
-                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente</option>
-            }
-        </select>
+        <!-- Selector Dropbox de Órdenes -->
+        <div class="d-flex align-items-center gap-1">
+            <label class="small fw-bold text-secondary text-nowrap mb-0">Órdenes:</label>
+            <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;"
+                    value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+                <option value="0">-- Seleccionar Orden Activa --</option>
+                @foreach (var ord in ordenesActivas)
+                {
+                    <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
+                }
+            </select>
+        </div>
 
-        <div class="input-group input-group-sm" style="width: 210px;">
-            <span class="input-group-text">Orden #</span>
-            <input type="number" min="1" class="form-control" @bind="ordenInput" />
-            <button class="btn btn-primary" @onclick="CargarPorInputAsync">Cargar</button>
+        <!-- Búsqueda Manual por Orden / NHCL -->
+        <div class="input-group input-group-sm" style="width: auto;">
+            <span class="input-group-text bg-light fw-semibold text-secondary">Ord:</span>
+            <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
+                   min="1" placeholder="Orden" @bind="ordenInput" @onkeydown="OnInputKeyDown" />
+            <span class="input-group-text bg-light fw-semibold text-secondary">NHCL:</span>
+            <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
+                   min="1" placeholder="NHCL" @bind="nhclInput" @onkeydown="OnInputKeyDown" />
+            <button class="btn btn-primary fw-semibold px-3 d-flex align-items-center gap-1" @onclick="CargarPorInputAsync" title="Buscar y Cargar Paciente">
+                <i class="bi bi-search"></i>
+                <span>Buscar</span>
+            </button>
         </div>
 
         @if (paciente != null)
@@ -91,13 +105,13 @@ else
                 <div class="col-md-2">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text">Inicio</span>
-                        <input type="text" class="form-control" @bind="hoja.HoraInicio" placeholder="08:00" />
+                        <input type="time" class="form-control" value="@hoja.HoraInicio" @onchange="@(e => hoja.HoraInicio = e.Value?.ToString() ?? "")" />
                     </div>
                 </div>
                 <div class="col-md-2">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text">Fin</span>
-                        <input type="text" class="form-control" @bind="hoja.HoraFin" placeholder="10:30" />
+                        <input type="time" class="form-control" value="@hoja.HoraFin" @onchange="@(e => hoja.HoraFin = e.Value?.ToString() ?? "")" />
                     </div>
                 </div>
                 <div class="col-md-2">
@@ -120,17 +134,17 @@ else
     <!-- Pestañas de Navegación Intraoperatoria -->
     <ul class="nav nav-tabs mb-3 small fw-semibold">
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 1 ? "active text-primary" : "text-secondary")" @onclick="() => tabActiva = 1">
+            <button class="nav-link @(tabActiva == 1 ? "active text-primary" : "text-secondary")" @onclick="() => SeleccionarTab(1)">
                 1. Gráfica Hemodinámica y Agentes (16 Tiempos)
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 2 ? "active text-primary" : "text-secondary")" @onclick="() => tabActiva = 2">
+            <button class="nav-link @(tabActiva == 2 ? "active text-primary" : "text-secondary")" @onclick="() => SeleccionarTab(2)">
                 2. Vía Aérea, Monitoreo y Técnica Anestésica
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 3 ? "active text-primary" : "text-secondary")" @onclick="() => tabActiva = 3">
+            <button class="nav-link @(tabActiva == 3 ? "active text-primary" : "text-secondary")" @onclick="() => SeleccionarTab(3)">
                 3. Balance Hídrico Intraoperatorio y Cierre
             </button>
         </li>
@@ -549,7 +563,15 @@ else
     [Parameter] public int Nhcl { get; set; }
 
     private int ordenInput;
+    private int nhclInput;
     private List<OrdenActivaResumenDto> ordenesActivas = new();
+
+    private void SeleccionarTab(int t)
+    {
+        tabActiva = t;
+        mensajeAlerta = string.Empty;
+        esError = false;
+    }
     private int tabActiva = 1;
     private PacienteHeaderDto? paciente;
     private PacienteHeaderDto pacienteVista => paciente ?? new();
@@ -565,9 +587,21 @@ else
         await Task.Yield();
 
         ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
-        if (IdOrden > 0)
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0 && ordenesActivas.Count > 0)
+        {
+            IdOrden = ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = ordenesActivas[0].Nhcl;
+        }
+
+        if (IdOrden > 0 || Nhcl > 0)
         {
             ordenInput = IdOrden;
+            nhclInput = Nhcl;
             await CargarDatosAsync(1);
         }
         cargandoInicial = false;
@@ -581,26 +615,50 @@ else
             IdOrden = selOrden;
             Nhcl = ord?.Nhcl ?? 0;
             ordenInput = IdOrden;
+            nhclInput = Nhcl;
             await CargarDatosAsync(1);
+            Nav.NavigateTo($"/quirofano/anestesia/{IdOrden}/{Nhcl}", replace: true);
         }
     }
 
     private async Task CargarPorInputAsync()
     {
-        if (ordenInput <= 0) return;
-        IdOrden = ordenInput;
-        var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
-        if (match != null) Nhcl = match.Nhcl;
-        await CargarDatosAsync(1);
+        if (ordenInput <= 0 && nhclInput > 0)
+        {
+            var matchNhcl = ordenesActivas.FirstOrDefault(x => x.Nhcl == nhclInput);
+            if (matchNhcl != null) ordenInput = matchNhcl.IdOrdenAtencion;
+        }
+
+        if (ordenInput > 0 || nhclInput > 0)
+        {
+            IdOrden = ordenInput;
+            Nhcl = nhclInput;
+            var match = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
+            if (match != null && Nhcl <= 0) Nhcl = match.Nhcl;
+            await CargarDatosAsync(1);
+            Nav.NavigateTo($"/quirofano/anestesia/{IdOrden}/{Nhcl}", replace: true);
+        }
+    }
+
+    private async Task OnInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CargarPorInputAsync();
+        }
     }
 
     private async Task CambiarHojaAsync(int numForm)
     {
+        mensajeAlerta = string.Empty;
+        esError = false;
         await CargarDatosAsync(numForm);
     }
 
     private async Task CargarDatosAsync(int numForm)
     {
+        mensajeAlerta = string.Empty;
+        esError = false;
         var p = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
         if (p != null)
         {

@@ -18,7 +18,7 @@ public interface IQuirofanoService
 
     // 3. Protocolo Quirúrgico, Equipo y Chequeo de Cirugía (qvt_Protocolo + qvt_ingresocirugia + qvt_team)
     Task<ProtocoloQuirurgicoCompletoDto> ObtenerProtocoloQuirurgicoAsync(int idOrden, int nhcl);
-    Task<bool> GuardarProtocoloQuirurgicoAsync(ProtocoloQuirurgicoCompletoDto dto, int idUsuario, string nombreUsuario);
+    Task<(bool Ok, string? Mensaje)> GuardarProtocoloQuirurgicoAsync(ProtocoloQuirurgicoCompletoDto dto, int idUsuario, string nombreUsuario);
     Task<bool> AgregarMiembroEquipoAsync(MiembroEquipoQuirurgicoDto miembro);
     Task<bool> EliminarMiembroEquipoAsync(int sec);
 
@@ -811,9 +811,11 @@ public class QuirofanoService : IQuirofanoService
                 dto.Sangrado = prot.sangrado != null ? (int)prot.sangrado : 0;
                 dto.Disposicion = prot.disposicion != null ? (int)prot.disposicion : 1;
                 dto.Drenaje = prot.drenaje != null ? (int)prot.drenaje : 0;
-                dto.Muestra = prot.muestra?.ToString() ?? "NO";
+                var mRaw = prot.muestra?.ToString()?.Trim().ToUpperInvariant();
+                dto.Muestra = mRaw switch { "S" or "SI" or "1" => "SI", "C" or "CULTIVO" => "CULTIVO", _ => "NO" };
                 dto.FechaMuestra = prot.fechaMuestra != null ? (DateTime?)prot.fechaMuestra : null;
-                dto.Congelacion = prot.congelacion?.ToString() ?? "NO";
+                var cRaw = prot.congelacion?.ToString()?.Trim().ToUpperInvariant();
+                dto.Congelacion = cRaw switch { "S" or "SI" or "1" => "SI", _ => "NO" };
                 dto.FechaConge = prot.fechaConge != null ? (DateTime?)prot.fechaConge : null;
             }
 
@@ -826,7 +828,14 @@ public class QuirofanoService : IQuirofanoService
             {
                 dto.SecIngresoCirugia = (int)ing.sec;
                 dto.Sala = ing.sala != null ? (int)ing.sala : 1;
-                dto.Posicion = ing.posicion?.ToString() ?? "Decúbito Dorsal";
+                var posRaw = ing.posicion?.ToString()?.Trim().ToUpperInvariant();
+                dto.Posicion = posRaw switch
+                {
+                    "S" => "Decúbito Dorsal",
+                    "P" => "Decúbito Ventral / Prona",
+                    "L" or "A" => "Decúbito Lateral",
+                    _ => !string.IsNullOrEmpty(posRaw) ? posRaw! : "Decúbito Dorsal"
+                };
                 dto.CondicionPiel = ing.condicionpiel?.ToString() ?? "Íntegra";
                 dto.Lavado = ing.lavado?.ToString() ?? "Clorhexidina";
                 dto.UnidadElectro = ing.unidadelectro?.ToString() ?? "Bipolar / Monopolar";
@@ -836,8 +845,20 @@ public class QuirofanoService : IQuirofanoService
                 dto.GasasRecuentoFinal = ing.gasasr?.ToString() ?? "10 (Completo)";
                 dto.Compresas = ing.compresas?.ToString() ?? "Completas";
                 dto.MaterialDejado = ing.materialdejado?.ToString() ?? "Ninguno";
-                dto.CasoContaminado = ing.casocontaminado?.ToString() ?? "Limpia";
-                dto.TransferidoA = ing.transferidoa?.ToString() ?? "Sala de Recuperación";
+                var casoRaw = ing.casocontaminado?.ToString()?.Trim().ToUpperInvariant();
+                dto.CasoContaminado = casoRaw switch
+                {
+                    "S" => "Contaminada",
+                    _ => "Limpia"
+                };
+                var transRaw = ing.transferidoa?.ToString()?.Trim().ToUpperInvariant();
+                dto.TransferidoA = transRaw switch
+                {
+                    "R" => "Sala de Recuperación",
+                    "U" => "UCI / Cuidados Intensivos",
+                    "P" => "Hospitalización General",
+                    _ => !string.IsNullOrEmpty(transRaw) ? transRaw! : "Sala de Recuperación"
+                };
                 dto.ObservacionesEnfermeria = ing.observaciones1?.ToString() ?? "";
             }
 
@@ -867,7 +888,7 @@ public class QuirofanoService : IQuirofanoService
         return dto;
     }
 
-    public async Task<bool> GuardarProtocoloQuirurgicoAsync(ProtocoloQuirurgicoCompletoDto dto, int idUsuario, string nombreUsuario)
+    public async Task<(bool Ok, string? Mensaje)> GuardarProtocoloQuirurgicoAsync(ProtocoloQuirurgicoCompletoDto dto, int idUsuario, string nombreUsuario)
     {
         try
         {
@@ -875,9 +896,43 @@ public class QuirofanoService : IQuirofanoService
             var existeProt = await _db.ExecuteScalarAsync<int?>(
                 "SELECT TOP 1 id FROM qvt_Protocolo WHERE idOrden = @IdOrden", new { dto.IdOrden });
 
+            string muestraChar = dto.Muestra?.Trim().ToUpperInvariant() switch
+            {
+                "SI" or "S" or "1" => "S",
+                "CULTIVO" or "C" => "C",
+                _ => "N"
+            };
+
+            string congelacionChar = dto.Congelacion?.Trim().ToUpperInvariant() switch
+            {
+                "SI" or "S" or "1" => "S",
+                _ => "N"
+            };
+
+            var protParams = new
+            {
+                dto.IdOrden,
+                dto.Nhcl,
+                dto.Fecha,
+                TipoCirugia = Truncate(dto.TipoCirugia, 200),
+                Principal = Truncate(dto.Principal, 250),
+                dto.Incision,
+                dto.Hallazgos,
+                dto.ProcedimientoQuir,
+                dto.Sintesis,
+                dto.Complicaciones,
+                dto.Sangrado,
+                dto.Disposicion,
+                dto.Drenaje,
+                Muestra = muestraChar,
+                dto.FechaMuestra,
+                Congelacion = congelacionChar,
+                dto.FechaConge,
+                IdProtocolo = existeProt ?? 0
+            };
+
             if (existeProt.HasValue && existeProt.Value > 0)
             {
-                dto.IdProtocolo = existeProt.Value;
                 await _db.ExecuteAsync(@"
                     UPDATE qvt_Protocolo SET
                         fecha = @Fecha, tipoCirugia = @TipoCirugia, principal = @Principal,
@@ -885,7 +940,7 @@ public class QuirofanoService : IQuirofanoService
                         sintesis = @Sintesis, complicaciones = @Complicaciones, sangrado = @Sangrado,
                         disposicion = @Disposicion, drenaje = @Drenaje, muestra = @Muestra,
                         fechaMuestra = @FechaMuestra, congelacion = @Congelacion, fechaConge = @FechaConge
-                    WHERE id = @IdProtocolo", dto);
+                    WHERE id = @IdProtocolo", protParams);
             }
             else
             {
@@ -898,12 +953,58 @@ public class QuirofanoService : IQuirofanoService
                         @IdOrden, @Nhcl, @Fecha, @TipoCirugia, @Principal, @Incision, @Hallazgos,
                         @ProcedimientoQuir, @Sintesis, @Complicaciones, @Sangrado, @Disposicion,
                         @Drenaje, @Muestra, @FechaMuestra, @Congelacion, @FechaConge
-                    )", dto);
+                    )", protParams);
             }
 
             // 2. Upsert qvt_ingresocirugia
             var existeIng = await _db.ExecuteScalarAsync<int?>(
                 "SELECT TOP 1 sec FROM qvt_ingresocirugia WHERE id_orden = @IdOrden", new { dto.IdOrden });
+
+            string posChar = (dto.Posicion ?? string.Empty).Trim().ToUpperInvariant() switch
+            {
+                var s when s.Contains("DORSAL") || s.Contains("SUPINA") || s == "S" => "S",
+                var s when s.Contains("PRONA") || s.Contains("VENTRAL") || s == "P" => "P",
+                var s when s.Contains("LATERAL") || s == "L" || s == "A" => "L",
+                _ => "O"
+            };
+
+            string casoChar = (dto.CasoContaminado ?? string.Empty).Trim().ToUpperInvariant() switch
+            {
+                var s when s.Contains("CONTAMINADA") || s.Contains("SUCIA") || s == "S" => "S",
+                _ => "N"
+            };
+
+            string transfChar = (dto.TransferidoA ?? string.Empty).Trim().ToUpperInvariant() switch
+            {
+                var s when s.Contains("RECUPERA") || s == "R" => "R",
+                var s when s.Contains("UCI") || s == "U" => "U",
+                var s when s.Contains("HOSP") || s.Contains("PIEZA") || s == "P" => "P",
+                _ => "O"
+            };
+
+            string obsDetalle = $"Gasas Ini:{dto.GasasIniciales} Adic:{dto.GasasAdicionales} Fin:{dto.GasasRecuentoFinal} Comp:{dto.Compresas}. {dto.ObservacionesEnfermeria}".Trim();
+
+            var ingParams = new
+            {
+                dto.Nhcl,
+                dto.IdOrden,
+                dto.Sala,
+                Posicion = posChar,
+                CondicionPiel = Truncate(dto.CondicionPiel, 150),
+                Lavado = Char1(dto.Lavado, "S"),
+                UnidadElectro = Char1(dto.UnidadElectro, "S"),
+                LocalizacionPlaca = Truncate(dto.LocalizacionPlaca, 150),
+                GasasIniciales = Char1(dto.GasasIniciales, "S"),
+                GasasAdicionales = Char1(dto.GasasAdicionales, "N"),
+                GasasRecuentoFinal = Char1(dto.GasasRecuentoFinal, "S"),
+                Compresas = Char1(dto.Compresas, "S"),
+                MaterialDejado = Truncate(dto.MaterialDejado, 250),
+                CasoContaminado = casoChar,
+                TransferidoA = transfChar,
+                ObservacionesEnfermeria = Truncate(obsDetalle, 150),
+                IdUser = idUsuario,
+                Sec = existeIng ?? 0
+            };
 
             if (existeIng.HasValue && existeIng.Value > 0)
             {
@@ -914,14 +1015,7 @@ public class QuirofanoService : IQuirofanoService
                         gasasl = @GasasIniciales, gasas = @GasasAdicionales, gasasr = @GasasRecuentoFinal,
                         compresas = @Compresas, materialdejado = @MaterialDejado, casocontaminado = @CasoContaminado,
                         transferidoa = @TransferidoA, observaciones1 = @ObservacionesEnfermeria, iduser = @IdUser
-                    WHERE sec = @Sec",
-                    new
-                    {
-                        dto.Sala, dto.Posicion, dto.CondicionPiel, dto.Lavado, dto.UnidadElectro,
-                        dto.LocalizacionPlaca, dto.GasasIniciales, dto.GasasAdicionales, dto.GasasRecuentoFinal,
-                        dto.Compresas, dto.MaterialDejado, dto.CasoContaminado, dto.TransferidoA,
-                        dto.ObservacionesEnfermeria, IdUser = idUsuario, Sec = existeIng.Value
-                    });
+                    WHERE sec = @Sec", ingParams);
             }
             else
             {
@@ -934,27 +1028,40 @@ public class QuirofanoService : IQuirofanoService
                         @Nhcl, @IdOrden, GETDATE(), @Sala, @Posicion, @CondicionPiel, @Lavado,
                         @UnidadElectro, @LocalizacionPlaca, @GasasIniciales, @GasasAdicionales, @GasasRecuentoFinal, @Compresas,
                         @MaterialDejado, @CasoContaminado, @TransferidoA, @ObservacionesEnfermeria, @IdUser
-                    )",
-                    new
-                    {
-                        dto.Nhcl, dto.IdOrden, dto.Sala, dto.Posicion, dto.CondicionPiel, dto.Lavado,
-                        dto.UnidadElectro, dto.LocalizacionPlaca, dto.GasasIniciales, dto.GasasAdicionales,
-                        dto.GasasRecuentoFinal, dto.Compresas, dto.MaterialDejado, dto.CasoContaminado,
-                        dto.TransferidoA, dto.ObservacionesEnfermeria, IdUser = idUsuario
-                    });
+                    )", ingParams);
             }
 
-            await _db.RegistrarBitacoraAsync(
-                $"Protocolo Quirúrgico guardado Orden {dto.IdOrden}",
-                idUsuario);
+            try
+            {
+                await _db.RegistrarBitacoraAsync(
+                    $"Protocolo Quirúrgico guardado Orden {dto.IdOrden}",
+                    idUsuario);
+            }
+            catch
+            {
+                // Bitácora no bloqueante
+            }
 
-            return true;
+            return (true, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al guardar Protocolo Quirúrgico Orden {IdOrden}", dto.IdOrden);
-            return false;
+            return (false, ex.Message);
         }
+    }
+
+    private static string Truncate(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Length <= maxLength ? value : value[..maxLength];
+    }
+
+    private static string Char1(string? value, string defaultValue = "S")
+    {
+        if (string.IsNullOrWhiteSpace(value)) return defaultValue;
+        var trimmed = value.Trim();
+        return trimmed.Length >= 1 ? trimmed[..1].ToUpperInvariant() : defaultValue;
     }
 
     public async Task<bool> AgregarMiembroEquipoAsync(MiembroEquipoQuirurgicoDto miembro)
