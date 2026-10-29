@@ -1,4 +1,4 @@
-using HosvetKardex.Web.Data;
+﻿using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Models;
 
 namespace HosvetKardex.Web.Services;
@@ -1217,7 +1217,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<OrdenProformaResumenDto?> ObtenerDetalleProformaOrdenAsync(int idOrden)
     {
-        const string sqlOrden = @"
+        var cols = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
+        string colFactura = cols.Contains("ordenaten_factura") ? "RTRIM(ISNULL(o.ordenaten_factura, 'N'))" : "'N'";
+        string colNumFac = cols.Contains("ordenaten_numfacBC") ? "RTRIM(ISNULL(o.ordenaten_numfacBC, ''))" : "''";
+        string sqlOrden = $@"
             SELECT TOP 1
                 o.ordenAten_id AS IdOrden,
                 o.ordenAten_nhcl AS Nhcl,
@@ -1231,8 +1234,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 RTRIM(ISNULL(u.user_nombre, '')) AS MedicoTratante,
                 ISNULL(o.ordenAten_fecha, GETDATE()) AS FechaOrden,
                 RTRIM(ISNULL(o.ordenAten_etapa, '')) AS EtapaActual,
-                RTRIM(ISNULL(o.ordenaten_factura, 'N')) AS FacturadoBc,
-                RTRIM(ISNULL(o.ordenaten_numfacBC, '')) AS NumeroFacturaBc
+                {colFactura} AS FacturadoBc,
+                {colNumFac} AS NumeroFacturaBc
             FROM vt_ordenAtencion o
             LEFT JOIN vt_pacientes p ON p.mas_nhcl = o.ordenAten_nhcl
             LEFT JOIN vt_clientes c ON c.pa_codigo = o.ordenAten_idcliente
@@ -1267,8 +1270,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error consultando cargos de la proforma para la orden {IdOrden}", idOrden);
-            throw;
+            _logger.LogWarning(ex, "No se pudieron obtener cargos de vt_facturasBChospi para la orden {IdOrden}", idOrden);
+            // Cargos omitidos
+
         }
 
         orden.Items = items;
@@ -1288,15 +1292,30 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
         try
         {
-            int actualizados = await _db.ExecuteAsync(@"
-                UPDATE vt_ordenAtencion
-                SET ordenaten_factura = 'S',
-                    ordenaten_numfacBC = @NumFac
-                WHERE ordenAten_id = @IdOrden",
-                new { IdOrden = idOrden, NumFac = numeroGenerado });
+            var cols = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
+            if (cols.Contains("ordenaten_factura") && cols.Contains("ordenaten_numfacBC"))
+            {
+                int actualizados = await _db.ExecuteAsync(@"
+                    UPDATE vt_ordenAtencion
+                    SET ordenaten_factura = 'S',
+                        ordenaten_numfacBC = @NumFac
+                    WHERE ordenAten_id = @IdOrden",
+                    new { IdOrden = idOrden, NumFac = numeroGenerado });
+                if (actualizados == 0)
+                    return (false, string.Empty, "No se encontrÃ³ la orden para emitir la proforma.");
+            }
+            else
+            {
+                await _db.ExecuteAsync(@"
+                    UPDATE vt_ordenAtencion
+                    SET ordenAten_etapa = 'PROFORMA'
+                    WHERE ordenAten_id = @IdOrden",
+                    new { IdOrden = idOrden });
+            }
 
-            if (actualizados == 0)
-                return (false, string.Empty, "No se encontró la orden para emitir la proforma.");
+
+
+
         }
         catch (Exception ex)
         {

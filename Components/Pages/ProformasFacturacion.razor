@@ -1,4 +1,4 @@
-@page "/facturacion/proformas"
+﻿@page "/facturacion/proformas"
 @using HosvetKardex.Web.Models
 @using HosvetKardex.Web.Services
 @inject IAdmisionFacturacionService AdmisionService
@@ -349,16 +349,24 @@
 
     private async Task CargarProformasAsync()
     {
-        _ordenesProforma = await AdmisionService.BuscarOrdenesParaProformaAsync(DateTime.Today.AddDays(-7), DateTime.Today, _filtroOrden);
+        try
+        {
+            _ordenesProforma = await AdmisionService.BuscarOrdenesParaProformaAsync(DateTime.Today.AddDays(-7), DateTime.Today, _filtroOrden);
 
-        if (OrdenIdQuery.HasValue && OrdenIdQuery.Value > 0)
-        {
-            _proformaActual = _ordenesProforma.FirstOrDefault(o => o.IdOrden == OrdenIdQuery.Value)
-                              ?? await AdmisionService.ObtenerDetalleProformaOrdenAsync(OrdenIdQuery.Value);
+            if (OrdenIdQuery.HasValue && OrdenIdQuery.Value > 0)
+            {
+                _proformaActual = _ordenesProforma.FirstOrDefault(o => o.IdOrden == OrdenIdQuery.Value)
+                                  ?? await AdmisionService.ObtenerDetalleProformaOrdenAsync(OrdenIdQuery.Value);
+            }
+            else if (_ordenesProforma.Count > 0 && _proformaActual == null)
+            {
+                _proformaActual = _ordenesProforma[0];
+            }
         }
-        else if (_ordenesProforma.Count > 0 && _proformaActual == null)
+        catch (Exception ex)
         {
-            _proformaActual = _ordenesProforma[0];
+            _notificacionError = true;
+            _mensajeNotificacion = $"Error al cargar proformas: {ex.Message}";
         }
     }
 
