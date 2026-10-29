@@ -20,6 +20,13 @@
             <small class="text-muted">Solicitud y procesamiento de pruebas de laboratorio clínico por especialidad diagnóstica.</small>
         </div>
         <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
+            <select class="form-select form-select-sm" style="width: 280px;" value="@IdOrden" @onchange="SeleccionarOrdenActivaAsync">
+                <option value="0">-- Seleccionar paciente / orden --</option>
+                @foreach (var orden in OrdenesActivas)
+                {
+                    <option value="@orden.IdOrdenAtencion">#@orden.IdOrdenAtencion | @orden.Paciente (NHCL @orden.Nhcl)</option>
+                }
+            </select>
             <div class="input-group input-group-sm" style="width: 260px;">
                 <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
                 <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
@@ -237,6 +244,7 @@
     private bool EsError { get; set; }
 
     private PacienteHeaderDto? Paciente { get; set; }
+    private List<OrdenActivaResumenDto> OrdenesActivas { get; set; } = new();
     private List<GrupoLaboratorioCatalogoDto> GruposLaboratorio { get; set; } = GrupoLaboratorioCatalogoDto.ObtenerGruposOficiales();
     private List<PruebaCatalogoDto> CatalogoPruebas { get; set; } = new();
     private List<OrdenLaboratorioItemDto> OrdenesActuales { get; set; } = new();
@@ -247,6 +255,8 @@
         CargandoInicial = true;
         await Task.Yield();
 
+        OrdenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+
         if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
         {
             IdOrden = Session.OrdenActiva.Value;
@@ -254,11 +264,10 @@
         }
         else if (IdOrden <= 0)
         {
-            var activas = await KardexService.ObtenerOrdenesActivasAsync();
-            if (activas.Count > 0)
+            if (OrdenesActivas.Count > 0)
             {
-                IdOrden = activas[0].IdOrdenAtencion;
-                Nhcl = activas[0].Nhcl;
+                IdOrden = OrdenesActivas[0].IdOrdenAtencion;
+                Nhcl = OrdenesActivas[0].Nhcl;
             }
         }
 
@@ -284,6 +293,34 @@
             IdOrden = IdOrdenInput;
             Nhcl = NhclInput;
             await CargarDatosOrdenAsync();
+        }
+    }
+
+    private async Task SeleccionarOrdenActivaAsync(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var idOrden) || idOrden <= 0)
+            return;
+
+        var orden = OrdenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == idOrden);
+        if (orden == null)
+            return;
+
+        CargandoInicial = true;
+        IdOrden = orden.IdOrdenAtencion;
+        Nhcl = orden.Nhcl;
+        IdOrdenInput = IdOrden;
+        NhclInput = Nhcl;
+        CatalogoPruebas.ForEach(x => x.Seleccionado = false);
+        ObservacionMuestraDefault = string.Empty;
+        try
+        {
+            await CargarDatosOrdenAsync();
+            EsError = false;
+            MensajeAlerta = $"Paciente {orden.Paciente} cargado correctamente.";
+        }
+        finally
+        {
+            CargandoInicial = false;
         }
     }
 
