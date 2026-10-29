@@ -169,6 +169,10 @@ public sealed class EFactCatalogService(
             var response = item.Id > 0
                 ? await http.PutAsJsonAsync(Url($"api/productos/{item.Id}"), producto)
                 : await http.PostAsJsonAsync(Url("api/productos"), producto);
+            if (response.IsSuccessStatusCode)
+            {
+                InventarioService.InvalidarCache();
+            }
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex)
@@ -202,6 +206,10 @@ public sealed class EFactCatalogService(
         try
         {
             var response = await http.DeleteAsync(Url($"api/productos/{codigo}"));
+            if (response.IsSuccessStatusCode)
+            {
+                InventarioService.InvalidarCache();
+            }
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex)

@@ -4,6 +4,7 @@
 @inject IKardexService KardexService
 @inject IReportExportService ReportService
 @inject SessionStateService Session
+@inject IEFactCatalogService EFactCatalog
 @inject IJSRuntime JS
 
 <PageTitle>e-ForVets - Recetario Médico e Indicaciones</PageTitle>
@@ -137,8 +138,14 @@
                     <div class="row g-2 mb-3 p-2 bg-light rounded border">
                         <div class="col-md-5">
                             <label class="form-label small fw-semibold">Medicamento / Principio Activo / Presentación *</label>
-                            <input type="text" class="form-control form-control-sm" @bind="NuevoItem.Descripcionamento"
-                                   placeholder="Ej: Amoxicilina + Ácido Clavulánico 250mg Comprimidos" />
+                            <input type="text" class="form-control form-control-sm" list="listaProductosEFact" @bind="NuevoItem.Descripcionamento"
+                                   placeholder="Seleccione de Productos e Insumos o escriba..." />
+                            <datalist id="listaProductosEFact">
+                                @foreach (var prod in _catalogoEFact)
+                                {
+                                    <option value="@prod.Descripcion">@prod.Codigo — $@prod.Precio?.ToString("F2")</option>
+                                }
+                            </datalist>
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold">Cantidad</label>
@@ -254,6 +261,7 @@
     private List<RecetaMedicamentoItemDto> ItemsReceta { get; set; } = new();
     private List<DiagnosticoCie10Dto> DiagnosticosOrden { get; set; } = new();
     private string IndicacionesGenerales { get; set; } = string.Empty;
+    private List<CatalogoOperativoDto> _catalogoEFact = new();
     private RecetaMedicamentoItemDto NuevoItem { get; set; } = new();
 
     protected override async Task OnParametersSetAsync()
@@ -277,6 +285,12 @@
             }
         }
 
+        try
+        {
+            var prods = await EFactCatalog.ObtenerProductosAsync();
+            _catalogoEFact = prods.Where(p => p.Estado == "A" && p.Tipo != "SERVICIO").ToList();
+        }
+        catch { }
         var tBuscar = BuscarRecetasEmitidasAsync();
         if (IdOrden > 0)
         {

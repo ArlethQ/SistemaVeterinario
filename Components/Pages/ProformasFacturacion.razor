@@ -2,6 +2,7 @@
 @using HosvetKardex.Web.Models
 @using HosvetKardex.Web.Services
 @inject IAdmisionFacturacionService AdmisionService
+@inject IEFactCatalogService EFactCatalog
 @inject IReportExportService ReportService
 @inject SessionStateService SessionState
 @inject NavigationManager NavManager
@@ -162,7 +163,14 @@
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold mb-0">Descripción Servicio / Insumo</label>
-                                    <input type="text" class="form-control form-control-sm" placeholder="Descripción..." @bind="_nuevoCargo.DescripcionItem" />
+                                    <input type="text" class="form-control form-control-sm" list="listaEFactProforma" placeholder="Seleccione o escriba..."
+                                           @bind="_nuevoCargo.DescripcionItem" @bind:after="OnDescripcionProformaChanged" />
+                                    <datalist id="listaEFactProforma">
+                                        @foreach (var p in _catalogoEFact)
+                                        {
+                                            <option value="@p.Descripcion">@p.Codigo — $@p.Precio?.ToString("F2")</option>
+                                        }
+                                    </datalist>
                                 </div>
                                 <div class="col-md-1">
                                     <label class="form-label small fw-bold mb-0">Cant.</label>
@@ -323,6 +331,7 @@
 
     private List<UsuarioSistemaDto> _usuarios = new();
     private List<BitacoraAuditoriaDto> _bitacora = new();
+    private List<CatalogoOperativoDto> _catalogoEFact = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -337,6 +346,12 @@
                 OrdenIdQuery = qOrden;
         }
 
+        try
+        {
+            var prods = await EFactCatalog.ObtenerProductosAsync();
+            _catalogoEFact = prods.Where(p => p.Estado == "A").ToList();
+        }
+        catch { }
         var tProf = CargarProformasAsync();
         var tUsr = AdmisionService.ObtenerUsuariosAsync();
         var tBit = AdmisionService.ObtenerBitacoraAsync(DateTime.Today.AddDays(-30), DateTime.Today);
@@ -373,6 +388,16 @@
     private void SeleccionarOrdenProforma(OrdenProformaResumenDto orden)
     {
         _proformaActual = orden;
+    }
+
+    private void OnDescripcionProformaChanged()
+    {
+        var match = _catalogoEFact.FirstOrDefault(x => string.Equals(x.Descripcion, _nuevoCargo.DescripcionItem, StringComparison.OrdinalIgnoreCase));
+        if (match != null)
+        {
+            if (!string.IsNullOrWhiteSpace(match.Codigo)) _nuevoCargo.CodigoItemBc = match.Codigo;
+            if (match.Precio.HasValue) _nuevoCargo.PrecioUnitario = match.Precio.Value;
+        }
     }
 
     private async Task AgregarCargoManualAsync()

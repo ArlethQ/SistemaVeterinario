@@ -9,6 +9,7 @@ public interface IInventarioService
     Task<decimal> ObtenerStockReservadoLocalAsync(string codigoProd, string bodega);
     Task<int> GuardarReservaStockAsync(string idProd, int idUser, decimal cantidad, int localidad, string bodega, int orden, int nhcl, int idReserva, string origenReserva = "QUI", int? idRegistroAne = null, int? hoja = null);
     Task<int> EliminarReservaStockAsync(string idProd, int orden, int idReserva, string origenReserva = "QUI");
+    void InvalidarCacheCatalogo();
 }
 
 public class InventarioService : IInventarioService
@@ -33,18 +34,20 @@ public class InventarioService : IInventarioService
         if (string.IsNullOrWhiteSpace(filtro) || filtro.Trim().Length < 2)
             return resultados;
 
-        string termino = filtro.Trim().ToUpperInvariant();
+        string terminoNorm = NormalizarTexto(filtro.Trim());
 
-        // El catálogo comercial de E-FACT (usuario configurado) es la fuente principal de productos e insumos.
+        // El catálogo oficial de E-FACT (configurado en "Productos e insumos") es la fuente exclusiva.
+        // No se usan datos quemados ni registros históricos de tablas antiguas para garantizar
+        // que solo se muestren los productos e insumos vigentes configurados en el sistema.
         try
         {
             var productosEFact = await ObtenerCatalogoEFactCacheAsync();
             resultados.AddRange(productosEFact
                 .Where(x => x.Estado == "A" &&
                     (string.Equals(x.Tipo, "PRODUCTO", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(x.Tipo) || !string.Equals(x.Tipo, "SERVICIO", StringComparison.OrdinalIgnoreCase)) &&
-                    (x.Descripcion.Contains(termino, StringComparison.OrdinalIgnoreCase) ||
-                     x.Codigo.Contains(termino, StringComparison.OrdinalIgnoreCase)))
-                .Take(30)
+                    (NormalizarTexto(x.Descripcion).Contains(terminoNorm) ||
+                     NormalizarTexto(x.Codigo).Contains(terminoNorm)))
+                .Take(40)
                 .Select(x => new FarmacoStockDto
                 {
                     Number = string.IsNullOrWhiteSpace(x.Codigo) ? x.Id.ToString() : x.Codigo,
@@ -60,45 +63,34 @@ public class InventarioService : IInventarioService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo consultar el catálogo E-FACT; se usará el histórico de medicamentos.");
-        }
-
-        // Si no se encuentra en E-FACT, consultar el histórico de medicamentos e insumos reales
-        // EXCLUSIVAMENTE con tipo = 'M' (Medicamento) o 'I' (Insumo) en qvt_productosUtilizados.
-        // Se excluye terminantemente vt_productos (tarifario CPT: procedimientos/estudios como 'ABDOMEN 2 POSC', 'ABLACIONENDOMETRIAL')
-        // y registros con tipo = 'D' (Diagnósticos) o 'P' (Procedimientos).
-        if (resultados.Count == 0)
-        {
-            try
-            {
-                const string sqlHist = @"
-                    SELECT DISTINCT TOP 30
-                        CAST(codigoprod AS VARCHAR(20)) AS Number,
-                        RTRIM(ISNULL(proddescripcion, '')) AS DisplayName,
-                        CAST(codigoprod AS VARCHAR(20)) AS Id,
-                        'IVA0' AS TaxGroupCode,
-                        CAST(0 AS DECIMAL(18,2)) AS Inventory,
-                        CAST(0 AS DECIMAL(18,2)) AS Available,
-                        CAST(ISNULL(precioprod, 0) AS DECIMAL(18,2)) AS UnitPrice,
-                        'UND' AS BaseUnitOfMeasureCode,
-                        'HISTORICO' AS Location
-                    FROM qvt_productosUtilizados
-                    WHERE proddescripcion LIKE @Filtro
-                      AND codigoprod IS NOT NULL
-                      AND tipo IN ('M', 'I')
-                    ORDER BY DisplayName";
-
-                var hist = await _sql.QueryAsync<FarmacoStockDto>(sqlHist, new { Filtro = $"%{termino}%" });
-                resultados.AddRange(hist);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error al consultar histórico de medicamentos en qvt_productosUtilizados.");
-            }
+            _logger.LogWarning(ex, "No se pudo consultar el catálogo E-FACT de productos e insumos.");
         }
 
         return resultados;
     }
+
+    private static string NormalizarTexto(string texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto)) return string.Empty;
+        var normalized = texto.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder(normalized.Length);
+        foreach (var c in normalized)
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                sb.Append(c);
+            }
+        }
+        return sb.ToString().Normalize(System.Text.NormalizationForm.FormC).ToUpperInvariant();
+    }
+
+    public static void InvalidarCache()
+    {
+        _catalogoEFactCache = null;
+        _catalogoEFactExpira = DateTime.MinValue;
+    }
+
+    public void InvalidarCacheCatalogo() => InvalidarCache();
 
     private async Task<List<CatalogoOperativoDto>> ObtenerCatalogoEFactCacheAsync()
     {
