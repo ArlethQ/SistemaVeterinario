@@ -18,6 +18,7 @@
     </thead><tbody>
     @if(_tab=="recordatorios"){@foreach(var x in _recordatorios){<tr><td><strong>@x.Paciente</strong><small class="d-block text-muted">NHCL @x.Nhcl</small></td><td>@x.Propietario</td><td>@x.QuienManda<small class="d-block text-muted">@x.Especialidad</small></td><td>@x.FechaEnvio.ToString("yyyy-MM-dd")</td><td>@x.ProximaRevision?.ToString("yyyy-MM-dd")</td><td>@x.Telefono<small class="d-block text-muted">@x.CorreoEnviado</small></td></tr>}}
     else if(_tab=="alertas"){@foreach(var x in _alertas){<tr><td><strong>@x.Paciente</strong><small class="d-block text-muted">Orden @x.Orden · NHCL @x.Nhcl</small></td><td>@x.Cliente<small class="d-block text-muted">@x.Telefono</small></td><td>@x.Medico<small class="d-block text-muted">@x.Especialidad</small></td><td>@x.FechaEnvio.ToString("yyyy-MM-dd")</td><td>@x.Pronostico</td><td><span class="badge bg-secondary">@x.Estado</span></td></tr>}}
+    else if(_fallecidos.Count == 0){<tr><td colspan="5" class="text-center text-muted py-4">No existen pacientes fallecidos dentro del rango seleccionado.</td></tr>}
     else{@foreach(var x in _fallecidos){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td>@x.Nhcl</td><td><strong>@x.Paciente</strong></td><td>@x.Propietario</td><td>@x.Motivo</td></tr>}}
     </tbody></table></div></div>
 </div>
@@ -26,7 +27,7 @@
 @code {
     private bool _autorizado, _cargando, _porRevision;
     private string _tab="recordatorios", _estado="", _error="";
-    private DateTime _desde=new(DateTime.Today.Year,DateTime.Today.Month,1), _hasta=DateTime.Today;
+    private DateTime _desde=new(DateTime.Today.Year,1,1), _hasta=DateTime.Today;
     private List<RecordatorioVacunaDto> _recordatorios=[]; private List<AlertaClinicaDto> _alertas=[]; private List<PacienteFallecidoDto> _fallecidos=[];
     protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated){Nav.NavigateTo("/login");return;}_autorizado=true;await CargarAsync();}
     private async Task CambiarTab(string tab){_tab=tab;await CargarAsync();}

@@ -155,12 +155,13 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
     {
         const string sql = @"
             SELECT p.fechafallecido AS Fecha, p.mas_nhcl AS Nhcl, RTRIM(p.mas_nombre) AS Paciente,
-                RTRIM(c.pa_apellidos + ' ' + c.pa_nombres) AS Propietario,
+                LTRIM(RTRIM(CONCAT(ISNULL(c.pa_apellidos,''), ' ', ISNULL(c.pa_nombres,'')))) AS Propietario,
                 RTRIM(ISNULL(m.motivo,'')) AS Motivo
             FROM vt_pacientes p
-            INNER JOIN vt_clientes c ON p.mas_idcliente=c.pa_codigo
+            LEFT JOIN vt_clientes c ON p.mas_idcliente=c.pa_codigo
             LEFT JOIN vt_motivomuerte m ON p.motivofallece=m.sec
-            WHERE p.fallecido='TRUE' AND p.fechafallecido>=@Desde AND p.fechafallecido<DATEADD(day,1,@Hasta)
+            WHERE CONVERT(VARCHAR(10), ISNULL(p.fallecido, 0)) IN ('1','True','TRUE')
+                AND p.fechafallecido>=@Desde AND p.fechafallecido<DATEADD(day,1,@Hasta)
             ORDER BY p.fechafallecido DESC";
         return (await _db.QueryAsync<PacienteFallecidoDto>(sql, new { Desde = desde.Date, Hasta = hasta.Date })).ToList();
     }

@@ -121,7 +121,7 @@ public class HospitalizacionService : IHospitalizacionService
             return _cacheCondiciones;
 
         var res = (await _db.QueryAsync<CondicionHospitalDto>(
-            "SELECT id AS Id, condicion AS Condicion FROM vt_condicionHospital WHERE estado = 'A' ORDER BY id")).ToList();
+            "SELECT id AS Id, RTRIM(condicion) AS Condicion FROM hvt_condicion WHERE ISNULL(estado, 'A')='A' ORDER BY id")).ToList();
         _cacheCondiciones = res;
         return res;
     }
@@ -132,7 +132,7 @@ public class HospitalizacionService : IHospitalizacionService
             return _cacheRitmos;
 
         var res = (await _db.QueryAsync<RitmoHorarioDto>(
-            "SELECT id AS Id, des_ritmo AS Des_Ritmo FROM vt_ritmoHorario ORDER BY id")).ToList();
+            "SELECT id AS Id, RTRIM(des_ritmo) AS Des_Ritmo FROM hvt_ritmo WHERE ISNULL(estado, 'A')='A' ORDER BY id")).ToList();
         _cacheRitmos = res;
         return res;
     }
