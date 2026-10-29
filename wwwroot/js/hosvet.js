@@ -129,15 +129,27 @@ window.hosvetPrintElement = (elementId, orientation = 'portrait') => {
         }
     });
 
-    const printWindow = window.open("", "_blank", "width=1000,height=900");
+    // Imprimir en un iframe oculto evita abrir una ventana about:blank con una
+    // segunda copia visible del reporte detrás del diálogo de impresión.
+    const printFrame = document.createElement("iframe");
+    printFrame.setAttribute("aria-hidden", "true");
+    printFrame.style.position = "fixed";
+    printFrame.style.width = "0";
+    printFrame.style.height = "0";
+    printFrame.style.border = "0";
+    printFrame.style.visibility = "hidden";
+    document.body.appendChild(printFrame);
+
+    const printWindow = printFrame.contentWindow;
     if (!printWindow) {
+        printFrame.remove();
         window.print();
         return;
     }
 
     const printStyles = `
         @page {
-            size: A4 portrait;
+            size: A4 ${orientation === 'landscape' ? 'landscape' : 'portrait'};
             margin: 4mm 4mm 4mm 4mm;
         }
         * {
@@ -294,12 +306,16 @@ window.hosvetPrintElement = (elementId, orientation = 'portrait') => {
     printWindow.document.write(htmlDoc);
     printWindow.document.close();
 
-    printWindow.focus();
     window.setTimeout(() => {
         try {
+            const removePrintFrame = () => printFrame.remove();
+            printWindow.addEventListener("afterprint", removePrintFrame, { once: true });
+            printWindow.focus();
             printWindow.print();
+            window.setTimeout(removePrintFrame, 60000);
         } catch (e) {
             console.error("Error al imprimir:", e);
+            printFrame.remove();
         }
     }, 450);
 };
