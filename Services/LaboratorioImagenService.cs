@@ -84,47 +84,11 @@ public class LaboratorioImagenService : ILaboratorioImagenService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Consulta vt_pruebas_laboratorio con esquema alternativo; aplicando catálogo estándar.");
-        }
-
-        if (!resultado.Any())
-        {
-            resultado = ObtenerCatalogoLaboratorioRespaldo(grupoId, filtroTexto);
+            _logger.LogError(ex, "No se pudo consultar el catálogo real de laboratorio.");
+            throw;
         }
 
         return resultado;
-    }
-
-    private static List<PruebaCatalogoDto> ObtenerCatalogoLaboratorioRespaldo(int grupoId, string? filtro)
-    {
-        var baseList = new List<PruebaCatalogoDto>
-        {
-            new() { CodigoProd = "HV-LAB001", Descripcion = "Hemograma Completo Automatizado + Frotis", GrupoId = 1, PrecioUnitario = 15.00m },
-            new() { CodigoProd = "HV-LAB002", Descripcion = "Conteo de Reticulocitos y Plaquetas", GrupoId = 1, PrecioUnitario = 12.00m },
-            new() { CodigoProd = "HV-LAB003", Descripcion = "Tiempos de Coagulación (TP / TTPa) + Fibrinógeno", GrupoId = 2, PrecioUnitario = 24.00m },
-            new() { CodigoProd = "HV-LAB004", Descripcion = "Química Sanguínea Básica (Glucosa, BUN, Creatinina, ALT, ALP, PT)", GrupoId = 3, PrecioUnitario = 28.00m },
-            new() { CodigoProd = "HV-LAB005", Descripcion = "Perfil Renal Completo (Urea, Creatinina, SDMA, Fósforo)", GrupoId = 3, PrecioUnitario = 34.00m },
-            new() { CodigoProd = "HV-LAB006", Descripcion = "Enzimas Hepáticas y Pancreáticas (ALT, AST, GGT, Lipasa, Amilasa)", GrupoId = 4, PrecioUnitario = 26.00m },
-            new() { CodigoProd = "HV-LAB007", Descripcion = "Panel de Electrolitos Sérico (Na+, K+, Cl-, Ca2+ iónico)", GrupoId = 5, PrecioUnitario = 18.00m },
-            new() { CodigoProd = "HV-LAB008", Descripcion = "Uroanálisis Completo + Sedimento Urinario + Ratio UPC", GrupoId = 6, PrecioUnitario = 14.00m },
-            new() { CodigoProd = "HV-LAB009", Descripcion = "Cultivo Bacteriológico y Antibiograma", GrupoId = 7, PrecioUnitario = 35.00m },
-            new() { CodigoProd = "HV-LAB010", Descripcion = "Coproparasitario Seriado + Flotación", GrupoId = 8, PrecioUnitario = 12.00m },
-            new() { CodigoProd = "HV-LAB011", Descripcion = "Citología por Punción de Aguja Fina (PAF) / Impronta", GrupoId = 9, PrecioUnitario = 25.00m },
-            new() { CodigoProd = "HV-LAB012", Descripcion = "Perfil Tiroideo (T4 Total, T4 Libre, TSH)", GrupoId = 10, PrecioUnitario = 42.00m },
-            new() { CodigoProd = "HV-LAB013", Descripcion = "Perfil Prequirúrgico Integral e-ForVets", GrupoId = 11, PrecioUnitario = 45.00m },
-            new() { CodigoProd = "HV-LAB014", Descripcion = "Análisis de Líquido de Efusión (Torácico / Abdominal / LCR)", GrupoId = 12, PrecioUnitario = 30.00m },
-            new() { CodigoProd = "HV-LAB015", Descripcion = "Panel Química Seca Urgencias", GrupoId = 13, PrecioUnitario = 22.00m },
-            new() { CodigoProd = "HV-LAB016", Descripcion = "Gasometría Arterial / Venosa + Lactato", GrupoId = 14, PrecioUnitario = 32.00m },
-            new() { CodigoProd = "HV-LAB017", Descripcion = "Test Rápido SNAP 4Dx / FeLV-FIV / Parvovirus-Distemper", GrupoId = 15, PrecioUnitario = 28.00m },
-            new() { CodigoProd = "HV-LAB018", Descripcion = "Dosaje de Fenobarbital / Bromuro de Potasio", GrupoId = 16, PrecioUnitario = 36.00m }
-        };
-
-        var query = baseList.AsEnumerable();
-        if (grupoId > 0) query = query.Where(x => x.GrupoId == grupoId);
-        if (!string.IsNullOrWhiteSpace(filtro))
-            query = query.Where(x => x.Descripcion.Contains(filtro, StringComparison.OrdinalIgnoreCase) ||
-                                     x.CodigoProd.Contains(filtro, StringComparison.OrdinalIgnoreCase));
-        return query.ToList();
     }
 
     public async Task<List<PruebaCatalogoDto>> ObtenerCatalogoImagenologiaAsync(string modalidad = "TODOS", string? filtroTexto = null, string prefijoLocalidad = "HV")
@@ -153,28 +117,10 @@ public class LaboratorioImagenService : ILaboratorioImagenService
             else if (modalidad == "ECOS") locales = locales.Where(x => x.Categoria == "ECOS");
             resultado.AddRange(locales);
         }
-        catch { }
-
-        if (!resultado.Any())
+        catch (Exception ex)
         {
-            var baseRx = new List<PruebaCatalogoDto>
-            {
-                new() { CodigoProd = "HV-RX001", Descripcion = "Radiografía Digital de Tórax (2 Proyecciones: LL y VD/DV)", Categoria = "RX", PrecioUnitario = 35.00m },
-                new() { CodigoProd = "HV-RX002", Descripcion = "Radiografía Digital de Abdomen Simple (LL y VD)", Categoria = "RX", PrecioUnitario = 35.00m },
-                new() { CodigoProd = "HV-RX003", Descripcion = "Radiografía de Columna Vertebral / Esqueleto Apendicular", Categoria = "RX", PrecioUnitario = 38.00m },
-                new() { CodigoProd = "HV-RX004", Descripcion = "Radiografía de Cráneo / Cuello / Odontológica", Categoria = "RX", PrecioUnitario = 32.00m },
-                new() { CodigoProd = "HV-ECO001", Descripcion = "Ecografía Abdominal Completa + Doppler", Categoria = "ECOS", PrecioUnitario = 45.00m },
-                new() { CodigoProd = "HV-ECO002", Descripcion = "Ecografía Gestacional y Viabilidad Fetal", Categoria = "ECOS", PrecioUnitario = 30.00m },
-                new() { CodigoProd = "HV-ECO003", Descripcion = "Ecocardiografía Doppler Color + Modo M", Categoria = "ECOS", PrecioUnitario = 65.00m },
-                new() { CodigoProd = "HV-ECO004", Descripcion = "Ecografía Focalizada de Emergencia (A-FAST / T-FAST)", Categoria = "ECOS", PrecioUnitario = 28.00m }
-            };
-
-            var q = baseRx.AsEnumerable();
-            if (modalidad == "RX") q = q.Where(x => x.Categoria == "RX");
-            else if (modalidad == "ECOS") q = q.Where(x => x.Categoria == "ECOS");
-            if (!string.IsNullOrWhiteSpace(filtroTexto))
-                q = q.Where(x => x.Descripcion.Contains(filtroTexto, StringComparison.OrdinalIgnoreCase));
-            resultado = q.ToList();
+            _logger.LogError(ex, "No se pudo consultar el catálogo real de imagenología.");
+            throw;
         }
 
         return resultado;

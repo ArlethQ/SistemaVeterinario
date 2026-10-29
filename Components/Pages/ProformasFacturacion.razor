@@ -35,7 +35,7 @@
 
     @if (!string.IsNullOrEmpty(_mensajeNotificacion))
     {
-        <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+        <div class="alert @(_notificacionError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2" role="alert">
             <i class="bi bi-check-circle-fill me-2"></i>@_mensajeNotificacion
             <button type="button" class="btn-close" @onclick="() => _mensajeNotificacion = string.Empty"></button>
         </div>
@@ -173,7 +173,7 @@
                                     <input type="number" step="0.01" class="form-control form-control-sm" @bind="_nuevoCargo.PrecioUnitario" />
                                 </div>
                                 <div class="col-md-1">
-                                    <button class="btn btn-sm btn-dark w-100" title="Añadir cargo" @onclick="AgregarCargoManual">
+                                    <button class="btn btn-sm btn-dark w-100" title="Añadir cargo mediante E-FACT" @onclick="AgregarCargoManualAsync">
                                         <i class="bi bi-plus-lg"></i>
                                     </button>
                                 </div>
@@ -315,10 +315,11 @@
     private string _filtroOrden = string.Empty;
     private bool _cargandoInicial = true;
     private string _mensajeNotificacion = string.Empty;
+    private bool _notificacionError;
 
     private List<OrdenProformaResumenDto> _ordenesProforma = new();
     private OrdenProformaResumenDto? _proformaActual;
-    private ItemFacturableProformaDto _nuevoCargo = new() { OrigenModulo = "HOSPITALIZACION", CodigoItemBc = "SER-HOSP-EXTRA", Cantidad = 1, PrecioUnitario = 15.00m };
+    private ItemFacturableProformaDto _nuevoCargo = new() { OrigenModulo = "HOSPITALIZACION", Cantidad = 1 };
 
     private List<UsuarioSistemaDto> _usuarios = new();
     private List<BitacoraAuditoriaDto> _bitacora = new();
@@ -366,23 +367,28 @@
         _proformaActual = orden;
     }
 
-    private void AgregarCargoManual()
+    private async Task AgregarCargoManualAsync()
     {
-        if (_proformaActual == null || string.IsNullOrWhiteSpace(_nuevoCargo.DescripcionItem)) return;
-
-        _proformaActual.Items.Add(new ItemFacturableProformaDto
+        if (_proformaActual == null || string.IsNullOrWhiteSpace(_nuevoCargo.DescripcionItem))
         {
-            IdRegistro = _proformaActual.Items.Count + 1,
-            IdOrden = _proformaActual.IdOrden,
-            OrigenModulo = _nuevoCargo.OrigenModulo,
-            CodigoItemBc = string.IsNullOrWhiteSpace(_nuevoCargo.CodigoItemBc) ? "SER-GEN-01" : _nuevoCargo.CodigoItemBc,
-            DescripcionItem = _nuevoCargo.DescripcionItem,
-            Cantidad = _nuevoCargo.Cantidad,
-            PrecioUnitario = _nuevoCargo.PrecioUnitario,
-            Seleccionado = true
-        });
+            _notificacionError = true;
+            _mensajeNotificacion = "Ingrese la descripción del cargo.";
+            return;
+        }
 
-        _nuevoCargo = new ItemFacturableProformaDto { OrigenModulo = "HOSPITALIZACION", CodigoItemBc = "SER-HOSP-EXTRA", Cantidad = 1, PrecioUnitario = 15.00m };
+        _nuevoCargo.IdOrden = _proformaActual.IdOrden;
+        bool guardado = await AdmisionService.AgregarCargoProformaManualAsync(_nuevoCargo, SessionState.IdUser);
+        if (!guardado)
+        {
+            _notificacionError = true;
+            _mensajeNotificacion = "No se registró el cargo: falta configurar el endpoint de proformas de E-FACT.";
+            return;
+        }
+
+        _notificacionError = false;
+        _mensajeNotificacion = "Cargo registrado correctamente.";
+        _nuevoCargo = new ItemFacturableProformaDto { OrigenModulo = "HOSPITALIZACION", Cantidad = 1 };
+        _proformaActual = await AdmisionService.ObtenerDetalleProformaOrdenAsync(_proformaActual.IdOrden);
     }
 
     private async Task EmitirProformaAsync()
@@ -390,8 +396,12 @@
         if (_proformaActual == null) return;
         int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
         var res = await AdmisionService.EmitirProformaAsync(_proformaActual.IdOrden, _proformaActual.Items, idUser);
-        _proformaActual.FacturadoBc = "S";
-        _proformaActual.NumeroFacturaBc = res.NumeroProforma;
+        _notificacionError = !res.Exito;
+        if (res.Exito)
+        {
+            _proformaActual.FacturadoBc = "S";
+            _proformaActual.NumeroFacturaBc = res.NumeroProforma;
+        }
         _mensajeNotificacion = res.Mensaje;
     }
 

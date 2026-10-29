@@ -178,16 +178,13 @@ public class KardexService : IKardexService
                 return lista;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "No se pudieron consultar las vías de administración.");
+            throw;
+        }
 
-        return
-        [
-            new() { Id = 1, Via = "INTRAVENOSA (IV)" },
-            new() { Id = 2, Via = "INTRAMUSCULAR (IM)" },
-            new() { Id = 3, Via = "SUBCUTANEA (SC)" },
-            new() { Id = 4, Via = "ORAL (PO)" },
-            new() { Id = 5, Via = "TOPICA" }
-        ];
+        return [];
     }
 
     public async Task<List<FuncionarioDto>> ObtenerFuncionariosEnfermeriaAsync()
@@ -214,14 +211,13 @@ public class KardexService : IKardexService
                 return lista;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "No se pudo consultar el personal de enfermería.");
+            throw;
+        }
 
-        return
-        [
-            new() { UserNumero = 1, UserNombre = "Dr. Gabriel Vintimilla", UserIniciales = "GV" },
-            new() { UserNumero = 2, UserNombre = "Dra. Valeria Andrade", UserIniciales = "VA" },
-            new() { UserNumero = 3, UserNombre = "Dr. Sebastián Cordero", UserIniciales = "SC" }
-        ];
+        return [];
     }
 
     public async Task<List<FuncionEnfermeriaDto>> ObtenerFuncionesEnfermeriaAsync()
@@ -245,13 +241,13 @@ public class KardexService : IKardexService
                 return lista;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "No se pudieron consultar las funciones de enfermería.");
+            throw;
+        }
 
-        return
-        [
-            new() { TipUserNumero = 2, TipUserDescripcion = "MEDICO" },
-            new() { TipUserNumero = 3, TipUserDescripcion = "ENFERMERA" }
-        ];
+        return [];
     }
 
     public async Task<List<ProductoUtilizadoDto>> ObtenerProductosUtilizadosAsync(int ordenId, string modulo = "EnCirugia")

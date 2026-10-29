@@ -1277,7 +1277,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public Task<bool> AgregarCargoProformaManualAsync(ItemFacturableProformaDto cargo, int idUsuario)
     {
-        return Task.FromResult(true);
+        _logger.LogWarning("No se agregó el cargo manual porque esa operación todavía no tiene persistencia configurada.");
+        return Task.FromResult(false);
     }
 
     public async Task<(bool Exito, string NumeroProforma, string Mensaje)> EmitirProformaAsync(
@@ -1337,23 +1338,108 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
         try
         {
-            var res = (await _db.QueryAsync<UsuarioSistemaDto>(sql, new { Filtro = filtro?.Trim() ?? string.Empty })).ToList();
-            if (res.Count > 0) return res;
+            return (await _db.QueryAsync<UsuarioSistemaDto>(sql, new { Filtro = filtro?.Trim() ?? string.Empty })).ToList();
         }
-        catch { }
-
-        return new List<UsuarioSistemaDto>
+        catch (Exception ex)
         {
-            new() { UserNumero = 1, UserNombre = "Dr. Gabriel Vintimilla", UserLogin = "gvintimilla", UserEstado = "A", TipoDescripcion = "Administrador / Médico", EspecialidadDescripcion = "Medicina Interna", UserTipoMedico = "P", UserCedula = "1712345678", UserEmail = "gvintimilla@usfq.edu.ec", UserCelular = "0991234567", UserIniciales = "GV" },
-            new() { UserNumero = 2, UserNombre = "Dra. Valeria Andrade", UserLogin = "vandrade", UserEstado = "A", TipoDescripcion = "Médico Veterinario", EspecialidadDescripcion = "Consulta General", UserTipoMedico = "P", UserCedula = "1723456789", UserEmail = "vandrade@usfq.edu.ec", UserCelular = "0982345678", UserIniciales = "VA" },
-            new() { UserNumero = 3, UserNombre = "Dr. Sebastián Cordero", UserLogin = "scordero", UserEstado = "A", TipoDescripcion = "Cirujano / Anestesiólogo", EspecialidadDescripcion = "Cirugía y Tejidos Blandos", UserTipoMedico = "P", UserCedula = "1734567890", UserEmail = "scordero@usfq.edu.ec", UserCelular = "0993456789", UserIniciales = "SC" },
-            new() { UserNumero = 4, UserNombre = "Dra. Carolina Páez", UserLogin = "cpaez", UserEstado = "A", TipoDescripcion = "Especialista Silvestre", EspecialidadDescripcion = "Fauna Silvestre", UserTipoMedico = "P", UserCedula = "1745678901", UserEmail = "cpaez@usfq.edu.ec", UserCelular = "0984567890", UserIniciales = "CP" }
-        };
+            _logger.LogError(ex, "No se pudieron consultar los usuarios del sistema.");
+            throw;
+        }
     }
 
-    public Task<bool> GuardarUsuarioAsync(UsuarioSistemaDto usuario)
+    public async Task<bool> GuardarUsuarioAsync(UsuarioSistemaDto usuario)
     {
-        return Task.FromResult(true);
+        if (string.IsNullOrWhiteSpace(usuario.UserNombre) ||
+            string.IsNullOrWhiteSpace(usuario.UserLogin) ||
+            usuario.UserTipoUserNumero <= 0 ||
+            usuario.UserEspNumero <= 0)
+        {
+            return false;
+        }
+
+        string login = usuario.UserLogin.Trim();
+        int duplicados = await _db.ExecuteScalarAsync<int>(@"
+            SELECT COUNT(1)
+            FROM vt_usuarios
+            WHERE user_login = @Login
+              AND user_numero <> @IdUsuario;", new { Login = login, IdUsuario = usuario.UserNumero });
+        if (duplicados > 0)
+        {
+            return false;
+        }
+
+        bool esNuevo = usuario.UserNumero <= 0;
+        if (esNuevo && string.IsNullOrWhiteSpace(usuario.UserClave))
+        {
+            return false;
+        }
+
+        var parametros = new
+        {
+            IdUsuario = usuario.UserNumero,
+            Nombre = usuario.UserNombre.Trim(),
+            Login = login,
+            Iniciales = usuario.UserIniciales.Trim(),
+            Email = usuario.UserEmail.Trim(),
+            Celular = usuario.UserCelular.Trim(),
+            Convencional = usuario.UserConvencional.Trim(),
+            Cedula = usuario.UserCedula.Trim(),
+            TipoUsuario = usuario.UserTipoUserNumero,
+            Especialidad = usuario.UserEspNumero,
+            TipoMedico = usuario.UserTipoMedico.Trim(),
+            Observaciones = usuario.UserObservaciones.Trim(),
+            Estado = usuario.UserEstado == "I" ? "I" : "A",
+            Clave = _db.HashPasswordSha1(usuario.UserClave)
+        };
+
+        int filas;
+        if (esNuevo)
+        {
+            filas = await _db.ExecuteAsync(@"
+                INSERT INTO vt_usuarios
+                    (user_nombre, user_login, user_clave, user_iniciales, user_email,
+                     user_celular, user_convensional, user_cedula, user_tipouser_numero,
+                     user_esp_numero, user_tipomedico, user_observaciones, user_estado,
+                     user_fechacambio)
+                VALUES
+                    (@Nombre, @Login, @Clave, @Iniciales, @Email,
+                     @Celular, @Convencional, @Cedula, @TipoUsuario,
+                     @Especialidad, @TipoMedico, @Observaciones, @Estado,
+                     GETDATE());", parametros);
+
+            if (filas <= 0) return false;
+            usuario.UserNumero = await _db.ExecuteScalarAsync<int>(
+                "SELECT user_numero FROM vt_usuarios WHERE user_login = @Login;", new { Login = login });
+        }
+        else
+        {
+            string sql = string.IsNullOrWhiteSpace(usuario.UserClave)
+                ? @"
+                    UPDATE vt_usuarios
+                    SET user_nombre = @Nombre, user_login = @Login, user_iniciales = @Iniciales,
+                        user_email = @Email, user_celular = @Celular, user_convensional = @Convencional,
+                        user_cedula = @Cedula, user_tipouser_numero = @TipoUsuario,
+                        user_esp_numero = @Especialidad, user_tipomedico = @TipoMedico,
+                        user_observaciones = @Observaciones, user_estado = @Estado,
+                        user_fechacambio = GETDATE()
+                    WHERE user_numero = @IdUsuario;"
+                : @"
+                    UPDATE vt_usuarios
+                    SET user_nombre = @Nombre, user_login = @Login, user_clave = @Clave,
+                        user_iniciales = @Iniciales, user_email = @Email, user_celular = @Celular,
+                        user_convensional = @Convencional, user_cedula = @Cedula,
+                        user_tipouser_numero = @TipoUsuario, user_esp_numero = @Especialidad,
+                        user_tipomedico = @TipoMedico, user_observaciones = @Observaciones,
+                        user_estado = @Estado, user_fechacambio = GETDATE()
+                    WHERE user_numero = @IdUsuario;";
+            filas = await _db.ExecuteAsync(sql, parametros);
+            if (filas <= 0) return false;
+        }
+
+        await _db.RegistrarBitacoraAsync(
+            $"{(esNuevo ? "Crea" : "Actualiza")} usuario: {login}",
+            usuario.UserNumero);
+        return true;
     }
 
     public async Task<List<BitacoraAuditoriaDto>> ObtenerBitacoraAsync(DateTime desde, DateTime hasta, string filtro = "")
@@ -1373,18 +1459,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
         try
         {
-            var res = (await _db.QueryAsync<BitacoraAuditoriaDto>(sql, new { Desde = desde.Date, Hasta = hasta.Date.AddDays(1).AddSeconds(-1) })).ToList();
-            if (res.Count > 0) return res;
+            return (await _db.QueryAsync<BitacoraAuditoriaDto>(sql, new { Desde = desde.Date, Hasta = hasta.Date.AddDays(1).AddSeconds(-1) })).ToList();
         }
-        catch { }
-
-        return new List<BitacoraAuditoriaDto>
+        catch (Exception ex)
         {
-            new() { VitId = 9804, VitDetalle = "Emisión de Proforma Consolidada #PROF-008941 (Orden #24004)", UserLogin = "gvintimilla", VitFechaMod = DateTime.Now.AddMinutes(-15), Ip = "10.10.24.18", Hostname = "HDEV-CAJA-01" },
-            new() { VitId = 9803, VitDetalle = "Registro de Aplicación Kardex Hora 08:00 - Omeprazol IV 40mg (NHCL #5001 - MAX)", UserLogin = "vandrade", VitFechaMod = DateTime.Now.AddMinutes(-42), Ip = "10.10.24.35", Hostname = "HDEV-UCI-02" },
-            new() { VitId = 9802, VitDetalle = "Cierre de Protocolo Quirúrgico e ingreso a Sala de Recuperación Aldrete (NHCL #5003 - ROCKY)", UserLogin = "scordero", VitFechaMod = DateTime.Now.AddHours(-2), Ip = "10.10.24.50", Hostname = "HDEV-QUIR-01" },
-            new() { VitId = 9801, VitDetalle = "Admisión de Paciente Fauna Silvestre #9001 (Amazona farinosa)", UserLogin = "cpaez", VitFechaMod = DateTime.Now.AddHours(-4), Ip = "10.10.24.90", Hostname = "TUERI-ADM-01" }
-        };
+            _logger.LogError(ex, "No se pudo consultar la bitácora de auditoría.");
+            throw;
+        }
     }
 }
 
