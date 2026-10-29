@@ -465,25 +465,26 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 if (string.IsNullOrWhiteSpace(motivoOtro))
                     throw new InvalidOperationException("Debe ingresar el motivo de muerte.");
 
-                int? motivoExistente = await _db.ExecuteScalarAsync<int?>(@"
-                    SELECT TOP (1) sec
-                    FROM vt_motivomuerte
-                    WHERE UPPER(LTRIM(RTRIM(motivo))) = UPPER(@Motivo)", new { Motivo = motivoOtro });
+                mascota.MotivoFallece = await _db.ExecuteScalarAsync<int>(@"
+                    SET XACT_ABORT ON;
+                    BEGIN TRANSACTION;
 
-                if (motivoExistente.HasValue)
-                {
-                    await _db.ExecuteAsync(
-                        "UPDATE vt_motivomuerte SET estado='A' WHERE sec=@Id",
-                        new { Id = motivoExistente.Value });
-                    mascota.MotivoFallece = motivoExistente.Value;
-                }
-                else
-                {
-                    mascota.MotivoFallece = await _db.ExecuteScalarAsync<int>(@"
-                        INSERT INTO vt_motivomuerte (motivo, estado)
-                        VALUES (@Motivo, 'A');
-                        SELECT CAST(SCOPE_IDENTITY() AS INT);", new { Motivo = motivoOtro });
-                }
+                    DECLARE @Sec INT;
+                    SELECT TOP (1) @Sec=sec
+                    FROM vt_motivomuerte WITH (TABLOCKX, HOLDLOCK)
+                    WHERE UPPER(LTRIM(RTRIM(motivo)))=UPPER(@Motivo);
+
+                    IF @Sec IS NULL
+                    BEGIN
+                        SELECT @Sec=ISNULL(MAX(sec), 0) + 1 FROM vt_motivomuerte;
+                        INSERT INTO vt_motivomuerte (sec, motivo, estado)
+                        VALUES (@Sec, @Motivo, 'A');
+                    END
+                    ELSE
+                        UPDATE vt_motivomuerte SET estado='A' WHERE sec=@Sec;
+
+                    COMMIT TRANSACTION;
+                    SELECT @Sec;", new { Motivo = motivoOtro });
             }
 
             if (!string.IsNullOrWhiteSpace(mascota.MasNombre))
@@ -747,13 +748,22 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ON UPPER(LTRIM(RTRIM(existente.motivo)))=UPPER(requerido.motivo)
             WHERE ISNULL(existente.estado, 'I')<>'A';
 
-            INSERT INTO vt_motivomuerte (motivo, estado)
-            SELECT requerido.motivo, 'A'
-            FROM @Motivos requerido
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM vt_motivomuerte existente WITH (UPDLOCK, HOLDLOCK)
-                WHERE UPPER(LTRIM(RTRIM(existente.motivo)))=UPPER(requerido.motivo));
+            DECLARE @MaxSec INT;
+            SELECT @MaxSec=ISNULL(MAX(sec), 0)
+            FROM vt_motivomuerte WITH (TABLOCKX, HOLDLOCK);
+
+            ;WITH Faltantes AS
+            (
+                SELECT requerido.motivo
+                FROM @Motivos requerido
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM vt_motivomuerte existente
+                    WHERE UPPER(LTRIM(RTRIM(existente.motivo)))=UPPER(requerido.motivo))
+            )
+            INSERT INTO vt_motivomuerte (sec, motivo, estado)
+            SELECT @MaxSec + ROW_NUMBER() OVER (ORDER BY motivo), motivo, 'A'
+            FROM Faltantes;
 
             COMMIT TRANSACTION;
 
