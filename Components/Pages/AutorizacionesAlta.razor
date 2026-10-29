@@ -18,6 +18,13 @@
             <small class="text-muted">Emisión de consentimientos informados, documentos legales y plan de alta hospitalaria.</small>
         </div>
         <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
+            <select class="form-select form-select-sm" style="width: 280px;" value="@IdOrden" @onchange="SeleccionarOrdenActivaAsync">
+                <option value="0">-- Seleccionar paciente / orden --</option>
+                @foreach (var orden in OrdenesActivas)
+                {
+                    <option value="@orden.IdOrdenAtencion">#@orden.IdOrdenAtencion | @orden.Paciente (NHCL @orden.Nhcl)</option>
+                }
+            </select>
             <div class="input-group input-group-sm" style="width: 260px;">
                 <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
                 <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
@@ -207,6 +214,7 @@
     private string? MensajeAlerta { get; set; }
 
     private PacienteHeaderDto? Paciente { get; set; }
+    private List<OrdenActivaResumenDto> OrdenesActivas { get; set; } = new();
     private List<FormatoPlantillaDto> Plantillas { get; set; } = new();
     private List<AutorizacionClinicaDto> AutorizacionesEmitidas { get; set; } = new();
     private AutorizacionClinicaDto NuevaAutorizacion { get; set; } = new();
@@ -218,6 +226,10 @@
         await Task.Yield();
 
         var tPlantillas = ConsultaService.ObtenerPlantillasFormatosAsync();
+        var tOrdenes = KardexService.ObtenerOrdenesActivasAsync();
+        await Task.WhenAll(tPlantillas, tOrdenes);
+        Plantillas = await tPlantillas;
+        OrdenesActivas = await tOrdenes;
 
         if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
         {
@@ -226,15 +238,12 @@
         }
         else if (IdOrden <= 0 && Nhcl <= 0)
         {
-            var activas = await KardexService.ObtenerOrdenesActivasAsync();
-            if (activas.Count > 0)
+            if (OrdenesActivas.Count > 0)
             {
-                IdOrden = activas[0].IdOrdenAtencion;
-                Nhcl = activas[0].Nhcl;
+                IdOrden = OrdenesActivas[0].IdOrdenAtencion;
+                Nhcl = OrdenesActivas[0].Nhcl;
             }
         }
-
-        Plantillas = await tPlantillas;
 
         if (IdOrden > 0 || Nhcl > 0)
         {
@@ -250,6 +259,31 @@
         IdOrden = IdOrdenInput;
         Nhcl = NhclInput;
         await CargarDatosAsync();
+    }
+
+    private async Task SeleccionarOrdenActivaAsync(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var idOrden) || idOrden <= 0)
+            return;
+
+        var orden = OrdenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == idOrden);
+        if (orden == null)
+            return;
+
+        CargandoInicial = true;
+        IdOrden = orden.IdOrdenAtencion;
+        Nhcl = orden.Nhcl;
+        IdOrdenInput = IdOrden;
+        NhclInput = Nhcl;
+        try
+        {
+            await CargarDatosAsync();
+            MensajeAlerta = $"Paciente {orden.Paciente} cargado correctamente.";
+        }
+        finally
+        {
+            CargandoInicial = false;
+        }
     }
 
     private async Task CargarDatosAsync()

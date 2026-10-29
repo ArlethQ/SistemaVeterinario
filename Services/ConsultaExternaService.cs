@@ -667,6 +667,10 @@ public class ConsultaExternaService : IConsultaExternaService
 
     public async Task<bool> AgregarMedicamentoRecetaAsync(RecetaMedicamentoItemDto item, int idUsuario, int idLocalidad)
     {
+        if (item.IdOrden <= 0 || item.Nhcl <= 0 || item.Cantidad <= 0 ||
+            string.IsNullOrWhiteSpace(item.Descripcionamento) || string.IsNullOrWhiteSpace(item.Indicaciones))
+            return false;
+
         const string sql = @"
             INSERT INTO vt_medicinas (
                 med_nhcl, med_idProdu, med_indicaciones, med_cantidad, med_id_orden,
@@ -678,7 +682,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 GETDATE(), @Tipo, @Observaciones
             )";
 
-        await _db.ExecuteAsync(sql, new
+        var filasAfectadas = await _db.ExecuteAsync(sql, new
         {
             item.Nhcl,
             CodigoNum = int.TryParse(item.CodigoProd, out var cod) ? cod : 0,
@@ -691,7 +695,7 @@ public class ConsultaExternaService : IConsultaExternaService
             item.Observaciones
         });
 
-        return true;
+        return filasAfectadas > 0;
     }
 
     public async Task<bool> EliminarMedicamentoRecetaAsync(int sec)

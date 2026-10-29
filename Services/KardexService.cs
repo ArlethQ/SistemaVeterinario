@@ -385,11 +385,11 @@ public class KardexService : IKardexService
                 INSERT INTO qvt_productosUtilizados (
                     ordenId, nhcl, hora, fecha, codigoprod, precioprod, stockprod, indicacionesprod,
                     cantprod, usuario, localidad, proddescripcion, via, origen, iniciales, funcion,
-                    funcionario, estado, grupo, modulo, tipo, med_iva, med_iddinamics, med_medida, med_bodega
+                    funcionario, estado, grupo, modulo, tipo
                 ) VALUES (
                     @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProd, @PrecioProd, 0, @IndicacionesProd,
                     @CantProd, @Usuario, @Localidad, @ProdDescripcion, @Via, 'E', @Iniciales, @Funcion,
-                    @Funcionario, 'Vigente', @Grupo, @Modulo, 'M', @MedIva, @MedIdDinamics, @MedMedida, @MedBodega
+                    @Funcionario, 'Vigente', 1, @Modulo, 'M'
                 );
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -399,7 +399,9 @@ public class KardexService : IKardexService
                 Nhcl = nhcl,
                 Hora = horaStr,
                 Fecha = input.Fecha.Date,
-                CodigoProd = input.CodigoProd.Trim(),
+                CodigoProd = int.TryParse(input.IdDinamics, out var idProducto)
+                    ? idProducto
+                    : int.TryParse(input.CodigoProd, out var codigoProducto) ? codigoProducto : 0,
                 PrecioProd = input.PrecioProd,
                 IndicacionesProd = input.IndicacionesProd.Trim(),
                 CantProd = input.CantProd,
@@ -410,12 +412,7 @@ public class KardexService : IKardexService
                 Iniciales = iniciales,
                 Funcion = input.Funcion.Trim(),
                 Funcionario = nombreFuncionario,
-                Grupo = string.IsNullOrWhiteSpace(input.Tipo) ? "FARMACO" : input.Tipo.Trim(),
-                Modulo = modulo,
-                MedIva = input.Iva.Trim(),
-                MedIdDinamics = input.IdDinamics.Trim(),
-                MedMedida = input.UnidadMedida.Trim(),
-                MedBodega = input.Bodega.Trim()
+                Modulo = modulo
             });
 
             if (idCreado.HasValue && idCreado.Value > 0)
@@ -436,31 +433,10 @@ public class KardexService : IKardexService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Modo Demo al registrar medicamento en memoria.");
+            _logger.LogError(ex, "Error al registrar medicamento en Kardex para la orden {OrdenId}", ordenId);
         }
 
-        int nuevoId = _productosDemo.Count > 0 ? _productosDemo.Max(p => p.Id) + 1 : 1;
-        _productosDemo.Insert(0, new ProductoUtilizadoDto
-        {
-            Id = nuevoId,
-            Orden = ordenId,
-            Nhcl = nhcl,
-            Codigo = input.CodigoProd.Trim(),
-            Producto = input.ProdDescripcion.Trim(),
-            Cantidad = input.CantProd,
-            Precio = input.PrecioProd,
-            Indicaciones = input.IndicacionesProd.Trim(),
-            Via = input.Via.Trim(),
-            Fecha = input.Fecha.ToString("yyyy-MM-dd"),
-            FechaRaw = input.Fecha.Date,
-            Hora = horaStr,
-            Iniciales = iniciales,
-            Funcion = input.Funcion.Trim(),
-            Funcionario = nombreFuncionario,
-            Bodega = string.IsNullOrWhiteSpace(input.Bodega) ? "HOSP" : input.Bodega.Trim()
-        });
-
-        return (true, "Administración de medicamento registrada en Kardex (Modo Demo).");
+        return (false, "No se pudo guardar la administración del medicamento en la base de datos.");
     }
 
     public async Task<(bool Exito, string Mensaje)> EliminarAdministracionMedicamentoAsync(int idRegistro, string codigoProd, int ordenId)

@@ -18,6 +18,13 @@
             <small class="text-muted">Emisión de recetas médicas veterinarias, posología e indicaciones generales para el propietario.</small>
         </div>
         <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
+            <select class="form-select form-select-sm" style="width: 280px;" value="@IdOrden" @onchange="SeleccionarOrdenActivaAsync">
+                <option value="0">-- Seleccionar paciente / orden --</option>
+                @foreach (var orden in OrdenesActivas)
+                {
+                    <option value="@orden.IdOrdenAtencion">#@orden.IdOrdenAtencion | @orden.Paciente (NHCL @orden.Nhcl)</option>
+                }
+            </select>
             <div class="input-group input-group-sm" style="width: 260px;">
                 <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
                 <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
@@ -34,8 +41,8 @@
 
     @if (!string.IsNullOrEmpty(MensajeAlerta))
     {
-        <div class="alert alert-success alert-dismissible fade show py-2">
-            <i class="bi bi-check-circle-fill me-2"></i>@MensajeAlerta
+        <div class="alert @(EsError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2">
+            <i class="bi @(EsError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@MensajeAlerta
             <button type="button" class="btn-close py-2" @onclick="() => MensajeAlerta = null"></button>
         </div>
     }
@@ -97,8 +104,10 @@
                                             <div class="text-muted" style="font-size: 0.72rem;">@r.Cliente</div>
                                         </td>
                                         <td class="text-end">
-                                            <button class="btn btn-xs btn-primary py-0 px-2" @onclick="() => SeleccionarRecetaListadoAsync(r)">
-                                                Ver
+                                            <button class="btn btn-xs @(r.IdOrdenOFicha == IdOrden ? "btn-secondary" : "btn-primary") py-0 px-2"
+                                                    disabled="@(r.IdOrdenOFicha == IdOrden)"
+                                                    @onclick="() => SeleccionarRecetaListadoAsync(r)">
+                                                @(r.IdOrdenOFicha == IdOrden ? "Viendo" : "Ver")
                                             </button>
                                         </td>
                                     </tr>
@@ -133,7 +142,7 @@
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold">Cantidad</label>
-                            <input type="number" min="1" step="1" class="form-control form-control-sm"
+                            <input type="number" min="1" step="1" class="form-control form-control-sm" onkeydown="return event.key !== '-'"
                                    @bind="NuevoItem.Cantidad" @bind:after="ActualizarCantidadLetras" />
                         </div>
                         <div class="col-md-3">
@@ -236,10 +245,12 @@
     private DateTime FechaDesde { get; set; } = DateTime.Today.AddDays(-30);
     private DateTime FechaHasta { get; set; } = DateTime.Today;
     private bool CargandoInicial { get; set; } = true;
+    private bool EsError { get; set; }
     private string? MensajeAlerta { get; set; }
 
     private PacienteHeaderDto? Paciente { get; set; }
     private List<RecetaResumenListadoDto> ListadoRecetas { get; set; } = new();
+    private List<OrdenActivaResumenDto> OrdenesActivas { get; set; } = new();
     private List<RecetaMedicamentoItemDto> ItemsReceta { get; set; } = new();
     private List<DiagnosticoCie10Dto> DiagnosticosOrden { get; set; } = new();
     private string IndicacionesGenerales { get; set; } = string.Empty;
@@ -250,6 +261,8 @@
         CargandoInicial = true;
         await Task.Yield();
 
+        OrdenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+
         if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
         {
             IdOrden = Session.OrdenActiva.Value;
@@ -257,11 +270,10 @@
         }
         else if (IdOrden <= 0)
         {
-            var activas = await KardexService.ObtenerOrdenesActivasAsync();
-            if (activas.Count > 0)
+            if (OrdenesActivas.Count > 0)
             {
-                IdOrden = activas[0].IdOrdenAtencion;
-                Nhcl = activas[0].Nhcl;
+                IdOrden = OrdenesActivas[0].IdOrdenAtencion;
+                Nhcl = OrdenesActivas[0].Nhcl;
             }
         }
 
@@ -290,13 +302,39 @@
         }
     }
 
+    private async Task SeleccionarOrdenActivaAsync(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var idOrden) || idOrden <= 0)
+            return;
+
+        var orden = OrdenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == idOrden);
+        if (orden == null)
+            return;
+
+        IdOrden = orden.IdOrdenAtencion;
+        Nhcl = orden.Nhcl;
+        IdOrdenInput = IdOrden;
+        NhclInput = Nhcl;
+        await CargarRecetaOrdenAsync();
+    }
+
     private async Task SeleccionarRecetaListadoAsync(RecetaResumenListadoDto item)
     {
+        CargandoInicial = true;
         IdOrden = item.IdOrdenOFicha;
         Nhcl = item.Nhcl;
         IdOrdenInput = IdOrden;
         NhclInput = Nhcl;
-        await CargarRecetaOrdenAsync();
+        try
+        {
+            await CargarRecetaOrdenAsync();
+            EsError = false;
+            MensajeAlerta = $"Receta de la Orden #{IdOrden} cargada correctamente.";
+        }
+        finally
+        {
+            CargandoInicial = false;
+        }
     }
 
     private async Task BuscarRecetasEmitidasAsync()
@@ -354,13 +392,31 @@
 
     private async Task AgregarItemRecetaAsync()
     {
-        if (string.IsNullOrWhiteSpace(NuevoItem.Descripcionamento)) return;
+        if (NuevoItem.Cantidad <= 0)
+        {
+            EsError = true;
+            MensajeAlerta = "La cantidad debe ser mayor a cero.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(NuevoItem.Descripcionamento) || string.IsNullOrWhiteSpace(NuevoItem.Indicaciones))
+        {
+            EsError = true;
+            MensajeAlerta = "Ingrese el medicamento y sus indicaciones posológicas.";
+            return;
+        }
         NuevoItem.IdOrden = IdOrden;
         NuevoItem.Nhcl = Nhcl;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
-        await ConsultaService.AgregarMedicamentoRecetaAsync(NuevoItem, idUser, 1);
+        var ok = await ConsultaService.AgregarMedicamentoRecetaAsync(NuevoItem, idUser, Session.Localidad);
+        if (!ok)
+        {
+            EsError = true;
+            MensajeAlerta = "No se pudo guardar el medicamento en la receta.";
+            return;
+        }
         NuevoItem = new RecetaMedicamentoItemDto();
         ItemsReceta = await ConsultaService.ObtenerRecetaOrdenAsync(IdOrden);
+        EsError = false;
         MensajeAlerta = "Medicamento agregado a la receta.";
     }
 
