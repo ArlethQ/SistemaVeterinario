@@ -537,53 +537,104 @@
 
     private async Task GuardarIngreso()
     {
-        _ingreso.IdOrden = IdOrden;
-        _ingreso.Nhcl = Nhcl;
-        var ok = await Service.GuardarIngresoCirugiaAsync(_ingreso, Session.IdUser);
-        Mensaje(ok);
+        try
+        {
+            if (IdOrden <= 0 || Nhcl <= 0)
+            {
+                Mensaje(false, "Debe seleccionar un paciente y orden válidos antes de guardar.");
+                return;
+            }
+            _ingreso.IdOrden = IdOrden;
+            _ingreso.Nhcl = Nhcl;
+            var ok = await Service.GuardarIngresoCirugiaAsync(_ingreso, Session.IdUser);
+            Mensaje(ok, ok ? "Ingreso quirúrgico guardado correctamente." : "No se pudo guardar el ingreso quirúrgico.");
+            if (ok)
+            {
+                await CargarModulo();
+            }
+        }
+        catch (Exception ex)
+        {
+            Mensaje(false, $"Error al guardar ingreso quirúrgico: {ex.Message}");
+        }
     }
 
     private async Task Procesar(int id)
     {
-        Mensaje(await Service.MarcarDespachoProcesadoAsync(id));
-        await CargarModulo();
+        try
+        {
+            var ok = await Service.MarcarDespachoProcesadoAsync(id);
+            Mensaje(ok, ok ? "Despacho marcado como procesado." : "No se pudo marcar el despacho.");
+            await CargarModulo();
+        }
+        catch (Exception ex)
+        {
+            Mensaje(false, $"Error al procesar despacho: {ex.Message}");
+        }
     }
 
     private async Task GuardarFisio()
     {
-        _fisioNueva.IdOrden = IdOrden;
-        _fisioNueva.Nhcl = Nhcl;
-        var ok = await Service.GuardarFisioterapiaAsync(_fisioNueva);
-        Mensaje(ok);
-        if (ok)
+        try
         {
-            _fisioNueva = new();
-            await CargarModulo();
+            if (IdOrden <= 0 || Nhcl <= 0)
+            {
+                Mensaje(false, "Debe seleccionar un paciente y orden válidos.");
+                return;
+            }
+            _fisioNueva.IdOrden = IdOrden;
+            _fisioNueva.Nhcl = Nhcl;
+            var ok = await Service.GuardarFisioterapiaAsync(_fisioNueva);
+            Mensaje(ok, ok ? "Sesión de fisioterapia guardada correctamente." : "No se pudo guardar la sesión de fisioterapia.");
+            if (ok)
+            {
+                _fisioNueva = new();
+                await CargarModulo();
+            }
+        }
+        catch (Exception ex)
+        {
+            Mensaje(false, $"Error al guardar fisioterapia: {ex.Message}");
         }
     }
 
     private async Task GuardarIStat()
     {
-        if (Nhcl <= 0)
+        try
         {
-            Mensaje(false, "Debe ingresar o seleccionar un paciente (NHCL) válido.");
-            return;
-        }
+            if (Nhcl <= 0)
+            {
+                Mensaje(false, "Debe ingresar o seleccionar un paciente (NHCL) válido.");
+                return;
+            }
 
-        _istatNuevo.Nhcl = Nhcl;
-        var ok = await Service.GuardarIStatAsync(_istatNuevo, Session.IdUser);
-        Mensaje(ok, ok ? "Análisis i-STAT guardado con éxito." : "No se pudo guardar el análisis i-STAT.");
-        if (ok)
+            _istatNuevo.Nhcl = Nhcl;
+            var ok = await Service.GuardarIStatAsync(_istatNuevo, Session.IdUser);
+            Mensaje(ok, ok ? "Análisis i-STAT guardado con éxito." : "No se pudo guardar el análisis i-STAT.");
+            if (ok)
+            {
+                _istatNuevo = new();
+                await CargarModulo();
+            }
+        }
+        catch (Exception ex)
         {
-            _istatNuevo = new();
-            await CargarModulo();
+            Mensaje(false, $"Error al guardar análisis i-STAT: {ex.Message}");
         }
     }
 
     private async Task EliminarIStat(int id)
     {
-        Mensaje(await Service.EliminarIStatAsync(id, Session.IdUser));
-        await CargarModulo();
+        try
+        {
+            var ok = await Service.EliminarIStatAsync(id, Session.IdUser);
+            Mensaje(ok, ok ? "Registro i-STAT eliminado correctamente." : "No se pudo eliminar el registro.");
+            await CargarModulo();
+        }
+        catch (Exception ex)
+        {
+            Mensaje(false, $"Error al eliminar análisis i-STAT: {ex.Message}");
+        }
     }
 
     private async Task ImprimirIStatPdf(IStatDto item)

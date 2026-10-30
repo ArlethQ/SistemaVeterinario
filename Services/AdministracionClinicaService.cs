@@ -286,13 +286,104 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
     }
 
     public async Task<IngresoCirugiaDto> ObtenerIngresoCirugiaAsync(int idOrden, int nhcl) =>
-        await _db.QueryFirstOrDefaultAsync<IngresoCirugiaDto>(@"SELECT TOP 1 sec AS Sec,nhcl AS Nhcl,id_orden AS IdOrden,fecha AS Fecha,RTRIM(ISNULL(sala,'')) AS Sala,RTRIM(ISNULL(entra,'')) AS Entra,RTRIM(ISNULL(sale,'')) AS Sale,RTRIM(ISNULL(transporte,'')) AS Transporte,RTRIM(ISNULL(posicion,'')) AS Posicion,RTRIM(ISNULL(observaciones1,'')) AS Observaciones FROM qvt_ingresocirugia WHERE id_orden=@IdOrden AND nhcl=@Nhcl ORDER BY sec DESC", new { IdOrden=idOrden,Nhcl=nhcl }) ?? new(){IdOrden=idOrden,Nhcl=nhcl};
+        await _db.QueryFirstOrDefaultAsync<IngresoCirugiaDto>(@"SELECT TOP 1 
+            sec AS Sec,
+            nhcl AS Nhcl,
+            id_orden AS IdOrden,
+            fecha AS Fecha,
+            CAST(ISNULL(sala, 1) AS VARCHAR(10)) AS Sala,
+            ISNULL(CONVERT(VARCHAR(5), entra, 108), '') AS Entra,
+            ISNULL(CONVERT(VARCHAR(5), sale, 108), '') AS Sale,
+            RTRIM(ISNULL(transporte,'')) AS Transporte,
+            RTRIM(ISNULL(posicion,'')) AS Posicion,
+            RTRIM(ISNULL(observaciones1,'')) AS Observaciones 
+        FROM qvt_ingresocirugia 
+        WHERE id_orden=@IdOrden AND nhcl=@Nhcl 
+        ORDER BY sec DESC", new { IdOrden = idOrden, Nhcl = nhcl }) ?? new() { IdOrden = idOrden, Nhcl = nhcl };
 
     public async Task<bool> GuardarIngresoCirugiaAsync(IngresoCirugiaDto x, int idUsuario)
     {
-        const string ins=@"INSERT INTO qvt_ingresocirugia(nhcl,id_orden,fecha,sala,entra,sale,transporte,posicion,observaciones1,iduser) VALUES(@Nhcl,@IdOrden,@Fecha,@Sala,@Entra,@Sale,@Transporte,@Posicion,@Observaciones,@IdUsuario)";
-        const string upd=@"UPDATE qvt_ingresocirugia SET fecha=@Fecha,sala=@Sala,entra=@Entra,sale=@Sale,transporte=@Transporte,posicion=@Posicion,observaciones1=@Observaciones,iduser=@IdUsuario WHERE sec=@Sec";
-        return await _db.ExecuteAsync(x.Sec>0?upd:ins,new{x.Nhcl,x.IdOrden,x.Fecha,x.Sala,x.Entra,x.Sale,x.Transporte,x.Posicion,x.Observaciones,IdUsuario=idUsuario,x.Sec})>0;
+        int salaId = 1;
+        if (!string.IsNullOrWhiteSpace(x.Sala))
+        {
+            if (!int.TryParse(x.Sala.Trim(), out salaId))
+            {
+                var digits = new string(x.Sala.Where(char.IsDigit).ToArray());
+                if (!int.TryParse(digits, out salaId)) salaId = 1;
+            }
+        }
+
+        DateTime? entraDt = ParseHoraOFecha(x.Entra, x.Fecha);
+        DateTime? saleDt = ParseHoraOFecha(x.Sale, x.Fecha);
+
+        string transporte = x.Transporte?.Trim() ?? "";
+        if (transporte.Length > 150) transporte = transporte.Substring(0, 150);
+
+        string posicion = x.Posicion?.Trim() ?? "";
+        if (posicion.Length > 50) posicion = posicion.Substring(0, 50);
+
+        string obs = x.Observaciones?.Trim() ?? "";
+        if (obs.Length > 150) obs = obs.Substring(0, 150);
+
+        if (x.Sec <= 0)
+        {
+            var existeSec = await _db.ExecuteScalarAsync<int?>(
+                "SELECT TOP 1 sec FROM qvt_ingresocirugia WHERE id_orden=@IdOrden AND nhcl=@Nhcl ORDER BY sec DESC",
+                new { x.IdOrden, x.Nhcl });
+            if (existeSec.HasValue && existeSec.Value > 0)
+            {
+                x.Sec = existeSec.Value;
+            }
+        }
+
+        const string ins = @"INSERT INTO qvt_ingresocirugia(
+            nhcl, id_orden, fecha, sala, entra, sale, transporte, posicion, observaciones1, iduser
+        ) VALUES (
+            @Nhcl, @IdOrden, @Fecha, @Sala, @Entra, @Sale, @Transporte, @Posicion, @Observaciones, @IdUsuario
+        )";
+
+        const string upd = @"UPDATE qvt_ingresocirugia SET 
+            fecha = @Fecha,
+            sala = @Sala,
+            entra = @Entra,
+            sale = @Sale,
+            transporte = @Transporte,
+            posicion = @Posicion,
+            observaciones1 = @Observaciones,
+            iduser = @IdUsuario 
+        WHERE sec = @Sec";
+
+        return await _db.ExecuteAsync(x.Sec > 0 ? upd : ins, new
+        {
+            x.Nhcl,
+            x.IdOrden,
+            x.Fecha,
+            Sala = salaId,
+            Entra = entraDt,
+            Sale = saleDt,
+            Transporte = transporte,
+            Posicion = posicion,
+            Observaciones = obs,
+            IdUsuario = idUsuario,
+            x.Sec
+        }) > 0;
+    }
+
+    private static DateTime? ParseHoraOFecha(string? val, DateTime fechaBase)
+    {
+        if (string.IsNullOrWhiteSpace(val)) return null;
+        val = val.Trim();
+
+        if (DateTime.TryParse(val, out var dtCompleto) && dtCompleto.Year > 1900)
+            return dtCompleto;
+
+        if (TimeSpan.TryParse(val, out var ts))
+            return fechaBase.Date.Add(ts);
+
+        if (int.TryParse(val, out var horaEntera) && horaEntera >= 0 && horaEntera <= 23)
+            return fechaBase.Date.AddHours(horaEntera);
+
+        return null;
     }
 
     public async Task<List<DespachoClinicoDto>> ObtenerDespachosAsync(DateTime desde,DateTime hasta,int tipo=0) =>
