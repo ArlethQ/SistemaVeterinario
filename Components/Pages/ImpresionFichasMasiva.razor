@@ -1,0 +1,564 @@
+@page "/consulta/imprimir-fichas"
+@page "/consulta/imprimir-fichas/{NhclParam:int}"
+@page "/reportes/imprimir-fichas"
+@inject SessionStateService Session
+@inject IConsultaExternaService ConsultaService
+@inject IKardexService KardexService
+@inject IAdmisionFacturacionService AdmisionService
+@inject IReportExportService ReportService
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+<PageTitle>Impresión de fichas por lotes | e-ForVets</PageTitle>
+
+@if (_autorizado)
+{
+    <div class="container-fluid py-3">
+        <!-- ENCABEZADO -->
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+            <div>
+                <small class="text-primary fw-bold text-uppercase">Historia Clínica &amp; Reclamo de Seguros</small>
+                <h3 class="fw-bold mb-0 text-dark">Impresión Masiva de Fichas Médicas por Lotes</h3>
+                <small class="text-muted">Selección de atenciones SOAP y generación de dossier consolidado para auditorías y aseguradoras</small>
+            </div>
+            <div class="d-flex gap-2">
+                @if (_atenciones.Any(x => x.Seleccionado))
+                {
+                    <button class="btn btn-danger fw-semibold d-flex align-items-center gap-2 shadow-sm"
+                            disabled="@_generandoPdf"
+                            @onclick="GenerarDossierConsolidadoPdfAsync">
+                        @if (_generandoPdf)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                            <span>Generando PDF...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-file-earmark-pdf-fill fs-5"></i>
+                            <span>Descargar Dossier Consolidado (@_atenciones.Count(x => x.Seleccionado))</span>
+                        }
+                    </button>
+                }
+                <a class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" href="/consulta/fichamedica">
+                    <i class="bi bi-journal-medical"></i>
+                    <span>Ir a Historia SOAP</span>
+                </a>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_mensaje))
+        {
+            <div class="alert @(_mensajeEsError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small shadow-sm" role="alert">
+                <i class="bi @(_mensajeEsError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-1"></i>
+                @_mensaje
+                <button type="button" class="btn-close py-2" @onclick="() => _mensaje = string.Empty"></button>
+            </div>
+        }
+
+        <!-- BARRA DE BÚSQUEDA Y SELECTOR DE PACIENTES -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body py-2">
+                <div class="row g-2 align-items-end">
+                    <!-- Dropdown de órdenes activas -->
+                    <div class="col-md-5 col-lg-4">
+                        <label class="form-label small text-muted mb-1 fw-bold">
+                            <i class="bi bi-list-check me-1 text-primary"></i> Órdenes Activas Recientes:
+                        </label>
+                        <select class="form-select form-select-sm" value="@_ordenSeleccionada" @onchange="OnOrdenSelectChangedAsync">
+                            <option value="0">-- Seleccionar de lista activa --</option>
+                            @foreach (var ord in _ordenesActivas)
+                            {
+                                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL: @ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
+                            }
+                        </select>
+                    </div>
+
+                    <!-- Búsqueda directa por NHCL -->
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <label class="form-label small text-muted mb-1">Historia (NHCL)</label>
+                        <input class="form-control form-control-sm text-center fw-bold" type="number"
+                               placeholder="Ej: 15896" @bind="_nhclInput" @onkeydown="OnInputKeyDownAsync" />
+                    </div>
+
+                    <!-- Filtro por nombre o cédula -->
+                    <div class="col-6 col-md-3 col-lg-4">
+                        <label class="form-label small text-muted mb-1">Buscar por Mascota o Propietario</label>
+                        <input class="form-control form-control-sm"
+                               placeholder="Nombre mascota, propietario o cédula..."
+                               list="pacientesSugeridos"
+                               @bind="_busquedaTexto"
+                               @onkeydown="OnInputKeyDownAsync" />
+                        <datalist id="pacientesSugeridos">
+                            @foreach (var p in _pacientesLista.Take(25))
+                            {
+                                <option value="@p.MasNhcl">#@p.MasNhcl - @p.MasNombre (@p.ClienteNombre)</option>
+                            }
+                        </datalist>
+                    </div>
+
+                    <div class="col-12 col-md-1 col-lg-2">
+                        <button class="btn btn-sm btn-primary w-100 fw-semibold" @onclick="ConsultarAtencionesAsync">
+                            <i class="bi bi-search me-1"></i> Consultar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TARJETA INFORMATIVA DEL PACIENTE SELECCIONADO -->
+        @if (_paciente != null)
+        {
+            <div class="card border-0 shadow-sm mb-3 bg-light">
+                <div class="card-body py-2 px-3">
+                    <div class="row align-items-center g-2">
+                        <div class="col-md-5">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold" style="width: 42px; height: 42px;">
+                                    @Iniciales(_paciente.PacienteNombre)
+                                </div>
+                                <div>
+                                    <h5 class="mb-0 fw-bold text-dark">@_paciente.PacienteNombre</h5>
+                                    <span class="badge bg-primary me-1">@_paciente.Especie</span>
+                                    <span class="badge bg-secondary">@_paciente.Raza</span>
+                                    <small class="text-muted ms-1">(@_paciente.Sexo · @_paciente.EdadTexto)</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted d-block">Tutor / Asegurado:</small>
+                            <span class="fw-semibold text-dark">@_paciente.PropietarioNombre</span>
+                            <small class="text-muted ms-1">C.I.: @_paciente.ClienteCedula</small>
+                        </div>
+                        <div class="col-md-3 text-md-end">
+                            <div class="badge bg-dark py-1 px-2 fs-6">NHCL: @_paciente.Nhcl</div>
+                            <small class="d-block text-muted">@_atenciones.Count atención(es) en el historial</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- TABLA DE ATENCIONES PARA SELECCIÓN POR LOTES -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fw-bold text-dark"><i class="bi bi-card-checklist text-primary me-1"></i> Atenciones Médicas Registradas</span>
+                    <span class="badge bg-info text-dark">@_atenciones.Count total</span>
+                    <span class="badge bg-primary">@_atenciones.Count(x => x.Seleccionado) seleccionadas</span>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button class="btn btn-xs btn-outline-secondary py-1 px-2 small" @onclick="ToggleSeleccionarTodas">
+                        <i class="bi bi-check2-all me-1"></i>
+                        @(_atenciones.All(x => x.Seleccionado) ? "Deseleccionar todas" : "Seleccionar todas")
+                    </button>
+                    @if (_atenciones.Any(x => x.Seleccionado))
+                    {
+                        <button class="btn btn-sm btn-danger py-1 px-3 fw-semibold"
+                                disabled="@_generandoPdf"
+                                @onclick="GenerarDossierConsolidadoPdfAsync">
+                            <i class="bi bi-file-earmark-pdf-fill me-1"></i> Imprimir Dossier (@_atenciones.Count(x => x.Seleccionado))
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light small">
+                        <tr>
+                            <th style="width: 40px;" class="text-center">
+                                <input type="checkbox" class="form-check-input"
+                                       checked="@(_atenciones.Count > 0 && _atenciones.All(x => x.Seleccionado))"
+                                       @onchange="OnMasterCheckboxChanged" title="Seleccionar/Deseleccionar todas" />
+                            </th>
+                            <th style="width: 130px;">Fecha / Hora</th>
+                            <th style="width: 80px;" class="text-center">Orden</th>
+                            <th style="width: 180px;">Médico / Especialidad</th>
+                            <th style="min-width: 200px;">Motivo de Consulta</th>
+                            <th style="min-width: 220px;">Diagnósticos CIE-10</th>
+                            <th style="width: 140px;" class="text-center">Constantes</th>
+                            <th style="width: 130px;" class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_cargando)
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                    <span>Cargando atenciones médicas del paciente...</span>
+                                </td>
+                            </tr>
+                        }
+                        else if (_atenciones.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+                                    <span>No se encontraron atenciones registradas para el paciente consultado.</span>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var item in _atenciones)
+                            {
+                                <tr class="@(item.Seleccionado ? "table-active" : "")">
+                                    <td class="text-center">
+                                        <input type="checkbox" class="form-check-input"
+                                               @bind="item.Seleccionado" />
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">@item.Fecha.ToString("dd/MM/yyyy")</div>
+                                        <small class="text-muted">@item.Fecha.ToString("HH:mm")</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary">#@item.Orden</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">@(string.IsNullOrWhiteSpace(item.Medico) ? "Médico Tratante" : item.Medico)</div>
+                                        <small class="text-muted">@(string.IsNullOrWhiteSpace(item.Especialidad) ? "Consulta General" : item.Especialidad)</small>
+                                    </td>
+                                    <td>
+                                        <span class="text-dark">@item.Motivo</span>
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(item.Diagnosticos))
+                                        {
+                                            <span class="small text-secondary">
+                                                <i class="bi bi-tag-fill text-primary me-1"></i>@item.Diagnosticos
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <small class="text-muted fst-italic">Sin diagnóstico codificado</small>
+                                        }
+                                    </td>
+                                    <td class="text-center small">
+                                        @if (item.Peso.HasValue && item.Peso > 0)
+                                        {
+                                            <span class="badge bg-light text-dark border me-1">@item.Peso kg</span>
+                                        }
+                                        @if (item.Temperatura.HasValue && item.Temperatura > 0)
+                                        {
+                                            <span class="badge bg-light text-dark border">@item.Temperatura °C</span>
+                                        }
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <button class="btn btn-xs btn-outline-danger py-1 px-2 me-1"
+                                                title="Descargar Ficha Médica Individual (PDF)"
+                                                @onclick="() => DescargarFichaIndividualPdfAsync(item)">
+                                            <i class="bi bi-file-earmark-pdf"></i> PDF
+                                        </button>
+                                        <a class="btn btn-xs btn-outline-primary py-1 px-2"
+                                           title="Ver y editar en Historia Clínica SOAP"
+                                           href="/consulta/fichamedica/@item.Orden/@item.Nhcl">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (_atenciones.Count > 0)
+            {
+                <div class="card-footer bg-light d-flex justify-content-between align-items-center py-2">
+                    <small class="text-muted">
+                        Marque las casillas de las atenciones que requiere consolidar para auditoría o reclamo a la aseguradora.
+                    </small>
+                    @if (_atenciones.Any(x => x.Seleccionado))
+                    {
+                        <button class="btn btn-sm btn-danger fw-semibold"
+                                disabled="@_generandoPdf"
+                                @onclick="GenerarDossierConsolidadoPdfAsync">
+                            <i class="bi bi-file-earmark-pdf-fill me-1"></i>
+                            Exportar @_atenciones.Count(x => x.Seleccionado) Ficha(s) en un solo PDF
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int NhclParam { get; set; }
+
+    private bool _autorizado;
+    private bool _cargando;
+    private bool _generandoPdf;
+    private string _mensaje = string.Empty;
+    private bool _mensajeEsError;
+
+    private int _ordenSeleccionada;
+    private int? _nhclInput;
+    private string _busquedaTexto = string.Empty;
+
+    private PacienteHeaderDto? _paciente;
+    private List<OrdenActivaResumenDto> _ordenesActivas = [];
+    private List<PacienteMascotaDto> _pacientesLista = [];
+    private List<FichaMedicaResumenLoteDto> _atenciones = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+        _autorizado = true;
+
+        try
+        {
+            var tOrd = KardexService.ObtenerOrdenesActivasAsync();
+            var tPac = AdmisionService.BuscarMascotasAsync(string.Empty);
+            await Task.WhenAll(tOrd, tPac);
+
+            _ordenesActivas = await tOrd;
+            _pacientesLista = await tPac;
+        }
+        catch { }
+
+        int nhclACargar = NhclParam > 0 ? NhclParam : (Session.NhclActivo ?? 0);
+        if (nhclACargar <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            var ordActiva = _ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == Session.OrdenActiva.Value);
+            if (ordActiva != null) nhclACargar = ordActiva.Nhcl;
+        }
+        else if (nhclACargar <= 0 && _ordenesActivas.Count > 0)
+        {
+            nhclACargar = _ordenesActivas[0].Nhcl;
+        }
+
+        if (nhclACargar > 0)
+        {
+            _nhclInput = nhclACargar;
+            await ConsultarAtencionesAsync();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (NhclParam > 0 && NhclParam != _nhclInput)
+        {
+            _nhclInput = NhclParam;
+            await ConsultarAtencionesAsync();
+        }
+    }
+
+    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int idOrden) && idOrden > 0)
+        {
+            _ordenSeleccionada = idOrden;
+            var ord = _ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == idOrden);
+            if (ord != null)
+            {
+                _nhclInput = ord.Nhcl;
+                await ConsultarAtencionesAsync();
+            }
+        }
+    }
+
+    private async Task OnInputKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ConsultarAtencionesAsync();
+        }
+    }
+
+    private async Task ConsultarAtencionesAsync()
+    {
+        _mensaje = string.Empty;
+        _mensajeEsError = false;
+
+        int nhclConsultar = _nhclInput ?? 0;
+
+        // Si escribió en la barra de búsqueda texto de paciente
+        if (nhclConsultar <= 0 && !string.IsNullOrWhiteSpace(_busquedaTexto))
+        {
+            if (int.TryParse(_busquedaTexto.Trim(), out int n) && n > 0)
+            {
+                nhclConsultar = n;
+            }
+            else
+            {
+                var match = _pacientesLista.FirstOrDefault(p =>
+                    p.MasNombre.Contains(_busquedaTexto, StringComparison.OrdinalIgnoreCase) ||
+                    p.ClienteNombre.Contains(_busquedaTexto, StringComparison.OrdinalIgnoreCase) ||
+                    p.ClienteCedula.Contains(_busquedaTexto, StringComparison.OrdinalIgnoreCase));
+                if (match != null)
+                {
+                    nhclConsultar = match.MasNhcl;
+                }
+            }
+        }
+
+        if (nhclConsultar <= 0)
+        {
+            _mensaje = "Por favor ingrese o seleccione una historia clínica (NHCL) o paciente válido.";
+            _mensajeEsError = true;
+            return;
+        }
+
+        _cargando = true;
+        _nhclInput = nhclConsultar;
+
+        try
+        {
+            var tPac = KardexService.ObtenerCabeceraPacienteAsync(0, nhclConsultar);
+            var tAtenc = ConsultaService.ObtenerAtencionesParaImpresionLoteAsync(nhclConsultar);
+            await Task.WhenAll(tPac, tAtenc);
+
+            _paciente = await tPac;
+            _atenciones = await tAtenc;
+
+            if (_paciente == null)
+            {
+                _paciente = new PacienteHeaderDto
+                {
+                    Nhcl = nhclConsultar,
+                    PacienteNombre = _atenciones.FirstOrDefault()?.Paciente ?? $"Paciente #{nhclConsultar}",
+                    ClienteNombre = _atenciones.FirstOrDefault()?.Cliente ?? "Propietario Registrado",
+                    Especie = "Canino / Felino",
+                    Raza = "Mestizo",
+                    Sexo = "N/D"
+                };
+            }
+
+            Session.SeleccionarOrden(_paciente.OrdenAtencionId, _paciente.Nhcl, _paciente.PacienteNombre);
+
+            if (_atenciones.Count == 0)
+            {
+                _mensaje = $"No se registraron fichas médicas en el sistema para el paciente #{nhclConsultar}.";
+                _mensajeEsError = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _mensaje = $"Error al consultar historial: {ex.Message}";
+            _mensajeEsError = true;
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private void ToggleSeleccionarTodas()
+    {
+        bool estadoNuevo = !_atenciones.All(x => x.Seleccionado);
+        foreach (var item in _atenciones)
+        {
+            item.Seleccionado = estadoNuevo;
+        }
+    }
+
+    private void OnMasterCheckboxChanged(ChangeEventArgs e)
+    {
+        bool isChecked = (bool)(e.Value ?? false);
+        foreach (var item in _atenciones)
+        {
+            item.Seleccionado = isChecked;
+        }
+    }
+
+    private async Task DescargarFichaIndividualPdfAsync(FichaMedicaResumenLoteDto item)
+    {
+        try
+        {
+            var pac = _paciente ?? await KardexService.ObtenerCabeceraPacienteAsync(item.Orden, item.Nhcl);
+            if (pac == null) return;
+
+            var tFicha = ConsultaService.ObtenerFichaMedicaAsync(item.Orden, item.Nhcl);
+            var tDiags = ConsultaService.ObtenerDiagnosticosOrdenAsync(item.Orden);
+            var tRec = ConsultaService.ObtenerRecetaOrdenAsync(item.Orden);
+            await Task.WhenAll(tFicha, tDiags, tRec);
+
+            var ficha = await tFicha;
+            if (string.IsNullOrWhiteSpace(ficha.UserNombre)) ficha.UserNombre = item.Medico;
+
+            var pdfBytes = ReportService.GenerarFichaMedicaPdf(pac, ficha, await tDiags, await tRec);
+            var fileName = $"FichaMedica_Orden_{item.Orden}_NHCL_{item.Nhcl}.pdf";
+            await JS.InvokeVoidAsync("hosvetDownloadFile", fileName, "application/pdf", Convert.ToBase64String(pdfBytes));
+        }
+        catch (Exception ex)
+        {
+            _mensaje = $"Error al generar ficha individual: {ex.Message}";
+            _mensajeEsError = true;
+        }
+    }
+
+    private async Task GenerarDossierConsolidadoPdfAsync()
+    {
+        var seleccionadas = _atenciones.Where(x => x.Seleccionado).OrderBy(x => x.Fecha).ToList();
+        if (seleccionadas.Count == 0)
+        {
+            _mensaje = "Debe seleccionar al menos una atención médica con la casilla de verificación.";
+            _mensajeEsError = true;
+            return;
+        }
+
+        if (_paciente == null)
+        {
+            _mensaje = "Faltan los datos del paciente para emitir el dossier consolidado.";
+            _mensajeEsError = true;
+            return;
+        }
+
+        _generandoPdf = true;
+        _mensaje = string.Empty;
+
+        try
+        {
+            var lote = new List<FichaLoteItemDto>();
+
+            foreach (var item in seleccionadas)
+            {
+                var tFicha = ConsultaService.ObtenerFichaMedicaAsync(item.Orden, item.Nhcl);
+                var tDiags = ConsultaService.ObtenerDiagnosticosOrdenAsync(item.Orden);
+                var tRec = ConsultaService.ObtenerRecetaOrdenAsync(item.Orden);
+                await Task.WhenAll(tFicha, tDiags, tRec);
+
+                var f = await tFicha;
+                if (string.IsNullOrWhiteSpace(f.UserNombre)) f.UserNombre = item.Medico;
+
+                lote.Add(new FichaLoteItemDto
+                {
+                    Ficha = f,
+                    Diagnosticos = await tDiags,
+                    Receta = await tRec,
+                    Medico = item.Medico,
+                    Especialidad = item.Especialidad
+                });
+            }
+
+            var pdfBytes = ReportService.GenerarFichasMedicasLotePdf(_paciente, lote);
+            var fileName = $"Dossier_Fichas_NHCL_{_paciente.Nhcl}_{DateTime.Now:yyyyMMdd_HHmm}.pdf";
+            await JS.InvokeVoidAsync("hosvetDownloadFile", fileName, "application/pdf", Convert.ToBase64String(pdfBytes));
+
+            _mensaje = $"Dossier consolidado con {lote.Count} atenciones generado y descargado exitosamente.";
+            _mensajeEsError = false;
+        }
+        catch (Exception ex)
+        {
+            _mensaje = $"Error generando dossier consolidado: {ex.Message}";
+            _mensajeEsError = true;
+        }
+        finally
+        {
+            _generandoPdf = false;
+        }
+    }
+
+    private static string Iniciales(string? nombre)
+    {
+        if (string.IsNullOrWhiteSpace(nombre)) return "P";
+        var parts = nombre.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1) return parts[0].Substring(0, Math.Min(2, parts[0].Length)).ToUpper();
+        return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+    }
+}

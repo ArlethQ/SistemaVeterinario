@@ -2,12 +2,623 @@
 @page "/operaciones/clinicas/{IdOrden:int}/{Nhcl:int}"
 @inject SessionStateService Session
 @inject IAdministracionClinicaService Service
+@inject IKardexService KardexService
+@inject IReportExportService ReportService
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 <PageTitle>Operaciones clínicas | e-ForVets</PageTitle>
-@if(_autorizado){<div class="container-fluid py-3"><h2>Ingreso, despacho, fisioterapia e i-STAT</h2>@if(!string.IsNullOrWhiteSpace(_mensaje)){<div class="alert @(_error?"alert-danger":"alert-success")">@_mensaje</div>}<ul class="nav nav-tabs mb-3">@foreach(var t in new[]{("ingreso","Control de ingreso"),("despacho","Despachos"),("fisio","Fisioterapia"),("istat","i-STAT")}){<li class="nav-item"><button class="nav-link @(_tab==t.Item1?"active":"")" @onclick="()=>Cambiar(t.Item1)">@t.Item2</button></li>}</ul>
-@if(_tab!="despacho"){<div class="row g-2 mb-3"><div class="col-md-3"><label>Orden</label><input class="form-control" type="number" @bind="IdOrden" /></div><div class="col-md-3"><label>NHCL</label><input class="form-control" type="number" @bind="Nhcl" /></div><div class="col-md-2 align-self-end"><button class="btn btn-outline-primary" @onclick="CargarModulo">Cargar</button></div></div>}
-@if(_tab=="ingreso"){<div class="card"><div class="card-body row g-3"><div class="col-md-3"><label>Fecha</label><input class="form-control" type="datetime-local" @bind="_ingreso.Fecha" /></div><div class="col-md-3"><label>Sala</label><input class="form-control" @bind="_ingreso.Sala" /></div><div class="col-md-3"><label>Entrada</label><input class="form-control" @bind="_ingreso.Entra" /></div><div class="col-md-3"><label>Salida</label><input class="form-control" @bind="_ingreso.Sale" /></div><div class="col-md-4"><label>Transporte</label><input class="form-control" @bind="_ingreso.Transporte" /></div><div class="col-md-4"><label>Posición</label><input class="form-control" @bind="_ingreso.Posicion" /></div><div class="col-12"><label>Observaciones</label><textarea class="form-control" @bind="_ingreso.Observaciones"></textarea></div><div><button class="btn btn-primary" @onclick="GuardarIngreso">Guardar ingreso</button></div></div></div>}
-else if(_tab=="despacho"){<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Orden</th><th>Paciente</th><th>Propietario</th><th>Tipo</th><th>Etapa</th><th></th></tr></thead><tbody>@foreach(var x in _despachos){<tr><td>@x.IdOrden</td><td><strong>@x.Paciente</strong><small class="d-block">NHCL @x.Nhcl</small></td><td>@x.Propietario</td><td>@x.Tipo</td><td>@x.Etapa</td><td><button class="btn btn-sm btn-success" @onclick="()=>Procesar(x.IdOrden)">Procesado</button></td></tr>}</tbody></table></div>}
-else if(_tab=="fisio"){<div class="card mb-3"><div class="card-body row g-2"><div class="col-md-2"><label>Id producto</label><input class="form-control" type="number" @bind="_fisioNueva.IdProducto" /></div><div class="col-md-2"><label>Cantidad</label><input class="form-control" type="number" step="0.1" @bind="_fisioNueva.Cantidad" /></div><div class="col-md-6"><label>Observaciones</label><input class="form-control" @bind="_fisioNueva.Observaciones" /></div><div class="col-md-2 align-self-end"><button class="btn btn-primary" @onclick="GuardarFisio">Agregar</button></div></div></div>@foreach(var x in _fisio){<div class="border rounded p-2 mb-1"><strong>@x.Descripcion</strong><span class="float-end">@x.Cantidad</span><small class="d-block text-muted">@x.Fecha.ToString("yyyy-MM-dd") · @x.Observaciones</small></div>}}
-else{<div class="card mb-3"><div class="card-body"><div class="row g-2">@foreach(var c in CamposIStat){<div class="col-md-3"><label>@c.Nombre</label><input class="form-control" value="@c.Get()" @onchange="e=>c.Set(e.Value?.ToString()??string.Empty)" /></div>}</div><button class="btn btn-primary mt-3" @onclick="GuardarIStat">Guardar resultado</button></div></div><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Fecha</th><th>Hto</th><th>Hb</th><th>Urea</th><th>Creat.</th><th>Glucosa</th><th>Na</th><th>K</th><th>pH</th><th>Lactato</th><th></th></tr></thead><tbody>@foreach(var x in _istat){<tr><td>@x.Fecha.ToString("g")</td><td>@x.Hematocrito</td><td>@x.Hemoglobina</td><td>@x.Urea</td><td>@x.Creatinina</td><td>@x.Glucosa</td><td>@x.Sodio</td><td>@x.Potasio</td><td>@x.Ph</td><td>@x.Lactato</td><td><button class="btn btn-sm text-danger" @onclick="()=>EliminarIStat(x.Id)">Eliminar</button></td></tr>}</tbody></table></div>}</div>}
-@code{[Parameter]public int IdOrden{get;set;}[Parameter]public int Nhcl{get;set;}private bool _autorizado,_error;private string _tab="ingreso",_mensaje="";private IngresoCirugiaDto _ingreso=new();private List<DespachoClinicoDto> _despachos=[];private List<FisioterapiaOrdenDto> _fisio=[];private FisioterapiaOrdenDto _fisioNueva=new();private List<IStatDto> _istat=[];private IStatDto _istatNuevo=new();private record Campo(string Nombre,Func<string> Get,Action<string> Set);private IEnumerable<Campo> CamposIStat=>[new("Hematocrito",()=>_istatNuevo.Hematocrito,x=>_istatNuevo.Hematocrito=x),new("Hemoglobina",()=>_istatNuevo.Hemoglobina,x=>_istatNuevo.Hemoglobina=x),new("Urea",()=>_istatNuevo.Urea,x=>_istatNuevo.Urea=x),new("Creatinina",()=>_istatNuevo.Creatinina,x=>_istatNuevo.Creatinina=x),new("Glucosa",()=>_istatNuevo.Glucosa,x=>_istatNuevo.Glucosa=x),new("Sodio",()=>_istatNuevo.Sodio,x=>_istatNuevo.Sodio=x),new("Potasio",()=>_istatNuevo.Potasio,x=>_istatNuevo.Potasio=x),new("pH",()=>_istatNuevo.Ph,x=>_istatNuevo.Ph=x),new("Lactato",()=>_istatNuevo.Lactato,x=>_istatNuevo.Lactato=x)];protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated){Nav.NavigateTo("/login");return;}_autorizado=true;await CargarModulo();}private async Task Cambiar(string t){_tab=t;await CargarModulo();}private async Task CargarModulo(){try{if(_tab=="despacho")_despachos=await Service.ObtenerDespachosAsync(DateTime.Today.AddDays(-30),DateTime.Today);else if(IdOrden>0&&Nhcl>0){if(_tab=="ingreso")_ingreso=await Service.ObtenerIngresoCirugiaAsync(IdOrden,Nhcl);else if(_tab=="fisio")_fisio=await Service.ObtenerFisioterapiaAsync(IdOrden,Nhcl);else _istat=await Service.ObtenerIStatAsync(Nhcl);}}catch(Exception){Mensaje(false);}}private async Task GuardarIngreso(){_ingreso.IdOrden=IdOrden;_ingreso.Nhcl=Nhcl;Mensaje(await Service.GuardarIngresoCirugiaAsync(_ingreso,Session.IdUser));}private async Task Procesar(int id){Mensaje(await Service.MarcarDespachoProcesadoAsync(id));await CargarModulo();}private async Task GuardarFisio(){_fisioNueva.IdOrden=IdOrden;_fisioNueva.Nhcl=Nhcl;var ok=await Service.GuardarFisioterapiaAsync(_fisioNueva);Mensaje(ok);if(ok){_fisioNueva=new();await CargarModulo();}}private async Task GuardarIStat(){_istatNuevo.Nhcl=Nhcl;var ok=await Service.GuardarIStatAsync(_istatNuevo,Session.IdUser);Mensaje(ok);if(ok){_istatNuevo=new();await CargarModulo();}}private async Task EliminarIStat(int id){Mensaje(await Service.EliminarIStatAsync(id,Session.IdUser));await CargarModulo();}private void Mensaje(bool ok){_error=!ok;_mensaje=ok?"Operación guardada correctamente.":"No se pudo completar la operación.";}}
+
+@if (_autorizado)
+{
+    <div class="container-fluid py-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+                <h3 class="fw-bold mb-0 text-primary">Operaciones Clínicas y POCT</h3>
+                <small class="text-muted">Control de ingreso a quirófano, despachos de servicios, fisioterapia y gasometría i-STAT</small>
+            </div>
+            @if (_paciente != null)
+            {
+                <div class="card bg-light border-0 shadow-sm py-1 px-3 d-inline-block">
+                    <span class="fw-semibold text-dark">@_paciente.PacienteNombre</span>
+                    <span class="badge bg-primary ms-1">@_paciente.Especie</span>
+                    <small class="text-muted ms-2">NHCL: <strong>@_paciente.Nhcl</strong> | Propietario: @_paciente.PropietarioNombre</small>
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_mensaje))
+        {
+            <div class="alert @(_error ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+                @_mensaje
+                <button type="button" class="btn-close" @onclick="() => _mensaje = string.Empty"></button>
+            </div>
+        }
+
+        <ul class="nav nav-pills mb-3 gap-1">
+            @foreach (var t in new[] { ("ingreso", "Control de ingreso"), ("despacho", "Despachos"), ("fisio", "Fisioterapia"), ("istat", "Gasometría i-STAT") })
+            {
+                <li class="nav-item">
+                    <button class="nav-link @(_tab == t.Item1 ? "active" : "") fw-semibold" @onclick="() => Cambiar(t.Item1)">@t.Item2</button>
+                </li>
+            }
+        </ul>
+
+        @if (_tab != "despacho")
+        {
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-body py-2">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-5 col-lg-4">
+                            <label class="form-label small text-muted mb-1 fw-bold">
+                                <i class="bi bi-list-check me-1 text-primary"></i> Desplegable de Órdenes y NHCL:
+                            </label>
+                            <select class="form-select form-select-sm"
+                                    value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+                                <option value="0">-- Seleccionar Orden Activa --</option>
+                                @foreach (var ord in _ordenesActivas)
+                                {
+                                    <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL: @ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small text-muted mb-1">Orden</label>
+                            <input class="form-control form-control-sm" type="number" @bind="IdOrden" @onkeydown="OnInputKeyDown" placeholder="Ej: 55430" />
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small text-muted mb-1">NHCL</label>
+                            <input class="form-control form-control-sm" type="number" @bind="Nhcl" @onkeydown="OnInputKeyDown" placeholder="Ej: 15896" />
+                        </div>
+                        <div class="col-12 col-md-2 col-lg-2">
+                            <button class="btn btn-sm btn-primary w-100" @onclick="CargarModulo">
+                                <i class="bi bi-search me-1"></i> Cargar Datos
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (_tab == "ingreso")
+        {
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold">Registro de Ingreso a Quirófano</div>
+                <div class="card-body row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label small">Fecha y Hora</label>
+                        <input class="form-control" type="datetime-local" @bind="_ingreso.Fecha" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Sala Asignada</label>
+                        <input class="form-control" @bind="_ingreso.Sala" placeholder="Ej: Quirófano 1" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Hora Entrada</label>
+                        <input class="form-control" @bind="_ingreso.Entra" placeholder="HH:mm" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Hora Salida</label>
+                        <input class="form-control" @bind="_ingreso.Sale" placeholder="HH:mm" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">Medio de Transporte</label>
+                        <input class="form-control" @bind="_ingreso.Transporte" placeholder="Ej: Camilla, Brazos" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">Posición Quirúrgica</label>
+                        <input class="form-control" @bind="_ingreso.Posicion" placeholder="Ej: Decúbito dorsal" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">Observaciones Clínicas</label>
+                        <textarea class="form-control" rows="2" @bind="_ingreso.Observaciones"></textarea>
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-primary" @onclick="GuardarIngreso">Guardar Ingreso Quirúrgico</button>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (_tab == "despacho")
+        {
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold">Bandeja de Despachos de Servicios (Últimos 30 días)</div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Orden</th>
+                                <th>Paciente</th>
+                                <th>Propietario</th>
+                                <th>Tipo</th>
+                                <th>Etapa</th>
+                                <th class="text-end">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_despachos.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-3">No hay despachos pendientes en este período.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var x in _despachos)
+                                {
+                                    <tr>
+                                        <td><span class="badge bg-secondary">#@x.IdOrden</span></td>
+                                        <td><strong>@x.Paciente</strong><small class="d-block text-muted">NHCL @x.Nhcl</small></td>
+                                        <td>@x.Propietario</td>
+                                        <td><span class="badge bg-info text-dark">@x.Tipo</span></td>
+                                        <td>@x.Etapa</td>
+                                        <td class="text-end">
+                                            <button class="btn btn-sm btn-outline-success" @onclick="() => Procesar(x.IdOrden)">
+                                                Marcar Procesado
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+        else if (_tab == "fisio")
+        {
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white fw-bold">Nueva Sesión de Fisioterapia</div>
+                <div class="card-body row g-2">
+                    <div class="col-md-2">
+                        <label class="form-label small">Id Producto</label>
+                        <input class="form-control" type="number" @bind="_fisioNueva.IdProducto" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Cantidad</label>
+                        <input class="form-control" type="number" step="0.1" @bind="_fisioNueva.Cantidad" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small">Observaciones del Tratamiento</label>
+                        <input class="form-control" @bind="_fisioNueva.Observaciones" placeholder="Detalle técnico de la sesión..." />
+                    </div>
+                    <div class="col-md-2 align-self-end">
+                        <button class="btn btn-primary w-100" @onclick="GuardarFisio">Agregar Registro</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold">Historial de Sesiones</div>
+                <div class="card-body p-2">
+                    @if (_fisio.Count == 0)
+                    {
+                        <p class="text-muted text-center my-3">No hay registros de fisioterapia para esta orden.</p>
+                    }
+                    else
+                    {
+                        @foreach (var x in _fisio)
+                        {
+                            <div class="border rounded p-2 mb-2 bg-light">
+                                <div class="d-flex justify-content-between">
+                                    <strong>@x.Descripcion</strong>
+                                    <span class="badge bg-primary">Cant: @x.Cantidad</span>
+                                </div>
+                                <small class="d-block text-muted">@x.Fecha.ToString("yyyy-MM-dd") · @x.Observaciones</small>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- i-STAT TAB -->
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark"><i class="bi bi-activity text-primary me-1"></i> Nuevo Análisis de Gasometría y Electrolitos (i-STAT®)</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="small text-muted mb-0">Fecha Toma:</label>
+                        <input class="form-control form-control-sm" type="datetime-local" @bind="_istatNuevo.Fecha" style="width: 210px;" />
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- 3 PANELES CLÍNICOS -->
+                    <div class="row g-3">
+                        <!-- Panel 1: Gases -->
+                        <div class="col-lg-4">
+                            <div class="card h-100 border-0 bg-light">
+                                <div class="card-header bg-primary text-white py-1 px-3 fw-semibold small">
+                                    1. Gases y Equilibrio Ácido-Base
+                                </div>
+                                <div class="card-body p-2">
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">pH (7.35-7.45)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Ph" placeholder="7.40" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">pCO2 (35-45 mmHg)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Pressure" placeholder="40.0" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">pO2 (80-100 mmHg)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Oxygen" placeholder="95.0" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">HCO3 (18-24 mmol/L)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Bicarbonato" placeholder="22.0" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">TCO2 (19-25 mmol/L)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Carbon" placeholder="23.0" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">BE (-4 a +4 mmol/L)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Base" placeholder="0.0" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">sO2 (95-100 %)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Saturation" placeholder="98" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold text-danger">Lactato (&lt; 2.50 mmol/L)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Lactato" placeholder="1.20" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Panel 2: Electrolitos -->
+                        <div class="col-lg-4">
+                            <div class="card h-100 border-0 bg-light">
+                                <div class="card-header bg-success text-white py-1 px-3 fw-semibold small">
+                                    2. Electrolitos y Minerales
+                                </div>
+                                <div class="card-body p-2">
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">Na+ (140-154 mmol/L)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Sodio" placeholder="145.0" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">K+ (3.8-5.3 mmol/L)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Potasio" placeholder="4.2" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">Cl- (105-120 mmol/L)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Chloride" placeholder="110.0" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">iCa (1.12-1.40 mmol/L)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Ionized" placeholder="1.25" />
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label small mb-0 fw-semibold">Anión Gap (12-24 mmol/L)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Gap" placeholder="16.0" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Panel 3: Bioquímica -->
+                        <div class="col-lg-4">
+                            <div class="card h-100 border-0 bg-light">
+                                <div class="card-header bg-warning text-dark py-1 px-3 fw-semibold small">
+                                    3. Hematología y Bioquímica Inmediata
+                                </div>
+                                <div class="card-body p-2">
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">Hto (%)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Hematocrito" placeholder="42.0" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">Hb (g/dL)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Hemoglobina" placeholder="14.2" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">Glucosa (70-140 mg/dL)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Glucosa" placeholder="95.0" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-0 fw-semibold">BUN / Urea (7-27 mg/dL)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Urea" placeholder="15.0" />
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label small mb-0 fw-semibold">Creatinina (0.5-1.5 mg/dL)</label>
+                                            <input class="form-control form-control-sm" @bind="_istatNuevo.Creatinina" placeholder="1.0" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 text-end">
+                        <button class="btn btn-primary" @onclick="GuardarIStat">
+                            <i class="bi bi-save me-1"></i> Guardar Resultado i-STAT
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABLA DE HISTORIAL I-STAT -->
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">Historial de Registros i-STAT (NHCL: @Nhcl)</span>
+                    <span class="badge bg-secondary">Total: @_istat.Count</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr class="small">
+                                <th>Fecha</th>
+                                <th>pH</th>
+                                <th>pCO2</th>
+                                <th>pO2</th>
+                                <th>HCO3</th>
+                                <th>Na+</th>
+                                <th>K+</th>
+                                <th>Cl-</th>
+                                <th>iCa</th>
+                                <th>Hto</th>
+                                <th>Hb</th>
+                                <th>Glu</th>
+                                <th>Lac</th>
+                                <th>Usuario</th>
+                                <th class="text-end">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_istat.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="15" class="text-center text-muted py-4">No hay análisis i-STAT registrados para esta historia clínica.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var x in _istat)
+                                {
+                                    <tr>
+                                        <td class="fw-semibold">@x.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                                        <td><span class="badge bg-light text-dark border">@x.Ph</span></td>
+                                        <td>@x.Pressure</td>
+                                        <td>@x.Oxygen</td>
+                                        <td>@x.Bicarbonato</td>
+                                        <td>@x.Sodio</td>
+                                        <td>@x.Potasio</td>
+                                        <td>@x.Chloride</td>
+                                        <td>@x.Ionized</td>
+                                        <td>@x.Hematocrito%</td>
+                                        <td>@x.Hemoglobina</td>
+                                        <td>@x.Glucosa</td>
+                                        <td><span class="fw-semibold text-danger">@x.Lactato</span></td>
+                                        <td><small class="text-muted">@(string.IsNullOrWhiteSpace(x.QuienIngresa) ? "Usuario" : x.QuienIngresa)</small></td>
+                                        <td class="text-end text-nowrap">
+                                            <button class="btn btn-sm btn-outline-danger py-0 px-2 me-1" title="Descargar Reporte Oficial en PDF" @onclick="() => ImprimirIStatPdf(x)">
+                                                <i class="bi bi-file-earmark-pdf me-1"></i> PDF
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Eliminar Registro" @onclick="() => EliminarIStat(x.Id)">
+                                                ✕
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private bool _autorizado, _error;
+    private string _tab = "ingreso", _mensaje = "";
+    private PacienteHeaderDto? _paciente;
+
+    private IngresoCirugiaDto _ingreso = new();
+    private List<DespachoClinicoDto> _despachos = [];
+    private List<FisioterapiaOrdenDto> _fisio = [];
+    private FisioterapiaOrdenDto _fisioNueva = new();
+    private List<OrdenActivaResumenDto> _ordenesActivas = [];
+    private List<IStatDto> _istat = [];
+    private IStatDto _istatNuevo = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+        _autorizado = true;
+
+        try
+        {
+            _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+        }
+        catch { }
+
+        if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (IdOrden <= 0 && _ordenesActivas.Count > 0)
+        {
+            IdOrden = _ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = _ordenesActivas[0].Nhcl;
+        }
+
+        await CargarModulo();
+    }
+
+    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int selOrden) && selOrden > 0)
+        {
+            var ord = _ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == selOrden);
+            IdOrden = selOrden;
+            Nhcl = ord?.Nhcl ?? 0;
+            await CargarModulo();
+            Nav.NavigateTo($"/operaciones/clinicas/{IdOrden}/{Nhcl}", replace: true);
+        }
+    }
+
+    private async Task OnInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CargarModulo();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IdOrden > 0 || Nhcl > 0)
+        {
+            await CargarModulo();
+        }
+    }
+
+    private async Task Cambiar(string t)
+    {
+        _tab = t;
+        await CargarModulo();
+    }
+
+    private async Task CargarModulo()
+    {
+        try
+        {
+            if (_tab == "despacho")
+            {
+                _despachos = await Service.ObtenerDespachosAsync(DateTime.Today.AddDays(-30), DateTime.Today);
+            }
+            else
+            {
+                if (Nhcl > 0 || IdOrden > 0)
+                {
+                    _paciente = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
+                    if (_paciente != null)
+                    {
+                        if (Nhcl <= 0) Nhcl = _paciente.Nhcl;
+                        if (IdOrden <= 0) IdOrden = _paciente.OrdenAtencionId;
+                    }
+                }
+
+                if (_tab == "ingreso" && IdOrden > 0 && Nhcl > 0)
+                {
+                    _ingreso = await Service.ObtenerIngresoCirugiaAsync(IdOrden, Nhcl);
+                }
+                else if (_tab == "fisio" && IdOrden > 0 && Nhcl > 0)
+                {
+                    _fisio = await Service.ObtenerFisioterapiaAsync(IdOrden, Nhcl);
+                }
+                else if (_tab == "istat" && Nhcl > 0)
+                {
+                    _istat = await Service.ObtenerIStatAsync(Nhcl);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Mensaje(false, $"Error al cargar información: {ex.Message}");
+        }
+    }
+
+    private async Task GuardarIngreso()
+    {
+        _ingreso.IdOrden = IdOrden;
+        _ingreso.Nhcl = Nhcl;
+        var ok = await Service.GuardarIngresoCirugiaAsync(_ingreso, Session.IdUser);
+        Mensaje(ok);
+    }
+
+    private async Task Procesar(int id)
+    {
+        Mensaje(await Service.MarcarDespachoProcesadoAsync(id));
+        await CargarModulo();
+    }
+
+    private async Task GuardarFisio()
+    {
+        _fisioNueva.IdOrden = IdOrden;
+        _fisioNueva.Nhcl = Nhcl;
+        var ok = await Service.GuardarFisioterapiaAsync(_fisioNueva);
+        Mensaje(ok);
+        if (ok)
+        {
+            _fisioNueva = new();
+            await CargarModulo();
+        }
+    }
+
+    private async Task GuardarIStat()
+    {
+        if (Nhcl <= 0)
+        {
+            Mensaje(false, "Debe ingresar o seleccionar un paciente (NHCL) válido.");
+            return;
+        }
+
+        _istatNuevo.Nhcl = Nhcl;
+        var ok = await Service.GuardarIStatAsync(_istatNuevo, Session.IdUser);
+        Mensaje(ok, ok ? "Análisis i-STAT guardado con éxito." : "No se pudo guardar el análisis i-STAT.");
+        if (ok)
+        {
+            _istatNuevo = new();
+            await CargarModulo();
+        }
+    }
+
+    private async Task EliminarIStat(int id)
+    {
+        Mensaje(await Service.EliminarIStatAsync(id, Session.IdUser));
+        await CargarModulo();
+    }
+
+    private async Task ImprimirIStatPdf(IStatDto item)
+    {
+        try
+        {
+            var pac = _paciente ?? await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, item.Nhcl);
+            if (pac == null)
+            {
+                pac = new PacienteHeaderDto
+                {
+                    Nhcl = item.Nhcl,
+                    PacienteNombre = $"Paciente NHCL {item.Nhcl}",
+                    ClienteNombre = "Propietario Registrado",
+                    Especie = "Canino/Felino",
+                    Raza = "Mestizo",
+                    Sexo = "N/D"
+                };
+            }
+
+            var pdfBytes = ReportService.GenerarIStatPdf(pac, item, Session.CurrentUser?.NombreCompleto);
+            var fileName = $"iSTAT_NHCL_{item.Nhcl}_{item.Fecha:yyyyMMdd_HHmm}.pdf";
+            await JS.InvokeVoidAsync("hosvetDownloadFile", fileName, "application/pdf", Convert.ToBase64String(pdfBytes));
+        }
+        catch (Exception ex)
+        {
+            Mensaje(false, $"Error al exportar PDF: {ex.Message}");
+        }
+    }
+
+    private void Mensaje(bool ok, string? texto = null)
+    {
+        _error = !ok;
+        _mensaje = !string.IsNullOrWhiteSpace(texto) 
+            ? texto 
+            : (ok ? "Operación guardada correctamente." : "No se pudo completar la operación.");
+    }
+}

@@ -129,8 +129,13 @@ public class ConsultaExternaService : IConsultaExternaService
                     ISNULL(pronosticotueri, 'Bueno') AS MedPronostico,
                     TRY_CONVERT(DATETIME, contmtiempo) AS MedFechaControl,
                     ISNULL(med_pregunta, 'N') AS RequiereCirugia,
-                    ISNULL(estadoparte, 'PENDIENTE') AS EstadoParte
+                    ISNULL(estadoparte, 'PENDIENTE') AS EstadoParte,
+                    RTRIM(ISNULL(u.user_nombre, '')) AS UserNombre,
+                    RTRIM(ISNULL(u.user_nombre, '')) AS NombreMedico,
+                    RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad
                 FROM vt_fichamedica
+                LEFT JOIN vt_usuarios u ON u.user_numero = med_iduser
+                LEFT JOIN vt_especialidades e ON e.es_id = med_especialidad
                 WHERE med_orden = @IdOrden
                 ORDER BY sec DESC";
 

@@ -65,6 +65,9 @@ public class FichaMedicaCompletaDto
     public string ContpSi => MedFechaControl.HasValue ? "S" : "N";
     public string ContpNo => MedFechaControl.HasValue ? "N" : "S";
     public string IndicacionesGeneralesReceta { get; set; } = string.Empty;
+    public string UserNombre { get; set; } = string.Empty;
+    public string NombreMedico { get; set; } = string.Empty;
+    public string Especialidad { get; set; } = string.Empty;
 }
 
 public class DiagnosticoCie10Dto
