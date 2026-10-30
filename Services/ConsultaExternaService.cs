@@ -1104,7 +1104,22 @@ public class ConsultaExternaService : IConsultaExternaService
                 @DetalleHtml, @Orden, @Tipo, @Documento
             )";
 
-        await _db.ExecuteAsync(sql, dto);
+        string tipo = string.IsNullOrWhiteSpace(dto.Tipo) ? "HDEV" : dto.Tipo.Trim();
+        if (tipo.Length > 50) tipo = tipo.Substring(0, 50);
+
+        string doc = string.IsNullOrWhiteSpace(dto.Documento) ? "Consentimiento Informado" : dto.Documento.Trim();
+        if (doc.Length > 150) doc = doc.Substring(0, 150);
+
+        await _db.ExecuteAsync(sql, new
+        {
+            dto.Nhcl,
+            dto.IdUser,
+            dto.Cliente,
+            dto.DetalleHtml,
+            dto.Orden,
+            Tipo = tipo,
+            Documento = doc
+        });
         return true;
     }
 

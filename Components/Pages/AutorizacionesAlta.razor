@@ -41,8 +41,8 @@
 
     @if (!string.IsNullOrEmpty(MensajeAlerta))
     {
-        <div class="alert alert-success alert-dismissible fade show py-2">
-            <i class="bi bi-check-circle-fill me-2"></i>@MensajeAlerta
+        <div class="alert @(EsErrorAlerta ? "alert-danger" : "alert-success") alert-dismissible fade show py-2">
+            <i class="bi @(EsErrorAlerta ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@MensajeAlerta
             <button type="button" class="btn-close py-2" @onclick="() => MensajeAlerta = null"></button>
         </div>
     }
@@ -212,6 +212,7 @@
     private bool ModoVistaPreviaHtml { get; set; } = true;
     private bool CargandoInicial { get; set; } = true;
     private string? MensajeAlerta { get; set; }
+    private bool EsErrorAlerta { get; set; }
 
     private PacienteHeaderDto? Paciente { get; set; }
     private List<OrdenActivaResumenDto> OrdenesActivas { get; set; } = new();
@@ -256,9 +257,17 @@
 
     private async Task CargarPorInputAsync()
     {
-        IdOrden = IdOrdenInput;
-        Nhcl = NhclInput;
-        await CargarDatosAsync();
+        try
+        {
+            IdOrden = IdOrdenInput;
+            Nhcl = NhclInput;
+            await CargarDatosAsync();
+        }
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al buscar por Orden/NHCL: {ex.Message}";
+            EsErrorAlerta = true;
+        }
     }
 
     private async Task SeleccionarOrdenActivaAsync(ChangeEventArgs e)
@@ -288,37 +297,57 @@
 
     private async Task CargarDatosAsync()
     {
-        if (IdOrden > 0)
+        try
         {
-            Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
-            if (Paciente != null && Nhcl <= 0)
+            if (IdOrden > 0)
             {
-                Nhcl = Paciente.Nhcl;
-                NhclInput = Nhcl;
+                Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
+                if (Paciente != null && Nhcl <= 0)
+                {
+                    Nhcl = Paciente.Nhcl;
+                    NhclInput = Nhcl;
+                }
+                Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
             }
-            Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
-        }
 
-        if (Nhcl > 0)
+            if (Nhcl > 0)
+            {
+                var tAut = ConsultaService.ObtenerAutorizacionesPacienteAsync(Nhcl);
+                var tAlta = ConsultaService.ObtenerFormularioAltaAsync(IdOrden, Nhcl);
+                await Task.WhenAll(tAut, tAlta);
+                AutorizacionesEmitidas = await tAut;
+                AltaForm = await tAlta;
+                await CargarPlantillaFormatoAsync();
+            }
+        }
+        catch (Exception ex)
         {
-            var tAut = ConsultaService.ObtenerAutorizacionesPacienteAsync(Nhcl);
-            var tAlta = ConsultaService.ObtenerFormularioAltaAsync(IdOrden, Nhcl);
-            var tFmt = CargarPlantillaFormatoAsync();
-            await Task.WhenAll(tAut, tAlta, tFmt);
-            AutorizacionesEmitidas = await tAut;
-            AltaForm = await tAlta;
+            MensajeAlerta = $"Error al cargar datos del paciente: {ex.Message}";
+            EsErrorAlerta = true;
         }
     }
 
     private async Task CargarPlantillaFormatoAsync()
     {
-        var plantilla = Plantillas.FirstOrDefault(p => p.FormId == FormatoSeleccionadoId);
-        if (plantilla != null)
+        try
         {
-            NuevaAutorizacion.Documento = plantilla.FormNombre;
-            NuevaAutorizacion.Tipo = string.IsNullOrWhiteSpace(plantilla.FormTipo) ? "HDEV" : plantilla.FormTipo;
+            var plantilla = Plantillas.FirstOrDefault(p => p.FormId == FormatoSeleccionadoId);
+            if (plantilla != null)
+            {
+                NuevaAutorizacion.AutorizacionId = 0;
+                NuevaAutorizacion.Documento = plantilla.FormNombre;
+                NuevaAutorizacion.Tipo = string.IsNullOrWhiteSpace(plantilla.FormTipo) ? "HDEV" : plantilla.FormTipo;
+            }
+            if (FormatoSeleccionadoId > 0 && Nhcl > 0)
+            {
+                NuevaAutorizacion.DetalleHtml = await ConsultaService.ProcesarPlantillaConDatosPacienteAsync(FormatoSeleccionadoId, Nhcl);
+            }
         }
-        NuevaAutorizacion.DetalleHtml = await ConsultaService.ProcesarPlantillaConDatosPacienteAsync(FormatoSeleccionadoId, Nhcl);
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al cargar la plantilla: {ex.Message}";
+            EsErrorAlerta = true;
+        }
     }
 
     private void CargarAutorizacionExistente(AutorizacionClinicaDto item)
@@ -337,32 +366,77 @@
 
     private async Task GuardarAutorizacionAsync()
     {
-        NuevaAutorizacion.Nhcl = Nhcl;
-        NuevaAutorizacion.Orden = IdOrden;
-        NuevaAutorizacion.IdUser = Session.CurrentUser?.UserNumero ?? 1;
-        await ConsultaService.GuardarAutorizacionAsync(NuevaAutorizacion);
-        AutorizacionesEmitidas = await ConsultaService.ObtenerAutorizacionesPacienteAsync(Nhcl);
-        MensajeAlerta = $"Documento '{NuevaAutorizacion.Documento}' registrado en el historial del paciente.";
+        try
+        {
+            if (Nhcl <= 0)
+            {
+                MensajeAlerta = "Debe seleccionar un paciente antes de registrar un documento.";
+                EsErrorAlerta = true;
+                return;
+            }
+
+            NuevaAutorizacion.Nhcl = Nhcl;
+            NuevaAutorizacion.Orden = IdOrden;
+            NuevaAutorizacion.Cliente = Paciente?.ClienteCodigo ?? 0;
+            NuevaAutorizacion.IdUser = Session.CurrentUser?.UserNumero ?? 1;
+
+            await ConsultaService.GuardarAutorizacionAsync(NuevaAutorizacion);
+            AutorizacionesEmitidas = await ConsultaService.ObtenerAutorizacionesPacienteAsync(Nhcl);
+            MensajeAlerta = $"Documento '{NuevaAutorizacion.Documento}' registrado en el historial del paciente.";
+            EsErrorAlerta = false;
+        }
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al registrar el documento: {ex.Message}";
+            EsErrorAlerta = true;
+        }
     }
 
     private async Task GuardarFormularioAltaAsync()
     {
-        AltaForm.IdOrden = IdOrden;
-        AltaForm.Nhcl = Nhcl;
-        int idUser = Session.CurrentUser?.UserNumero ?? 1;
-        await ConsultaService.GuardarFormularioAltaAsync(AltaForm, idUser);
-        MensajeAlerta = "Plan de Alta Hospitalaria guardado correctamente.";
+        try
+        {
+            if (IdOrden <= 0 && Nhcl <= 0)
+            {
+                MensajeAlerta = "Debe seleccionar un paciente/orden antes de guardar el plan de alta.";
+                EsErrorAlerta = true;
+                return;
+            }
+
+            AltaForm.IdOrden = IdOrden;
+            AltaForm.Nhcl = Nhcl;
+            int idUser = Session.CurrentUser?.UserNumero ?? 1;
+            await ConsultaService.GuardarFormularioAltaAsync(AltaForm, idUser);
+            MensajeAlerta = "Plan de Alta Hospitalaria guardado correctamente.";
+            EsErrorAlerta = false;
+        }
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al guardar el plan de alta: {ex.Message}";
+            EsErrorAlerta = true;
+        }
     }
 
     private async Task ExportarAltaPdfAsync()
     {
-        var pac = Paciente;
-        if (pac is null || pac.Nhcl <= 0)
+        try
         {
-            MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
-            return;
+            var pac = Paciente;
+            if (pac is null || pac.Nhcl <= 0)
+            {
+                MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
+                EsErrorAlerta = true;
+                return;
+            }
+            var pdfBytes = ReportService.GenerarAltaMedicaPdf(pac, AltaForm);
+            await JS.InvokeVoidAsync("descargarArchivoBase64", $"PlanAlta_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+            MensajeAlerta = "Plan de Alta descargado correctamente en formato PDF.";
+            EsErrorAlerta = false;
         }
-        var pdfBytes = ReportService.GenerarAltaMedicaPdf(pac, AltaForm);
-        await JS.InvokeVoidAsync("descargarArchivoBase64", $"PlanAlta_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al generar el PDF de alta: {ex.Message}";
+            EsErrorAlerta = true;
+        }
     }
 }
