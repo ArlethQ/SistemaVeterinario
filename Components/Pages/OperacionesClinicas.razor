@@ -48,15 +48,28 @@
             <div class="card border-0 shadow-sm mb-3">
                 <div class="card-body py-2">
                     <div class="row g-2 align-items-end">
-                        <div class="col-sm-3 col-md-2">
-                            <label class="form-label small text-muted mb-1">Orden de Atención</label>
-                            <input class="form-control form-control-sm" type="number" @bind="IdOrden" />
+                        <div class="col-md-5 col-lg-4">
+                            <label class="form-label small text-muted mb-1 fw-bold">
+                                <i class="bi bi-list-check me-1 text-primary"></i> Desplegable de Órdenes y NHCL:
+                            </label>
+                            <select class="form-select form-select-sm"
+                                    value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+                                <option value="0">-- Seleccionar Orden Activa --</option>
+                                @foreach (var ord in _ordenesActivas)
+                                {
+                                    <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL: @ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
+                                }
+                            </select>
                         </div>
-                        <div class="col-sm-3 col-md-2">
-                            <label class="form-label small text-muted mb-1">Historia Clínica (NHCL)</label>
-                            <input class="form-control form-control-sm" type="number" @bind="Nhcl" />
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small text-muted mb-1">Orden</label>
+                            <input class="form-control form-control-sm" type="number" @bind="IdOrden" @onkeydown="OnInputKeyDown" placeholder="Ej: 55430" />
                         </div>
-                        <div class="col-sm-3 col-md-2">
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small text-muted mb-1">NHCL</label>
+                            <input class="form-control form-control-sm" type="number" @bind="Nhcl" @onkeydown="OnInputKeyDown" placeholder="Ej: 15896" />
+                        </div>
+                        <div class="col-12 col-md-2 col-lg-2">
                             <button class="btn btn-sm btn-primary w-100" @onclick="CargarModulo">
                                 <i class="bi bi-search me-1"></i> Cargar Datos
                             </button>
@@ -415,6 +428,7 @@
     private List<DespachoClinicoDto> _despachos = [];
     private List<FisioterapiaOrdenDto> _fisio = [];
     private FisioterapiaOrdenDto _fisioNueva = new();
+    private List<OrdenActivaResumenDto> _ordenesActivas = [];
     private List<IStatDto> _istat = [];
     private IStatDto _istatNuevo = new();
 
@@ -427,13 +441,44 @@
         }
         _autorizado = true;
 
+        try
+        {
+            _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+        }
+        catch { }
+
         if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
         {
             IdOrden = Session.OrdenActiva.Value;
             Nhcl = Session.NhclActivo ?? 0;
         }
+        else if (IdOrden <= 0 && _ordenesActivas.Count > 0)
+        {
+            IdOrden = _ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = _ordenesActivas[0].Nhcl;
+        }
 
         await CargarModulo();
+    }
+
+    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int selOrden) && selOrden > 0)
+        {
+            var ord = _ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == selOrden);
+            IdOrden = selOrden;
+            Nhcl = ord?.Nhcl ?? 0;
+            await CargarModulo();
+            Nav.NavigateTo($"/operaciones/clinicas/{IdOrden}/{Nhcl}", replace: true);
+        }
+    }
+
+    private async Task OnInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CargarModulo();
+        }
     }
 
     protected override async Task OnParametersSetAsync()
