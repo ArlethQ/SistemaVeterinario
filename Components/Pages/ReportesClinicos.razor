@@ -1,13 +1,198 @@
 @page "/reportes/clinicos"
 @inject IGestionMigradaService Service
+@inject IConsultaExternaService ConsultaService
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+
 <PageTitle>Reportes clínicos | e-ForVets</PageTitle>
-@if(_autorizado){<div class="container-fluid py-3"><div class="d-flex flex-wrap gap-2 justify-content-between align-items-end mb-3"><div><small class="text-primary fw-bold">REPORTERÍA</small><h2>Reportes clínicos</h2></div><div class="d-flex gap-2">@if(_tab=="partes"){<button class="btn btn-outline-danger" disabled="@(!_partes.Any() || _cargando)" @onclick="ExportarPartesPdf"><i class="bi bi-file-earmark-pdf-fill me-1"></i>Imprimir consolidado</button>}<button class="btn btn-primary" disabled="@_cargando" @onclick="Cargar">@(_cargando ? "Consultando..." : "Consultar")</button></div></div>
-<div class="card mb-3"><div class="card-body row g-2"><div class="col-md-3"><label>Desde</label><input type="date" class="form-control" @bind="_desde"/></div><div class="col-md-3"><label>Hasta</label><input type="date" class="form-control" @bind="_hasta"/></div></div></div>
-<ul class="nav nav-tabs mb-3">@foreach(var t in new[]{("atenciones","Atenciones"),("diagnosticos","Diagnósticos consolidados"),("partes","Parte operatorio")}){<li class="nav-item"><button class="nav-link @(_tab==t.Item1?"active":"")" @onclick="()=>Cambiar(t.Item1)">@t.Item2</button></li>}</ul>
-@if(!string.IsNullOrEmpty(_error)){<div class="alert alert-danger">@_error</div>}<div class="table-responsive card"><table class="table table-hover mb-0"><thead class="table-light">@if(_tab=="atenciones"){<tr><th>Fecha</th><th>Orden/NHCL</th><th>Paciente/cliente</th><th>Médico</th><th>Diagnóstico</th><th>Localidad</th></tr>}else if(_tab=="diagnosticos"){<tr><th>Fecha</th><th>Orden/NHCL</th><th>Paciente/cliente</th><th>Médico</th><th>Diagnóstico</th><th>Tipo</th></tr>}else{<tr><th>Fecha</th><th>Orden/NHCL</th><th>Paciente/propietario</th><th>Procedimiento</th><th>Diagnóstico</th></tr>}</thead><tbody>
-@if(_tab=="atenciones"){@foreach(var x in _atenciones){<tr><td>@x.Fecha.ToString("g")</td><td>@x.Orden / @x.Nhcl</td><td><strong>@x.Paciente</strong><small class="d-block">@x.Cliente</small></td><td>@x.Medico</td><td>@x.Diagnostico</td><td>@x.Localidad</td></tr>}}else if(_tab=="diagnosticos"){@foreach(var x in _diagnosticos){<tr><td>@x.Fecha.ToString("g")</td><td>@x.Orden / @x.Nhcl</td><td><strong>@x.Paciente</strong><small class="d-block">@x.Cliente</small></td><td>@x.Medico</td><td>@x.Diagnostico</td><td>@x.Tipo</td></tr>}}else{@foreach(var x in _partes){<tr><td>@x.Fecha.ToString("g")</td><td>@x.IdOrden / @x.Nhcl</td><td><strong>@x.Paciente</strong><small class="d-block">@x.Propietario</small></td><td>@x.Procedimiento</td><td>@x.Diagnostico <button class="btn btn-sm btn-outline-primary float-end" @onclick='()=>Nav.NavigateTo($"/quirofano/protocolo/{x.IdOrden}/{x.Nhcl}")'>Ver e imprimir</button></td></tr>}}@if(!_cargando && ((_tab=="atenciones"&&!_atenciones.Any())||(_tab=="diagnosticos"&&!_diagnosticos.Any())||(_tab=="partes"&&!_partes.Any()))){<tr><td colspan="6" class="text-center text-muted py-4">No existen registros para el período seleccionado.</td></tr>}</tbody></table></div></div>}
-@code{bool _autorizado,_cargando;string _tab="atenciones",_error="";DateTime _desde=DateTime.Today.AddMonths(-1),_hasta=DateTime.Today;List<ReporteAtencionDto> _atenciones=[];List<ReporteDiagnosticoDto> _diagnosticos=[];List<ParteOperatorioResumenDto> _partes=[];protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated){Nav.NavigateTo("/login");return;}_autorizado=true;await Cargar();}async Task Cambiar(string t){_tab=t;await Cargar();}async Task Cargar(){_error="";if(_desde>_hasta){_error="La fecha inicial no puede superar la fecha final.";return;}_cargando=true;try{if(_tab=="atenciones")_atenciones=await Service.ObtenerAtencionesAsync(_desde,_hasta);else if(_tab=="diagnosticos")_diagnosticos=await Service.ObtenerDiagnosticosAsync(_desde,_hasta);else _partes=await Service.ObtenerPartesOperatoriosAsync(_desde,_hasta);}catch(Exception ex){_error=$"No se pudo generar el reporte: {ex.Message}";}finally{_cargando=false;}}async Task ExportarPartesPdf(){if(!_partes.Any())return;var bytes=ReportService.GenerarPartesOperatoriosPdf(_partes,_desde,_hasta);await JS.InvokeVoidAsync("descargarArchivoBase64",$"PartesOperatorios_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.pdf","application/pdf",Convert.ToBase64String(bytes));}}
+
+@if (_autorizado)
+{
+    <div class="container-fluid py-3">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-end mb-3">
+            <div><small class="text-primary fw-bold">REPORTERÍA</small><h2 class="mb-0">Reportes clínicos</h2></div>
+            <div class="d-flex flex-wrap gap-2">
+                @if (_tab == "atenciones")
+                {
+                    <button class="btn btn-outline-danger" disabled="@(!_atenciones.Any() || _cargando)" @onclick="ExportarAtencionesPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF</button>
+                    <button class="btn btn-outline-success" disabled="@(!_atenciones.Any() || _cargando)" @onclick="ExportarAtencionesExcelAsync"><i class="bi bi-file-earmark-excel-fill me-1"></i>Excel</button>
+                }
+                else if (_tab == "partes")
+                {
+                    <button class="btn btn-outline-danger" disabled="@(!_partes.Any() || _cargando)" @onclick="ExportarPartesPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>Imprimir consolidado</button>
+                }
+                <button class="btn btn-primary" disabled="@_cargando" @onclick="CargarAsync">@(_cargando ? "Consultando..." : "Consultar")</button>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">Filtros</h6></div>
+            <div class="card-body row g-3">
+                <div class="col-md-2"><label class="form-label small fw-semibold">Desde</label><input type="date" class="form-control" @bind="_desde" /></div>
+                <div class="col-md-2"><label class="form-label small fw-semibold">Hasta</label><input type="date" class="form-control" @bind="_hasta" /></div>
+                @if (_tab == "atenciones")
+                {
+                    <div class="col-md-2"><label class="form-label small fw-semibold">Médico</label><select class="form-select" @bind="_idMedico"><option value="0">Todos</option>@foreach (var x in _medicos){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+                    <div class="col-md-2"><label class="form-label small fw-semibold">Localidad</label><select class="form-select" @bind="_idLocalidad"><option value="0">Todas</option>@foreach (var x in _localidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+                    <div class="col-md-2"><label class="form-label small fw-semibold">Especialidad</label><select class="form-select" @bind="_idEspecialidad"><option value="0">Todas</option>@foreach (var x in _especialidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+                    <div class="col-md-2 d-flex align-items-end"><div class="form-check mb-2"><input id="condensarAtenciones" class="form-check-input" type="checkbox" @bind="_condensado" /><label class="form-check-label fw-semibold" for="condensarAtenciones">Condensar resultado</label></div></div>
+                    <div class="col-md-8">
+                        <label class="form-label small fw-semibold">Diagnóstico CIE-10</label>
+                        <div class="input-group">
+                            <input class="form-control" placeholder="Buscar por código o descripción" @bind="_filtroDiagnostico" @bind:event="oninput" @onkeydown="BuscarDiagnosticoConEnterAsync" />
+                            <button class="btn btn-outline-primary" @onclick="BuscarDiagnosticosAsync">Buscar</button>
+                            @if (!string.IsNullOrWhiteSpace(_codigoDiagnostico)) { <button class="btn btn-outline-secondary" @onclick="LimpiarDiagnostico">Quitar filtro</button> }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_codigoDiagnostico))
+                        {
+                            <div class="mt-1"><span class="badge text-bg-primary">@_codigoDiagnostico · @_diagnosticoSeleccionado</span></div>
+                        }
+                        @if (_diagnosticosCatalogo.Count > 0)
+                        {
+                            <div class="list-group mt-1" style="max-height:170px;overflow:auto">
+                                @foreach (var d in _diagnosticosCatalogo)
+                                {
+                                    <button class="list-group-item list-group-item-action py-1 small" @onclick="() => SeleccionarDiagnostico(d)"><strong>@d.CieCodigo</strong> · @d.CieDiagnostico</button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <ul class="nav nav-tabs mb-3">
+            @foreach (var t in new[] { ("atenciones", "Atenciones"), ("diagnosticos", "Diagnósticos consolidados"), ("partes", "Parte operatorio") })
+            {
+                <li class="nav-item"><button class="nav-link @(_tab == t.Item1 ? "active" : "")" @onclick="() => CambiarAsync(t.Item1)">@t.Item2</button></li>
+            }
+        </ul>
+
+        @if (!string.IsNullOrEmpty(_error)) { <div class="alert alert-danger">@_error</div> }
+
+        <div class="card shadow-sm border-0">
+            @if (_tab == "atenciones" && _condensado)
+            {
+                <div class="card-header bg-white d-flex justify-content-between"><strong>Resumen de atenciones</strong><span class="badge text-bg-primary">@_atenciones.Select(x => x.Orden).Distinct().Count() atención(es)</span></div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0"><thead class="table-light"><tr><th>Médico</th><th>Especialidad</th><th>Localidad</th><th class="text-end">Atenciones</th></tr></thead><tbody>
+                        @foreach (var x in ResumenAtenciones)
+                        {
+                            <tr><td>@x.Medico</td><td>@x.Especialidad</td><td>@x.Localidad</td><td class="text-end fw-bold">@x.Total</td></tr>
+                        }
+                        @if (!_cargando && !ResumenAtenciones.Any()) { <tr><td colspan="4" class="text-center text-muted py-4">No existen registros para los filtros seleccionados.</td></tr> }
+                    </tbody></table>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            @if (_tab == "atenciones") { <tr><th>Fecha</th><th>Orden/NHCL</th><th>Paciente/cliente</th><th>Médico/especialidad</th><th>Diagnóstico</th><th>Localidad</th><th>Registrado por</th></tr> }
+                            else if (_tab == "diagnosticos") { <tr><th>Fecha</th><th>Orden/NHCL</th><th>Paciente/cliente</th><th>Médico</th><th>Diagnóstico</th><th>Tipo</th></tr> }
+                            else { <tr><th>Fecha</th><th>Orden/NHCL</th><th>Paciente/propietario</th><th>Procedimiento</th><th>Diagnóstico</th></tr> }
+                        </thead>
+                        <tbody>
+                            @if (_tab == "atenciones")
+                            {
+                                @foreach (var x in _atenciones)
+                                {
+                                    <tr><td>@x.Fecha.ToString("g")</td><td>@x.Orden / @x.Nhcl</td><td><strong>@x.Paciente</strong><small class="d-block">@x.Cliente</small></td><td>@x.Medico<small class="d-block text-muted">@x.Especialidad</small></td><td><strong>@(x.CodigoDiagnostico == "0" ? "OTRO" : x.CodigoDiagnostico)</strong><small class="d-block">@(x.CodigoDiagnostico == "0" ? x.OtrosDiagnostico : x.Diagnostico)</small></td><td>@x.Localidad</td><td>@x.RegistradoPor</td></tr>
+                                }
+                            }
+                            else if (_tab == "diagnosticos")
+                            {
+                                @foreach (var x in _diagnosticos) { <tr><td>@x.Fecha.ToString("g")</td><td>@x.Orden / @x.Nhcl</td><td><strong>@x.Paciente</strong><small class="d-block">@x.Cliente</small></td><td>@x.Medico</td><td>@x.Diagnostico</td><td>@x.Tipo</td></tr> }
+                            }
+                            else
+                            {
+                                @foreach (var x in _partes) { <tr><td>@x.Fecha.ToString("g")</td><td>@x.IdOrden / @x.Nhcl</td><td><strong>@x.Paciente</strong><small class="d-block">@x.Propietario</small></td><td>@x.Procedimiento</td><td>@x.Diagnostico <button class="btn btn-sm btn-outline-primary float-end" @onclick="() => AbrirProtocolo(x.IdOrden, x.Nhcl)">Ver e imprimir</button></td></tr> }
+                            }
+                            @if (!_cargando && ((_tab == "atenciones" && !_atenciones.Any()) || (_tab == "diagnosticos" && !_diagnosticos.Any()) || (_tab == "partes" && !_partes.Any()))) { <tr><td colspan="7" class="text-center text-muted py-4">No existen registros para el período y filtros seleccionados.</td></tr> }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private sealed record ResumenAtencion(string Medico, string Especialidad, string Localidad, int Total);
+    private bool _autorizado, _cargando, _condensado;
+    private string _tab = "atenciones", _error = "", _filtroDiagnostico = "", _codigoDiagnostico = "", _diagnosticoSeleccionado = "";
+    private DateTime _desde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime _hasta = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1).AddDays(-1);
+    private int _idMedico, _idLocalidad, _idEspecialidad;
+    private List<ReporteAtencionDto> _atenciones = [];
+    private List<ReporteDiagnosticoDto> _diagnosticos = [];
+    private List<ParteOperatorioResumenDto> _partes = [];
+    private List<SelectorClinicoDto> _medicos = [], _localidades = [], _especialidades = [];
+    private List<CatalogoCie10ItemDto> _diagnosticosCatalogo = [];
+
+    private List<ResumenAtencion> ResumenAtenciones => _atenciones
+        .GroupBy(x => new { x.IdMedico, x.Medico, x.IdEspecialidad, x.Especialidad, x.IdLocalidad, x.Localidad })
+        .Select(g => new ResumenAtencion(g.Key.Medico, g.Key.Especialidad, g.Key.Localidad, g.Select(x => x.Orden).Distinct().Count()))
+        .OrderBy(x => x.Medico).ThenBy(x => x.Especialidad).ThenBy(x => x.Localidad).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated) { Nav.NavigateTo("/login"); return; }
+        _autorizado = true;
+        try
+        {
+            var medicos = Service.ObtenerMedicosAsync(); var localidades = Service.ObtenerLocalidadesSelectorAsync(); var especialidades = Service.ObtenerEspecialidadesSelectorAsync();
+            await Task.WhenAll(medicos, localidades, especialidades);
+            _medicos = await medicos; _localidades = await localidades; _especialidades = await especialidades;
+        }
+        catch (Exception ex) { _error = $"No se pudieron cargar los filtros: {ex.Message}"; }
+        await CargarAsync();
+    }
+
+    private async Task CambiarAsync(string tab) { _tab = tab; await CargarAsync(); }
+    private void AbrirProtocolo(int idOrden, int nhcl) => Nav.NavigateTo($"/quirofano/protocolo/{idOrden}/{nhcl}");
+    private async Task CargarAsync()
+    {
+        _error = "";
+        if (_desde > _hasta) { _error = "La fecha inicial no puede superar la fecha final."; return; }
+        _cargando = true;
+        try
+        {
+            if (_tab == "atenciones")
+                _atenciones = await Service.ObtenerAtencionesAsync(_desde, _hasta, _idLocalidad > 0 ? _idLocalidad : null, _idMedico > 0 ? _idMedico : null, _idEspecialidad > 0 ? _idEspecialidad : null, _codigoDiagnostico);
+            else if (_tab == "diagnosticos") _diagnosticos = await Service.ObtenerDiagnosticosAsync(_desde, _hasta);
+            else _partes = await Service.ObtenerPartesOperatoriosAsync(_desde, _hasta);
+        }
+        catch (Exception ex) { _error = $"No se pudo generar el reporte: {ex.Message}"; }
+        finally { _cargando = false; }
+    }
+
+    private async Task BuscarDiagnosticoConEnterAsync(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarDiagnosticosAsync(); }
+    private async Task BuscarDiagnosticosAsync()
+    {
+        if (_filtroDiagnostico.Trim().Length < 2) { _error = "Ingrese al menos dos caracteres para buscar el diagnóstico."; return; }
+        _diagnosticosCatalogo = await ConsultaService.BuscarCatalogoCie10Async(_filtroDiagnostico);
+    }
+    private void SeleccionarDiagnostico(CatalogoCie10ItemDto item) { _codigoDiagnostico = item.CieCodigo.ToString(); _diagnosticoSeleccionado = item.CieDiagnostico; _filtroDiagnostico = item.CieDiagnostico; _diagnosticosCatalogo = []; }
+    private void LimpiarDiagnostico() { _codigoDiagnostico = ""; _diagnosticoSeleccionado = ""; _filtroDiagnostico = ""; _diagnosticosCatalogo = []; }
+
+    private async Task ExportarAtencionesPdfAsync()
+    {
+        var bytes = ReportService.GenerarReporteAtencionesPdf(_atenciones, _desde, _hasta, _condensado);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Atenciones_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+    }
+    private async Task ExportarAtencionesExcelAsync()
+    {
+        var bytes = ReportService.GenerarReporteAtencionesExcel(_atenciones, _desde, _hasta, _condensado);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Atenciones_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+    private async Task ExportarPartesPdfAsync()
+    {
+        if (!_partes.Any()) return;
+        var bytes = ReportService.GenerarPartesOperatoriosPdf(_partes, _desde, _hasta);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"PartesOperatorios_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+    }
+}

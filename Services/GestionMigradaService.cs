@@ -5,8 +5,8 @@ namespace HosvetKardex.Web.Services;
 
 public interface IGestionMigradaService
 {
-    Task<List<ReporteAtencionDto>> ObtenerAtencionesAsync(DateTime desde, DateTime hasta);
-    Task<List<ReporteDiagnosticoDto>> ObtenerDiagnosticosAsync(DateTime desde, DateTime hasta);
+    Task<List<ReporteAtencionDto>> ObtenerAtencionesAsync(DateTime desde, DateTime hasta, int? idLocalidad = null, int? idMedico = null, int? idEspecialidad = null, string? codigoDiagnostico = null);
+    Task<List<ReporteDiagnosticoDto>> ObtenerDiagnosticosAsync(DateTime desde, DateTime hasta, int? idLocalidad = null, string? codigoDiagnostico = null);
     Task<List<ParteOperatorioResumenDto>> ObtenerPartesOperatoriosAsync(DateTime desde, DateTime hasta);
     Task<List<HorarioMedicoDto>> ObtenerHorariosAsync();
     Task<bool> GuardarHorarioAsync(HorarioMedicoDto item, int idUsuario);
@@ -19,6 +19,7 @@ public interface IGestionMigradaService
     Task<bool> CancelarCirugiaAsync(int id, int idUsuario);
     Task<List<SelectorClinicoDto>> ObtenerMedicosAsync();
     Task<List<SelectorClinicoDto>> ObtenerLocalidadesSelectorAsync();
+    Task<List<SelectorClinicoDto>> ObtenerEspecialidadesSelectorAsync();
     Task<List<SelectorClinicoDto>> BuscarPacientesAsync(string filtro);
     Task<List<SelectorClinicoDto>> BuscarProcedimientosAsync(string filtro);
     Task<List<CatalogoOperativoDto>> ObtenerCatalogoAsync(string tipo);
@@ -34,24 +35,89 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         var faltantes = requeridas.Where(c => !disponibles.Contains(c)).ToArray();
         if (faltantes.Length > 0) throw new InvalidOperationException($"{tabla} no contiene las columnas requeridas: {string.Join(", ", faltantes)}.");
     }
-    public async Task<List<ReporteAtencionDto>> ObtenerAtencionesAsync(DateTime desde, DateTime hasta) => (await db.QueryAsync<ReporteAtencionDto>(@"
-        SELECT o.ordenAten_id Orden,f.med_nhcl Nhcl,f.med_fecha Fecha,RTRIM(ISNULL(u.user_nombre,'')) Medico,
-        RTRIM(p.mas_nombre) Paciente,RTRIM(c.pa_apellidos+' '+c.pa_nombres) Cliente,
-        RTRIM(COALESCE(ci.cie_diagnostico,CONVERT(varchar(max),d.dig_descripcion),'')) Diagnostico,RTRIM(ISNULL(l.loc_descripcion,'')) Localidad
-        FROM vt_fichamedica f INNER JOIN vt_ordenAtencion o ON o.ordenAten_id=f.med_orden
-        INNER JOIN vt_pacientes p ON p.mas_nhcl=f.med_nhcl INNER JOIN vt_clientes c ON c.pa_codigo=f.med_cliente
-        LEFT JOIN vt_usuarios u ON u.user_numero=f.med_iduser LEFT JOIN vt_diagnosticos d ON d.dig_id_orden=f.med_orden
-        LEFT JOIN vt_cie10 ci ON ci.cie_codigo=d.dig_codigoDiag LEFT JOIN vt_localidades l ON l.loc_id=o.ordenAten_idlocalidad
-        WHERE o.ordenAten_etapa='PROCESADO' AND f.med_fecha>=@Desde AND f.med_fecha<DATEADD(day,1,@Hasta) ORDER BY f.med_fecha DESC",new{Desde=desde.Date,Hasta=hasta.Date})).ToList();
+    public async Task<List<ReporteAtencionDto>> ObtenerAtencionesAsync(
+        DateTime desde, DateTime hasta, int? idLocalidad = null, int? idMedico = null,
+        int? idEspecialidad = null, string? codigoDiagnostico = null) =>
+        (await db.QueryAsync<ReporteAtencionDto>(@"
+        SELECT
+            o.ordenAten_id AS Orden,
+            ISNULL(f.med_nhcl, 0) AS Nhcl,
+            ISNULL(f.med_fecha, o.ordenAten_fecha) AS Fecha,
+            ISNULL(f.med_iduser, 0) AS IdMedico,
+            RTRIM(ISNULL(u.user_nombre, '')) AS Medico,
+            RTRIM(ISNULL(p.mas_nombre, '')) AS Paciente,
+            RTRIM(ISNULL(c.pa_apellidos, '') + ' ' + ISNULL(c.pa_nombres, '')) AS Cliente,
+            RTRIM(COALESCE(NULLIF(ci.cie_diagnostico, ''), CONVERT(VARCHAR(MAX), d.dig_descripcion), '')) AS Diagnostico,
+            RTRIM(ISNULL(CAST(d.dig_codigoDiag AS VARCHAR(20)), '')) AS CodigoDiagnostico,
+            CASE WHEN ISNULL(CAST(d.dig_codigoDiag AS VARCHAR(20)), '0') = '0' THEN RTRIM(ISNULL(CONVERT(VARCHAR(MAX), d.dig_descripcion), '')) ELSE '' END AS OtrosDiagnostico,
+            ISNULL(o.ordenAten_idlocalidad, 0) AS IdLocalidad,
+            RTRIM(ISNULL(l.loc_descripcion, '')) AS Localidad,
+            ISNULL(f.med_especialidad, 0) AS IdEspecialidad,
+            RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad,
+            RTRIM(ISNULL(c.pa_direccion, '')) AS Direccion,
+            RTRIM(ISNULL(ur.user_nombre, '')) AS RegistradoPor
+        FROM vt_fichamedica f
+        INNER JOIN vt_ordenAtencion o ON o.ordenAten_id = f.med_orden
+        INNER JOIN vt_pacientes p ON p.mas_nhcl = f.med_nhcl
+        INNER JOIN vt_clientes c ON c.pa_codigo = f.med_cliente
+        INNER JOIN vt_usuarios u ON u.user_numero = f.med_iduser
+        LEFT JOIN vt_usuarios ur ON ur.user_numero = o.ordenAten_IdUsuario
+        LEFT JOIN vt_diagnosticos d ON d.dig_id_orden = f.med_orden
+        LEFT JOIN vt_cie10 ci ON ci.cie_codigo = d.dig_codigoDiag
+        INNER JOIN vt_localidades l ON l.loc_id = o.ordenAten_idlocalidad
+        INNER JOIN vt_especialidades e ON e.es_id = f.med_especialidad
+        WHERE o.ordenAten_etapa = 'PROCESADO'
+          AND c.pa_estado = 'A'
+          AND f.med_fecha >= @Desde AND f.med_fecha < DATEADD(DAY, 1, @Hasta)
+          AND (@IdLocalidad IS NULL OR o.ordenAten_idlocalidad = @IdLocalidad)
+          AND (@IdMedico IS NULL OR f.med_iduser = @IdMedico)
+          AND (@IdEspecialidad IS NULL OR f.med_especialidad = @IdEspecialidad)
+          AND (@CodigoDiagnostico = '' OR d.dig_codigoDiag = @CodigoDiagnostico)
+        ORDER BY o.ordenAten_id", new
+        {
+            Desde = desde.Date,
+            Hasta = hasta.Date,
+            IdLocalidad = idLocalidad,
+            IdMedico = idMedico,
+            IdEspecialidad = idEspecialidad,
+            CodigoDiagnostico = codigoDiagnostico?.Trim() ?? string.Empty
+        })).ToList();
 
-    public async Task<List<ReporteDiagnosticoDto>> ObtenerDiagnosticosAsync(DateTime desde, DateTime hasta) => (await db.QueryAsync<ReporteDiagnosticoDto>(@"
-        SELECT f.med_orden Orden,f.med_nhcl Nhcl,f.med_fecha Fecha,RTRIM(p.mas_nombre) Paciente,
-        RTRIM(c.pa_apellidos+' '+c.pa_nombres) Cliente,RTRIM(ISNULL(u.user_nombre,'')) Medico,
-        RTRIM(COALESCE(ci.cie_diagnostico,CONVERT(varchar(max),d.dig_descripcion),'')) Diagnostico,
-        CASE WHEN d.dig_tipo='P' THEN 'Presuntivo' ELSE 'Definitivo' END Tipo
-        FROM vt_fichamedica f INNER JOIN vt_pacientes p ON p.mas_nhcl=f.med_nhcl INNER JOIN vt_clientes c ON c.pa_codigo=f.med_cliente
-        INNER JOIN vt_diagnosticos d ON d.dig_id_orden=f.med_orden LEFT JOIN vt_cie10 ci ON ci.cie_codigo=d.dig_codigoDiag
-        LEFT JOIN vt_usuarios u ON u.user_numero=f.med_iduser WHERE f.med_fecha>=@Desde AND f.med_fecha<DATEADD(day,1,@Hasta) ORDER BY f.med_fecha DESC",new{Desde=desde.Date,Hasta=hasta.Date})).ToList();
+    public async Task<List<ReporteDiagnosticoDto>> ObtenerDiagnosticosAsync(
+        DateTime desde, DateTime hasta, int? idLocalidad = null, string? codigoDiagnostico = null) =>
+        (await db.QueryAsync<ReporteDiagnosticoDto>(@"
+        SELECT
+            f.med_orden AS Orden,
+            f.med_nhcl AS Nhcl,
+            f.med_fecha AS Fecha,
+            RTRIM(p.mas_nombre) AS Paciente,
+            RTRIM(ISNULL(c.pa_apellidos, '') + ' ' + ISNULL(c.pa_nombres, '')) AS Cliente,
+            RTRIM(u.user_nombre) AS Medico,
+            RTRIM(CAST(d.dig_codigoDiag AS VARCHAR(20))) AS CodigoDiagnostico,
+            RTRIM(ci.cie_diagnostico) AS Diagnostico,
+            CASE WHEN d.dig_tipo = 'P' THEN 'Presuntivo' ELSE 'Definitivo' END AS Tipo,
+            CASE WHEN ISNULL(f.med_edadanios, 0) = 0 THEN 1 ELSE f.med_edadanios END AS EdadAnios,
+            ISNULL(f.med_edadmeses, 0) AS EdadMeses,
+            CASE WHEN p.mas_sexo = 'H' THEN 'Hembra' WHEN p.mas_sexo = 'M' THEN 'Macho' ELSE 'Indefinido' END AS Sexo,
+            ISNULL(o.ordenAten_idlocalidad, 0) AS IdLocalidad
+        FROM vt_fichamedica f
+        INNER JOIN vt_ordenAtencion o ON f.med_orden = o.ordenAten_id
+        INNER JOIN vt_clientes c ON f.med_cliente = c.pa_codigo
+        INNER JOIN vt_pacientes p ON f.med_nhcl = p.mas_nhcl
+        INNER JOIN vt_usuarios u ON f.med_iduser = u.user_numero
+        INNER JOIN vt_diagnosticos d ON f.med_orden = d.dig_id_orden
+        INNER JOIN vt_cie10 ci ON d.dig_codigoDiag = ci.cie_codigo
+        WHERE f.med_orden > 0
+          AND f.med_fecha >= @Desde AND f.med_fecha < DATEADD(DAY, 1, @Hasta)
+          AND (@IdLocalidad IS NULL OR o.ordenAten_idlocalidad = @IdLocalidad)
+          AND (@CodigoDiagnostico = '' OR d.dig_codigoDiag = @CodigoDiagnostico)
+        ORDER BY f.med_orden", new
+        {
+            Desde = desde.Date,
+            Hasta = hasta.Date,
+            IdLocalidad = idLocalidad,
+            CodigoDiagnostico = codigoDiagnostico?.Trim() ?? string.Empty
+        })).ToList();
 
     public async Task<List<ParteOperatorioResumenDto>> ObtenerPartesOperatoriosAsync(DateTime desde, DateTime hasta) => (await db.QueryAsync<ParteOperatorioResumenDto>(@"
         SELECT q.id Id,q.idOrden IdOrden,q.fecha Fecha,q.nhcl Nhcl,RTRIM(ISNULL(p.mas_nombre,'')) Paciente,
@@ -128,6 +194,7 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
 
     public async Task<List<SelectorClinicoDto>> ObtenerMedicosAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,user_numero) Id,RTRIM(user_nombre) Descripcion,CONVERT(int,user_esp_numero) IdRelacionado FROM vt_usuarios WHERE user_estado='A' AND user_tipouser_numero=2 ORDER BY user_nombre")).ToList();
     public async Task<List<SelectorClinicoDto>> ObtenerLocalidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,loc_id) Id,RTRIM(loc_descripcion) Descripcion FROM vt_localidades WHERE loc_estado='A' ORDER BY loc_descripcion")).ToList();
+    public async Task<List<SelectorClinicoDto>> ObtenerEspecialidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,es_id) Id,RTRIM(es_descripcion) Descripcion FROM vt_especialidades ORDER BY es_descripcion")).ToList();
     public async Task<List<SelectorClinicoDto>> BuscarPacientesAsync(string filtro)=>(await db.QueryAsync<SelectorClinicoDto>("SELECT TOP 100 mas_nhcl Id,RTRIM(mas_nombre)+' · NHCL '+CAST(mas_nhcl AS varchar(20)) Descripcion,mas_idcliente IdRelacionado FROM vt_pacientes WHERE mas_estado='A' AND (@Filtro='' OR mas_nombre LIKE '%'+@Filtro+'%' OR CAST(mas_nhcl AS varchar(20)) LIKE '%'+@Filtro+'%') ORDER BY mas_nombre",new{Filtro=filtro?.Trim()??""})).ToList();
     public async Task<List<SelectorClinicoDto>> BuscarProcedimientosAsync(string filtro)=>(await db.QueryAsync<SelectorClinicoDto>("SELECT TOP 100 prod_id Id,RTRIM(prod_descripcion) Descripcion,prod_grupo IdRelacionado FROM vt_productos WHERE prod_estado='A' AND (@Filtro='' OR prod_descripcion LIKE '%'+@Filtro+'%' OR CAST(prod_id AS varchar(20)) LIKE '%'+@Filtro+'%') ORDER BY prod_descripcion",new{Filtro=filtro?.Trim()??""})).ToList();
 

@@ -36,6 +36,10 @@ public interface IReportExportService
     byte[] GenerarPartesOperatoriosPdf(List<ParteOperatorioResumenDto> partes, DateTime desde, DateTime hasta);
     byte[] GenerarOrdenesAtencionPdf(List<OrdenAtencionResumenDto> ordenes, DateTime desde, DateTime hasta);
     byte[] GenerarOrdenesAtencionExcel(List<OrdenAtencionResumenDto> ordenes, DateTime desde, DateTime hasta);
+    byte[] GenerarReporteAtencionesPdf(List<ReporteAtencionDto> atenciones, DateTime desde, DateTime hasta, bool condensado);
+    byte[] GenerarReporteAtencionesExcel(List<ReporteAtencionDto> atenciones, DateTime desde, DateTime hasta, bool condensado);
+    byte[] GenerarReporteDiagnosticosPdf(List<ReporteDiagnosticoDto> diagnosticos, DateTime desde, DateTime hasta, bool condensado);
+    byte[] GenerarReporteDiagnosticosExcel(List<ReporteDiagnosticoDto> diagnosticos, DateTime desde, DateTime hasta, bool condensado);
     byte[] GenerarCodigoQrPng(string texto);
 }
 
@@ -80,6 +84,197 @@ public class ReportExportService : IReportExportService
         ws.Range(1, 1, 1, headers.Length).Style.Font.Bold = true; ws.Range(1, 1, 1, headers.Length).Style.Fill.BackgroundColor = XLColor.LightBlue;
         int row = 2; foreach (var o in ordenes) { object[] values = [o.IdOrden, o.Fecha, o.Hora, o.Nhcl, o.Mascota, o.Propietario, o.Medico, o.Especialidad, o.Etapa, o.Estado, o.DespachoDescripcion]; for (int i = 0; i < values.Length; i++) ws.Cell(row, i + 1).Value = XLCellValue.FromObject(values[i]); row++; }
         ws.Column(2).Style.DateFormat.Format = "dd/mm/yyyy"; ws.Columns().AdjustToContents(); ws.SheetView.FreezeRows(1); ws.RangeUsed()?.SetAutoFilter();
+        using var stream = new MemoryStream(); wb.SaveAs(stream); return stream.ToArray();
+    }
+
+    public byte[] GenerarReporteAtencionesPdf(
+        List<ReporteAtencionDto> atenciones, DateTime desde, DateTime hasta, bool condensado)
+    {
+        var resumen = atenciones
+            .GroupBy(x => new { x.IdMedico, x.Medico, x.IdEspecialidad, x.Especialidad, x.IdLocalidad, x.Localidad })
+            .Select(g => new
+            {
+                g.Key.Medico,
+                g.Key.Especialidad,
+                g.Key.Localidad,
+                Total = g.Select(x => x.Orden).Distinct().Count()
+            })
+            .OrderBy(x => x.Medico).ThenBy(x => x.Especialidad).ThenBy(x => x.Localidad)
+            .ToList();
+
+        return Document.Create(doc => doc.Page(page =>
+        {
+            page.Size(PageSizes.A4.Landscape());
+            page.Margin(22);
+            page.DefaultTextStyle(x => x.FontSize(condensado ? 9 : 7.5f));
+            page.Header().Column(col =>
+            {
+                col.Item().Text(condensado ? "REPORTE CONDENSADO DE ATENCIONES" : "LISTA DETALLADA DE ATENCIONES POR MÉDICO")
+                    .Bold().FontSize(14).FontColor(Colors.Blue.Darken3);
+                col.Item().Text($"Período: {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy} · {atenciones.Select(x => x.Orden).Distinct().Count()} atención(es)")
+                    .FontColor(Colors.Grey.Darken2);
+            });
+            page.Content().PaddingTop(10).Table(table =>
+            {
+                if (condensado)
+                {
+                    table.ColumnsDefinition(c => { c.RelativeColumn(2); c.RelativeColumn(1.6f); c.RelativeColumn(1.6f); c.ConstantColumn(70); });
+                    table.Header(h => { foreach (var texto in new[] { "Médico", "Especialidad", "Localidad", "Atenciones" }) h.Cell().Background(Colors.Blue.Lighten4).Padding(5).Text(texto).Bold(); });
+                    foreach (var item in resumen)
+                    {
+                        foreach (var valor in new[] { item.Medico, item.Especialidad, item.Localidad, item.Total.ToString() })
+                            table.Cell().BorderBottom(.5f).BorderColor(Colors.Grey.Lighten2).Padding(4).Text(valor);
+                    }
+                }
+                else
+                {
+                    table.ColumnsDefinition(c => { c.ConstantColumn(55); c.ConstantColumn(70); c.RelativeColumn(1.3f); c.RelativeColumn(1.5f); c.RelativeColumn(1.4f); c.RelativeColumn(1.5f); c.RelativeColumn(1.1f); });
+                    table.Header(h => { foreach (var texto in new[] { "Fecha", "Orden/NHCL", "Paciente", "Propietario", "Médico", "Diagnóstico", "Sede / Especialidad" }) h.Cell().Background(Colors.Blue.Lighten4).Padding(4).Text(texto).Bold(); });
+                    foreach (var item in atenciones)
+                    {
+                        var diagnostico = item.CodigoDiagnostico == "0" ? item.OtrosDiagnostico : $"{item.CodigoDiagnostico} · {item.Diagnostico}";
+                        foreach (var valor in new[]
+                        {
+                            item.Fecha.ToString("dd/MM/yyyy"), $"{item.Orden} / {item.Nhcl}", item.Paciente,
+                            item.Cliente, item.Medico, diagnostico, $"{item.Localidad}\n{item.Especialidad}"
+                        }) table.Cell().BorderBottom(.5f).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(valor ?? string.Empty);
+                    }
+                }
+            });
+            page.Footer().AlignCenter().Text($"Generado por e-ForVets · {DateTime.Now:dd/MM/yyyy HH:mm}");
+        })).GeneratePdf();
+    }
+
+    public byte[] GenerarReporteAtencionesExcel(
+        List<ReporteAtencionDto> atenciones, DateTime desde, DateTime hasta, bool condensado)
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add(condensado ? "Atenciones condensadas" : "Atenciones");
+        if (condensado)
+        {
+            string[] headers = ["Médico", "Especialidad", "Localidad", "Total atenciones"];
+            for (var i = 0; i < headers.Length; i++) ws.Cell(1, i + 1).Value = headers[i];
+            var grupos = atenciones
+                .GroupBy(x => new { x.IdMedico, x.Medico, x.IdEspecialidad, x.Especialidad, x.IdLocalidad, x.Localidad })
+                .Select(g => new { g.Key.Medico, g.Key.Especialidad, g.Key.Localidad, Total = g.Select(x => x.Orden).Distinct().Count() })
+                .OrderBy(x => x.Medico).ThenBy(x => x.Especialidad).ThenBy(x => x.Localidad);
+            var fila = 2;
+            foreach (var g in grupos)
+            {
+                ws.Cell(fila, 1).Value = g.Medico; ws.Cell(fila, 2).Value = g.Especialidad;
+                ws.Cell(fila, 3).Value = g.Localidad; ws.Cell(fila, 4).Value = g.Total; fila++;
+            }
+        }
+        else
+        {
+            string[] headers = ["Fecha", "Orden", "NHCL", "Paciente", "Propietario", "Dirección", "Médico", "Especialidad", "Código diagnóstico", "Diagnóstico", "Localidad", "Registrado por"];
+            for (var i = 0; i < headers.Length; i++) ws.Cell(1, i + 1).Value = headers[i];
+            var fila = 2;
+            foreach (var x in atenciones)
+            {
+                object[] valores = [x.Fecha, x.Orden, x.Nhcl, x.Paciente, x.Cliente, x.Direccion, x.Medico, x.Especialidad, x.CodigoDiagnostico, x.CodigoDiagnostico == "0" ? x.OtrosDiagnostico : x.Diagnostico, x.Localidad, x.RegistradoPor];
+                for (var i = 0; i < valores.Length; i++) ws.Cell(fila, i + 1).Value = XLCellValue.FromObject(valores[i]);
+                fila++;
+            }
+            ws.Column(1).Style.DateFormat.Format = "dd/mm/yyyy hh:mm";
+        }
+        var ultimaColumna = condensado ? 4 : 12;
+        ws.Range(1, 1, 1, ultimaColumna).Style.Font.Bold = true;
+        ws.Range(1, 1, 1, ultimaColumna).Style.Fill.BackgroundColor = XLColor.LightBlue;
+        ws.SheetView.FreezeRows(1); ws.RangeUsed()?.SetAutoFilter(); ws.Columns().AdjustToContents();
+        ws.Cell(ws.LastRowUsed()?.RowNumber() + 2 ?? 3, 1).Value = $"Período: {desde:dd/MM/yyyy} - {hasta:dd/MM/yyyy}";
+        using var stream = new MemoryStream(); wb.SaveAs(stream); return stream.ToArray();
+    }
+
+    public byte[] GenerarReporteDiagnosticosPdf(
+        List<ReporteDiagnosticoDto> diagnosticos, DateTime desde, DateTime hasta, bool condensado)
+    {
+        var resumen = diagnosticos
+            .GroupBy(x => new { x.CodigoDiagnostico, x.Diagnostico })
+            .Select(g => new { g.Key.CodigoDiagnostico, g.Key.Diagnostico, Total = g.Count() })
+            .OrderBy(x => x.Diagnostico)
+            .ToList();
+
+        return Document.Create(doc => doc.Page(page =>
+        {
+            page.Size(PageSizes.A4.Landscape());
+            page.Margin(22);
+            page.DefaultTextStyle(x => x.FontSize(condensado ? 9 : 7.5f));
+            page.Header().Column(col =>
+            {
+                col.Item().Text(condensado ? "REPORTE CONDENSADO DE DIAGNÓSTICOS" : "REPORTE DETALLADO DE DIAGNÓSTICOS")
+                    .Bold().FontSize(14).FontColor(Colors.Blue.Darken3);
+                col.Item().Text($"Período: {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy} · {diagnosticos.Count} diagnóstico(s)")
+                    .FontColor(Colors.Grey.Darken2);
+            });
+            page.Content().PaddingTop(10).Table(table =>
+            {
+                if (condensado)
+                {
+                    table.ColumnsDefinition(c => { c.ConstantColumn(95); c.RelativeColumn(4); c.ConstantColumn(80); });
+                    table.Header(h => { foreach (var texto in new[] { "Código", "Diagnóstico", "Cantidad" }) h.Cell().Background(Colors.Blue.Lighten4).Padding(5).Text(texto).Bold(); });
+                    foreach (var item in resumen)
+                    {
+                        foreach (var valor in new[] { item.CodigoDiagnostico, item.Diagnostico, item.Total.ToString() })
+                            table.Cell().BorderBottom(.5f).BorderColor(Colors.Grey.Lighten2).Padding(4).Text(valor);
+                    }
+                }
+                else
+                {
+                    table.ColumnsDefinition(c => { c.ConstantColumn(52); c.ConstantColumn(72); c.RelativeColumn(1.2f); c.RelativeColumn(1.3f); c.RelativeColumn(1.2f); c.RelativeColumn(1.6f); c.ConstantColumn(62); c.ConstantColumn(72); });
+                    table.Header(h => { foreach (var texto in new[] { "Fecha", "Orden/NHCL", "Paciente", "Propietario", "Médico", "Diagnóstico", "Tipo", "Edad / Sexo" }) h.Cell().Background(Colors.Blue.Lighten4).Padding(4).Text(texto).Bold(); });
+                    foreach (var item in diagnosticos)
+                    {
+                        foreach (var valor in new[]
+                        {
+                            item.Fecha.ToString("dd/MM/yyyy"), $"{item.Orden} / {item.Nhcl}", item.Paciente,
+                            item.Cliente, item.Medico, $"{item.CodigoDiagnostico} · {item.Diagnostico}", item.Tipo,
+                            $"{item.EdadAnios}a {item.EdadMeses}m · {item.Sexo}"
+                        }) table.Cell().BorderBottom(.5f).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(valor ?? string.Empty);
+                    }
+                }
+            });
+            page.Footer().AlignCenter().Text($"Generado por e-ForVets · {DateTime.Now:dd/MM/yyyy HH:mm}");
+        })).GeneratePdf();
+    }
+
+    public byte[] GenerarReporteDiagnosticosExcel(
+        List<ReporteDiagnosticoDto> diagnosticos, DateTime desde, DateTime hasta, bool condensado)
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add(condensado ? "Diagnósticos condensados" : "Diagnósticos");
+        if (condensado)
+        {
+            string[] headers = ["Código", "Diagnóstico", "Cantidad"];
+            for (var i = 0; i < headers.Length; i++) ws.Cell(1, i + 1).Value = headers[i];
+            var grupos = diagnosticos.GroupBy(x => new { x.CodigoDiagnostico, x.Diagnostico })
+                .Select(g => new { g.Key.CodigoDiagnostico, g.Key.Diagnostico, Total = g.Count() })
+                .OrderBy(x => x.Diagnostico);
+            var fila = 2;
+            foreach (var g in grupos)
+            {
+                ws.Cell(fila, 1).Value = g.CodigoDiagnostico; ws.Cell(fila, 2).Value = g.Diagnostico;
+                ws.Cell(fila, 3).Value = g.Total; fila++;
+            }
+        }
+        else
+        {
+            string[] headers = ["Fecha", "Orden", "NHCL", "Paciente", "Propietario", "Médico", "Código diagnóstico", "Diagnóstico", "Tipo", "Edad años", "Edad meses", "Sexo"];
+            for (var i = 0; i < headers.Length; i++) ws.Cell(1, i + 1).Value = headers[i];
+            var fila = 2;
+            foreach (var x in diagnosticos)
+            {
+                object[] valores = [x.Fecha, x.Orden, x.Nhcl, x.Paciente, x.Cliente, x.Medico, x.CodigoDiagnostico, x.Diagnostico, x.Tipo, x.EdadAnios, x.EdadMeses, x.Sexo];
+                for (var i = 0; i < valores.Length; i++) ws.Cell(fila, i + 1).Value = XLCellValue.FromObject(valores[i]);
+                fila++;
+            }
+            ws.Column(1).Style.DateFormat.Format = "dd/mm/yyyy hh:mm";
+        }
+        var ultimaColumna = condensado ? 3 : 12;
+        ws.Range(1, 1, 1, ultimaColumna).Style.Font.Bold = true;
+        ws.Range(1, 1, 1, ultimaColumna).Style.Fill.BackgroundColor = XLColor.LightBlue;
+        ws.SheetView.FreezeRows(1); ws.RangeUsed()?.SetAutoFilter(); ws.Columns().AdjustToContents();
+        ws.Cell(ws.LastRowUsed()?.RowNumber() + 2 ?? 3, 1).Value = $"Período: {desde:dd/MM/yyyy} - {hasta:dd/MM/yyyy}";
         using var stream = new MemoryStream(); wb.SaveAs(stream); return stream.ToArray();
     }
 
