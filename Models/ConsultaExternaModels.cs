@@ -217,6 +217,8 @@ public class FormatoPlantillaDto
     public string FormNombre { get; set; } = string.Empty;
     public string FormTipo { get; set; } = string.Empty;
     public string FormArchivoHtml { get; set; } = string.Empty;
+    public bool EsSistema { get; set; }
+    public bool EsPersonalizada => !EsSistema;
 }
 
 public class AutorizacionClinicaDto

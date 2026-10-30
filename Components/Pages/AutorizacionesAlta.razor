@@ -5,6 +5,7 @@
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject IJSRuntime JS
+@inject IWebHostEnvironment Environment
 
 <PageTitle>e-ForVets - Autorizaciones, Consentimientos y Plan de Alta</PageTitle>
 
@@ -83,19 +84,57 @@
                     <i class="bi bi-file-earmark-richtext me-1"></i>1. Generación de Consentimientos y Autorizaciones Legales
                 </div>
                 <div class="card-body">
-                    <div class="row g-2 mb-3">
-                        <div class="col-md-8">
+                    <div class="row g-2 mb-3 align-items-end">
+                        <div class="col-md-5">
                             <label class="form-label small fw-semibold">Seleccionar Plantilla Oficial</label>
                             <select class="form-select form-select-sm" @bind="FormatoSeleccionadoId" @bind:after="CargarPlantillaFormatoAsync">
                                 <option value="0">-- Seleccione formato institucional --</option>
-                                @foreach (var f in Plantillas)
+                                
+                                @if (Plantillas.Any(p => p.EsPersonalizada))
                                 {
-                                    <option value="@f.FormId">@f.FormNombre (@(f.FormTipo == "TUERI" ? "Silvestre" : (f.FormTipo == "HDEV" ? "Doméstico" : f.FormTipo)))</option>
+                                    <optgroup label="⭐ Plantillas Personalizadas (Creadas por usuario)">
+                                        @foreach (var f in Plantillas.Where(p => p.EsPersonalizada))
+                                        {
+                                            <option value="@f.FormId">⭐ @f.FormNombre (Personalizada)</option>
+                                        }
+                                    </optgroup>
                                 }
+
+                                <optgroup label="📋 Plantillas Oficiales del Sistema (Predeterminadas)">
+                                    @foreach (var f in Plantillas.Where(p => !p.EsPersonalizada))
+                                    {
+                                        <option value="@f.FormId">📋 @f.FormNombre (@(f.FormTipo == "TUERI" ? "Silvestre" : (f.FormTipo == "HDEV" ? "Doméstico" : f.FormTipo)))</option>
+                                    }
+                                </optgroup>
                             </select>
                         </div>
-                        <div class="col-md-4 d-flex align-items-end">
-                            <button class="btn btn-sm btn-primary w-100" @onclick="GuardarAutorizacionAsync">
+                        <div class="col-md-2">
+                            <button class="btn btn-sm btn-outline-warning text-dark w-100 fw-semibold" @onclick="GuardarPlantillaAsync" title="Guarda los cambios de este documento en la plantilla para que se mantengan en el futuro">
+                                <i class="bi bi-bookmark-check-fill text-warning me-1"></i>Guardar Plantilla
+                            </button>
+                        </div>
+                        <div class="col-md-2">
+                            @if (FormatoSeleccionadoId > 0 && PlantillaSeleccionada?.EsPersonalizada == true)
+                            {
+                                <button class="btn btn-sm btn-outline-danger w-100 fw-semibold" @onclick="AbrirModalEliminarPlantilla" title="Eliminar esta plantilla personalizada">
+                                    <i class="bi bi-trash3-fill me-1"></i>Eliminar Plantilla
+                                </button>
+                            }
+                            else if (FormatoSeleccionadoId > 0)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary w-100 fw-semibold" disabled title="Esta es una plantilla oficial predeterminada del sistema y no se puede borrar">
+                                    <i class="bi bi-lock-fill me-1"></i>Plantilla Oficial
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-secondary w-100 fw-semibold" disabled>
+                                    <i class="bi bi-trash3 me-1"></i>Eliminar
+                                </button>
+                            }
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-sm btn-primary w-100 fw-semibold" @onclick="GuardarAutorizacionAsync" title="Registra este documento en el historial legal del paciente">
                                 <i class="bi bi-floppy-fill me-1"></i>Guardar Documento
                             </button>
                         </div>
@@ -107,22 +146,97 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold d-flex justify-content-between">
-                            <span>Contenido del Documento (Con Reemplazo Automático de Datos del Paciente/Propietario)</span>
-                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" @onclick="() => ModoVistaPreviaHtml = !ModoVistaPreviaHtml">
-                                @(ModoVistaPreviaHtml ? "Editar HTML" : "Vista Previa Documento")
-                            </button>
+                        <label class="form-label small fw-semibold mb-1 d-block">
+                            <i class="bi bi-file-earmark-font text-primary me-1"></i>Contenido del Documento
+                            <small class="text-muted fw-normal ms-1">(Escriba y edite directamente en el documento)</small>
                         </label>
-                        @if (ModoVistaPreviaHtml)
-                        {
-                            <div class="border rounded p-3 bg-light small" style="min-height: 220px; max-height: 280px; overflow-y: auto;">
-                                @((MarkupString)NuevaAutorizacion.DetalleHtml)
-                            </div>
-                        }
-                        else
-                        {
-                            <textarea class="form-control form-control-sm font-monospace" rows="9" @bind="NuevaAutorizacion.DetalleHtml"></textarea>
-                        }
+
+                        <!-- Barra de Herramientas de Formato (Word / Docs) -->
+                        <div class="d-flex flex-wrap gap-1 p-1 bg-light border border-bottom-0 rounded-top align-items-center">
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('bold')" title="Negrita (Ctrl+B)">
+                                <i class="bi bi-type-bold fw-bold"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('italic')" title="Cursiva (Ctrl+I)">
+                                <i class="bi bi-type-italic"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('underline')" title="Subrayado (Ctrl+U)">
+                                <i class="bi bi-type-underline"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('strikeThrough')" title="Tachado">
+                                <i class="bi bi-type-strikethrough"></i>
+                            </button>
+
+                            <span class="vr mx-1 my-1"></span>
+
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('formatBlock', '<h2>')" title="Título H2">
+                                <span class="fw-bold small">H2</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('formatBlock', '<h3>')" title="Subtítulo H3">
+                                <span class="fw-bold small">H3</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('formatBlock', '<p>')" title="Párrafo normal">
+                                <span class="small">P</span>
+                            </button>
+
+                            <span class="vr mx-1 my-1"></span>
+
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyLeft')" title="Alinear a la izquierda">
+                                <i class="bi bi-text-left"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyCenter')" title="Centrar">
+                                <i class="bi bi-text-center"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyRight')" title="Alinear a la derecha">
+                                <i class="bi bi-text-right"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyFull')" title="Justificar">
+                                <i class="bi bi-justify"></i>
+                            </button>
+
+                            <span class="vr mx-1 my-1"></span>
+
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('insertUnorderedList')" title="Lista con viñetas">
+                                <i class="bi bi-list-ul"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('insertOrderedList')" title="Lista numerada">
+                                <i class="bi bi-list-ol"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('insertHorizontalRule')" title="Separador horizontal">
+                                <i class="bi bi-hr"></i>
+                            </button>
+
+                            <span class="vr mx-1 my-1"></span>
+
+                            <!-- Subir e Insertar Imagen -->
+                            <label class="btn btn-sm btn-white border py-0 px-2 shadow-none mb-0 text-primary fw-semibold" style="cursor: pointer;" title="Subir e insertar imagen al documento (Logo, ecografía, firma, etc.)">
+                                <i class="bi bi-image-fill me-1"></i>Insertar Imagen
+                                <InputFile OnChange="SubirImagenAlDocumentoAsync" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
+                            </label>
+
+                            <span class="vr mx-1 my-1"></span>
+
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('undo')" title="Deshacer (Ctrl+Z)">
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('redo')" title="Rehacer (Ctrl+Y)">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('removeFormat')" title="Limpiar formato">
+                                <i class="bi bi-eraser"></i>
+                            </button>
+                        </div>
+
+                        <!-- Documento con edición visual directa -->
+                        <div id="editorDocVisual"
+                             contenteditable="true"
+                             class="border rounded-bottom p-3 bg-white shadow-sm"
+                             style="min-height: 280px; max-height: 420px; overflow-y: auto; outline: none; line-height: 1.5; font-size: 0.92rem;"
+                             @onblur="SincronizarDesdeEditorVisualAsync">
+                        </div>
+
+                        <small class="text-muted d-block mt-1">
+                            <i class="bi bi-info-circle me-1"></i>Haga clic directamente en el documento para modificar textos, párrafos, tablas o imágenes antes de guardar.
+                        </small>
                     </div>
 
                     <h6 class="fw-bold text-secondary small border-bottom pb-1">Historial de Autorizaciones del Paciente (@AutorizacionesEmitidas.Count)</h6>
@@ -146,7 +260,7 @@
                                         <td class="fw-semibold">@a.Documento</td>
                                         <td>@a.NombreMedico</td>
                                         <td class="text-end">
-                                            <button class="btn btn-xs btn-outline-primary py-0 px-2" @onclick="() => CargarAutorizacionExistente(a)">
+                                            <button class="btn btn-xs btn-outline-primary py-0 px-2" @onclick="() => CargarAutorizacionExistenteAsync(a)">
                                                 Ver
                                             </button>
                                         </td>
@@ -202,6 +316,40 @@
     </div>
 </div>
 
+<!-- Modal de Confirmación para Eliminar Plantilla -->
+@if (MostrarModalEliminarPlantilla)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content shadow border-0">
+                <div class="modal-header bg-danger text-white py-2">
+                    <h5 class="modal-title fs-6 fw-bold">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Confirmar Eliminación de Plantilla
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CerrarModalEliminarPlantilla"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <p class="mb-2">¿Está seguro de que desea eliminar la plantilla personalizada?</p>
+                    <div class="alert alert-warning py-2 mb-2 small">
+                        <strong><i class="bi bi-file-earmark-text me-1"></i>@(PlantillaSeleccionada?.FormNombre ?? "Plantilla")</strong>
+                    </div>
+                    <small class="text-muted d-block">
+                        <i class="bi bi-info-circle me-1"></i>Esta acción eliminará la plantilla permanentemente del selector. Los documentos guardados previamente en el historial de los pacientes no se verán afectados.
+                    </small>
+                </div>
+                <div class="modal-footer py-2 bg-light">
+                    <button type="button" class="btn btn-sm btn-secondary" @onclick="CerrarModalEliminarPlantilla" disabled="@EliminandoPlantilla">
+                        Cancelar
+                    </button>
+                    <button type="button" class="btn btn-sm btn-danger fw-semibold" @onclick="ConfirmarEliminarPlantillaAsync" disabled="@EliminandoPlantilla">
+                        @(EliminandoPlantilla ? "Eliminando..." : "Sí, Eliminar Plantilla")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
@@ -209,7 +357,9 @@
     private int IdOrdenInput { get; set; }
     private int NhclInput { get; set; }
     private int FormatoSeleccionadoId { get; set; }
-    private bool ModoVistaPreviaHtml { get; set; } = true;
+    private FormatoPlantillaDto? PlantillaSeleccionada => Plantillas.FirstOrDefault(p => p.FormId == FormatoSeleccionadoId);
+    private bool MostrarModalEliminarPlantilla { get; set; }
+    private bool EliminandoPlantilla { get; set; }
     private bool CargandoInicial { get; set; } = true;
     private string? MensajeAlerta { get; set; }
     private bool EsErrorAlerta { get; set; }
@@ -327,6 +477,15 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !string.IsNullOrEmpty(NuevaAutorizacion.DetalleHtml))
+        {
+            await Task.Delay(50);
+            await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorDocVisual", NuevaAutorizacion.DetalleHtml);
+        }
+    }
+
     private async Task CargarPlantillaFormatoAsync()
     {
         try
@@ -342,6 +501,14 @@
             {
                 NuevaAutorizacion.DetalleHtml = await ConsultaService.ProcesarPlantillaConDatosPacienteAsync(FormatoSeleccionadoId, Nhcl);
             }
+            else if (FormatoSeleccionadoId > 0 && plantilla != null)
+            {
+                NuevaAutorizacion.DetalleHtml = plantilla.FormArchivoHtml;
+            }
+
+            StateHasChanged();
+            await Task.Delay(40);
+            await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorDocVisual", NuevaAutorizacion.DetalleHtml);
         }
         catch (Exception ex)
         {
@@ -350,7 +517,7 @@
         }
     }
 
-    private void CargarAutorizacionExistente(AutorizacionClinicaDto item)
+    private async Task CargarAutorizacionExistenteAsync(AutorizacionClinicaDto item)
     {
         NuevaAutorizacion = new AutorizacionClinicaDto
         {
@@ -361,7 +528,54 @@
             Tipo = item.Tipo,
             DetalleHtml = item.DetalleHtml
         };
-        ModoVistaPreviaHtml = true;
+        StateHasChanged();
+        await Task.Delay(40);
+        await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorDocVisual", NuevaAutorizacion.DetalleHtml);
+    }
+
+    private async Task SubirImagenAlDocumentoAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file == null) return;
+
+            if (file.Size > 15 * 1024 * 1024)
+            {
+                MensajeAlerta = "La imagen seleccionada supera el límite permitido de 15MB.";
+                EsErrorAlerta = true;
+                return;
+            }
+
+            string uploadsFolder = Path.Combine(Environment.WebRootPath, "imagenes", "documentos");
+            if (!Directory.Exists(uploadsFolder))
+            {
+                Directory.CreateDirectory(uploadsFolder);
+            }
+
+            string ext = Path.GetExtension(file.Name).ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(ext)) ext = ".png";
+            string fileName = $"{DateTime.Now:yyyyMMddHHmmss}_{Guid.NewGuid().ToString("N")[..6]}{ext}";
+            string filePath = Path.Combine(uploadsFolder, fileName);
+
+            await using (var stream = file.OpenReadStream(maxAllowedSize: 15 * 1024 * 1024))
+            await using (var fs = new FileStream(filePath, FileMode.Create))
+            {
+                await stream.CopyToAsync(fs);
+            }
+
+            string imgUrl = $"/imagenes/documentos/{fileName}";
+            await JS.InvokeVoidAsync("hosvetEditor.insertImage", "editorDocVisual", imgUrl);
+            await SincronizarDesdeEditorVisualAsync();
+
+            MensajeAlerta = "Imagen subida e insertada exitosamente en el documento.";
+            EsErrorAlerta = false;
+        }
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al subir imagen al documento: {ex.Message}";
+            EsErrorAlerta = true;
+        }
     }
 
     private async Task GuardarAutorizacionAsync()
@@ -375,6 +589,19 @@
                 return;
             }
 
+            var html = await JS.InvokeAsync<string>("hosvetEditor.getContent", "editorDocVisual");
+            if (html != null)
+            {
+                NuevaAutorizacion.DetalleHtml = html;
+            }
+
+            if (string.IsNullOrWhiteSpace(NuevaAutorizacion.DetalleHtml))
+            {
+                MensajeAlerta = "El contenido del documento no puede estar vacío.";
+                EsErrorAlerta = true;
+                return;
+            }
+
             NuevaAutorizacion.Nhcl = Nhcl;
             NuevaAutorizacion.Orden = IdOrden;
             NuevaAutorizacion.Cliente = Paciente?.ClienteCodigo ?? 0;
@@ -382,13 +609,135 @@
 
             await ConsultaService.GuardarAutorizacionAsync(NuevaAutorizacion);
             AutorizacionesEmitidas = await ConsultaService.ObtenerAutorizacionesPacienteAsync(Nhcl);
-            MensajeAlerta = $"Documento '{NuevaAutorizacion.Documento}' registrado en el historial del paciente.";
+            MensajeAlerta = $"Documento '{NuevaAutorizacion.Documento}' registrado exitosamente en el historial del paciente.";
             EsErrorAlerta = false;
         }
         catch (Exception ex)
         {
             MensajeAlerta = $"Error al registrar el documento: {ex.Message}";
             EsErrorAlerta = true;
+        }
+    }
+
+    private async Task GuardarPlantillaAsync()
+    {
+        try
+        {
+            var html = await JS.InvokeAsync<string>("hosvetEditor.getContent", "editorDocVisual");
+            if (html != null)
+            {
+                NuevaAutorizacion.DetalleHtml = html;
+            }
+
+            if (string.IsNullOrWhiteSpace(NuevaAutorizacion.DetalleHtml))
+            {
+                MensajeAlerta = "El contenido de la plantilla no puede estar vacío.";
+                EsErrorAlerta = true;
+                return;
+            }
+
+            string nombrePlantilla = string.IsNullOrWhiteSpace(NuevaAutorizacion.Documento)
+                ? (Plantillas.FirstOrDefault(p => p.FormId == FormatoSeleccionadoId)?.FormNombre ?? "Plantilla Institucional")
+                : NuevaAutorizacion.Documento.Trim();
+
+            var ok = await ConsultaService.GuardarPlantillaFormatoAsync(
+                FormatoSeleccionadoId,
+                nombrePlantilla,
+                NuevaAutorizacion.DetalleHtml);
+
+            if (ok)
+            {
+                Plantillas = await ConsultaService.ObtenerPlantillasFormatosAsync();
+                if (FormatoSeleccionadoId <= 0)
+                {
+                    var nueva = Plantillas.FirstOrDefault(p => p.FormNombre.Equals(nombrePlantilla, StringComparison.OrdinalIgnoreCase));
+                    if (nueva != null)
+                    {
+                        FormatoSeleccionadoId = nueva.FormId;
+                    }
+                }
+
+                MensajeAlerta = $"Plantilla oficial '{nombrePlantilla}' guardada exitosamente. Los próximos documentos generados mantendrán este nuevo formato e imágenes.";
+                EsErrorAlerta = false;
+            }
+            else
+            {
+                MensajeAlerta = "No se pudo guardar la plantilla en el sistema.";
+                EsErrorAlerta = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al guardar la plantilla: {ex.Message}";
+            EsErrorAlerta = true;
+        }
+    }
+
+    private async Task SincronizarDesdeEditorVisualAsync()
+    {
+        var html = await JS.InvokeAsync<string>("hosvetEditor.getContent", "editorDocVisual");
+        if (html != null)
+        {
+            NuevaAutorizacion.DetalleHtml = html;
+        }
+    }
+
+    private void AbrirModalEliminarPlantilla()
+    {
+        if (PlantillaSeleccionada == null || !PlantillaSeleccionada.EsPersonalizada)
+        {
+            MensajeAlerta = "Solo se pueden eliminar plantillas personalizadas. Las plantillas del sistema están protegidas.";
+            EsErrorAlerta = true;
+            return;
+        }
+        MostrarModalEliminarPlantilla = true;
+    }
+
+    private void CerrarModalEliminarPlantilla()
+    {
+        MostrarModalEliminarPlantilla = false;
+    }
+
+    private async Task ConfirmarEliminarPlantillaAsync()
+    {
+        if (FormatoSeleccionadoId <= 0 || PlantillaSeleccionada == null)
+        {
+            CerrarModalEliminarPlantilla();
+            return;
+        }
+
+        try
+        {
+            EliminandoPlantilla = true;
+            string nombreEliminado = PlantillaSeleccionada.FormNombre;
+            var res = await ConsultaService.EliminarPlantillaFormatoAsync(FormatoSeleccionadoId);
+
+            if (res.Ok)
+            {
+                Plantillas = await ConsultaService.ObtenerPlantillasFormatosAsync();
+                FormatoSeleccionadoId = 0;
+                NuevaAutorizacion.Documento = string.Empty;
+                NuevaAutorizacion.DetalleHtml = string.Empty;
+                await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorDocVisual", "");
+
+                MensajeAlerta = $"Plantilla personalizada '{nombreEliminado}' eliminada exitosamente.";
+                EsErrorAlerta = false;
+            }
+            else
+            {
+                MensajeAlerta = res.Mensaje ?? "No se pudo eliminar la plantilla.";
+                EsErrorAlerta = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al eliminar la plantilla: {ex.Message}";
+            EsErrorAlerta = true;
+        }
+        finally
+        {
+            EliminandoPlantilla = false;
+            CerrarModalEliminarPlantilla();
         }
     }
 

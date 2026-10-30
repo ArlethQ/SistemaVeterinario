@@ -50,6 +50,8 @@ public interface IConsultaExternaService
     // 6. Autorizaciones / Consentimientos y Alta MÃ©dica (vt_autorizaciones + vt_formatos + qvt_formulario_alta)
     Task<List<FormatoPlantillaDto>> ObtenerPlantillasFormatosAsync(string? tipo = null);
     Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl);
+    Task<bool> GuardarPlantillaFormatoAsync(int formId, string nombre, string html);
+    Task<(bool Ok, string? Mensaje)> EliminarPlantillaFormatoAsync(int formId);
     Task<List<AutorizacionClinicaDto>> ObtenerAutorizacionesPacienteAsync(int nhcl);
     Task<bool> GuardarAutorizacionAsync(AutorizacionClinicaDto dto);
     Task<FormularioAltaMedicaDto> ObtenerFormularioAltaAsync(int idOrden, int nhcl);
@@ -1014,13 +1016,130 @@ public class ConsultaExternaService : IConsultaExternaService
                 CAST(form_id AS INT) AS FormId,
                 RTRIM(ISNULL(form_nombre, '')) AS FormNombre,
                 RTRIM(ISNULL(form_tipo, '')) AS FormTipo,
-                ISNULL(CAST(form_archivoHtml AS VARCHAR(MAX)), '') AS FormArchivoHtml
+                ISNULL(CAST(form_archivoHtml AS VARCHAR(MAX)), '') AS FormArchivoHtml,
+                CAST(ISNULL(form_es_sistema, CASE WHEN form_id <= 8 THEN 1 ELSE 0 END) AS BIT) AS EsSistema
             FROM vt_formatos
             WHERE (@Tipo IS NULL OR form_tipo = @Tipo)
             ORDER BY form_nombre ASC";
 
         var lista = await _db.QueryAsync<FormatoPlantillaDto>(sql, new { Tipo = tipo });
-        return lista.ToList();
+        var res = lista.ToList();
+        foreach (var item in res)
+        {
+            if (!string.IsNullOrEmpty(item.FormArchivoHtml))
+            {
+                item.FormArchivoHtml = CorregirCaracteresEspeciales(
+                    item.FormArchivoHtml
+                        .Replace("src=\"imagenes/", "src=\"/imagenes/")
+                        .Replace("src='imagenes/", "src='/imagenes/"));
+            }
+        }
+        return res;
+    }
+
+    public async Task<bool> GuardarPlantillaFormatoAsync(int formId, string nombre, string html)
+    {
+        try
+        {
+            if (formId > 0)
+            {
+                const string sql = @"
+                    UPDATE vt_formatos
+                    SET form_archivoHtml = @Html,
+                        form_nombre = CASE WHEN LEN(ISNULL(@Nombre, '')) > 0 THEN @Nombre ELSE form_nombre END
+                    WHERE form_id = @FormId";
+                await _db.ExecuteAsync(sql, new { FormId = formId, Nombre = nombre, Html = html });
+                return true;
+            }
+            else
+            {
+                const string sql = @"
+                    INSERT INTO vt_formatos (form_nombre, form_tipo, form_archivoHtml, form_es_sistema)
+                    VALUES (@Nombre, 'PERSONALIZADO', @Html, 0)";
+                await _db.ExecuteAsync(sql, new { Nombre = string.IsNullOrWhiteSpace(nombre) ? "Nueva Plantilla" : nombre, Html = html });
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al guardar plantilla formato form_id={FormId}", formId);
+            return false;
+        }
+    }
+
+    public async Task<(bool Ok, string? Mensaje)> EliminarPlantillaFormatoAsync(int formId)
+    {
+        try
+        {
+            if (formId <= 0)
+                return (false, "Identificador de plantilla no válido.");
+
+            var esSistema = await _db.ExecuteScalarAsync<int?>(
+                "SELECT ISNULL(form_es_sistema, CASE WHEN form_id <= 8 THEN 1 ELSE 0 END) FROM vt_formatos WHERE form_id = @FormId",
+                new { FormId = formId });
+
+            if (esSistema == 1 || formId <= 8)
+            {
+                return (false, "Esta es una plantilla oficial predeterminada del sistema y está protegida contra eliminación.");
+            }
+
+            var filas = await _db.ExecuteAsync("DELETE FROM vt_formatos WHERE form_id = @FormId", new { FormId = formId });
+            if (filas > 0)
+            {
+                return (true, null);
+            }
+            return (false, "No se encontró la plantilla para eliminar.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar plantilla formato form_id={FormId}", formId);
+            return (false, "Ocurrió un error al intentar eliminar la plantilla.");
+        }
+    }
+
+    public static string CorregirCaracteresEspeciales(string texto)
+    {
+        if (string.IsNullOrEmpty(texto)) return string.Empty;
+
+        return texto
+            .Replace("cÃ©dula", "cédula")
+            .Replace("CÃ©dula", "Cédula")
+            .Replace("cÃ‰dula", "cédula")
+            .Replace("mÃ©dico", "médico")
+            .Replace("MÃ©dico", "Médico")
+            .Replace("mÃ‰dico", "médico")
+            .Replace("realizaciÃ³n", "realización")
+            .Replace("RealizaciÃ³n", "Realización")
+            .Replace("diagnÃ³sticos", "diagnósticos")
+            .Replace("DiagnÃ³sticos", "Diagnósticos")
+            .Replace("anestÃ©sicos", "anestésicos")
+            .Replace("AnestÃ©sicos", "Anestésicos")
+            .Replace("quirÃºrgicos", "quirúrgicos")
+            .Replace("QuirÃºrgicos", "Quirúrgicos")
+            .Replace("terapÃ©uticos", "terapéuticos")
+            .Replace("TerapÃ©uticos", "Terapéuticos")
+            .Replace("TelÃ©fono", "Teléfono")
+            .Replace("telÃ©fono", "teléfono")
+            .Replace("NumÃ©rica", "Numérica")
+            .Replace("NUMÃ‰RICA", "NUMÉRICA")
+            .Replace("Numrica", "Numérica")
+            .Replace("NUMRICA", "NUMÉRICA")
+            .Replace("NÂ°", "N°")
+            .Replace("Â°", "°")
+            .Replace("Â¿", "¿")
+            .Replace("Â¡", "¡")
+            .Replace("Ã¡", "á")
+            .Replace("Ã©", "é")
+            .Replace("Ã­", "í")
+            .Replace("Ã³", "ó")
+            .Replace("Ãº", "ú")
+            .Replace("Ã±", "ñ")
+            .Replace("Ã ", "Á")
+            .Replace("Ã‰", "É")
+            .Replace("Ã ", "Í")
+            .Replace("Ã“", "Ó")
+            .Replace("Ãš", "Ú")
+            .Replace("Ã‘", "Ñ");
     }
 
     public async Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl)
@@ -1031,8 +1150,8 @@ public class ConsultaExternaService : IConsultaExternaService
         if (string.IsNullOrWhiteSpace(plantilla))
         {
             plantilla = @"<h4>CONSENTIMIENTO INFORMADO e-ForVets</h4>
-<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cÃ©dula de identidad NÂ° <strong>[CEDULA]</strong>, en calidad de propietario/responsable del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL]), autorizo al equipo mÃ©dico del Hospital de Especialidades Veterinarias la realizaciÃ³n de los procedimientos diagnÃ³sticos, anestÃ©sicos, quirÃºrgicos o terapÃ©uticos explicados.</p>
-<p>Fecha: [FECHAPIE] | TelÃ©fono: [TELEFONOPIE]</p>";
+<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cédula de identidad N° <strong>[CEDULA]</strong>, en calidad de propietario/responsable del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL]), autorizo al equipo médico del Hospital de Especialidades Veterinarias la realización de los procedimientos diagnósticos, anestésicos, quirúrgicos o terapéuticos explicados.</p>
+<p>Fecha: [FECHAPIE] | Teléfono: [TELEFONOPIE]</p>";
         }
 
         var datos = await _db.QueryFirstOrDefaultAsync<dynamic>(@"
@@ -1042,10 +1161,24 @@ public class ConsultaExternaService : IConsultaExternaService
                 RTRIM(ISNULL(c.pa_cedula, '')) AS Cedula,
                 RTRIM(ISNULL(c.pa_movil, '')) AS Celular,
                 RTRIM(ISNULL(c.pa_telefono, '')) AS Telefono,
-                RTRIM(ISNULL(c.pa_direccion, '')) AS Direccion
+                RTRIM(ISNULL(c.pa_direccion, '')) AS Direccion,
+                RTRIM(ISNULL(e.especie_nombre, '')) AS Especie,
+                RTRIM(ISNULL(r.raza_nombre, '')) AS Raza,
+                CASE 
+                    WHEN UPPER(RTRIM(ISNULL(p.mas_sexo, ''))) = 'M' THEN 'Macho'
+                    WHEN UPPER(RTRIM(ISNULL(p.mas_sexo, ''))) = 'H' THEN 'Hembra'
+                    ELSE RTRIM(ISNULL(p.mas_sexo, ''))
+                END AS Sexo,
+                p.mas_fechanac AS FechaNacimiento,
+                RTRIM(ISNULL(u.user_nombre, 'Médico Veterinario')) AS Medico
             FROM vt_pacientes p
             INNER JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
-            WHERE p.mas_nhcl = @Nhcl", new { Nhcl = nhcl });
+            LEFT JOIN vt_especie e ON p.mas_especie = e.especie_id
+            LEFT JOIN vt_raza r ON p.mas_raza = r.raza_id
+            LEFT JOIN vt_ordenesatencion o ON p.mas_nhcl = o.ordenAten_nhcl
+            LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
+            WHERE p.mas_nhcl = @Nhcl
+            ORDER BY o.ordenAten_id DESC", new { Nhcl = nhcl });
 
         string cliente = datos?.Cliente ?? "";
         string cedula = datos?.Cedula ?? "";
@@ -1053,21 +1186,48 @@ public class ConsultaExternaService : IConsultaExternaService
         string celular = datos?.Celular ?? "";
         string telefono = datos?.Telefono ?? "";
         string direccion = datos?.Direccion ?? "";
+        string especie = datos?.Especie ?? "";
+        string raza = datos?.Raza ?? "";
+        string sexo = datos?.Sexo ?? "";
+        string medico = datos?.Medico ?? "Médico Veterinario";
         string hoy = DateTime.Today.ToString("yyyy-MM-dd");
 
-        return plantilla
+        string edadTexto = "";
+        if (datos?.FechaNacimiento != null)
+        {
+            var fn = (DateTime)datos.FechaNacimiento;
+            var hoyDt = DateTime.Today;
+            int anios = hoyDt.Year - fn.Year;
+            if (hoyDt.Month < fn.Month || (hoyDt.Month == fn.Month && hoyDt.Day < fn.Day)) anios--;
+            int meses = (hoyDt.Month - fn.Month + 12) % 12;
+            edadTexto = anios > 0 ? $"{anios}a {meses}m" : $"{meses} meses";
+        }
+
+        string resultado = CorregirCaracteresEspeciales(plantilla)
+            .Replace("src=\"imagenes/", "src=\"/imagenes/")
+            .Replace("src='imagenes/", "src='/imagenes/")
             .Replace("[NOMBRECLIENTE]", cliente)
+            .Replace("[CLIENTE]", cliente)
             .Replace("[CEDULA]", cedula)
             .Replace("[MASCOTA]", mascota)
             .Replace("[NOMBREMASCOTA]", mascota)
+            .Replace("[ESPECIE]", especie)
+            .Replace("[RAZA]", raza)
+            .Replace("[SEXO]", sexo)
+            .Replace("[EDAD]", edadTexto)
+            .Replace("[USUARIO]", medico)
+            .Replace("[MEDICO]", medico)
             .Replace("[NOMBREPIE]", cliente)
             .Replace("[CEDULAPIE]", cedula)
             .Replace("[TELEFONOPIE]", celular)
             .Replace("[CONVENSIONALPIE]", telefono)
             .Replace("[FECHAPIE]", hoy)
             .Replace("[FECHADIA]", hoy)
+            .Replace("[FECHA]", hoy)
             .Replace("[NHCL]", nhcl.ToString())
             .Replace("[DIRECCION]", direccion);
+
+        return resultado;
     }
 
     public async Task<List<AutorizacionClinicaDto>> ObtenerAutorizacionesPacienteAsync(int nhcl)

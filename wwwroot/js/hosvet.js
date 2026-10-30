@@ -381,3 +381,55 @@ document.addEventListener('paste', function (e) {
         }
     }
 });
+
+// ============================================================================
+// Editor Visual de Documentos y Plantillas Clínicas (WYSIWYG)
+// ============================================================================
+window.hosvetEditor = {
+    getContent: function(elementId) {
+        const el = document.getElementById(elementId);
+        return el ? el.innerHTML : "";
+    },
+    setContent: function(elementId, html) {
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.innerHTML = html || "";
+        }
+    },
+    format: function(command, value = null) {
+        try {
+            document.execCommand(command, false, value);
+        } catch (e) {
+            console.warn("Editor format error:", e);
+        }
+    },
+    insertImage: function(elementId, src) {
+        const editor = document.getElementById(elementId);
+        if (!editor) return;
+
+        editor.focus();
+        const img = document.createElement("img");
+        img.src = src;
+        img.style.maxWidth = "100%";
+        img.style.maxHeight = "350px";
+        img.style.height = "auto";
+        img.style.display = "block";
+        img.style.margin = "12px auto";
+        img.style.borderRadius = "4px";
+
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+            const range = sel.getRangeAt(0);
+            range.collapse(false);
+            range.insertNode(img);
+
+            const newRange = document.createRange();
+            newRange.setStartAfter(img);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+        } else {
+            editor.appendChild(img);
+        }
+    }
+};
