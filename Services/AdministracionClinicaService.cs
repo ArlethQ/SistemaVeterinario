@@ -299,9 +299,73 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
     public async Task<bool> GuardarFisioterapiaAsync(FisioterapiaOrdenDto x) => await _db.ExecuteAsync(@"INSERT INTO vt_fisioterapia_ordenes(fisioO_nhcl,fisioO_idProdu,fisoO_observaciones,fisioO_cantidad,fisioO_id_orden,fisioO_estado,fisioO_fecha) VALUES(@Nhcl,@IdProducto,@Observaciones,@Cantidad,@IdOrden,'A',@Fecha)",x)>0;
 
     public async Task<List<IStatDto>> ObtenerIStatAsync(int nhcl) =>
-        (await _db.QueryAsync<IStatDto>(@"SELECT sec AS Id,is_nhcl AS Nhcl,is_fecha AS Fecha,RTRIM(ISNULL(hematocrito,'')) AS Hematocrito,RTRIM(ISNULL(hemoglobina,'')) AS Hemoglobina,RTRIM(ISNULL(urea,'')) AS Urea,RTRIM(ISNULL(creatinina,'')) AS Creatinina,RTRIM(ISNULL(glucosa,'')) AS Glucosa,RTRIM(ISNULL(sodio,'')) AS Sodio,RTRIM(ISNULL(potasio,'')) AS Potasio,RTRIM(ISNULL(ph,'')) AS Ph,RTRIM(ISNULL(lactato,'')) AS Lactato FROM vt_istat WHERE is_nhcl=@Nhcl AND is_estado='A' ORDER BY is_fecha DESC",new{Nhcl=nhcl})).ToList();
+        (await _db.QueryAsync<IStatDto>(@"
+            SELECT 
+                i.sec AS Id,
+                i.is_nhcl AS Nhcl,
+                i.is_fecha AS Fecha,
+                ISNULL(i.is_iduser, 0) AS IdUser,
+                RTRIM(ISNULL(u.user_nombre, '')) AS QuienIngresa,
+                RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad,
+                RTRIM(ISNULL(i.ph,'')) AS Ph,
+                RTRIM(ISNULL(i.pressure,'')) AS Pressure,
+                RTRIM(ISNULL(i.oxygen,'')) AS Oxygen,
+                RTRIM(ISNULL(i.bicarbonato,'')) AS Bicarbonato,
+                RTRIM(ISNULL(i.carbon,'')) AS Carbon,
+                RTRIM(ISNULL(i.base,'')) AS Base,
+                RTRIM(ISNULL(i.saturation,'')) AS Saturation,
+                RTRIM(ISNULL(i.lactato,'')) AS Lactato,
+                RTRIM(ISNULL(i.sodio,'')) AS Sodio,
+                RTRIM(ISNULL(i.potasio,'')) AS Potasio,
+                RTRIM(ISNULL(i.chloride,'')) AS Chloride,
+                RTRIM(ISNULL(i.ionized,'')) AS Ionized,
+                RTRIM(ISNULL(i.gap,'')) AS Gap,
+                RTRIM(ISNULL(i.hematocrito,'')) AS Hematocrito,
+                RTRIM(ISNULL(i.hemoglobina,'')) AS Hemoglobina,
+                RTRIM(ISNULL(i.glucosa,'')) AS Glucosa,
+                RTRIM(ISNULL(i.urea,'')) AS Urea,
+                RTRIM(ISNULL(i.creatinina,'')) AS Creatinina
+            FROM vt_istat i
+            LEFT JOIN vt_usuarios u ON u.user_numero = i.is_iduser
+            LEFT JOIN vt_especialidades e ON e.es_id = u.user_esp_numero
+            WHERE i.is_nhcl = @Nhcl AND i.is_estado = 'A' 
+            ORDER BY i.is_fecha DESC", new { Nhcl = nhcl })).ToList();
 
-    public async Task<bool> GuardarIStatAsync(IStatDto x,int idUsuario) => await _db.ExecuteAsync(@"INSERT INTO vt_istat(is_nhcl,is_fecha,is_iduser,is_cliente,is_estado,is_tipo,hematocrito,hemoglobina,urea,creatinina,glucosa,sodio,potasio,ph,lactato) VALUES(@Nhcl,@Fecha,@IdUsuario,0,'A','ISTAT',@Hematocrito,@Hemoglobina,@Urea,@Creatinina,@Glucosa,@Sodio,@Potasio,@Ph,@Lactato)",new{x.Nhcl,x.Fecha,IdUsuario=idUsuario,x.Hematocrito,x.Hemoglobina,x.Urea,x.Creatinina,x.Glucosa,x.Sodio,x.Potasio,x.Ph,x.Lactato})>0;
+    public async Task<bool> GuardarIStatAsync(IStatDto x, int idUsuario) => await _db.ExecuteAsync(@"
+        INSERT INTO vt_istat(
+            is_nhcl, is_fecha, is_iduser, is_cliente, is_estado, is_tipo,
+            ph, pressure, oxygen, bicarbonato, carbon, base, saturation, lactato,
+            sodio, potasio, chloride, ionized, gap,
+            hematocrito, hemoglobina, glucosa, urea, creatinina
+        ) VALUES (
+            @Nhcl, @Fecha, @IdUsuario, 0, 'A', 'ISTAT',
+            @Ph, @Pressure, @Oxygen, @Bicarbonato, @Carbon, @Base, @Saturation, @Lactato,
+            @Sodio, @Potasio, @Chloride, @Ionized, @Gap,
+            @Hematocrito, @Hemoglobina, @Glucosa, @Urea, @Creatinina
+        )", new
+    {
+        x.Nhcl,
+        Fecha = x.Fecha == default ? DateTime.Now : x.Fecha,
+        IdUsuario = idUsuario,
+        x.Ph,
+        x.Pressure,
+        x.Oxygen,
+        x.Bicarbonato,
+        x.Carbon,
+        x.Base,
+        x.Saturation,
+        x.Lactato,
+        x.Sodio,
+        x.Potasio,
+        x.Chloride,
+        x.Ionized,
+        x.Gap,
+        x.Hematocrito,
+        x.Hemoglobina,
+        x.Glucosa,
+        x.Urea,
+        x.Creatinina
+    }) > 0;
 
     public async Task<bool> EliminarIStatAsync(int id,int idUsuario) => await _db.ExecuteAsync("UPDATE vt_istat SET is_estado='I',is_elimina=@IdUsuario,is_fechadelete=GETDATE() WHERE sec=@Id",new{Id=id,IdUsuario=idUsuario})>0;
 

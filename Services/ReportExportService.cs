@@ -36,6 +36,7 @@ public interface IReportExportService
     byte[] GenerarPartesOperatoriosPdf(List<ParteOperatorioResumenDto> partes, DateTime desde, DateTime hasta);
     byte[] GenerarOrdenesAtencionPdf(List<OrdenAtencionResumenDto> ordenes, DateTime desde, DateTime hasta);
     byte[] GenerarOrdenesAtencionExcel(List<OrdenAtencionResumenDto> ordenes, DateTime desde, DateTime hasta);
+    byte[] GenerarIStatPdf(PacienteHeaderDto paciente, IStatDto istat, string? nombreMedico = null);
     byte[] GenerarCodigoQrPng(string texto);
 }
 
@@ -2264,4 +2265,174 @@ public class ReportExportService : IReportExportService
             });
         })).GeneratePdf();
     }
+
+    public byte[] GenerarIStatPdf(PacienteHeaderDto paciente, IStatDto istat, string? nombreMedico = null)
+    {
+        var qrBytes = GenerarCodigoQrPng($"EFORVETS-ISTAT|NHCL:{istat.Nhcl}|ID:{istat.Id}|FECHA:{istat.Fecha:yyyyMMddHHmm}");
+        var medicoTratante = !string.IsNullOrWhiteSpace(nombreMedico) 
+            ? nombreMedico 
+            : (!string.IsNullOrWhiteSpace(istat.QuienIngresa) ? istat.QuienIngresa : "Médico Veterinario Tratante");
+        var especialidad = !string.IsNullOrWhiteSpace(istat.Especialidad) ? istat.Especialidad : "Medicina Veterinaria / Laboratorio";
+
+        var panelGases = new List<(string Param, string Abbr, string Val, string Unit, string RefCan, string RefFel)>
+        {
+            ("Potencial de Hidrógeno", "pH", istat.Ph, "pH", "7.35 - 7.45", "7.35 - 7.45"),
+            ("Presión Parcial CO2", "pCO2", istat.Pressure, "mmHg", "35.0 - 45.0", "35.0 - 45.0"),
+            ("Presión Parcial O2", "pO2", istat.Oxygen, "mmHg", "80.0 - 100.0", "80.0 - 100.0"),
+            ("Bicarbonato Actual", "HCO3", istat.Bicarbonato, "mmol/L", "18.0 - 24.0", "18.0 - 24.0"),
+            ("Dióxido de Carbono Total", "TCO2", istat.Carbon, "mmol/L", "19.0 - 25.0", "19.0 - 25.0"),
+            ("Exceso de Base en LEC", "BE ecf", istat.Base, "mmol/L", "-4.0 a +4.0", "-4.0 a +4.0"),
+            ("Saturación de Oxígeno", "sO2", istat.Saturation, "%", "95.0 - 100.0", "95.0 - 100.0"),
+            ("Lactato", "Lac", istat.Lactato, "mmol/L", "< 2.50", "< 2.50")
+        };
+
+        var panelElectrolitos = new List<(string Param, string Abbr, string Val, string Unit, string RefCan, string RefFel)>
+        {
+            ("Sodio Sérico", "Na+", istat.Sodio, "mmol/L", "140.0 - 154.0", "146.0 - 158.0"),
+            ("Potasio Sérico", "K+", istat.Potasio, "mmol/L", "3.8 - 5.3", "3.7 - 5.3"),
+            ("Cloruro", "Cl-", istat.Chloride, "mmol/L", "105.0 - 120.0", "112.0 - 126.0"),
+            ("Calcio Ionizado", "iCa", istat.Ionized, "mmol/L", "1.12 - 1.40", "1.12 - 1.40"),
+            ("Anión Gap", "AnGap", istat.Gap, "mmol/L", "12.0 - 24.0", "13.0 - 27.0")
+        };
+
+        var panelBioquimica = new List<(string Param, string Abbr, string Val, string Unit, string RefCan, string RefFel)>
+        {
+            ("Hematocrito Estimado", "Hto", istat.Hematocrito, "%", "37.0 - 55.0", "30.0 - 45.0"),
+            ("Hemoglobina Calculada", "Hb", istat.Hemoglobina, "g/dL", "12.0 - 18.0", "8.0 - 15.0"),
+            ("Glucosa Sanguínea", "Glu", istat.Glucosa, "mg/dL", "70.0 - 140.0", "75.0 - 150.0"),
+            ("Nitrógeno Ureico / Urea", "BUN", istat.Urea, "mg/dL", "7.0 - 27.0", "15.0 - 34.0"),
+            ("Creatinina Sérica", "Crea", istat.Creatinina, "mg/dL", "0.5 - 1.5", "0.6 - 1.8")
+        };
+
+        bool esFelino = (paciente.Especie ?? "").IndexOf("Fel", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        (paciente.Especie ?? "").IndexOf("Gato", StringComparison.OrdinalIgnoreCase) >= 0;
+
+        return Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(22);
+                page.DefaultTextStyle(x => x.FontSize(8.5f).FontFamily("Lato"));
+
+                page.Header().Column(col =>
+                {
+                    col.Item().Row(row =>
+                    {
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS - e-ForVets").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
+                            c.Item().Text("REPORTE OFICIAL DE GASOMETRÍA Y ELECTROLITOS CLÍNICOS (i-STAT)").Bold().FontSize(10.5f).FontColor(Colors.Grey.Darken3);
+                            c.Item().Text($"Fecha / Hora del Análisis: {istat.Fecha:dd/MM/yyyy HH:mm}   |   Registro #{istat.Id}").FontSize(8.5f).FontColor(Colors.Grey.Darken2);
+                        });
+                        row.ConstantItem(50).Image(qrBytes);
+                    });
+
+                    col.Item().PaddingTop(4).Background(Colors.Blue.Lighten5).Border(0.6f).BorderColor(Colors.Blue.Lighten3).Padding(6).Row(r =>
+                    {
+                        r.RelativeItem(2.2f).Column(c =>
+                        {
+                            c.Item().Text(t => { t.Span("Paciente: ").Bold(); t.Span(paciente.PacienteNombre); });
+                            c.Item().Text(t => { t.Span("Especie / Raza: ").Bold(); t.Span($"{paciente.Especie} / {paciente.Raza}"); });
+                            c.Item().Text(t => { t.Span("NHCL: ").Bold(); t.Span(paciente.Nhcl.ToString()); });
+                        });
+                        r.RelativeItem(2.2f).Column(c =>
+                        {
+                            c.Item().Text(t => { t.Span("Propietario: ").Bold(); t.Span(paciente.PropietarioNombre); });
+                            c.Item().Text(t => { t.Span("Sexo / Edad: ").Bold(); t.Span($"{paciente.Sexo} / {paciente.EdadTexto}"); });
+                            c.Item().Text(t => { t.Span("Orden de Atención: ").Bold(); t.Span(paciente.OrdenAtencionId > 0 ? $"#{paciente.OrdenAtencionId}" : "Ambulatorio / Consulta"); });
+                        });
+                        r.RelativeItem(2f).Column(c =>
+                        {
+                            c.Item().Text(t => { t.Span("Responsable: ").Bold(); t.Span(medicoTratante); });
+                            c.Item().Text(t => { t.Span("Especialidad: ").Bold(); t.Span(especialidad); });
+                            c.Item().Text(t => { t.Span("Tipo Muestra: ").Bold(); t.Span("Sangre Total Heparinizada"); });
+                        });
+                    });
+                });
+
+                page.Content().PaddingTop(10).Column(col =>
+                {
+                    void RenderPanel(string titulo, List<(string Param, string Abbr, string Val, string Unit, string RefCan, string RefFel)> items, string colorHex)
+                    {
+                        col.Item().PaddingTop(6).Background(Colors.Grey.Lighten3).PaddingVertical(3).PaddingHorizontal(6).Text(titulo).Bold().FontSize(9f).FontColor(Colors.Blue.Darken4);
+                        
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(c =>
+                            {
+                                c.RelativeColumn(2.6f);
+                                c.ConstantColumn(46);
+                                c.ConstantColumn(70);
+                                c.ConstantColumn(55);
+                                c.RelativeColumn(1.8f);
+                                c.RelativeColumn(1.8f);
+                            });
+
+                            table.Header(h =>
+                            {
+                                h.Cell().Background(Colors.Grey.Lighten4).BorderBottom(1).BorderColor(Colors.Grey.Medium).Padding(3).Text("Parámetro / Analito").Bold().FontSize(8f);
+                                h.Cell().Background(Colors.Grey.Lighten4).BorderBottom(1).BorderColor(Colors.Grey.Medium).Padding(3).AlignCenter().Text("Abrev.").Bold().FontSize(8f);
+                                h.Cell().Background(Colors.Grey.Lighten4).BorderBottom(1).BorderColor(Colors.Grey.Medium).Padding(3).AlignCenter().Text("Resultado").Bold().FontSize(8f);
+                                h.Cell().Background(Colors.Grey.Lighten4).BorderBottom(1).BorderColor(Colors.Grey.Medium).Padding(3).AlignCenter().Text("Unidades").Bold().FontSize(8f);
+                                h.Cell().Background(esFelino ? Colors.Grey.Lighten4 : Colors.Blue.Lighten5).BorderBottom(1).BorderColor(Colors.Grey.Medium).Padding(3).AlignCenter().Text("Ref. Canino").Bold().FontSize(8f);
+                                h.Cell().Background(esFelino ? Colors.Blue.Lighten5 : Colors.Grey.Lighten4).BorderBottom(1).BorderColor(Colors.Grey.Medium).Padding(3).AlignCenter().Text("Ref. Felino").Bold().FontSize(8f);
+                            });
+
+                            foreach (var it in items)
+                            {
+                                bool tieneValor = !string.IsNullOrWhiteSpace(it.Val);
+                                var bgRow = tieneValor ? Colors.White : Colors.Grey.Lighten5;
+
+                                table.Cell().Background(bgRow).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(it.Param).FontSize(8f);
+                                table.Cell().Background(bgRow).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3).AlignCenter().Text(it.Abbr).Bold().FontSize(8f);
+                                table.Cell().Background(bgRow).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3).AlignCenter().Text(tieneValor ? it.Val : "---").Bold().FontSize(9f).FontColor(tieneValor ? Colors.Blue.Darken3 : Colors.Grey.Medium);
+                                table.Cell().Background(bgRow).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3).AlignCenter().Text(it.Unit).FontSize(7.5f).FontColor(Colors.Grey.Darken2);
+                                table.Cell().Background(esFelino ? bgRow : Colors.Blue.Lighten5).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3).AlignCenter().Text(it.RefCan).FontSize(7.5f);
+                                table.Cell().Background(esFelino ? Colors.Blue.Lighten5 : bgRow).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(3).AlignCenter().Text(it.RefFel).FontSize(7.5f);
+                            }
+                        });
+                    }
+
+                    RenderPanel("1. GASES SANGUÍNEOS Y ESTADO ÁCIDO - BASE", panelGases, "#0284c7");
+                    RenderPanel("2. ELECTROLITOS Y MINERALES", panelElectrolitos, "#059669");
+                    RenderPanel("3. PARÁMETROS HEMATOLÓGICOS Y BIOQUÍMICOS", panelBioquimica, "#d97706");
+
+                    col.Item().PaddingTop(12).Row(r =>
+                    {
+                        r.RelativeItem(1.4f).Border(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5).Column(c =>
+                        {
+                            c.Item().Text("NOTAS METODOLÓGICAS:").Bold().FontSize(7.5f);
+                            c.Item().Text("• Cartucho Point-of-Care i-STAT (Abbott).").FontSize(7f).FontColor(Colors.Grey.Darken2);
+                            c.Item().Text("• Los rangos fisiológicos de referencia aplican a pacientes caninos y felinos en reposo normotérmico a nivel de mar/moderada altitud.").FontSize(7f).FontColor(Colors.Grey.Darken2);
+                            c.Item().Text("• Todo valor anómalo debe interpretarse en conjunción con el cuadro clínico y signos vitales del paciente.").FontSize(7f).FontColor(Colors.Grey.Darken2);
+                        });
+
+                        r.ConstantItem(25);
+
+                        r.RelativeItem(1f).Column(c =>
+                        {
+                            c.Item().Height(30);
+                            c.Item().BorderTop(0.8f).BorderColor(Colors.Grey.Darken2).AlignCenter().Text(medicoTratante).Bold().FontSize(8.5f);
+                            c.Item().AlignCenter().Text(especialidad).FontSize(7.5f).FontColor(Colors.Grey.Darken2);
+                            c.Item().AlignCenter().Text("Firma y Sello Responsable").FontSize(7.5f).FontColor(Colors.Grey.Darken1);
+                        });
+                    });
+                });
+
+                page.Footer().Row(r =>
+                {
+                    r.RelativeItem().Text("Sistema de Gestión e-ForVets • Reporte Oficial i-STAT").FontSize(7.5f).FontColor(Colors.Grey.Darken1);
+                    r.RelativeItem().AlignRight().Text(t =>
+                    {
+                        t.Span("Página ");
+                        t.CurrentPageNumber();
+                        t.Span(" de ");
+                        t.TotalPages();
+                    });
+                });
+            });
+        }).GeneratePdf();
+    }
+
 }
