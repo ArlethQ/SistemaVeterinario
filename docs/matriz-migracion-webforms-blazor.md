@@ -5,7 +5,19 @@
 - WebForms inventariadas: **93**.
 - Con code-behind localizado: **92**.
 - Crystal Reports encontrados en el legado: **36**.
-- Generado: **2026-10-29 10:26**.
+- Última revisión funcional: **2026-10-30**.
+
+## Pendientes reales confirmados
+
+La revisión de código redujo los doce registros marcados originalmente como faltantes a estas brechas funcionales:
+
+1. **Reporte base de pacientes/órdenes:** falta reproducir `vt_basereport.aspx` + `FormasReportes/rep_basereport.aspx` con sus datos de contacto y período; `RecepcionOrdenes.razor` cubre la operación diaria, pero no el reporte histórico exacto.
+2. **Reporte de fallecidos:** `SeguimientoClinico.razor` consulta y presenta los fallecidos, pero falta la descarga PDF/Excel equivalente a `rep_ListaFallecidos.aspx`.
+3. **Antecedentes epidemiológicos TUERI:** `FichaMedica.razor` registra descripción, alimentación y contacto con mascotas, pero aún faltan contacto con personas, tiempos de contacto y la anulación restringida al usuario/primeras 25 horas de `vt_antFinal.aspx`.
+4. **Grupos diagnósticos:** el CRUD está en `CatalogosOperativos.razor`, pero `GestionMigradaService` aún no conserva `vt_grupoestado`; actualmente fuerza estado `A`.
+5. **Parte operatorio consolidado:** existe impresión individual completa en `ProtocoloQuirurgico.razor` y resumen en `ReportesClinicos.razor`; falta validar/ampliar el consolidado para incluir diagnósticos y procedimientos extra del Crystal `rep_parteoperatorio.aspx`.
+
+No faltan vistas independientes para I-STAT, evolución impresa, recetas con/sin orden, equipo quirúrgico, archivos quirúrgicos, impresión masiva de fichas ni grupos diagnósticos; esas funciones ya tienen equivalente Blazor y quedan clasificadas como parciales hasta validación con datos reales.
 
 ## Resumen
 
@@ -15,11 +27,11 @@
 | Default.aspx | Órdenes y recepción | parcial | Home.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | FormasReportes\rep_baserecordatorio.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | AdministracionClinicaService, ReportExportService |
 | FormasReportes\rep_basereport.aspx | Operaciones clínicas | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
-| FormasReportes\rep_i_stat.aspx | Seguimiento clínico | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
+| FormasReportes\rep_i_stat.aspx | Seguimiento clínico | parcial | OperacionesClinicas.razor | AdministracionClinicaService, ReportExportService |
 | FormasReportes\rep_ListaAlertas.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | AdministracionClinicaService, ReportExportService |
 | FormasReportes\rep_ListaAtenciones.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | GestionMigradaService, ReportExportService |
 | FormasReportes\rep_ListaFallecidos.aspx | Seguimiento clínico | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
-| FormasReportes\rep_parteoperatorio.aspx | Quirófano y anestesia | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
+| FormasReportes\rep_parteoperatorio.aspx | Quirófano y anestesia | parcial | ReportesClinicos.razor / ProtocoloQuirurgico.razor | GestionMigradaService, QuirofanoService, ReportExportService |
 | FormasReportes\rep_TotalDiagnosticos.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | GestionMigradaService, ReportExportService |
 | FormasReportes\rep_TotalDiagnosticosCondensado.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | GestionMigradaService, ReportExportService |
 | Hosp_FichaHospitalizacion.aspx | Hospitalización | parcial | FichaHospitalizacion.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
@@ -31,7 +43,7 @@
 | ReportesPaginas\vt_fichasanteriores.aspx | Historia clínica | parcial | HistorialPaciente.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_administracionCitasnew.aspx | Agenda y horarios | parcial | AgendaCitas.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_antecedentes.aspx | Historia clínica | parcial | FichaMedica.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
-| vt_antFinal.aspx | Operaciones clínicas | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
+| vt_antFinal.aspx | Operaciones clínicas | parcial | FichaMedica.razor | ConsultaExternaService |
 | vt_apuntesahistorias.aspx | Historia clínica | parcial | ApuntesHistorias.razor | ConsultaExternaService |
 | vt_autorizaciones.aspx | Operaciones clínicas | parcial | AutorizacionesAlta.razor | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
 | vt_baseRecordatorios.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | AdministracionClinicaService, ReportExportService |
@@ -50,10 +62,10 @@
 | vt_especialidades.aspx | Administración | parcial | CatalogosOperativos.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, KardexService, LaboratorioImagenService |
 | vt_especies.aspx | Clientes y pacientes | parcial | CatalogosClinicos.razor | AdministracionClinicaService, AdmisionFacturacionService, KardexService, LaboratorioImagenService |
 | vt_evoluciones.aspx | Historia clínica | parcial | EvolucionMedica.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService, ReportExportService |
-| vt_EvolucionImp.aspx | Historia clínica | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService, ReportExportService |
+| vt_EvolucionImp.aspx | Historia clínica | parcial | EvolucionMedica.razor | ConsultaExternaService, ReportExportService |
 | vt_fallecidos.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | — |
 | vt_genero.aspx | Clientes y pacientes | parcial | CatalogosClinicos.razor | AdministracionClinicaService, AdmisionFacturacionService, LaboratorioImagenService |
-| vt_grupos_diagnosticos.aspx | Operaciones clínicas | faltante | — | ConsultaExternaService, GestionMigradaService |
+| vt_grupos_diagnosticos.aspx | Operaciones clínicas | parcial | CatalogosOperativos.razor | GestionMigradaService |
 | vt_hisDatMedicos.aspx | Historia clínica | parcial | FichaMedica.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_hisdatmedicospre.aspx | Historia clínica | parcial | FichaMedica.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_hisInfoMed.aspx | Historia clínica | parcial | FichaMedica.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
@@ -61,7 +73,7 @@
 | vt_historialPaciente.aspx | Historia clínica | parcial | HistorialPaciente.razor | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_hojaanestesia.aspx | Quirófano y anestesia | parcial | HojaAnestesia.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_i_stat.aspx | Seguimiento clínico | parcial | OperacionesClinicas.razor | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
-| vt_imprimirfichas.aspx | Historia clínica | parcial | HistorialPaciente.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
+| vt_imprimirfichas.aspx | Historia clínica | parcial | ImpresionFichasMasiva.razor | ConsultaExternaService, KardexService, ReportExportService |
 | vt_labmedicospre.aspx | Laboratorio e imagenología | parcial | BandejaResultadosDiagnosticos.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_listaalertas.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | AdministracionClinicaService, ReportExportService |
 | vt_listadiagnosticos.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | ConsultaExternaService, GestionMigradaService, ReportExportService |
@@ -81,16 +93,16 @@
 | vt_prequirurgico.aspx | Quirófano y anestesia | parcial | PreAnestesia.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_principal.aspx | Órdenes y recepción | parcial | Home.razor | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
 | vt_protocolo.aspx | Quirófano y anestesia | parcial | ProtocoloQuirurgico.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
-| vt_quirArchivos.aspx | Quirófano y anestesia | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
+| vt_quirArchivos.aspx | Quirófano y anestesia | parcial | ProtocoloQuirurgico.razor | QuirofanoService |
 | vt_quirenfermeria.aspx | Quirófano y anestesia | parcial | KardexEnfermeria.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_QuirofanoIngreso.aspx | Quirófano y anestesia | parcial | OperacionesClinicas.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_QuirofanoPrincipal.aspx | Quirófano y anestesia | parcial | ProgramacionClinica.razor | GestionMigradaService, KardexService, QuirofanoService |
-| vt_quirpersonales.aspx | Quirófano y anestesia | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService, QuirofanoService |
+| vt_quirpersonales.aspx | Quirófano y anestesia | parcial | ProtocoloQuirurgico.razor | QuirofanoService |
 | vt_QuirProformas.aspx | Quirófano y anestesia | parcial | ProformasFacturacion.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
-| vt_quirTeam.aspx | Quirófano y anestesia | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
+| vt_quirTeam.aspx | Quirófano y anestesia | parcial | ProtocoloQuirurgico.razor | QuirofanoService |
 | vt_razas.aspx | Clientes y pacientes | parcial | CatalogosClinicos.razor | AdministracionClinicaService, AdmisionFacturacionService, KardexService, LaboratorioImagenService |
 | vt_RecepcionPaciente.aspx | Quirófano y anestesia | parcial | ChecklistPreoperatorio.razor | KardexService, QuirofanoService |
-| vt_recetasnew.aspx | Historia clínica | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
+| vt_recetasnew.aspx | Historia clínica | parcial | RecetarioMedico.razor | ConsultaExternaService, ReportExportService |
 | vt_RecetassinOrden.aspx | Historia clínica | parcial | RecetaSinOrden.razor | ConsultaExternaService, EFactCatalogService, ReportExportService |
 | vt_Recuperacion.aspx | Quirófano y anestesia | parcial | SalaRecuperacion.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_RecuperacionPrincipal.aspx | Quirófano y anestesia | parcial | SalaRecuperacion.razor | QuirofanoService |
@@ -203,12 +215,12 @@
 - **Archivos físicos:** /reports/vt_istat.rpt, reports\vt_istat.rpt.
 - **Reportes Crystal:** /reports/vt_istat.rpt, reports\vt_istat.rpt.
 - **Correo:** No detectado.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/OperacionesClinicas.razor`, pestaña **i-STAT**.
+- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Permite registrar, listar, anular e imprimir cada resultado i-STAT en PDF.
+- **Diferencias encontradas:** El Crystal fue reemplazado por QuestPDF; debe validarse que todos los analitos históricos estén presentes en el formulario vigente.
+- **Trabajo requerido:** Comparar un resultado completo contra `vt_istat.rpt` y verificar analitos y formato.
 
 ### `FormasReportes\rep_ListaAlertas.aspx`
 
@@ -271,12 +283,12 @@
 - **Archivos físicos:** /reports/vt_parteoperatorio.rpt, reports\vt_parteoperatorio.rpt.
 - **Reportes Crystal:** /reports/vt_parteoperatorio.rpt, reports\vt_parteoperatorio.rpt.
 - **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/InventarioService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/ProtocoloQuirurgico.razor` para el parte individual y `Components/Pages/ReportesClinicos.razor` para el consolidado.
+- **Servicio equivalente:** `Services/QuirofanoService.cs`, `Services/GestionMigradaService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Existe protocolo completo imprimible y listado consolidado por período.
+- **Diferencias encontradas:** El consolidado actual es resumido y todavía no demuestra paridad con diagnósticos/procedimientos extra del Crystal.
+- **Trabajo requerido:** Ampliar y validar el consolidado contra `vt_parteoperatorio.rpt`.
 
 ### `FormasReportes\rep_TotalDiagnosticos.aspx`
 
@@ -475,12 +487,12 @@
 - **Archivos físicos:** No detectado.
 - **Reportes Crystal:** No detectado.
 - **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/FichaMedica.razor`, sección **Antecedentes**.
+- **Servicio equivalente:** `Services/ConsultaExternaService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Registra y consulta antecedentes, alimentación y contacto con mascotas por paciente.
+- **Diferencias encontradas:** Faltan campos TUERI de contacto con personas/tiempos y la anulación con dueño del registro y límite de 25 horas.
+- **Trabajo requerido:** Completar esos campos y la regla de anulación si TUERI sigue operativo.
 
 ### `vt_apuntesahistorias.aspx`
 
@@ -798,12 +810,12 @@
 - **Archivos físicos:** No detectado.
 - **Reportes Crystal:** No detectado.
 - **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/InventarioService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`, `Services/ReportExportService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/EvolucionMedica.razor`.
+- **Servicio equivalente:** `Services/ConsultaExternaService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Cronología, edición/anulación, órdenes de laboratorio/imagen y PDF de evoluciones disponibles.
+- **Diferencias encontradas:** El formato PDF reemplaza la impresión WebForms y requiere aprobación visual con un expediente real.
+- **Trabajo requerido:** Validar una evolución con exámenes asociados y firma médica.
 
 ### `vt_fallecidos.aspx`
 
@@ -849,12 +861,12 @@
 - **Archivos físicos:** /imagenes/Edit.png.
 - **Reportes Crystal:** No detectado.
 - **Correo:** No detectado.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/CatalogosOperativos.razor`, catálogo **Grupos diagnósticos**.
+- **Servicio equivalente:** `Services/GestionMigradaService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Lista, crea y edita grupos diagnósticos con control de duplicados.
+- **Diferencias encontradas:** El servicio actual fuerza estado `A` y no persiste `vt_grupoestado`.
+- **Trabajo requerido:** Incorporar activación/inactivación y validar referencias de CIE-10.
 
 ### `vt_hisDatMedicos.aspx`
 
@@ -985,12 +997,12 @@
 - **Archivos físicos:** /imagenes/anfibiotueri.jpg, /imagenes/avetueri.jpg, /imagenes/dorsal.jpg, /imagenes/dorsalgato.jpg, /imagenes/equinos.jpg, /imagenes/Informe.png, /imagenes/mamiferotueri.jpg, /imagenes/reptiltueri.jpg, /Reporteria/HDEV/FichaHDEV.rpt.
 - **Reportes Crystal:** /Reporteria/HDEV/FichaHDEV.rpt.
 - **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** `Components/Pages/HistorialPaciente.razor`.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
+- **Blazor equivalente:** `Components/Pages/ImpresionFichasMasiva.razor`.
+- **Servicio equivalente:** `Services/ConsultaExternaService.cs`, `Services/KardexService.cs`, `Services/ReportExportService.cs`.
 - **Estado:** **parcial**.
-- **Evidencia:** Página Components/Pages/HistorialPaciente.razor localizada; equivalencia funcional aún requiere pruebas CRUD, permisos y efectos secundarios.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Comparar campo/evento, validar CRUD, permisos, reportes, archivos y efectos secundarios con base de pruebas.
+- **Evidencia:** Selecciona atenciones por paciente, genera PDF individual y dossier consolidado para auditoría/seguros.
+- **Diferencias encontradas:** Crystal fue sustituido por QuestPDF y la selección se realiza sobre fichas SOAP vigentes.
+- **Trabajo requerido:** Validar el dossier con varias atenciones y los datos requeridos por aseguradoras.
 
 ### `vt_labmedicospre.aspx`
 
@@ -1325,12 +1337,12 @@
 - **Archivos físicos:** No detectado.
 - **Reportes Crystal:** No detectado.
 - **Correo:** No detectado.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/ProtocoloQuirurgico.razor`, pestaña **Archivos y Fotos de Cirugía**.
+- **Servicio equivalente:** `Services/QuirofanoService.cs` y almacenamiento controlado en `wwwroot/archivosPacientes`.
+- **Estado:** **parcial**.
+- **Evidencia:** Permite listar, subir, descargar y eliminar PDF, imágenes y documentos asociados al NHCL.
+- **Diferencias encontradas:** RadFileExplorer fue sustituido por carga web con límite de 15 MB y extensiones permitidas.
+- **Trabajo requerido:** Validar permisos de eliminación y respaldo de archivos en despliegue.
 
 ### `vt_quirenfermeria.aspx`
 
@@ -1393,12 +1405,12 @@
 - **Archivos físicos:** No detectado.
 - **Reportes Crystal:** No detectado.
 - **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/ProtocoloQuirurgico.razor`.
+- **Servicio equivalente:** `Services/QuirofanoService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** El contenedor Blazor reúne cirugía, equipo, autorizaciones relacionadas y archivos del paciente.
+- **Diferencias encontradas:** Las pestañas WebForms separadas fueron consolidadas en el flujo quirúrgico moderno.
+- **Trabajo requerido:** Validar navegación y permisos por rol con un caso quirúrgico completo.
 
 ### `vt_QuirProformas.aspx`
 
@@ -1427,12 +1439,12 @@
 - **Archivos físicos:** /imagenes/agregar.png.
 - **Reportes Crystal:** No detectado.
 - **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/InventarioService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/ProtocoloQuirurgico.razor`, pestaña **Equipo Quirúrgico**.
+- **Servicio equivalente:** `Services/QuirofanoService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Agrega y retira cirujano principal, ayudante, anestesiólogo, instrumentista y circulante sobre `qvt_team`.
+- **Diferencias encontradas:** Diagnósticos y procedimientos se gestionan en el protocolo, no dentro del selector de equipo.
+- **Trabajo requerido:** Validar duplicados, miembro principal y todos los roles con datos reales.
 
 ### `vt_razas.aspx`
 
@@ -1478,12 +1490,12 @@
 - **Archivos físicos:** /imagenes/b_report.png, Reporteria/HDEV/RptrecetaHDEV.rpt.
 - **Reportes Crystal:** Reporteria/HDEV/RptrecetaHDEV.rpt.
 - **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/RecetarioMedico.razor` para receta con orden y `Components/Pages/RecetaSinOrden.razor` para receta externa.
+- **Servicio equivalente:** `Services/ConsultaExternaService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Gestiona diagnósticos, medicamentos, indicaciones, listado histórico y PDF con QR para ambos tipos de receta.
+- **Diferencias encontradas:** Los Crystal históricos fueron sustituidos por un PDF común de receta.
+- **Trabajo requerido:** Validar impresión, numeración y datos del médico/localidad con recetas conocidas.
 
 ### `vt_RecetassinOrden.aspx`
 

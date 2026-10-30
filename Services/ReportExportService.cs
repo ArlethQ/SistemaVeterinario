@@ -44,6 +44,8 @@ public interface IReportExportService
     byte[] GenerarRecordatoriosSeguimientoExcel(List<RecordatorioVacunaDto> recordatorios, DateTime desde, DateTime hasta, bool porRevision);
     byte[] GenerarAlertasSeguimientoPdf(List<AlertaClinicaDto> alertas, DateTime desde, DateTime hasta, string estado);
     byte[] GenerarAlertasSeguimientoExcel(List<AlertaClinicaDto> alertas, DateTime desde, DateTime hasta, string estado);
+    byte[] GenerarIStatPdf(PacienteHeaderDto paciente, IStatDto istat, string? nombreMedico = null);
+    byte[] GenerarFichasMedicasLotePdf(PacienteHeaderDto paciente, List<FichaLoteItemDto> lote);
     byte[] GenerarCodigoQrPng(string texto);
 }
 

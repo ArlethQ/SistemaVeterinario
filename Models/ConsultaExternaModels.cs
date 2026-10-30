@@ -247,6 +247,33 @@ public class FormularioAltaMedicaDto
     public string Medicacion { get; set; } = string.Empty;
 }
 
+public class FichaMedicaResumenLoteDto
+{
+    public int Sec { get; set; }
+    public int Orden { get; set; }
+    public int Nhcl { get; set; }
+    public DateTime Fecha { get; set; }
+    public string Paciente { get; set; } = string.Empty;
+    public string Cliente { get; set; } = string.Empty;
+    public string Medico { get; set; } = string.Empty;
+    public string Especialidad { get; set; } = string.Empty;
+    public string Motivo { get; set; } = string.Empty;
+    public string Diagnosticos { get; set; } = string.Empty;
+    public decimal? Peso { get; set; }
+    public decimal? Temperatura { get; set; }
+    public int? FrecuenciaCardiaca { get; set; }
+    public bool Seleccionado { get; set; } = true;
+}
+
+public class FichaLoteItemDto
+{
+    public string Medico { get; set; } = string.Empty;
+    public string Especialidad { get; set; } = string.Empty;
+    public FichaMedicaCompletaDto Ficha { get; set; } = new();
+    public List<DiagnosticoCie10Dto> Diagnosticos { get; set; } = [];
+    public List<RecetaMedicamentoItemDto> Receta { get; set; } = [];
+}
+
 // ============================================================================
 // 5. APUNTES LONGITUDINALES A HISTORIAS CLINICAS (vt_apuntesahistorias / vt_notas)
 // ============================================================================
