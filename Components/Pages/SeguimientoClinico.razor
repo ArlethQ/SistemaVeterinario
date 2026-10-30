@@ -1,35 +1,171 @@
 @page "/seguimiento/clinico"
 @inject SessionStateService Session
 @inject IAdministracionClinicaService AdminService
+@inject IReportExportService ReportService
 @inject NavigationManager Nav
-<PageTitle>Seguimiento clínico | e-ForVets</PageTitle>
+@inject IJSRuntime JS
+
+<PageTitle>Reportes de seguimiento | e-ForVets</PageTitle>
 
 @if (_autorizado)
 {
-<div class="container-fluid py-3">
-    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3"><div><small class="text-primary fw-bold">SEGUIMIENTO</small><h2 class="mb-1">Recordatorios, alertas y fallecidos</h2><p class="text-muted mb-0">Consulta operativa migrada de los reportes WebForms.</p></div><button class="btn btn-primary" disabled="@_cargando" @onclick="CargarAsync">@(_cargando ? "Consultando..." : "Consultar")</button></div>
-    @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-danger">@_error</div> }
-    <div class="card border-0 shadow-sm mb-3"><div class="card-body row g-3 align-items-end"><div class="col-md-3"><label class="form-label">Desde</label><input class="form-control" type="date" @bind="_desde" /></div><div class="col-md-3"><label class="form-label">Hasta</label><input class="form-control" type="date" @bind="_hasta" /></div><div class="col-md-3">@if(_tab=="alertas"){<label class="form-label">Estado</label><select class="form-select" @bind="_estado"><option value="">Todos</option><option value="PENDIENTE">Pendiente</option><option value="REALIZADO">Realizado</option></select>}else if(_tab=="recordatorios"){<label class="form-label">Fecha de referencia</label><select class="form-select" @bind="_porRevision"><option value="false">Envío</option><option value="true">Próxima revisión</option></select>}</div></div></div>
-    <ul class="nav nav-tabs mb-3"><li class="nav-item"><button class="nav-link @(_tab=="recordatorios"?"active":"")" @onclick='()=>CambiarTab("recordatorios")'>Recordatorios (@_recordatorios.Count)</button></li><li class="nav-item"><button class="nav-link @(_tab=="alertas"?"active":"")" @onclick='()=>CambiarTab("alertas")'>Alertas (@_alertas.Count)</button></li><li class="nav-item"><button class="nav-link @(_tab=="fallecidos"?"active":"")" @onclick='()=>CambiarTab("fallecidos")'>Fallecidos (@_fallecidos.Count)</button></li></ul>
-    <div class="card border-0 shadow-sm"><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead class="table-light">
-    @if(_tab=="recordatorios"){<tr><th>Paciente</th><th>Propietario</th><th>Enviado por</th><th>Envío</th><th>Próxima revisión</th><th>Contacto</th></tr>}
-    else if(_tab=="alertas"){<tr><th>Orden / paciente</th><th>Cliente</th><th>Médico</th><th>Fecha</th><th>Pronóstico</th><th>Estado</th></tr>}
-    else{<tr><th>Fecha</th><th>NHCL</th><th>Paciente</th><th>Propietario</th><th>Motivo</th></tr>}
-    </thead><tbody>
-    @if(_tab=="recordatorios"){@foreach(var x in _recordatorios){<tr><td><strong>@x.Paciente</strong><small class="d-block text-muted">NHCL @x.Nhcl</small></td><td>@x.Propietario</td><td>@x.QuienManda<small class="d-block text-muted">@x.Especialidad</small></td><td>@x.FechaEnvio.ToString("yyyy-MM-dd")</td><td>@x.ProximaRevision?.ToString("yyyy-MM-dd")</td><td>@x.Telefono<small class="d-block text-muted">@x.CorreoEnviado</small></td></tr>}}
-    else if(_tab=="alertas"){@foreach(var x in _alertas){<tr><td><strong>@x.Paciente</strong><small class="d-block text-muted">Orden @x.Orden · NHCL @x.Nhcl</small></td><td>@x.Cliente<small class="d-block text-muted">@x.Telefono</small></td><td>@x.Medico<small class="d-block text-muted">@x.Especialidad</small></td><td>@x.FechaEnvio.ToString("yyyy-MM-dd")</td><td>@x.Pronostico</td><td><span class="badge bg-secondary">@x.Estado</span></td></tr>}}
-    else if(_fallecidos.Count == 0){<tr><td colspan="5" class="text-center text-muted py-4">No existen pacientes fallecidos dentro del rango seleccionado.</td></tr>}
-    else{@foreach(var x in _fallecidos){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td>@x.Nhcl</td><td><strong>@x.Paciente</strong></td><td>@x.Propietario</td><td>@x.Motivo</td></tr>}}
-    </tbody></table></div></div>
-</div>
+    <div class="container-fluid py-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+            <div>
+                <small class="text-primary fw-bold">SEGUIMIENTO</small>
+                <h2 class="mb-1">Reportes de seguimiento</h2>
+                <p class="text-muted mb-0">Recordatorios de vacunas, alertas quirúrgicas y pacientes fallecidos.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                @if (_tab == "recordatorios")
+                {
+                    <button class="btn btn-outline-danger" disabled="@(!_recordatorios.Any() || _cargando)" @onclick="ExportarRecordatoriosPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF</button>
+                    <button class="btn btn-outline-success" disabled="@(!_recordatorios.Any() || _cargando)" @onclick="ExportarRecordatoriosExcelAsync"><i class="bi bi-file-earmark-excel-fill me-1"></i>Excel</button>
+                }
+                else if (_tab == "alertas")
+                {
+                    <button class="btn btn-outline-danger" disabled="@(!_alertas.Any() || _cargando)" @onclick="ExportarAlertasPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF</button>
+                    <button class="btn btn-outline-success" disabled="@(!_alertas.Any() || _cargando)" @onclick="ExportarAlertasExcelAsync"><i class="bi bi-file-earmark-excel-fill me-1"></i>Excel</button>
+                }
+                <button class="btn btn-primary" disabled="@_cargando" @onclick="CargarAsync">@(_cargando ? "Consultando..." : "Consultar")</button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-danger">@_error</div> }
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">Filtros</h6></div>
+            <div class="card-body row g-3 align-items-end">
+                <div class="col-md-3"><label class="form-label">Desde</label><input class="form-control" type="date" @bind="_desde" /></div>
+                <div class="col-md-3"><label class="form-label">Hasta</label><input class="form-control" type="date" @bind="_hasta" /></div>
+                <div class="col-md-3">
+                    @if (_tab == "alertas")
+                    {
+                        <label class="form-label">Estado del procedimiento</label>
+                        <select class="form-select" @bind="_estado"><option value="">Todos</option><option value="Pendiente">Pendiente</option><option value="En Proceso">En Proceso</option><option value="Realizado">Realizado</option></select>
+                    }
+                    else if (_tab == "recordatorios")
+                    {
+                        <label class="form-label">Fecha de referencia</label>
+                        <select class="form-select" @bind="_porRevision"><option value="false">Fecha de envío</option><option value="true">Próxima revisión</option></select>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item"><button class="nav-link @(_tab == "recordatorios" ? "active" : "")" @onclick='() => CambiarTabAsync("recordatorios")'>Recordatorios (@_recordatorios.Count)</button></li>
+            <li class="nav-item"><button class="nav-link @(_tab == "alertas" ? "active" : "")" @onclick='() => CambiarTabAsync("alertas")'>Alertas quirúrgicas (@_alertas.Count)</button></li>
+            <li class="nav-item"><button class="nav-link @(_tab == "fallecidos" ? "active" : "")" @onclick='() => CambiarTabAsync("fallecidos")'>Fallecidos (@_fallecidos.Count)</button></li>
+        </ul>
+
+        <div class="card border-0 shadow-sm"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                @if (_tab == "recordatorios") { <tr><th>Paciente</th><th>Propietario</th><th>Enviado por</th><th>Envío</th><th>Próxima revisión</th><th>Contacto</th><th>Dirección</th></tr> }
+                else if (_tab == "alertas") { <tr><th>Orden/paciente</th><th>Propietario</th><th>Médico</th><th>Fecha</th><th>Especie/edad</th><th>Pronóstico</th><th>Estado</th><th>Contacto</th></tr> }
+                else { <tr><th>Fecha</th><th>NHCL</th><th>Paciente</th><th>Propietario</th><th>Motivo</th></tr> }
+            </thead>
+            <tbody>
+                @if (_tab == "recordatorios")
+                {
+                    @foreach (var x in _recordatorios)
+                    {
+                        <tr><td><strong>@x.Paciente</strong><small class="d-block text-muted">NHCL @x.Nhcl</small></td><td>@x.Propietario</td><td>@x.QuienManda<small class="d-block text-muted">@x.Especialidad</small></td><td>@x.FechaEnvio.ToString("dd/MM/yyyy")</td><td>@x.ProximaRevision?.ToString("dd/MM/yyyy")</td><td>@x.Telefono<small class="d-block text-muted">@x.Movil</small><small class="d-block text-muted">@x.CorreoEnviado</small></td><td>@x.Direccion</td></tr>
+                    }
+                    @if (!_cargando && !_recordatorios.Any()) { <tr><td colspan="7" class="text-center text-muted py-4">No existen recordatorios para los filtros seleccionados.</td></tr> }
+                }
+                else if (_tab == "alertas")
+                {
+                    @foreach (var x in _alertas)
+                    {
+                        <tr><td><strong>@x.Paciente</strong><small class="d-block text-muted">Orden @x.Orden · NHCL @x.Nhcl</small></td><td>@x.Cliente</td><td>@x.Medico<small class="d-block text-muted">@x.Especialidad</small></td><td>@x.FechaEnvio.ToString("dd/MM/yyyy")</td><td>@x.Especie<small class="d-block text-muted">@x.Anios año(s)</small></td><td>@x.Pronostico</td><td><span class="badge text-bg-secondary">@x.Estado</span></td><td>@x.Telefono<small class="d-block text-muted">@x.Movil</small><small class="d-block text-muted">@x.Email</small></td></tr>
+                    }
+                    @if (!_cargando && !_alertas.Any()) { <tr><td colspan="8" class="text-center text-muted py-4">No existen alertas para los filtros seleccionados.</td></tr> }
+                }
+                else if (_fallecidos.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">No existen pacientes fallecidos dentro del rango seleccionado.</td></tr> }
+                else
+                {
+                    @foreach (var x in _fallecidos) { <tr><td>@x.Fecha.ToString("dd/MM/yyyy")</td><td>@x.Nhcl</td><td><strong>@x.Paciente</strong></td><td>@x.Propietario</td><td>@x.Motivo</td></tr> }
+                }
+            </tbody>
+        </table></div></div>
+    </div>
 }
 
 @code {
     private bool _autorizado, _cargando, _porRevision;
-    private string _tab="recordatorios", _estado="", _error="";
-    private DateTime _desde=new(DateTime.Today.Year,1,1), _hasta=DateTime.Today;
-    private List<RecordatorioVacunaDto> _recordatorios=[]; private List<AlertaClinicaDto> _alertas=[]; private List<PacienteFallecidoDto> _fallecidos=[];
-    protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated){Nav.NavigateTo("/login");return;}_autorizado=true;await CargarAsync();}
-    private async Task CambiarTab(string tab){_tab=tab;await CargarAsync();}
-    private async Task CargarAsync(){if(_desde>_hasta){_error="La fecha inicial no puede superar la fecha final.";return;}_cargando=true;_error="";try{if(_tab=="recordatorios")_recordatorios=await AdminService.ObtenerRecordatoriosAsync(_desde,_hasta,_porRevision);else if(_tab=="alertas")_alertas=await AdminService.ObtenerAlertasAsync(_desde,_hasta,_estado);else _fallecidos=await AdminService.ObtenerFallecidosAsync(_desde,_hasta);}catch(Exception){_error="No se pudo consultar la información en la base de datos.";}_cargando=false;}
+    private string _tab = "recordatorios", _estado = "Pendiente", _error = "";
+    private DateTime _desde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime _hasta = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1).AddDays(-1);
+    private DateTime _recordatoriosDesde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime _recordatoriosHasta = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1).AddDays(-1);
+    private DateTime _alertasDesde = DateTime.Today, _alertasHasta = DateTime.Today;
+    private DateTime _fallecidosDesde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime _fallecidosHasta = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1).AddDays(-1);
+    private List<RecordatorioVacunaDto> _recordatorios = [];
+    private List<AlertaClinicaDto> _alertas = [];
+    private List<PacienteFallecidoDto> _fallecidos = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated) { Nav.NavigateTo("/login"); return; }
+        _autorizado = true; await CargarAsync();
+    }
+
+    private async Task CambiarTabAsync(string tab)
+    {
+        GuardarRangoActual();
+        _tab = tab;
+        RestaurarRangoActual();
+        await CargarAsync();
+    }
+
+    private void GuardarRangoActual()
+    {
+        if (_tab == "recordatorios") { _recordatoriosDesde = _desde; _recordatoriosHasta = _hasta; }
+        else if (_tab == "alertas") { _alertasDesde = _desde; _alertasHasta = _hasta; }
+        else { _fallecidosDesde = _desde; _fallecidosHasta = _hasta; }
+    }
+
+    private void RestaurarRangoActual()
+    {
+        if (_tab == "recordatorios") { _desde = _recordatoriosDesde; _hasta = _recordatoriosHasta; }
+        else if (_tab == "alertas") { _desde = _alertasDesde; _hasta = _alertasHasta; }
+        else { _desde = _fallecidosDesde; _hasta = _fallecidosHasta; }
+    }
+
+    private async Task CargarAsync()
+    {
+        if (_desde > _hasta) { _error = "La fecha inicial no puede superar la fecha final."; return; }
+        _cargando = true; _error = "";
+        try
+        {
+            if (_tab == "recordatorios") _recordatorios = await AdminService.ObtenerRecordatoriosAsync(_desde, _hasta, _porRevision);
+            else if (_tab == "alertas") _alertas = await AdminService.ObtenerAlertasAsync(_desde, _hasta, _estado);
+            else _fallecidos = await AdminService.ObtenerFallecidosAsync(_desde, _hasta);
+        }
+        catch (Exception ex) { _error = $"No se pudo consultar la información: {ex.Message}"; }
+        finally { _cargando = false; }
+    }
+
+    private async Task ExportarRecordatoriosPdfAsync()
+    {
+        var bytes = ReportService.GenerarRecordatoriosSeguimientoPdf(_recordatorios, _desde, _hasta, _porRevision);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Recordatorios_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+    }
+    private async Task ExportarRecordatoriosExcelAsync()
+    {
+        var bytes = ReportService.GenerarRecordatoriosSeguimientoExcel(_recordatorios, _desde, _hasta, _porRevision);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Recordatorios_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+    private async Task ExportarAlertasPdfAsync()
+    {
+        var bytes = ReportService.GenerarAlertasSeguimientoPdf(_alertas, _desde, _hasta, _estado);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"AlertasQuirurgicas_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+    }
+    private async Task ExportarAlertasExcelAsync()
+    {
+        var bytes = ReportService.GenerarAlertasSeguimientoExcel(_alertas, _desde, _hasta, _estado);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"AlertasQuirurgicas_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
 }

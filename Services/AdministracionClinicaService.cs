@@ -114,18 +114,21 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
         string campoFecha = porFechaRevision ? "v.vacuna_revacunacion" : "v.vacuna_fecha";
         string sql = $@"
             SELECT v.vacuna_nhcl AS Nhcl, RTRIM(p.mas_nombre) AS Paciente,
-                RTRIM(c.pa_apellidos + ' ' + c.pa_nombres) AS Propietario,
+                RTRIM(ISNULL(c.pa_apellidos, '') + ' ' + ISNULL(c.pa_nombres, '')) AS Propietario,
                 RTRIM(u.user_nombre) AS QuienManda,
                 RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad,
                 RTRIM(ISNULL(c.pa_email, '')) AS CorreoEnviado,
                 v.vacuna_fecha AS FechaEnvio, v.vacuna_revacunacion AS ProximaRevision,
-                RTRIM(COALESCE(NULLIF(c.pa_movil,''), c.pa_telefono, '')) AS Telefono
+                RTRIM(ISNULL(c.pa_telefono, '')) AS Telefono,
+                RTRIM(ISNULL(c.pa_movil, '')) AS Movil,
+                RTRIM(ISNULL(c.pa_direccion, '')) AS Direccion
             FROM vt_vacunas v
             INNER JOIN vt_usuarios u ON v.vacuna_iduser=u.user_numero
             INNER JOIN vt_pacientes p ON v.vacuna_nhcl=p.mas_nhcl
             INNER JOIN vt_clientes c ON p.mas_idcliente=c.pa_codigo
             LEFT JOIN vt_especialidades e ON e.es_id=u.user_esp_numero
-            WHERE v.vacuna_estado='A' AND {campoFecha} >= @Desde AND {campoFecha} < DATEADD(day,1,@Hasta)
+            WHERE ISNULL(v.vacuna_estado, 'A') = 'A'
+              AND {campoFecha} >= @Desde AND {campoFecha} < DATEADD(day,1,@Hasta)
             ORDER BY {campoFecha}";
         return (await _db.QueryAsync<RecordatorioVacunaDto>(sql, new { Desde = desde.Date, Hasta = hasta.Date })).ToList();
     }
@@ -137,9 +140,13 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
                 RTRIM(ISNULL(u.user_nombre,'')) AS Medico,
                 RTRIM(c.pa_apellidos + ' ' + c.pa_nombres) AS Cliente,
                 RTRIM(p.mas_nombre) AS Paciente, RTRIM(ISNULL(e.es_descripcion,'')) AS Especialidad,
-                RTRIM(ISNULL(f.med_analisis,'')) AS Pronostico,
+                RTRIM(ISNULL(f.pronosticotueri,'')) AS Pronostico,
                 RTRIM(ISNULL(f.estadoparte,'')) AS Estado,
-                RTRIM(COALESCE(NULLIF(c.pa_movil,''), c.pa_telefono, '')) AS Telefono
+                RTRIM(ISNULL(c.pa_telefono,'')) AS Telefono,
+                RTRIM(ISNULL(c.pa_movil,'')) AS Movil,
+                RTRIM(ISNULL(c.pa_email,'')) AS Email,
+                ISNULL(f.med_edadanios,0) AS Anios,
+                RTRIM(ISNULL(f.med_especie,'')) AS Especie
             FROM vt_fichamedica f
             INNER JOIN vt_pacientes p ON f.med_nhcl=p.mas_nhcl
             INNER JOIN vt_clientes c ON f.med_cliente=c.pa_codigo

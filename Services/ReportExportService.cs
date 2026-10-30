@@ -40,6 +40,10 @@ public interface IReportExportService
     byte[] GenerarReporteAtencionesExcel(List<ReporteAtencionDto> atenciones, DateTime desde, DateTime hasta, bool condensado);
     byte[] GenerarReporteDiagnosticosPdf(List<ReporteDiagnosticoDto> diagnosticos, DateTime desde, DateTime hasta, bool condensado);
     byte[] GenerarReporteDiagnosticosExcel(List<ReporteDiagnosticoDto> diagnosticos, DateTime desde, DateTime hasta, bool condensado);
+    byte[] GenerarRecordatoriosSeguimientoPdf(List<RecordatorioVacunaDto> recordatorios, DateTime desde, DateTime hasta, bool porRevision);
+    byte[] GenerarRecordatoriosSeguimientoExcel(List<RecordatorioVacunaDto> recordatorios, DateTime desde, DateTime hasta, bool porRevision);
+    byte[] GenerarAlertasSeguimientoPdf(List<AlertaClinicaDto> alertas, DateTime desde, DateTime hasta, string estado);
+    byte[] GenerarAlertasSeguimientoExcel(List<AlertaClinicaDto> alertas, DateTime desde, DateTime hasta, string estado);
     byte[] GenerarCodigoQrPng(string texto);
 }
 
@@ -275,6 +279,103 @@ public class ReportExportService : IReportExportService
         ws.Range(1, 1, 1, ultimaColumna).Style.Fill.BackgroundColor = XLColor.LightBlue;
         ws.SheetView.FreezeRows(1); ws.RangeUsed()?.SetAutoFilter(); ws.Columns().AdjustToContents();
         ws.Cell(ws.LastRowUsed()?.RowNumber() + 2 ?? 3, 1).Value = $"Período: {desde:dd/MM/yyyy} - {hasta:dd/MM/yyyy}";
+        using var stream = new MemoryStream(); wb.SaveAs(stream); return stream.ToArray();
+    }
+
+    public byte[] GenerarRecordatoriosSeguimientoPdf(
+        List<RecordatorioVacunaDto> recordatorios, DateTime desde, DateTime hasta, bool porRevision)
+    {
+        return Document.Create(doc => doc.Page(page =>
+        {
+            page.Size(PageSizes.A4.Landscape()); page.Margin(22); page.DefaultTextStyle(x => x.FontSize(8));
+            page.Header().Column(col =>
+            {
+                col.Item().Text("REPORTE DE RECORDATORIOS DE VACUNAS A PACIENTES").Bold().FontSize(14).FontColor(Colors.Blue.Darken3);
+                col.Item().Text($"Período: {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy} · Fecha de referencia: {(porRevision ? "próxima revisión" : "envío")} · {recordatorios.Count} registro(s)").FontColor(Colors.Grey.Darken2);
+            });
+            page.Content().PaddingTop(10).Table(table =>
+            {
+                table.ColumnsDefinition(c => { c.ConstantColumn(60); c.RelativeColumn(1.2f); c.RelativeColumn(1.4f); c.RelativeColumn(1.3f); c.ConstantColumn(65); c.ConstantColumn(65); c.RelativeColumn(1.4f); });
+                table.Header(h => { foreach (var texto in new[] { "NHCL", "Paciente", "Propietario", "Enviado por", "Envío", "Revisión", "Contacto" }) h.Cell().Background(Colors.Blue.Lighten4).Padding(4).Text(texto).Bold(); });
+                foreach (var item in recordatorios)
+                {
+                    foreach (var valor in new[]
+                    {
+                        item.Nhcl.ToString(), item.Paciente, item.Propietario, $"{item.QuienManda}\n{item.Especialidad}",
+                        item.FechaEnvio.ToString("dd/MM/yyyy"), item.ProximaRevision?.ToString("dd/MM/yyyy") ?? "",
+                        $"{item.Telefono} / {item.Movil}\n{item.CorreoEnviado}"
+                    }) table.Cell().BorderBottom(.5f).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(valor ?? string.Empty);
+                }
+            });
+            page.Footer().AlignCenter().Text($"Generado por e-ForVets · {DateTime.Now:dd/MM/yyyy HH:mm}");
+        })).GeneratePdf();
+    }
+
+    public byte[] GenerarRecordatoriosSeguimientoExcel(
+        List<RecordatorioVacunaDto> recordatorios, DateTime desde, DateTime hasta, bool porRevision)
+    {
+        using var wb = new XLWorkbook(); var ws = wb.Worksheets.Add("Recordatorios");
+        string[] headers = ["NHCL", "Paciente", "Propietario", "Enviado por", "Especialidad", "Correo enviado", "Fecha envío", "Próxima revisión", "Teléfono", "Móvil", "Dirección"];
+        for (var i = 0; i < headers.Length; i++) ws.Cell(1, i + 1).Value = headers[i];
+        var fila = 2;
+        foreach (var x in recordatorios)
+        {
+            object[] valores = [x.Nhcl, x.Paciente, x.Propietario, x.QuienManda, x.Especialidad, x.CorreoEnviado, x.FechaEnvio, x.ProximaRevision.HasValue ? x.ProximaRevision.Value : string.Empty, x.Telefono, x.Movil, x.Direccion];
+            for (var i = 0; i < valores.Length; i++) ws.Cell(fila, i + 1).Value = XLCellValue.FromObject(valores[i]);
+            fila++;
+        }
+        ws.Columns(7, 8).Style.DateFormat.Format = "dd/mm/yyyy";
+        ws.Range(1, 1, 1, headers.Length).Style.Font.Bold = true; ws.Range(1, 1, 1, headers.Length).Style.Fill.BackgroundColor = XLColor.LightBlue;
+        ws.SheetView.FreezeRows(1); ws.RangeUsed()?.SetAutoFilter(); ws.Columns().AdjustToContents();
+        ws.Cell(ws.LastRowUsed()?.RowNumber() + 2 ?? 3, 1).Value = $"Período: {desde:dd/MM/yyyy} - {hasta:dd/MM/yyyy}; referencia: {(porRevision ? "próxima revisión" : "envío")}";
+        using var stream = new MemoryStream(); wb.SaveAs(stream); return stream.ToArray();
+    }
+
+    public byte[] GenerarAlertasSeguimientoPdf(
+        List<AlertaClinicaDto> alertas, DateTime desde, DateTime hasta, string estado)
+    {
+        return Document.Create(doc => doc.Page(page =>
+        {
+            page.Size(PageSizes.A4.Landscape()); page.Margin(22); page.DefaultTextStyle(x => x.FontSize(7.5f));
+            page.Header().Column(col =>
+            {
+                col.Item().Text("LISTA DE PROCEDIMIENTOS QUIRÚRGICOS POR ESTADO").Bold().FontSize(14).FontColor(Colors.Blue.Darken3);
+                col.Item().Text($"Período: {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy} · Estado: {(string.IsNullOrWhiteSpace(estado) ? "Todos" : estado)} · {alertas.Count} registro(s)").FontColor(Colors.Grey.Darken2);
+            });
+            page.Content().PaddingTop(10).Table(table =>
+            {
+                table.ColumnsDefinition(c => { c.ConstantColumn(62); c.ConstantColumn(58); c.RelativeColumn(1.2f); c.RelativeColumn(1.4f); c.RelativeColumn(1.3f); c.RelativeColumn(1.1f); c.RelativeColumn(1.2f); c.ConstantColumn(65); });
+                table.Header(h => { foreach (var texto in new[] { "Orden/NHCL", "Fecha", "Paciente", "Propietario", "Médico", "Especie/Edad", "Pronóstico", "Estado" }) h.Cell().Background(Colors.Blue.Lighten4).Padding(4).Text(texto).Bold(); });
+                foreach (var item in alertas)
+                {
+                    foreach (var valor in new[]
+                    {
+                        $"{item.Orden} / {item.Nhcl}", item.FechaEnvio.ToString("dd/MM/yyyy"), item.Paciente, item.Cliente,
+                        $"{item.Medico}\n{item.Especialidad}", $"{item.Especie}\n{item.Anios} año(s)", item.Pronostico, item.Estado
+                    }) table.Cell().BorderBottom(.5f).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(valor ?? string.Empty);
+                }
+            });
+            page.Footer().AlignCenter().Text($"Generado por e-ForVets · {DateTime.Now:dd/MM/yyyy HH:mm}");
+        })).GeneratePdf();
+    }
+
+    public byte[] GenerarAlertasSeguimientoExcel(
+        List<AlertaClinicaDto> alertas, DateTime desde, DateTime hasta, string estado)
+    {
+        using var wb = new XLWorkbook(); var ws = wb.Worksheets.Add("Alertas quirúrgicas");
+        string[] headers = ["Orden", "NHCL", "Fecha", "Paciente", "Propietario", "Médico", "Especialidad", "Especie", "Edad años", "Pronóstico", "Estado", "Teléfono", "Móvil", "Correo"];
+        for (var i = 0; i < headers.Length; i++) ws.Cell(1, i + 1).Value = headers[i];
+        var fila = 2;
+        foreach (var x in alertas)
+        {
+            object[] valores = [x.Orden, x.Nhcl, x.FechaEnvio, x.Paciente, x.Cliente, x.Medico, x.Especialidad, x.Especie, x.Anios, x.Pronostico, x.Estado, x.Telefono, x.Movil, x.Email];
+            for (var i = 0; i < valores.Length; i++) ws.Cell(fila, i + 1).Value = XLCellValue.FromObject(valores[i]);
+            fila++;
+        }
+        ws.Column(3).Style.DateFormat.Format = "dd/mm/yyyy hh:mm";
+        ws.Range(1, 1, 1, headers.Length).Style.Font.Bold = true; ws.Range(1, 1, 1, headers.Length).Style.Fill.BackgroundColor = XLColor.LightBlue;
+        ws.SheetView.FreezeRows(1); ws.RangeUsed()?.SetAutoFilter(); ws.Columns().AdjustToContents();
+        ws.Cell(ws.LastRowUsed()?.RowNumber() + 2 ?? 3, 1).Value = $"Período: {desde:dd/MM/yyyy} - {hasta:dd/MM/yyyy}; estado: {(string.IsNullOrWhiteSpace(estado) ? "Todos" : estado)}";
         using var stream = new MemoryStream(); wb.SaveAs(stream); return stream.ToArray();
     }
 

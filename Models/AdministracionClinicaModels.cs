@@ -22,6 +22,8 @@ public sealed class RecordatorioVacunaDto
     public DateTime FechaEnvio { get; set; }
     public DateTime? ProximaRevision { get; set; }
     public string Telefono { get; set; } = string.Empty;
+    public string Movil { get; set; } = string.Empty;
+    public string Direccion { get; set; } = string.Empty;
 }
 
 public sealed class AlertaClinicaDto
@@ -36,6 +38,10 @@ public sealed class AlertaClinicaDto
     public string Pronostico { get; set; } = string.Empty;
     public string Estado { get; set; } = string.Empty;
     public string Telefono { get; set; } = string.Empty;
+    public string Movil { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public int Anios { get; set; }
+    public string Especie { get; set; } = string.Empty;
 }
 
 public sealed class PacienteFallecidoDto

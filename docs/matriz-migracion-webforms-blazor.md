@@ -13,10 +13,10 @@
 |---|---|---|---|---|
 | curvaCrecimiento.aspx | Clientes y pacientes | parcial | HistorialPaciente.razor | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
 | Default.aspx | Órdenes y recepción | parcial | Home.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
-| FormasReportes\rep_baserecordatorio.aspx | Seguimiento clínico | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
+| FormasReportes\rep_baserecordatorio.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | AdministracionClinicaService, ReportExportService |
 | FormasReportes\rep_basereport.aspx | Operaciones clínicas | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | FormasReportes\rep_i_stat.aspx | Seguimiento clínico | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
-| FormasReportes\rep_ListaAlertas.aspx | Seguimiento clínico | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
+| FormasReportes\rep_ListaAlertas.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | AdministracionClinicaService, ReportExportService |
 | FormasReportes\rep_ListaAtenciones.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | GestionMigradaService, ReportExportService |
 | FormasReportes\rep_ListaFallecidos.aspx | Seguimiento clínico | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
 | FormasReportes\rep_parteoperatorio.aspx | Quirófano y anestesia | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
@@ -34,7 +34,7 @@
 | vt_antFinal.aspx | Operaciones clínicas | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_apuntesahistorias.aspx | Historia clínica | parcial | ApuntesHistorias.razor | ConsultaExternaService |
 | vt_autorizaciones.aspx | Operaciones clínicas | parcial | AutorizacionesAlta.razor | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
-| vt_baseRecordatorios.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | — |
+| vt_baseRecordatorios.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | AdministracionClinicaService, ReportExportService |
 | vt_basereport.aspx | Operaciones clínicas | faltante | — | — |
 | vt_Calendarizacion.aspx | Agenda y horarios | parcial | ProgramacionClinica.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_calendarizarhorariosmedicos.aspx | Agenda y horarios | parcial | ProgramacionClinica.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
@@ -63,7 +63,7 @@
 | vt_i_stat.aspx | Seguimiento clínico | parcial | OperacionesClinicas.razor | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
 | vt_imprimirfichas.aspx | Historia clínica | parcial | HistorialPaciente.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_labmedicospre.aspx | Laboratorio e imagenología | parcial | BandejaResultadosDiagnosticos.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
-| vt_listaalertas.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | — |
+| vt_listaalertas.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | AdministracionClinicaService, ReportExportService |
 | vt_listadiagnosticos.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | ConsultaExternaService, GestionMigradaService, ReportExportService |
 | vt_listafichasmedicas.aspx | Historia clínica | parcial | ReportesClinicos.razor | ConsultaExternaService, GestionMigradaService, ReportExportService |
 | vt_localidades.aspx | Administración | parcial | LocalidadesAdministracion.razor | AdministracionClinicaService, AuthService, GestionMigradaService |
@@ -162,19 +162,19 @@
 ### `FormasReportes\rep_baserecordatorio.aspx`
 
 - **Code-behind:** `rep_baserecordatorio.aspx.vb`.
-- **Propósito funcional:** Módulo Seguimiento clínico; confirmar el propósito exacto durante la validación funcional.
+- **Propósito funcional:** Emitir recordatorios de vacunas por fecha de envío o próxima revisión, con paciente, propietario, médico, especialidad y datos de contacto.
 - **Campos principales:** CrystalReportSource1, CrystalReportViewer1, form1.
 - **Eventos y operaciones:** CrystalReportViewer1_Unload, Page_Load.
 - **Tablas/vistas/procedimientos:** vt_baserecordatorio, vt_clientes, vt_especialidades, vt_pacientes, vt_usuarios, vt_usuarios_1, vt_vitacoravacuna.
 - **Archivos físicos:** /reports/vt_baserecordatorio.rpt, reports\vt_baserecordatorio.rpt.
 - **Reportes Crystal:** /reports/vt_baserecordatorio.rpt, reports\vt_baserecordatorio.rpt.
-- **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Correo:** No envía correo; muestra el correo actual del propietario porque la tabla vigente no conserva `correoenvio`.
+- **Blazor equivalente:** `Components/Pages/SeguimientoClinico.razor`, pestaña **Recordatorios**.
+- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Consulta `vt_vacunas` por `vacuna_fecha` o `vacuna_revacunacion`, previsualiza los datos disponibles y genera PDF/Excel.
+- **Diferencias encontradas:** La base actual no contiene `vt_vitacoravacuna`; se usa el registro vigente `vt_vacunas` y el correo actual del propietario. Crystal Reports fue sustituido por QuestPDF/ClosedXML.
+- **Trabajo requerido:** Comparar ambos rangos de fecha contra registros conocidos de `vt_vacunas` y aprobar los formatos exportados.
 
 ### `FormasReportes\rep_basereport.aspx`
 
@@ -213,19 +213,19 @@
 ### `FormasReportes\rep_ListaAlertas.aspx`
 
 - **Code-behind:** `rep_ListaAlertas.aspx.vb`.
-- **Propósito funcional:** Módulo Seguimiento clínico; confirmar el propósito exacto durante la validación funcional.
+- **Propósito funcional:** Listar procedimientos quirúrgicos marcados para alerta, filtrados por fecha y estado del parte.
 - **Campos principales:** 1033, CrystalReportSource1, CrystalReportViewer1, form1.
 - **Eventos y operaciones:** CrystalReportViewer1_Unload, Page_Load.
 - **Tablas/vistas/procedimientos:** vt_clientes, vt_especialidades, vt_fichamedica, vt_listaAlertasrpt, vt_pacientes, vt_usuarios.
 - **Archivos físicos:** /reports/vt_listaAlertasrpt.rpt, reports\vt_listaAlertasrpt.rpt.
 - **Reportes Crystal:** /reports/vt_listaAlertasrpt.rpt, reports\vt_listaAlertasrpt.rpt.
-- **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Correo:** No envía correo; solo presenta teléfono, móvil y correo del propietario.
+- **Blazor equivalente:** `Components/Pages/SeguimientoClinico.razor`, pestaña **Alertas quirúrgicas**.
+- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Conserva `med_pregunta='S'`, rango de `med_fecha`, estados Pendiente/En Proceso/Realizado y los datos del Crystal; permite PDF/Excel.
+- **Diferencias encontradas:** El origen remitía el estado Realizado a `rep_ListaRealizados.aspx`, archivo ausente en el proyecto legado. Blazor cubre los tres estados con una sola consulta y reporte.
+- **Trabajo requerido:** Validar con un procedimiento de cada estado y comparar el contenido del PDF con `vt_listaAlertasrpt.rpt`.
 
 ### `FormasReportes\rep_ListaAtenciones.aspx`
 
@@ -519,7 +519,7 @@
 ### `vt_baseRecordatorios.aspx`
 
 - **Code-behind:** `vt_baseRecordatorios.aspx.vb`.
-- **Propósito funcional:** Módulo Seguimiento clínico; confirmar el propósito exacto durante la validación funcional.
+- **Propósito funcional:** Seleccionar un período y generar recordatorios de vacunas por fecha de envío o por próxima revisión.
 - **Campos principales:** btnimprimir, btnimprimirrev, CompareValidator1, CompareValidator2, CompareValidator3, CompareValidator4, Content1, Content2, ContentPlaceHolder1, head, Literal1, RadScriptManager1, TextBox1, TextBox2, TextBox3, TextBox4.
 - **Eventos y operaciones:** btnimprimir_Click, btnimprimirrev_Click, Page_Load.
 - **Tablas/vistas/procedimientos:** vt_baseRecordatorios.
@@ -527,11 +527,11 @@
 - **Reportes Crystal:** No detectado.
 - **Correo:** No detectado.
 - **Blazor equivalente:** `Components/Pages/SeguimientoClinico.razor`.
-- **Servicio equivalente:** `Services/.cs`.
+- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/ReportExportService.cs`.
 - **Estado:** **parcial**.
-- **Evidencia:** Página Components/Pages/SeguimientoClinico.razor localizada; equivalencia funcional aún requiere pruebas CRUD, permisos y efectos secundarios.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Comparar campo/evento, validar CRUD, permisos, reportes, archivos y efectos secundarios con base de pruebas.
+- **Evidencia:** La pestaña Recordatorios conserva los dos modos de fecha, fechas mensuales iniciales, previsualización y exportaciones PDF/Excel.
+- **Diferencias encontradas:** Los dos botones e iframes del origen se unificaron mediante el selector Fecha de referencia.
+- **Trabajo requerido:** Probar Envío y Próxima revisión con datos históricos y validar que los rangos incluyan el día final completo.
 
 ### `vt_basereport.aspx`
 
@@ -1012,7 +1012,7 @@
 ### `vt_listaalertas.aspx`
 
 - **Code-behind:** `vt_listaalertas.aspx.vb`.
-- **Propósito funcional:** Módulo Seguimiento clínico; confirmar el propósito exacto durante la validación funcional.
+- **Propósito funcional:** Seleccionar rango y estado para imprimir la lista de procedimientos quirúrgicos en seguimiento.
 - **Campos principales:** 1033, btnimprimir, cmbestadoparte, Content1, Content2, ContentPlaceHolder1, head, Literal1, RadScriptManager1, TextBox1, TextBox2.
 - **Eventos y operaciones:** btnimprimir_Click, Page_Load.
 - **Tablas/vistas/procedimientos:** vt_listaalertas.
@@ -1020,11 +1020,11 @@
 - **Reportes Crystal:** No detectado.
 - **Correo:** No detectado.
 - **Blazor equivalente:** `Components/Pages/SeguimientoClinico.razor`.
-- **Servicio equivalente:** `Services/.cs`.
+- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/ReportExportService.cs`.
 - **Estado:** **parcial**.
-- **Evidencia:** Página Components/Pages/SeguimientoClinico.razor localizada; equivalencia funcional aún requiere pruebas CRUD, permisos y efectos secundarios.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Comparar campo/evento, validar CRUD, permisos, reportes, archivos y efectos secundarios con base de pruebas.
+- **Evidencia:** La pestaña Alertas quirúrgicas inicia con la fecha actual y Pendiente, admite los tres estados y genera PDF/Excel con datos clínicos y de contacto.
+- **Diferencias encontradas:** Se añadió la opción Todos y se resolvió en la misma vista el caso Realizado cuyo reporte legado no existe físicamente.
+- **Trabajo requerido:** Comparar registros y estados con la bandeja quirúrgica y validar visualmente las exportaciones.
 
 ### `vt_listadiagnosticos.aspx`
 
