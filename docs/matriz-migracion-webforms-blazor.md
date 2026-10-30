@@ -32,7 +32,7 @@
 | vt_administracionCitasnew.aspx | Agenda y horarios | parcial | AgendaCitas.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_antecedentes.aspx | Historia clínica | parcial | FichaMedica.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_antFinal.aspx | Operaciones clínicas | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
-| vt_apuntesahistorias.aspx | Historia clínica | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
+| vt_apuntesahistorias.aspx | Historia clínica | parcial | ApuntesHistorias.razor | ConsultaExternaService |
 | vt_autorizaciones.aspx | Operaciones clínicas | parcial | AutorizacionesAlta.razor | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
 | vt_baseRecordatorios.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | — |
 | vt_basereport.aspx | Operaciones clínicas | faltante | — | — |
@@ -485,19 +485,19 @@
 ### `vt_apuntesahistorias.aspx`
 
 - **Code-behind:** `vt_apuntesahistorias.aspx.vb`.
-- **Propósito funcional:** Módulo Historia clínica; confirmar el propósito exacto durante la validación funcional.
+- **Propósito funcional:** Buscar un paciente y mantener apuntes longitudinales en su historia clínica, independientes de una orden de atención.
 - **Campos principales:** btnIngreso0, Buscar, Content1, Content2, ContentPlaceHolder1, DefaultSetOfTools, fechaingreso, GridView1, GridView5, head, LbCodCli, Lbespecialidad, Lbiduser, lblAnios, lblcliente, lblHostName, lblIdPac, lblIPAddress, lblMeses, lblNHCL, lblNombre, Lblocalidad, lbltipo, Lbtipouser, RadAjaxLoadingPanel1.
 - **Eventos y operaciones:** btnIngreso0_Click, Buscar_Click, GridView1_SelectedIndexChanging, GridView5_SelectedIndexChanging, Page_Load, RadGrid1_ItemCommand.
 - **Tablas/vistas/procedimientos:** vt_apuntesahistorias, vt_clase, vt_clientes, vt_clientes_1, vt_especie, vt_nombres_cientificos, vt_notas, vt_pacientes, vt_pacientes_1, vt_razas, vt_sexo, vt_usuarios.
 - **Archivos físicos:** /imagenes/Edit.png.
 - **Reportes Crystal:** No detectado.
-- **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Correo:** No; el correo del propietario solo se consultaba como dato de búsqueda.
+- **Blazor equivalente:** `Components/Pages/ApuntesHistorias.razor`.
+- **Servicio equivalente:** `Services/ConsultaExternaService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Búsqueda por nombres, apellidos, cédula, paciente o NHCL; alta en `vt_notas`, consulta de apuntes activos y anulación lógica con usuario y fecha.
+- **Diferencias encontradas:** La interfaz Blazor unifica en una sola tabla la selección propietario/paciente y usa un editor de texto seguro en lugar del editor HTML Telerik.
+- **Trabajo requerido:** Probar altas y anulaciones contra una base de datos de pruebas y validar con usuarios clínicos si requieren conservar formato enriquecido.
 
 ### `vt_autorizaciones.aspx`
 

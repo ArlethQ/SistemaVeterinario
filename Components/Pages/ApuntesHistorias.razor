@@ -1,0 +1,382 @@
+@page "/consulta/historial/apuntes"
+@page "/consulta/historial/apuntes/{Nhcl:int}"
+@inject IConsultaExternaService ConsultaService
+@inject SessionStateService Session
+@inject NavigationManager Nav
+
+<PageTitle>Apuntes a historias clínicas - e-ForVets</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+        <div>
+            <small class="text-primary fw-bold text-uppercase">Historia longitudinal</small>
+            <h2 class="mb-1 fw-bold">Apuntes a historias clínicas</h2>
+            <p class="text-muted mb-0">Registra observaciones permanentes asociadas al paciente, independientes de una orden de atención.</p>
+        </div>
+        @if (paciente is not null)
+        {
+            <a class="btn btn-outline-primary btn-sm" href="/consulta/historial/@paciente.Nhcl">Ver historia completa</a>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(mensaje))
+    {
+        <div class="alert @(esError ? "alert-danger" : "alert-success") alert-dismissible py-2" role="alert">
+            @mensaje
+            <button type="button" class="btn-close py-2" @onclick="() => mensaje = string.Empty"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white">
+            <h6 class="mb-0 fw-bold text-primary">Buscar historia clínica</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label small fw-semibold">Buscar por</label>
+                    <select class="form-select" @bind="criterioBusqueda" @bind:after="LimpiarResultados">
+                        <option value="apellidos">Apellidos del propietario</option>
+                        <option value="nombres">Nombres del propietario</option>
+                        <option value="cedula">Cédula del propietario</option>
+                        <option value="paciente">Nombre del paciente</option>
+                        <option value="nhcl">Número de historia</option>
+                    </select>
+                </div>
+                <div class="col-md-7 col-lg-8">
+                    <label class="form-label small fw-semibold">Criterio</label>
+                    <input class="form-control" autocomplete="off" placeholder="Escriba al menos dos caracteres" @bind="filtroBusqueda" @bind:event="oninput" @onkeydown="BuscarConEnterAsync" />
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100" disabled="@buscando" @onclick="BuscarAsync">
+                        @(buscando ? "Buscando..." : "Consultar")
+                    </button>
+                </div>
+            </div>
+
+            @if (resultados.Count > 0)
+            {
+                <div class="table-responsive mt-3">
+                    <table class="table table-sm table-hover align-middle mb-2">
+                        <thead class="table-light">
+                            <tr><th>NHCL</th><th>Paciente</th><th>Propietario</th><th>Cédula</th><th>Especie / raza</th><th>Tipo</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in ResultadosPagina)
+                            {
+                                <tr class="@(paciente?.Nhcl == item.Nhcl ? "table-primary" : "")">
+                                    <td class="fw-semibold">@item.Nhcl</td>
+                                    <td>@item.Paciente</td>
+                                    <td>@item.Propietario</td>
+                                    <td>@item.Cedula</td>
+                                    <td>@item.Especie @(!string.IsNullOrWhiteSpace(item.Raza) ? $"· {item.Raza}" : "")</td>
+                                    <td><span class="badge text-bg-light border">@item.Tipo</span></td>
+                                    <td class="text-end"><button class="btn btn-sm btn-outline-primary" @onclick="() => SeleccionarPacienteAsync(item)">Seleccionar</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (TotalPaginasResultados > 1)
+                {
+                    <div class="d-flex justify-content-end align-items-center gap-2 small">
+                        <button class="btn btn-sm btn-outline-secondary" disabled="@(paginaResultados == 1)" @onclick="() => paginaResultados--">Anterior</button>
+                        <span>Página @paginaResultados de @TotalPaginasResultados</span>
+                        <button class="btn btn-sm btn-outline-secondary" disabled="@(paginaResultados == TotalPaginasResultados)" @onclick="() => paginaResultados++">Siguiente</button>
+                    </div>
+                }
+            }
+            else if (busquedaEjecutada && !buscando)
+            {
+                <div class="text-muted text-center py-3">No se encontraron pacientes con el criterio indicado.</div>
+            }
+        </div>
+    </div>
+
+    @if (cargandoPaciente)
+    {
+        <LoadingState Message="Cargando apuntes de la historia clínica..." />
+    }
+    else if (paciente is not null)
+    {
+        <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
+            <div class="card-body py-3">
+                <div class="row g-2 small">
+                    <div class="col-md-2"><span class="text-muted">Historia</span><strong class="d-block text-primary fs-6">NHCL #@paciente.Nhcl</strong></div>
+                    <div class="col-md-2"><span class="text-muted">Paciente</span><strong class="d-block">@paciente.Paciente</strong><span>@paciente.Sexo</span></div>
+                    <div class="col-md-3"><span class="text-muted">Propietario</span><strong class="d-block">@paciente.Propietario</strong><span>@paciente.Celular</span></div>
+                    <div class="col-md-2"><span class="text-muted">Especie / raza</span><strong class="d-block">@paciente.Especie</strong><span>@paciente.Raza</span></div>
+                    <div class="col-md-2"><span class="text-muted">Edad</span><strong class="d-block">@paciente.EdadTexto</strong></div>
+                    <div class="col-md-1"><span class="text-muted">Tipo</span><strong class="d-block text-danger">@paciente.Tipo</strong></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">Nuevo apunte</h6></div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Fecha *</label>
+                            <input type="date" class="form-control" @bind="nuevoApunte.Fecha" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label fw-semibold">Observación clínica *</label>
+                            <textarea class="form-control" rows="12" maxlength="10000" placeholder="Escriba el apunte que debe permanecer visible en la historia del paciente..." @bind="nuevoApunte.Observacion" @bind:event="oninput"></textarea>
+                            <div class="d-flex justify-content-between mt-1">
+                                <small class="text-muted">Se guardará en mayúsculas, igual que en el sistema anterior.</small>
+                                <small class="text-muted">@nuevoApunte.Observacion.Length / 10000</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-white text-end">
+                        <button class="btn btn-success fw-semibold" disabled="@guardando" @onclick="GuardarAsync">
+                            @(guardando ? "Guardando..." : "Guardar apunte")
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-bold">Apuntes anteriores</h6>
+                        <span class="badge text-bg-primary">@apuntes.Count activo(s)</span>
+                    </div>
+                    <div class="card-body">
+                        @if (apuntes.Count == 0)
+                        {
+                            <div class="text-center text-muted py-5">No existen apuntes activos para este paciente.</div>
+                        }
+                        else
+                        {
+                            @foreach (var apunte in ApuntesPagina)
+                            {
+                                <article class="border rounded p-3 mb-3">
+                                    <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                                        <div>
+                                            <strong class="text-primary">@apunte.Fecha.ToString("yyyy-MM-dd")</strong>
+                                            <span class="text-muted ms-2">@apunte.RegistradoPor</span>
+                                            <span class="badge text-bg-light border ms-2">@apunte.Tipo</span>
+                                        </div>
+                                        @if (idApunteAAnular == apunte.Id)
+                                        {
+                                            <div class="d-flex gap-1 align-items-center">
+                                                <small class="text-danger fw-semibold me-1">¿Confirmar anulación?</small>
+                                                <button class="btn btn-sm btn-danger" disabled="@anulando" @onclick="() => AnularAsync(apunte.Id)">Sí, anular</button>
+                                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => idApunteAAnular = 0">Cancelar</button>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => idApunteAAnular = apunte.Id">Anular</button>
+                                        }
+                                    </div>
+                                    <div style="white-space:pre-wrap; overflow-wrap:anywhere">@apunte.Observacion</div>
+                                </article>
+                            }
+                        }
+                    </div>
+                    @if (TotalPaginasApuntes > 1)
+                    {
+                        <div class="card-footer bg-white d-flex justify-content-end align-items-center gap-2 small">
+                            <button class="btn btn-sm btn-outline-secondary" disabled="@(paginaApuntes == 1)" @onclick="() => paginaApuntes--">Anterior</button>
+                            <span>Página @paginaApuntes de @TotalPaginasApuntes</span>
+                            <button class="btn btn-sm btn-outline-secondary" disabled="@(paginaApuntes == TotalPaginasApuntes)" @onclick="() => paginaApuntes++">Siguiente</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Nhcl { get; set; }
+
+    private const int TamanoPaginaResultados = 8;
+    private const int TamanoPaginaApuntes = 5;
+    private string criterioBusqueda = "apellidos";
+    private string filtroBusqueda = string.Empty;
+    private List<PacienteApunteHistoriaDto> resultados = [];
+    private List<ApunteHistoriaClinicaDto> apuntes = [];
+    private PacienteApunteHistoriaDto? paciente;
+    private ApunteHistoriaClinicaDto nuevoApunte = new();
+    private bool buscando;
+    private bool busquedaEjecutada;
+    private bool cargandoPaciente;
+    private bool guardando;
+    private bool anulando;
+    private bool esError;
+    private string mensaje = string.Empty;
+    private int paginaResultados = 1;
+    private int paginaApuntes = 1;
+    private int idApunteAAnular;
+
+    private IEnumerable<PacienteApunteHistoriaDto> ResultadosPagina => resultados
+        .Skip((paginaResultados - 1) * TamanoPaginaResultados).Take(TamanoPaginaResultados);
+    private int TotalPaginasResultados => Math.Max(1, (int)Math.Ceiling(resultados.Count / (double)TamanoPaginaResultados));
+    private IEnumerable<ApunteHistoriaClinicaDto> ApuntesPagina => apuntes
+        .Skip((paginaApuntes - 1) * TamanoPaginaApuntes).Take(TamanoPaginaApuntes);
+    private int TotalPaginasApuntes => Math.Max(1, (int)Math.Ceiling(apuntes.Count / (double)TamanoPaginaApuntes));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        var nhclInicial = Nhcl > 0 ? Nhcl : Session.NhclActivo ?? 0;
+        if (nhclInicial > 0 && paciente?.Nhcl != nhclInicial)
+        {
+            await CargarPacientePorNhclAsync(nhclInicial);
+        }
+    }
+
+    private async Task BuscarConEnterAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarAsync();
+    }
+
+    private void LimpiarResultados()
+    {
+        resultados = [];
+        busquedaEjecutada = false;
+        paginaResultados = 1;
+    }
+
+    private async Task BuscarAsync()
+    {
+        mensaje = string.Empty;
+        var minimo = criterioBusqueda == "nhcl" ? 1 : 2;
+        if (filtroBusqueda.Trim().Length < minimo)
+        {
+            esError = true;
+            mensaje = criterioBusqueda == "nhcl"
+                ? "Ingrese un número de historia válido."
+                : "Ingrese al menos dos caracteres para buscar.";
+            return;
+        }
+
+        buscando = true;
+        try
+        {
+            resultados = await ConsultaService.BuscarPacientesParaApuntesAsync(filtroBusqueda, criterioBusqueda);
+            paginaResultados = 1;
+            busquedaEjecutada = true;
+            esError = false;
+        }
+        catch (Exception ex)
+        {
+            esError = true;
+            mensaje = $"No se pudo realizar la búsqueda: {ex.Message}";
+        }
+        finally
+        {
+            buscando = false;
+        }
+    }
+
+    private async Task SeleccionarPacienteAsync(PacienteApunteHistoriaDto seleccionado)
+    {
+        paciente = seleccionado;
+        Nhcl = seleccionado.Nhcl;
+        await CargarApuntesAsync();
+        Nav.NavigateTo($"/consulta/historial/apuntes/{seleccionado.Nhcl}", false);
+    }
+
+    private async Task CargarPacientePorNhclAsync(int nhcl)
+    {
+        cargandoPaciente = true;
+        mensaje = string.Empty;
+        try
+        {
+            var encontrados = await ConsultaService.BuscarPacientesParaApuntesAsync(nhcl.ToString(), "nhcl");
+            paciente = encontrados.FirstOrDefault();
+            if (paciente is null)
+            {
+                apuntes = [];
+                esError = true;
+                mensaje = $"No se encontró un paciente activo con NHCL #{nhcl}.";
+                return;
+            }
+            Nhcl = paciente.Nhcl;
+            await CargarApuntesAsync();
+            esError = false;
+        }
+        catch (Exception ex)
+        {
+            esError = true;
+            mensaje = $"No se pudo cargar la historia: {ex.Message}";
+        }
+        finally
+        {
+            cargandoPaciente = false;
+        }
+    }
+
+    private async Task CargarApuntesAsync()
+    {
+        if (paciente is null) return;
+        apuntes = await ConsultaService.ObtenerApuntesHistoriaAsync(paciente.Nhcl);
+        paginaApuntes = 1;
+        idApunteAAnular = 0;
+        nuevoApunte = new ApunteHistoriaClinicaDto
+        {
+            Nhcl = paciente.Nhcl,
+            IdCliente = paciente.IdCliente,
+            Fecha = DateTime.Today,
+            Tipo = paciente.Tipo
+        };
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (paciente is null || guardando) return;
+        guardando = true;
+        try
+        {
+            nuevoApunte.Nhcl = paciente.Nhcl;
+            nuevoApunte.IdCliente = paciente.IdCliente;
+            nuevoApunte.Tipo = paciente.Tipo;
+            var resultado = await ConsultaService.AgregarApunteHistoriaAsync(nuevoApunte, Session.IdUser);
+            esError = !resultado.Ok;
+            mensaje = resultado.Ok ? "Apunte registrado correctamente." : resultado.Mensaje ?? "No se pudo guardar el apunte.";
+            if (resultado.Ok) await CargarApuntesAsync();
+        }
+        catch (Exception ex)
+        {
+            esError = true;
+            mensaje = $"No se pudo guardar el apunte: {ex.Message}";
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private async Task AnularAsync(int id)
+    {
+        if (anulando) return;
+        anulando = true;
+        try
+        {
+            var resultado = await ConsultaService.AnularApunteHistoriaAsync(id, Session.IdUser);
+            esError = !resultado.Ok;
+            mensaje = resultado.Ok ? "Apunte anulado correctamente." : resultado.Mensaje ?? "No se pudo anular el apunte.";
+            if (resultado.Ok) await CargarApuntesAsync();
+        }
+        catch (Exception ex)
+        {
+            esError = true;
+            mensaje = $"No se pudo anular el apunte: {ex.Message}";
+        }
+        finally
+        {
+            anulando = false;
+        }
+    }
+}

@@ -224,3 +224,49 @@ public class FormularioAltaMedicaDto
     public string Dieta { get; set; } = string.Empty;
     public string Medicacion { get; set; } = string.Empty;
 }
+
+// ============================================================================
+// 5. APUNTES LONGITUDINALES A HISTORIAS CLINICAS (vt_apuntesahistorias / vt_notas)
+// ============================================================================
+public class PacienteApunteHistoriaDto
+{
+    public int Nhcl { get; set; }
+    public int IdCliente { get; set; }
+    public string Paciente { get; set; } = string.Empty;
+    public string Propietario { get; set; } = string.Empty;
+    public string Cedula { get; set; } = string.Empty;
+    public string Celular { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Sexo { get; set; } = string.Empty;
+    public string Especie { get; set; } = string.Empty;
+    public string Raza { get; set; } = string.Empty;
+    public string Tipo { get; set; } = "HDEV";
+    public DateTime? FechaNacimiento { get; set; }
+
+    public string EdadTexto
+    {
+        get
+        {
+            if (!FechaNacimiento.HasValue || FechaNacimiento.Value.Date > DateTime.Today) return "No registrada";
+            var nacimiento = FechaNacimiento.Value.Date;
+            var hoy = DateTime.Today;
+            var anios = hoy.Year - nacimiento.Year;
+            if (nacimiento > hoy.AddYears(-anios)) anios--;
+            var fechaAniversario = nacimiento.AddYears(Math.Max(0, anios));
+            var meses = Math.Max(0, ((hoy.Year - fechaAniversario.Year) * 12) + hoy.Month - fechaAniversario.Month);
+            return $"{Math.Max(0, anios)} año(s), {meses} mes(es)";
+        }
+    }
+}
+
+public class ApunteHistoriaClinicaDto
+{
+    public int Id { get; set; }
+    public int Nhcl { get; set; }
+    public int IdCliente { get; set; }
+    public int IdUsuario { get; set; }
+    public DateTime Fecha { get; set; } = DateTime.Today;
+    public string Observacion { get; set; } = string.Empty;
+    public string RegistradoPor { get; set; } = string.Empty;
+    public string Tipo { get; set; } = "HDEV";
+}

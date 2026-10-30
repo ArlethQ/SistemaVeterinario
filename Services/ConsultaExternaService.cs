@@ -46,6 +46,12 @@ public interface IConsultaExternaService
     Task<bool> GuardarAutorizacionAsync(AutorizacionClinicaDto dto);
     Task<FormularioAltaMedicaDto> ObtenerFormularioAltaAsync(int idOrden, int nhcl);
     Task<bool> GuardarFormularioAltaAsync(FormularioAltaMedicaDto dto, int idUsuario);
+
+    // 7. Apuntes longitudinales a historias clinicas (vt_apuntesahistorias / vt_notas)
+    Task<List<PacienteApunteHistoriaDto>> BuscarPacientesParaApuntesAsync(string filtro, string criterio);
+    Task<List<ApunteHistoriaClinicaDto>> ObtenerApuntesHistoriaAsync(int nhcl);
+    Task<(bool Ok, string? Mensaje)> AgregarApunteHistoriaAsync(ApunteHistoriaClinicaDto dto, int idUsuario);
+    Task<(bool Ok, string? Mensaje)> AnularApunteHistoriaAsync(int id, int idUsuario);
 }
 
 public class ConsultaExternaService : IConsultaExternaService
@@ -922,5 +928,160 @@ public class ConsultaExternaService : IConsultaExternaService
                 )", dto);
         }
         return true;
+    }
+
+    // ========================================================================
+    // 7. APUNTES LONGITUDINALES A HISTORIAS CLINICAS (vt_apuntesahistorias)
+    // ========================================================================
+    public async Task<List<PacienteApunteHistoriaDto>> BuscarPacientesParaApuntesAsync(
+        string filtro, string criterio)
+    {
+        filtro = filtro?.Trim() ?? string.Empty;
+        criterio = criterio?.Trim().ToLowerInvariant() ?? "apellidos";
+        if (filtro.Length < 2 && criterio != "nhcl") return [];
+
+        const string sql = @"
+            SELECT TOP 100
+                ISNULL(p.mas_nhcl, 0) AS Nhcl,
+                ISNULL(p.mas_idcliente, 0) AS IdCliente,
+                RTRIM(ISNULL(p.mas_nombre, '')) AS Paciente,
+                LTRIM(RTRIM(ISNULL(c.pa_nombres, '') + ' ' + ISNULL(c.pa_apellidos, ''))) AS Propietario,
+                RTRIM(ISNULL(c.pa_cedula, '')) AS Cedula,
+                RTRIM(ISNULL(c.pa_movil, '')) AS Celular,
+                RTRIM(ISNULL(c.pa_email, '')) AS Email,
+                RTRIM(ISNULL(s.sexo, ISNULL(p.mas_sexo, ''))) AS Sexo,
+                RTRIM(COALESCE(NULLIF(e.especie_descripcion, ''), NULLIF(cl.des_clas, ''), '')) AS Especie,
+                RTRIM(COALESCE(NULLIF(r.des_raza, ''), NULLIF(nc.nombre_cientifico, ''), NULLIF(p.mas_otros, ''), '')) AS Raza,
+                CASE WHEN RTRIM(ISNULL(p.mas_origen, 'M')) = 'M' THEN 'HDEV' ELSE 'TUERI' END AS Tipo,
+                p.mas_fechanace AS FechaNacimiento
+            FROM vt_pacientes p
+            INNER JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
+            LEFT JOIN vt_sexo s ON RTRIM(p.mas_sexo) = RTRIM(s.id)
+            LEFT JOIN vt_especie e ON p.mas_especie = e.especie_id
+            LEFT JOIN vt_razas r ON p.mas_raza = r.id_raza
+            LEFT JOIN vt_clase cl ON p.tue_clase = cl.id_clas
+            LEFT JOIN vt_nombres_cientificos nc ON p.tue_cientifico = nc.id
+            WHERE ISNULL(p.mas_estado, 'A') = 'A'
+              AND (
+                   (@Criterio = 'nombres' AND c.pa_nombres LIKE '%' + @Filtro + '%')
+                OR (@Criterio = 'apellidos' AND c.pa_apellidos LIKE '%' + @Filtro + '%')
+                OR (@Criterio = 'cedula' AND c.pa_cedula LIKE '%' + @Filtro + '%')
+                OR (@Criterio = 'paciente' AND p.mas_nombre LIKE '%' + @Filtro + '%')
+                OR (@Criterio = 'nhcl' AND p.mas_nhcl = TRY_CONVERT(INT, @Filtro))
+              )
+            ORDER BY p.mas_nombre, c.pa_apellidos, c.pa_nombres";
+
+        try
+        {
+            var lista = await _db.QueryAsync<PacienteApunteHistoriaDto>(sql, new
+            {
+                Filtro = filtro,
+                Criterio = criterio
+            });
+            return lista.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error buscando pacientes para apuntes de historia");
+            throw;
+        }
+    }
+
+    public async Task<List<ApunteHistoriaClinicaDto>> ObtenerApuntesHistoriaAsync(int nhcl)
+    {
+        const string sql = @"
+            SELECT
+                n.not_id AS Id,
+                ISNULL(n.not_nhcl, @Nhcl) AS Nhcl,
+                ISNULL(n.not_cliente, 0) AS IdCliente,
+                ISNULL(n.not_iduser, 0) AS IdUsuario,
+                ISNULL(n.not_fecha, GETDATE()) AS Fecha,
+                ISNULL(CAST(n.not_observacion AS VARCHAR(MAX)), '') AS Observacion,
+                RTRIM(ISNULL(u.user_nombre, 'Usuario no disponible')) AS RegistradoPor,
+                RTRIM(ISNULL(n.not_tipo, 'HDEV')) AS Tipo
+            FROM vt_notas n
+            LEFT JOIN vt_usuarios u ON n.not_iduser = u.user_numero
+            WHERE n.not_nhcl = @Nhcl AND ISNULL(n.not_estado, 'A') = 'A'
+            ORDER BY n.not_fecha DESC, n.not_id DESC";
+
+        var lista = await _db.QueryAsync<ApunteHistoriaClinicaDto>(sql, new { Nhcl = nhcl });
+        return lista.ToList();
+    }
+
+    public async Task<(bool Ok, string? Mensaje)> AgregarApunteHistoriaAsync(
+        ApunteHistoriaClinicaDto dto, int idUsuario)
+    {
+        if (dto.Nhcl <= 0 || dto.IdCliente <= 0)
+            return (false, "Seleccione un paciente válido.");
+        if (dto.Fecha == default)
+            return (false, "Ingrese una fecha válida.");
+        if (string.IsNullOrWhiteSpace(dto.Observacion))
+            return (false, "No se puede ingresar un apunte en blanco.");
+
+        var observacion = dto.Observacion.Trim().ToUpperInvariant();
+        var tipo = string.IsNullOrWhiteSpace(dto.Tipo) ? "HDEV" : dto.Tipo.Trim().ToUpperInvariant();
+        if (tipo.Length > 10) tipo = tipo[..10];
+
+        try
+        {
+            await _db.ExecuteAsync(@"
+                INSERT INTO vt_notas (
+                    not_nhcl, not_fecha, not_iduser, not_cliente, not_estado, not_observacion, not_tipo
+                ) VALUES (
+                    @Nhcl, @Fecha, @IdUsuario, @IdCliente, 'A', @Observacion, @Tipo
+                )", new
+            {
+                dto.Nhcl,
+                Fecha = dto.Fecha,
+                IdUsuario = idUsuario,
+                dto.IdCliente,
+                Observacion = observacion,
+                Tipo = tipo
+            });
+
+            try
+            {
+                await _db.RegistrarBitacoraAsync($"Apunte agregado a historia NHCL #{dto.Nhcl}", idUsuario);
+            }
+            catch
+            {
+                // La bitacora no debe impedir el registro clinico.
+            }
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error guardando apunte para NHCL {Nhcl}", dto.Nhcl);
+            return (false, "No se pudo guardar el apunte clínico.");
+        }
+    }
+
+    public async Task<(bool Ok, string? Mensaje)> AnularApunteHistoriaAsync(int id, int idUsuario)
+    {
+        if (id <= 0) return (false, "El apunte seleccionado no es válido.");
+        try
+        {
+            var filas = await _db.ExecuteAsync(@"
+                UPDATE vt_notas
+                SET not_estado = 'I', not_elimina = @IdUsuario, not_fechadelete = GETDATE()
+                WHERE not_id = @Id AND ISNULL(not_estado, 'A') = 'A'",
+                new { Id = id, IdUsuario = idUsuario });
+            if (filas <= 0) return (false, "El apunte ya fue anulado o no existe.");
+
+            try
+            {
+                await _db.RegistrarBitacoraAsync($"Apunte de historia anulado #{id}", idUsuario);
+            }
+            catch
+            {
+                // La bitacora no debe impedir la anulacion.
+            }
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error anulando apunte de historia {Id}", id);
+            return (false, "No se pudo anular el apunte clínico.");
+        }
     }
 }
