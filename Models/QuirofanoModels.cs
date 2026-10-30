@@ -246,6 +246,9 @@ public class ProtocoloQuirurgicoCompletoDto
     public DateTime? FechaMuestra { get; set; }
     public string Congelacion { get; set; } = "NO";
     public DateTime? FechaConge { get; set; }
+    public string HoraInicio { get; set; } = string.Empty;
+    public string HoraFin { get; set; } = string.Empty;
+    public int DuracionMinutos { get; set; }
 
     // Chequeo e Ingreso a Quirófano / Conteo de Gasas (qvt_ingresocirugia)
     public int SecIngresoCirugia { get; set; }
@@ -277,6 +280,8 @@ public class MiembroEquipoQuirurgicoDto
     public string RolFuncion { get; set; } = "Cirujano Principal"; // tipo / observacion
     public bool Principal { get; set; }
     public DateTime Fecha { get; set; } = DateTime.Today;
+    public bool EsExterno { get; set; }
+    public string Cedula { get; set; } = string.Empty;
 }
 
 // ============================================================================

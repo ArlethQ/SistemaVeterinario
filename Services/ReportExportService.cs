@@ -1620,7 +1620,17 @@ public class ReportExportService : IReportExportService
                         });
                         foreach (var m in prot.Equipo)
                         {
-                            t.Cell().Border(0.5f).Padding(3).Text(m.NombreProfesional);
+                            string profesional = m.NombreProfesional;
+                            if (m.EsExterno)
+                            {
+                                profesional += " (Externo";
+                                if (!string.IsNullOrWhiteSpace(m.Cedula))
+                                {
+                                    profesional += $" - C.I.: {m.Cedula}";
+                                }
+                                profesional += ")";
+                            }
+                            t.Cell().Border(0.5f).Padding(3).Text(profesional);
                             t.Cell().Border(0.5f).Padding(3).Text(m.RolFuncion);
                             t.Cell().Border(0.5f).Padding(3).AlignCenter().Text(m.Principal ? "SÍ" : "NO");
                         }
@@ -1635,6 +1645,18 @@ public class ReportExportService : IReportExportService
                             t.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(4).Text(k).Bold();
                             t.Cell().Border(0.5f).Padding(4).Text(v ?? "");
                         }
+                        string horarioStr = "No registrado";
+                        if (!string.IsNullOrWhiteSpace(prot.HoraInicio) || !string.IsNullOrWhiteSpace(prot.HoraFin))
+                        {
+                            horarioStr = $"Inicio: {(string.IsNullOrWhiteSpace(prot.HoraInicio) ? "--:--" : prot.HoraInicio)} | Fin: {(string.IsNullOrWhiteSpace(prot.HoraFin) ? "--:--" : prot.HoraFin)}";
+                            if (prot.DuracionMinutos > 0)
+                            {
+                                int durH = prot.DuracionMinutos / 60;
+                                int durM = prot.DuracionMinutos % 60;
+                                horarioStr += $" (Duración: {durH}h {durM}m)";
+                            }
+                        }
+                        RowProt("Horario y Duración", horarioStr);
                         RowProt("Procedimiento Principal", prot.Principal);
                         RowProt("Diéresis / Incisión", prot.Incision);
                         RowProt("Hallazgos Quirúrgicos", prot.Hallazgos);

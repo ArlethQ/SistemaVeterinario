@@ -826,6 +826,9 @@ public class QuirofanoService : IQuirofanoService
                 var cRaw = prot.congelacion?.ToString()?.Trim().ToUpperInvariant();
                 dto.Congelacion = cRaw switch { "S" or "SI" or "1" => "SI", _ => "NO" };
                 dto.FechaConge = prot.fechaConge != null ? (DateTime?)prot.fechaConge : null;
+                dto.HoraInicio = prot.horaInicio?.ToString() ?? "";
+                dto.HoraFin = prot.horaFin?.ToString() ?? "";
+                dto.DuracionMinutos = prot.duracionMinutos != null ? (int)prot.duracionMinutos : 0;
             }
 
             // 2. qvt_ingresocirugia (Chequeo de Enfermería / Conteo de Gasas)
@@ -877,10 +880,16 @@ public class QuirofanoService : IQuirofanoService
                     t.sec AS Sec,
                     ISNULL(t.idOrden, 0) AS IdOrden,
                     ISNULL(t.idUsuario, 0) AS IdUsuario,
-                    ISNULL(u.user_nombre, 'Profesional') AS NombreProfesional,
+                    CASE
+                        WHEN ISNULL(t.esExterno, 0) = 1 OR ISNULL(t.idUsuario, 0) <= 0
+                            THEN ISNULL(t.nombreExterno, 'Profesional Externo')
+                        ELSE ISNULL(u.user_nombre, 'Profesional')
+                    END AS NombreProfesional,
                     ISNULL(t.observacion, ISNULL(t.tipo, 'Cirujano')) AS RolFuncion,
                     ISNULL(t.principal, 0) AS Principal,
-                    ISNULL(t.fecha, GETDATE()) AS Fecha
+                    ISNULL(t.fecha, GETDATE()) AS Fecha,
+                    ISNULL(t.esExterno, 0) AS EsExterno,
+                    ISNULL(t.cedula, '') AS Cedula
                 FROM qvt_team t
                 LEFT JOIN vt_usuarios u ON t.idUsuario = u.user_numero
                 WHERE t.idOrden = @IdOrden AND ISNULL(t.estado, 'A') = 'A'
@@ -937,6 +946,9 @@ public class QuirofanoService : IQuirofanoService
                 dto.FechaMuestra,
                 Congelacion = congelacionChar,
                 dto.FechaConge,
+                HoraInicio = Truncate(dto.HoraInicio?.Trim(), 10),
+                HoraFin = Truncate(dto.HoraFin?.Trim(), 10),
+                dto.DuracionMinutos,
                 IdProtocolo = existeProt ?? 0
             };
 
@@ -948,7 +960,8 @@ public class QuirofanoService : IQuirofanoService
                         incision = @Incision, hallazgos = @Hallazgos, procedimientoQuir = @ProcedimientoQuir,
                         sintesis = @Sintesis, complicaciones = @Complicaciones, sangrado = @Sangrado,
                         disposicion = @Disposicion, drenaje = @Drenaje, muestra = @Muestra,
-                        fechaMuestra = @FechaMuestra, congelacion = @Congelacion, fechaConge = @FechaConge
+                        fechaMuestra = @FechaMuestra, congelacion = @Congelacion, fechaConge = @FechaConge,
+                        horaInicio = @HoraInicio, horaFin = @HoraFin, duracionMinutos = @DuracionMinutos
                     WHERE id = @IdProtocolo", protParams);
             }
             else
@@ -957,11 +970,13 @@ public class QuirofanoService : IQuirofanoService
                     INSERT INTO qvt_Protocolo (
                         idOrden, nhcl, fecha, tipoCirugia, principal, incision, hallazgos,
                         procedimientoQuir, sintesis, complicaciones, sangrado, disposicion,
-                        drenaje, muestra, fechaMuestra, congelacion, fechaConge
+                        drenaje, muestra, fechaMuestra, congelacion, fechaConge,
+                        horaInicio, horaFin, duracionMinutos
                     ) VALUES (
                         @IdOrden, @Nhcl, @Fecha, @TipoCirugia, @Principal, @Incision, @Hallazgos,
                         @ProcedimientoQuir, @Sintesis, @Complicaciones, @Sangrado, @Disposicion,
-                        @Drenaje, @Muestra, @FechaMuestra, @Congelacion, @FechaConge
+                        @Drenaje, @Muestra, @FechaMuestra, @Congelacion, @FechaConge,
+                        @HoraInicio, @HoraFin, @DuracionMinutos
                     )", protParams);
             }
 
@@ -1078,8 +1093,21 @@ public class QuirofanoService : IQuirofanoService
         try
         {
             const string sql = @"
-                INSERT INTO qvt_team (idOrden, idUsuario, fecha, estado, principal, observacion, tipo)
-                VALUES (@IdOrden, @IdUsuario, GETDATE(), 'A', @Principal, @RolFuncion, @RolFuncion)";
+                INSERT INTO qvt_team (
+                    idOrden, idUsuario, fecha, estado, principal, observacion, tipo,
+                    esExterno, nombreExterno, cedula
+                ) VALUES (
+                    @IdOrden,
+                    CASE WHEN @EsExterno = 1 THEN NULL ELSE @IdUsuario END,
+                    GETDATE(),
+                    'A',
+                    @Principal,
+                    @RolFuncion,
+                    @RolFuncion,
+                    @EsExterno,
+                    @NombreProfesional,
+                    @Cedula
+                )";
             await _db.ExecuteAsync(sql, miembro);
             return true;
         }
