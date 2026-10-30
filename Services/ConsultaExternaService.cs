@@ -46,6 +46,9 @@ public interface IConsultaExternaService
     Task<bool> GuardarAutorizacionAsync(AutorizacionClinicaDto dto);
     Task<FormularioAltaMedicaDto> ObtenerFormularioAltaAsync(int idOrden, int nhcl);
     Task<bool> GuardarFormularioAltaAsync(FormularioAltaMedicaDto dto, int idUsuario);
+
+    // 7. Impresión Masiva de Fichas Médicas por Lotes / Seguros (vt_imprimirfichas.aspx)
+    Task<List<FichaMedicaResumenLoteDto>> ObtenerAtencionesParaImpresionLoteAsync(int nhcl);
 }
 
 public class ConsultaExternaService : IConsultaExternaService
@@ -115,8 +118,13 @@ public class ConsultaExternaService : IConsultaExternaService
                     ISNULL(pronosticotueri, 'Bueno') AS MedPronostico,
                     TRY_CONVERT(DATETIME, contmtiempo) AS MedFechaControl,
                     ISNULL(med_pregunta, 'N') AS RequiereCirugia,
-                    ISNULL(estadoparte, 'PENDIENTE') AS EstadoParte
+                    ISNULL(estadoparte, 'PENDIENTE') AS EstadoParte,
+                    RTRIM(ISNULL(u.user_nombre, '')) AS UserNombre,
+                    RTRIM(ISNULL(u.user_nombre, '')) AS NombreMedico,
+                    RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad
                 FROM vt_fichamedica
+                LEFT JOIN vt_usuarios u ON u.user_numero = med_iduser
+                LEFT JOIN vt_especialidades e ON e.es_id = med_especialidad
                 WHERE med_orden = @IdOrden
                 ORDER BY sec DESC";
 
@@ -923,4 +931,50 @@ public class ConsultaExternaService : IConsultaExternaService
         }
         return true;
     }
+
+    public async Task<List<FichaMedicaResumenLoteDto>> ObtenerAtencionesParaImpresionLoteAsync(int nhcl)
+    {
+        if (nhcl <= 0) return [];
+        const string sql = @"
+            SELECT 
+                f.sec AS Sec,
+                f.med_orden AS Orden,
+                f.med_nhcl AS Nhcl,
+                f.med_fecha AS Fecha,
+                RTRIM(ISNULL(p.mas_nombre, '')) AS Paciente,
+                RTRIM(ISNULL(c.pa_nombres, '') + ' ' + ISNULL(c.pa_apellidos, '')) AS Cliente,
+                RTRIM(ISNULL(u.user_nombre, '')) AS Medico,
+                RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad,
+                RTRIM(ISNULL(f.med_motivo, '')) AS Motivo,
+                ISNULL((SELECT STUFF((SELECT ', ' + RTRIM(CAST(dig_descripcion AS nvarchar(max))) 
+                                      FROM vt_diagnosticos 
+                                      WHERE dig_id_orden = f.med_orden 
+                                      FOR XML PATH ('')), 1, 2, '')), '') AS Diagnosticos,
+                TRY_CONVERT(decimal(10,2), f.peso) AS Peso,
+                TRY_CONVERT(decimal(10,2), f.temperatura) AS Temperatura,
+                TRY_CONVERT(int, f.frecuenciacardiaca) AS FrecuenciaCardiaca
+            FROM vt_fichaMedica f
+            INNER JOIN vt_pacientes p ON f.med_nhcl = p.mas_nhcl
+            LEFT JOIN vt_clientes c ON f.med_cliente = c.pa_codigo
+            LEFT JOIN vt_usuarios u ON f.med_iduser = u.user_numero
+            LEFT JOIN vt_especialidades e ON f.med_especialidad = e.es_id
+            WHERE f.med_nhcl = @Nhcl
+            ORDER BY f.med_fecha DESC";
+
+        try
+        {
+            var items = (await _db.QueryAsync<FichaMedicaResumenLoteDto>(sql, new { Nhcl = nhcl })).ToList();
+            foreach (var item in items)
+            {
+                item.Seleccionado = true;
+            }
+            return items;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error consultando atenciones para impresión por lotes NHCL {Nhcl}", nhcl);
+            return [];
+        }
+    }
+
 }

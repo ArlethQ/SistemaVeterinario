@@ -65,6 +65,9 @@ public class FichaMedicaCompletaDto
     public string ContpSi => MedFechaControl.HasValue ? "S" : "N";
     public string ContpNo => MedFechaControl.HasValue ? "N" : "S";
     public string IndicacionesGeneralesReceta { get; set; } = string.Empty;
+    public string UserNombre { get; set; } = string.Empty;
+    public string NombreMedico { get; set; } = string.Empty;
+    public string Especialidad { get; set; } = string.Empty;
 }
 
 public class DiagnosticoCie10Dto
@@ -224,3 +227,31 @@ public class FormularioAltaMedicaDto
     public string Dieta { get; set; } = string.Empty;
     public string Medicacion { get; set; } = string.Empty;
 }
+
+public class FichaMedicaResumenLoteDto
+{
+    public int Sec { get; set; }
+    public int Orden { get; set; }
+    public int Nhcl { get; set; }
+    public DateTime Fecha { get; set; }
+    public string Paciente { get; set; } = string.Empty;
+    public string Cliente { get; set; } = string.Empty;
+    public string Medico { get; set; } = string.Empty;
+    public string Especialidad { get; set; } = string.Empty;
+    public string Motivo { get; set; } = string.Empty;
+    public string Diagnosticos { get; set; } = string.Empty;
+    public decimal? Peso { get; set; }
+    public decimal? Temperatura { get; set; }
+    public int? FrecuenciaCardiaca { get; set; }
+    public bool Seleccionado { get; set; } = true;
+}
+
+public class FichaLoteItemDto
+{
+    public string Medico { get; set; } = string.Empty;
+    public string Especialidad { get; set; } = string.Empty;
+    public FichaMedicaCompletaDto Ficha { get; set; } = new();
+    public List<DiagnosticoCie10Dto> Diagnosticos { get; set; } = [];
+    public List<RecetaMedicamentoItemDto> Receta { get; set; } = [];
+}
+
