@@ -29,6 +29,8 @@ builder.Services.AddScoped<ILaboratorioImagenService, LaboratorioImagenService>(
 builder.Services.AddScoped<IAdmisionFacturacionService, AdmisionFacturacionService>();
 builder.Services.AddScoped<IAdministracionClinicaService, AdministracionClinicaService>();
 builder.Services.AddScoped<IGestionMigradaService, GestionMigradaService>();
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.Configure<EFactApiOptions>(builder.Configuration.GetSection(EFactApiOptions.SectionName));
 builder.Services.AddHttpClient<IEFactCatalogService, EFactCatalogService>((services, client) =>
 {

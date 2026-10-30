@@ -21,6 +21,8 @@ Claves esperadas:
 - `GraphMail__ClientId`
 - `GraphMail__ClientSecret`
 - `GraphMail__SenderEmail`
+- `Smtp__Usuario`
+- `Smtp__Password`
 - Configuración sensible de E-FACT según el ambiente autorizado.
 
 No copiar secretos del sistema legado. Usar credenciales nuevas después de completar la rotación.
