@@ -354,7 +354,7 @@ else if (paciente != null)
                 <div class="row g-2 mb-3 bg-light p-2 rounded align-items-center">
                     <div class="col-md-7">
                         <label class="form-label mb-1 fw-semibold">Subir nuevo archivo / foto quirúrgica (PDF, JPG, PNG, DOCX, XLSX máx 15MB):</label>
-                        <InputFile class="form-control form-control-sm" OnChange="SubirArchivoQuirurgicoAsync" />
+                        <InputFile class="form-control form-control-sm" OnChange="SubirArchivoQuirurgicoAsync" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" />
                     </div>
                     <div class="col-md-5 text-muted pt-3">
                         <small>Los archivos subidos quedan asociados al expediente de ingreso quirúrgico del paciente.</small>
@@ -563,22 +563,23 @@ else if (paciente != null)
         var archivo = e.File;
         if (archivo == null) return;
 
-        if (archivo.Size > 15 * 1024 * 1024)
+        const long maxTamanoBytes = 15 * 1024 * 1024; // 15 MB
+        if (archivo.Size > maxTamanoBytes)
         {
             esError = true;
-            mensajeAlerta = "El archivo supera el límite permitido de 15 MB.";
+            mensajeAlerta = $"El archivo '{archivo.Name}' supera el límite máximo permitido de 15 MB (tamaño actual: {FormatearTamano(archivo.Size)}).";
             return;
         }
 
         var extensiones = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            ".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".xlsx", ".docx", ".doc"
+            ".pdf", ".jpg", ".jpeg", ".png", ".docx", ".xlsx"
         };
         var ext = Path.GetExtension(archivo.Name);
-        if (!extensiones.Contains(ext))
+        if (string.IsNullOrWhiteSpace(ext) || !extensiones.Contains(ext))
         {
             esError = true;
-            mensajeAlerta = "Tipo de archivo no permitido. Use imágenes (JPG, PNG), PDF o documentos Office.";
+            mensajeAlerta = $"Tipo de archivo no permitido ('{ext}'). Solo se admiten archivos PDF, JPG, PNG, DOCX y XLSX.";
             return;
         }
 
@@ -586,7 +587,7 @@ else if (paciente != null)
         {
             Directory.CreateDirectory(DirectorioFisico);
             var safeName = $"{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileNameWithoutExtension(archivo.Name)}{ext}";
-            await using var entrada = archivo.OpenReadStream(15 * 1024 * 1024);
+            await using var entrada = archivo.OpenReadStream(maxTamanoBytes);
             await using var salida = File.Create(Path.Combine(DirectorioFisico, safeName));
             await entrada.CopyToAsync(salida);
 

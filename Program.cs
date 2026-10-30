@@ -16,6 +16,11 @@ QuestPDF.Settings.ThrowOnMissingFontFamilies = false;
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddServerSideBlazor().AddHubOptions(opt =>
+{
+    opt.MaximumReceiveMessageSize = 32 * 1024 * 1024; // Permite transferencias seguras de archivos de hasta 15MB
+});
+
 // Servicios de datos, negocio, inventario y reportería PDF/Excel
 builder.Services.AddScoped<ISqlDataService, SqlDataService>();
 builder.Services.AddScoped<SessionStateService>();
