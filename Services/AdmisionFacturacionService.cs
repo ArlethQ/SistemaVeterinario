@@ -1155,11 +1155,20 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         try
         {
+                        if (TimeSpan.TryParse(cita.CiHora, out var tsHora))
+            {
+                cita.CiHora = $"{tsHora.Hours:D2}:{tsHora.Minutes:D2}";
+            }
+
             int superpuestas = await _db.ExecuteScalarAsync<int>(@"
                 SELECT COUNT(1) FROM vt_citas
                 WHERE ci_usuario=@CiUsuario AND ci_localidad=@CiLocalidad
-                  AND CAST(ci_fecha AS date)=@CiFecha AND LEFT(RTRIM(ci_hora),5)=LEFT(@CiHora,5)
-                  AND ISNULL(ci_estado,'A')='A'", new
+                  AND CAST(ci_fecha AS date)=@CiFecha 
+                  AND ISNULL(ci_estado,'A')='A'
+                  AND ISNULL(ci_estadocita,'N') NOT IN ('X', 'CANCELADA')
+                  AND (LEFT(RTRIM(ci_hora),5)=@CiHora 
+                       OR RTRIM(ci_hora)=@CiHora 
+                       OR TRY_CONVERT(time, RTRIM(ci_hora))=TRY_CONVERT(time, @CiHora))", new
             {
                 cita.CiUsuario,
                 cita.CiLocalidad,
@@ -1167,7 +1176,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 cita.CiHora
             });
             if (superpuestas > 0)
-                throw new InvalidOperationException("El médico ya tiene una cita activa en ese horario y localidad.");
+                throw new InvalidOperationException($"El médico ya tiene una cita activa agendada a las {cita.CiHora} en esta fecha.");
 
             const string insertSql = @"
                 INSERT INTO vt_citas (
