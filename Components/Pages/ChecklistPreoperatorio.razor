@@ -1,0 +1,263 @@
+@page "/quirofano/preanestesia/checklist"
+@page "/quirofano/preanestesia/checklist/{IdOrden:int}/{Nhcl:int}"
+@inject IKardexService KardexService
+@inject IQuirofanoService QuirofanoService
+@inject SessionStateService Session
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Checklist preoperatorio - e-ForVets</PageTitle>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h4 class="mb-0 fw-bold text-primary">Recepción y checklist preoperatorio</h4>
+        <small class="text-muted">Verificación previa al ingreso a quirófano, signos vitales, preparación y consentimiento.</small>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <select class="form-select form-select-sm" style="min-width:280px;max-width:380px" value="@IdOrden" @onchange="SeleccionarOrdenAsync">
+            <option value="0">-- Seleccionar orden activa --</option>
+            @foreach (var orden in ordenesActivas)
+            {
+                <option value="@orden.IdOrdenAtencion">#@orden.IdOrdenAtencion | NHCL @orden.Nhcl - @orden.Paciente</option>
+            }
+        </select>
+        <div class="input-group input-group-sm" style="width:auto">
+            <span class="input-group-text">Orden</span>
+            <input type="number" class="form-control" style="width:90px" @bind="ordenInput" @onkeydown="BuscarConEnterAsync" />
+            <span class="input-group-text">NHCL</span>
+            <input type="number" class="form-control" style="width:90px" @bind="nhclInput" @onkeydown="BuscarConEnterAsync" />
+            <button class="btn btn-primary" @onclick="CargarPorInputAsync">Buscar</button>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" disabled="@(paciente is null)" @onclick="ImprimirAsync">Imprimir</button>
+        <button class="btn btn-sm btn-success fw-semibold" disabled="@(paciente is null || guardando || ordenCerrada)" @onclick="GuardarAsync">
+            @(guardando ? "Guardando..." : "Guardar checklist")
+        </button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(mensaje))
+{
+    <div class="alert @(esError ? "alert-danger" : "alert-success") alert-dismissible py-2" role="alert">
+        @mensaje
+        <button type="button" class="btn-close py-2" @onclick="() => mensaje = string.Empty"></button>
+    </div>
+}
+
+@if (cargando)
+{
+    <LoadingState Message="Cargando checklist preoperatorio..." />
+}
+else if (paciente is not null)
+{
+    <section id="checklist-preoperatorio-imprimir">
+        <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
+            <div class="card-body py-2 px-3">
+                <div class="row g-2 small">
+                    <div class="col-md-2"><span class="text-muted">Orden / NHCL</span><strong class="d-block text-primary">#@paciente.OrdenAtencionId / @paciente.Nhcl</strong></div>
+                    <div class="col-md-3"><span class="text-muted">Paciente</span><strong class="d-block">@paciente.PacienteNombre</strong><small>@paciente.Especie · @paciente.Raza</small></div>
+                    <div class="col-md-3"><span class="text-muted">Propietario</span><strong class="d-block">@paciente.PropietarioNombre</strong><small>@paciente.ClienteCedula</small></div>
+                    <div class="col-md-2"><span class="text-muted">Sexo / edad</span><strong class="d-block">@paciente.Sexo · @paciente.EdadTexto</strong></div>
+                    <div class="col-md-2"><span class="text-muted">Médico</span><strong class="d-block">@paciente.MedicoResponsable</strong></div>
+                </div>
+            </div>
+        </div>
+
+        @if (ordenCerrada)
+        {
+            <div class="alert alert-warning py-2"><strong>Orden cerrada.</strong> El checklist está disponible en modo de consulta e impresión.</div>
+        }
+
+        <fieldset disabled="@ordenCerrada">
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">Documentación y preparación</h6></div>
+                        <div class="card-body row g-3">
+                            <div class="col-md-4"><label class="form-label fw-semibold">Fecha</label><input type="date" class="form-control" @bind="checklist.Fecha" /></div>
+                            <div class="col-md-8"><label class="form-label fw-semibold">Preparado por *</label><input maxlength="50" class="form-control" @bind="checklist.PreparadoPor" /></div>
+                            <div class="col-md-6"><label class="form-label">Formularios de consentimiento</label><select class="form-select" @bind="checklist.FormulariosConsentimiento"><option value="S">Sí</option><option value="N">No</option></select></div>
+                            <div class="col-md-6"><label class="form-label">Consentimiento informado firmado</label><select class="form-select" @bind="checklist.ConsentimientoFirmado"><option value="S">Sí</option><option value="N">No</option></select></div>
+                            <div class="col-md-4"><label class="form-label">Exámenes de laboratorio</label><select class="form-select" @bind="checklist.ExamenesLaboratorio"><option value="S">Sí</option><option value="N">No</option></select></div>
+                            <div class="col-md-4"><label class="form-label">Rayos X</label><select class="form-select" @bind="checklist.RayosX"><option value="S">Sí</option><option value="N">No</option></select></div>
+                            <div class="col-md-4"><label class="form-label">EKG</label><select class="form-select" @bind="checklist.Ekg"><option value="S">Sí</option><option value="N">No</option></select></div>
+                            <div class="col-12"><label class="form-label fw-semibold">Alergias</label><textarea maxlength="50" rows="2" class="form-control" @bind="checklist.Alergias"></textarea><small class="text-muted">También actualiza los antecedentes activos del paciente.</small></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-danger">Valoración preoperatoria</h6></div>
+                        <div class="card-body row g-3">
+                            <div class="col-md-3"><label class="form-label">Sistólica</label><input type="number" min="0" max="300" class="form-control" @bind="checklist.PresionSistolica" /></div>
+                            <div class="col-md-3"><label class="form-label">Diastólica</label><input type="number" min="0" max="300" class="form-control" @bind="checklist.PresionDiastolica" /></div>
+                            <div class="col-md-3"><label class="form-label">Pulso lpm</label><input type="number" min="0" max="300" class="form-control" @bind="checklist.Pulso" /></div>
+                            <div class="col-md-3"><label class="form-label">Saturación %</label><input type="number" min="0" max="100" class="form-control" @bind="checklist.Saturacion" /></div>
+                            <div class="col-md-3"><label class="form-label">Peso kg</label><input type="number" min="0" max="300" step="0.01" class="form-control" @bind="checklist.Peso" /></div>
+                            <div class="col-md-3"><label class="form-label">Talla cm</label><input type="number" min="0" max="250" class="form-control" @bind="checklist.Talla" /></div>
+                            <div class="col-md-3"><label class="form-label">IMC</label><input class="form-control" value="@ImcCalculado.ToString("N2")" readonly /></div>
+                            <div class="col-md-3"><label class="form-label">Micción (veces)</label><input type="number" min="0" max="300" class="form-control" @bind="checklist.Miccion" /></div>
+                            <div class="col-md-4"><label class="form-label">Hora de micción</label><input type="time" step="1" class="form-control" value="@HoraParaInput(checklist.HoraMiccion)" @onchange="CambiarHoraMiccion" /></div>
+                            <div class="col-md-4"><label class="form-label">Vía endovenosa</label><select class="form-select" @bind="checklist.ViaEndovenosa"><option value="S">Sí</option><option value="N">No</option></select></div>
+                            <div class="col-md-4"><label class="form-label">Hora premedicación</label><input type="time" step="1" class="form-control" value="@HoraParaInput(checklist.HoraPremedicacion)" @onchange="CambiarHoraPremedicacion" /></div>
+                            <div class="col-12"><label class="form-label">Observación de vía endovenosa</label><textarea maxlength="250" rows="2" class="form-control" @bind="checklist.ObservacionEndovenosa"></textarea></div>
+                            <div class="col-12"><label class="form-label">Premedicación</label><textarea maxlength="250" rows="2" class="form-control" @bind="checklist.Premedicacion"></textarea></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-white"><h6 class="mb-0 fw-bold">Prótesis y observaciones finales</h6></div>
+                        <div class="card-body row g-3">
+                            <div class="col-md-6"><label class="form-label">Prótesis</label><textarea rows="3" class="form-control" @bind="checklist.Protesis"></textarea></div>
+                            <div class="col-md-6"><label class="form-label fw-semibold">Observaciones *</label><textarea rows="3" class="form-control" @bind="checklist.Observaciones"></textarea></div>
+                            <div class="col-12 d-flex justify-content-end gap-2">
+                                <a class="btn btn-outline-primary" href="@($"/quirofano/pausa-seguridad/{IdOrden}/{Nhcl}")">Continuar a pausa de seguridad</a>
+                                <button class="btn btn-success fw-semibold" disabled="@guardando" @onclick="GuardarAsync">@(guardando ? "Guardando..." : "Guardar checklist preoperatorio")</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+    </section>
+}
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private int ordenInput;
+    private int nhclInput;
+    private List<OrdenActivaResumenDto> ordenesActivas = [];
+    private PacienteHeaderDto? paciente;
+    private ChecklistPreoperatorioDto checklist = new();
+    private bool cargando = true;
+    private bool guardando;
+    private bool ordenCerrada;
+    private bool esError;
+    private string mensaje = string.Empty;
+    private decimal ImcCalculado => checklist.Peso > 0 && checklist.Talla > 0
+        ? Math.Round(checklist.Peso / ((checklist.Talla / 100m) * (checklist.Talla / 100m)), 2)
+        : 0;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsAuthenticated) { Nav.NavigateTo("/login"); return; }
+        cargando = true;
+        try
+        {
+            ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+            if (IdOrden <= 0 && Session.OrdenActiva is > 0)
+            {
+                IdOrden = Session.OrdenActiva.Value;
+                Nhcl = Session.NhclActivo ?? 0;
+            }
+            else if (IdOrden <= 0 && ordenesActivas.Count > 0)
+            {
+                IdOrden = ordenesActivas[0].IdOrdenAtencion;
+                Nhcl = ordenesActivas[0].Nhcl;
+            }
+            if (IdOrden > 0) await CargarDatosAsync(false);
+        }
+        catch (Exception ex)
+        {
+            esError = true;
+            mensaje = $"No se pudo cargar el checklist: {ex.Message}";
+        }
+        finally { cargando = false; }
+    }
+
+    private async Task SeleccionarOrdenAsync(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var id) || id <= 0) return;
+        var orden = ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == id);
+        IdOrden = id;
+        Nhcl = orden?.Nhcl ?? 0;
+        await CargarDatosAsync();
+    }
+
+    private async Task BuscarConEnterAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CargarPorInputAsync();
+    }
+
+    private async Task CargarPorInputAsync()
+    {
+        var orden = ordenInput > 0
+            ? ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == ordenInput)
+            : ordenesActivas.FirstOrDefault(x => x.Nhcl == nhclInput);
+        IdOrden = ordenInput > 0 ? ordenInput : orden?.IdOrdenAtencion ?? 0;
+        Nhcl = nhclInput > 0 ? nhclInput : orden?.Nhcl ?? 0;
+        if (IdOrden <= 0 || Nhcl <= 0)
+        {
+            esError = true;
+            mensaje = "Ingrese una orden y un NHCL válidos.";
+            return;
+        }
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync(bool navegar = true)
+    {
+        cargando = true;
+        mensaje = string.Empty;
+        try
+        {
+            var encontrado = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
+            if (encontrado is null)
+            {
+                paciente = null;
+                esError = true;
+                mensaje = $"No se encontró la orden #{IdOrden} para el NHCL {Nhcl}.";
+                return;
+            }
+            paciente = encontrado;
+            IdOrden = encontrado.OrdenAtencionId;
+            Nhcl = encontrado.Nhcl;
+            ordenInput = IdOrden;
+            nhclInput = Nhcl;
+            ordenCerrada = string.Equals(encontrado.Cierre, "S", StringComparison.OrdinalIgnoreCase);
+            checklist = await QuirofanoService.ObtenerChecklistPreoperatorioAsync(IdOrden, Nhcl);
+            Session.SeleccionarOrden(IdOrden, Nhcl, encontrado.PacienteNombre);
+            esError = false;
+            if (navegar) Nav.NavigateTo($"/quirofano/preanestesia/checklist/{IdOrden}/{Nhcl}", false);
+        }
+        catch (Exception ex)
+        {
+            esError = true;
+            mensaje = $"No se pudo cargar el checklist: {ex.Message}";
+        }
+        finally { cargando = false; }
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (paciente is null || ordenCerrada) return;
+        guardando = true;
+        checklist.IdOrden = IdOrden;
+        checklist.Nhcl = Nhcl;
+        checklist.Imc = ImcCalculado;
+        var resultado = await QuirofanoService.GuardarChecklistPreoperatorioAsync(
+            checklist, Session.IdUser, paciente.ClienteCodigo);
+        guardando = false;
+        esError = !resultado.Ok;
+        mensaje = resultado.Ok ? "Checklist preoperatorio guardado correctamente." : resultado.Mensaje ?? "No se pudo guardar el checklist.";
+        if (resultado.Ok) checklist = await QuirofanoService.ObtenerChecklistPreoperatorioAsync(IdOrden, Nhcl);
+    }
+
+    private async Task ImprimirAsync()
+    {
+        await JS.InvokeVoidAsync("eval", "window.print()");
+    }
+
+    private static string HoraParaInput(string? hora)
+        => TimeSpan.TryParse(hora, out var valor) ? valor.ToString(@"hh\:mm\:ss") : string.Empty;
+
+    private void CambiarHoraMiccion(ChangeEventArgs e)
+        => checklist.HoraMiccion = e.Value?.ToString() ?? string.Empty;
+
+    private void CambiarHoraPremedicacion(ChangeEventArgs e)
+        => checklist.HoraPremedicacion = e.Value?.ToString() ?? string.Empty;
+}

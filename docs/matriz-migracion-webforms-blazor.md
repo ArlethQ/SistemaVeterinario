@@ -89,7 +89,7 @@
 | vt_QuirProformas.aspx | Quirófano y anestesia | parcial | ProformasFacturacion.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_quirTeam.aspx | Quirófano y anestesia | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_razas.aspx | Clientes y pacientes | parcial | CatalogosClinicos.razor | AdministracionClinicaService, AdmisionFacturacionService, KardexService, LaboratorioImagenService |
-| vt_RecepcionPaciente.aspx | Clientes y pacientes | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService |
+| vt_RecepcionPaciente.aspx | Quirófano y anestesia | parcial | ChecklistPreoperatorio.razor | KardexService, QuirofanoService |
 | vt_recetasnew.aspx | Historia clínica | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_RecetassinOrden.aspx | Órdenes y recepción | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_Recuperacion.aspx | Quirófano y anestesia | parcial | SalaRecuperacion.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
@@ -1454,19 +1454,19 @@
 ### `vt_RecepcionPaciente.aspx`
 
 - **Code-behind:** `vt_RecepcionPaciente.aspx.vb`.
-- **Propósito funcional:** Módulo Clientes y pacientes; confirmar el propósito exacto durante la validación funcional.
+- **Propósito funcional:** Recepción preoperatoria del paciente: consentimientos, exámenes, alergias, signos vitales, vía endovenosa, premedicación, prótesis y observaciones antes del ingreso a quirófano.
 - **Campos principales:** btnPrint, enviar, form1, imp1, Label1, Label2, Label3, Label4, Lbespecialidad, Lbiduser, lblCirugiaProgramada, lblHostName, lblId, Lblidcliente, lblIPAddress, lblNhcl, lblnombres, Lblocalidad, lblpaciente, lblsexo, lborden, Lbtipouser, numdiastolicaedit, nummiccioedit, numpesoedit.
 - **Eventos y operaciones:** enviar_Click, Page_Load.
 - **Tablas/vistas/procedimientos:** qvt_checkpreoperatorio, vt_antecedentes, vt_clientes, vt_ordenAtencion, vt_pacientes, vt_RecepcionPaciente.
 - **Archivos físicos:** p.rpt.
 - **Reportes Crystal:** p.rpt.
-- **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Correo:** No; el código solo consulta el correo del propietario como dato de cabecera.
+- **Blazor equivalente:** `Components/Pages/ChecklistPreoperatorio.razor`.
+- **Servicio equivalente:** `Services/QuirofanoService.cs`, `Services/KardexService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Vista y servicio implementados; conserva `qvt_checkpreoperatorio`, sincroniza alergias con `vt_antecedentes`, bloquea órdenes cerradas, valida campos obligatorios, calcula IMC e imprime desde el navegador.
+- **Diferencias encontradas:** El archivo `p.rpt` existe en el sistema antiguo, pero esta página imprime el HTML con `window.print()`; Blazor conserva ese comportamiento y moderniza la presentación.
+- **Trabajo requerido:** Ejecutar una prueba funcional contra una base de datos de pruebas y validar el resultado impreso con el personal clínico antes de marcar la migración como completa.
 
 ### `vt_recetasnew.aspx`
 

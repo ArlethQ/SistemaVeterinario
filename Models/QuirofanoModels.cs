@@ -280,6 +280,41 @@ public class MiembroEquipoQuirurgicoDto
 }
 
 // ============================================================================
+// 3.1 RECEPCION Y CHECKLIST PREOPERATORIO (vt_RecepcionPaciente / qvt_checkpreoperatorio)
+// ============================================================================
+public class ChecklistPreoperatorioDto
+{
+    public int Id { get; set; }
+    public int IdOrden { get; set; }
+    public int Nhcl { get; set; }
+    public int IdUsuario { get; set; }
+    public DateTime Fecha { get; set; } = DateTime.Today;
+    public string HoraRegistro { get; set; } = DateTime.Now.ToString("HH:mm:ss");
+    public string FormulariosConsentimiento { get; set; } = "N";
+    public string ConsentimientoFirmado { get; set; } = "N";
+    public string PreparadoPor { get; set; } = string.Empty;
+    public string ExamenesLaboratorio { get; set; } = "N";
+    public string RayosX { get; set; } = "N";
+    public string Ekg { get; set; } = "N";
+    public string Alergias { get; set; } = string.Empty;
+    public int PresionSistolica { get; set; }
+    public int PresionDiastolica { get; set; }
+    public int Pulso { get; set; }
+    public int Saturacion { get; set; }
+    public decimal Peso { get; set; }
+    public int Talla { get; set; }
+    public int Miccion { get; set; }
+    public string HoraMiccion { get; set; } = DateTime.Now.ToString("HH:mm:ss");
+    public string ViaEndovenosa { get; set; } = "N";
+    public string ObservacionEndovenosa { get; set; } = string.Empty;
+    public string Premedicacion { get; set; } = string.Empty;
+    public string HoraPremedicacion { get; set; } = DateTime.Now.ToString("HH:mm:ss");
+    public string Protesis { get; set; } = string.Empty;
+    public string Observaciones { get; set; } = string.Empty;
+    public decimal Imc { get; set; }
+}
+
+// ============================================================================
 // 4. SALA DE RECUPERACIÓN Y POST-OPERATORIO (vt_Recuperacion + vt_postquirurgico)
 // ============================================================================
 public class RecuperacionSignoVitalDto

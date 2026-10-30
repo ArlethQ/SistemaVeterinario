@@ -22,6 +22,11 @@ public interface IQuirofanoService
     Task<bool> AgregarMiembroEquipoAsync(MiembroEquipoQuirurgicoDto miembro);
     Task<bool> EliminarMiembroEquipoAsync(int sec);
 
+    // 3.1 Recepcion y checklist preoperatorio (qvt_checkpreoperatorio + vt_antecedentes)
+    Task<ChecklistPreoperatorioDto> ObtenerChecklistPreoperatorioAsync(int idOrden, int nhcl);
+    Task<(bool Ok, string? Mensaje)> GuardarChecklistPreoperatorioAsync(
+        ChecklistPreoperatorioDto dto, int idUsuario, int idCliente);
+
     // 4. Sala de Recuperación y Post-Operatorio (qvt_recuperacion + qvt_post_operatorio + qvt_ingliqadm + qvt_observaciones_recuperacion)
     // 5. Pausa de Seguridad / Lista de Chequeo Quirúrgico OMS (vt_ControlIngreso + qvt_verificacion)
     Task<PausaSeguridadDto> ObtenerPausaSeguridadAsync(int idOrden, int nhcl);
@@ -1585,5 +1590,190 @@ public class QuirofanoService : IQuirofanoService
             _logger.LogError(ex, "Error al guardar Pausa de Seguridad Orden {IdOrden}", dto.IdOrden);
             return (false, ex.Message);
         }
+    }
+
+    // ========================================================================
+    // 6. RECEPCION / CHECKLIST PREOPERATORIO (vt_RecepcionPaciente)
+    // ========================================================================
+    public async Task<ChecklistPreoperatorioDto> ObtenerChecklistPreoperatorioAsync(int idOrden, int nhcl)
+    {
+        var dto = new ChecklistPreoperatorioDto { IdOrden = idOrden, Nhcl = nhcl };
+        try
+        {
+            const string sql = @"
+                SELECT TOP 1
+                    id AS Id,
+                    ISNULL(fichamedr, @IdOrden) AS IdOrden,
+                    ISNULL(nhclr, @Nhcl) AS Nhcl,
+                    ISNULL(usuarior, 0) AS IdUsuario,
+                    ISNULL(fechar, GETDATE()) AS Fecha,
+                    RTRIM(ISNULL(horar, '')) AS HoraRegistro,
+                    ISNULL(rpta1, 'N') AS FormulariosConsentimiento,
+                    ISNULL(rpta2, 'N') AS ConsentimientoFirmado,
+                    RTRIM(ISNULL(preparado, '')) AS PreparadoPor,
+                    ISNULL(rpta3, 'N') AS ExamenesLaboratorio,
+                    ISNULL(rpta4, 'N') AS RayosX,
+                    ISNULL(rpta5, 'N') AS Ekg,
+                    RTRIM(ISNULL(alergias, '')) AS Alergias,
+                    TRY_CONVERT(INT, LEFT(ISNULL(presion, '0'), CHARINDEX('/', ISNULL(presion, '0') + '/') - 1)) AS PresionSistolica,
+                    TRY_CONVERT(INT, NULLIF(SUBSTRING(ISNULL(presion, ''), CHARINDEX('/', ISNULL(presion, '')) + 1, 20), '')) AS PresionDiastolica,
+                    ISNULL(pulso, 0) AS Pulso,
+                    ISNULL(saturacion, 0) AS Saturacion,
+                    ISNULL(peso, 0) AS Peso,
+                    ISNULL(talla, 0) AS Talla,
+                    ISNULL(miccion, 0) AS Miccion,
+                    RTRIM(ISNULL(hora, '')) AS HoraMiccion,
+                    ISNULL(rpta6, 'N') AS ViaEndovenosa,
+                    RTRIM(ISNULL(obsintravenosa, '')) AS ObservacionEndovenosa,
+                    RTRIM(ISNULL(premedicacion, '')) AS Premedicacion,
+                    RTRIM(ISNULL(horapre, '')) AS HoraPremedicacion,
+                    ISNULL(protesis, '') AS Protesis,
+                    ISNULL(observaciones, '') AS Observaciones,
+                    ISNULL(imc, 0) AS Imc
+                FROM qvt_checkpreoperatorio
+                WHERE fichamedr = @IdOrden
+                ORDER BY id DESC";
+
+            var existente = await _db.QueryFirstOrDefaultAsync<ChecklistPreoperatorioDto>(
+                sql, new { IdOrden = idOrden, Nhcl = nhcl });
+            if (existente is not null)
+            {
+                dto = existente;
+            }
+
+            var alergia = await _db.QueryFirstOrDefaultAsync<string>(@"
+                SELECT TOP 1 RTRIM(ISNULL(antecedente_descripcion, ''))
+                FROM vt_antecedentes
+                WHERE antecedente_nhcl = @Nhcl AND ISNULL(antecedente_estado, 'A') = 'A'
+                ORDER BY antecedente_fecha DESC", new { Nhcl = nhcl });
+            if (!string.IsNullOrWhiteSpace(alergia)) dto.Alergias = alergia;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al cargar checklist preoperatorio Orden {IdOrden}", idOrden);
+            throw;
+        }
+
+        dto.FormulariosConsentimiento = Char1(dto.FormulariosConsentimiento, "N");
+        dto.ConsentimientoFirmado = Char1(dto.ConsentimientoFirmado, "N");
+        dto.ExamenesLaboratorio = Char1(dto.ExamenesLaboratorio, "N");
+        dto.RayosX = Char1(dto.RayosX, "N");
+        dto.Ekg = Char1(dto.Ekg, "N");
+        dto.ViaEndovenosa = Char1(dto.ViaEndovenosa, "N");
+        dto.HoraMiccion = NormalizarHora(dto.HoraMiccion);
+        dto.HoraPremedicacion = NormalizarHora(dto.HoraPremedicacion);
+        return dto;
+    }
+
+    public async Task<(bool Ok, string? Mensaje)> GuardarChecklistPreoperatorioAsync(
+        ChecklistPreoperatorioDto dto, int idUsuario, int idCliente)
+    {
+        if (dto.IdOrden <= 0 || dto.Nhcl <= 0)
+            return (false, "Seleccione una orden y un paciente válidos.");
+        if (string.IsNullOrWhiteSpace(dto.PreparadoPor))
+            return (false, "El campo Preparado por es obligatorio.");
+        if (string.IsNullOrWhiteSpace(dto.Observaciones))
+            return (false, "El campo Observaciones es obligatorio.");
+        if (dto.PresionSistolica is < 0 or > 300 || dto.PresionDiastolica is < 0 or > 300 ||
+            dto.Pulso is < 0 or > 300 || dto.Saturacion is < 0 or > 100 ||
+            dto.Peso is < 0 or > 300 || dto.Talla is < 0 or > 250 || dto.Miccion is < 0 or > 300)
+            return (false, "Revise los rangos de signos vitales, peso, talla y micción.");
+
+        dto.Imc = dto.Peso > 0 && dto.Talla > 0
+            ? Math.Round(dto.Peso / ((dto.Talla / 100m) * (dto.Talla / 100m)), 2, MidpointRounding.AwayFromZero)
+            : 0;
+
+        var p = new
+        {
+            dto.IdOrden,
+            dto.Nhcl,
+            IdUsuario = idUsuario,
+            Fecha = dto.Fecha.Date,
+            HoraRegistro = DateTime.Now.ToString("HH:mm:ss"),
+            Formularios = Char1(dto.FormulariosConsentimiento, "N"),
+            Consentimiento = Char1(dto.ConsentimientoFirmado, "N"),
+            Preparado = Truncate(dto.PreparadoPor.Trim(), 50),
+            Laboratorio = Char1(dto.ExamenesLaboratorio, "N"),
+            RayosX = Char1(dto.RayosX, "N"),
+            Ekg = Char1(dto.Ekg, "N"),
+            Alergias = Truncate(dto.Alergias.Trim(), 50),
+            Presion = $"{dto.PresionSistolica}/{dto.PresionDiastolica}",
+            dto.Pulso,
+            dto.Saturacion,
+            dto.Peso,
+            dto.Talla,
+            dto.Miccion,
+            HoraMiccion = NormalizarHora(dto.HoraMiccion),
+            Via = Char1(dto.ViaEndovenosa, "N"),
+            ObservacionVia = Truncate(dto.ObservacionEndovenosa.Trim(), 250),
+            Premedicacion = Truncate(dto.Premedicacion.Trim(), 250),
+            HoraPremedicacion = NormalizarHora(dto.HoraPremedicacion),
+            Protesis = dto.Protesis.Trim(),
+            Observaciones = dto.Observaciones.Trim(),
+            dto.Imc,
+            IdCliente = idCliente
+        };
+
+        const string upsertChecklist = @"
+            IF EXISTS (SELECT 1 FROM qvt_checkpreoperatorio WHERE fichamedr = @IdOrden)
+            BEGIN
+                UPDATE qvt_checkpreoperatorio SET
+                    nhclr=@Nhcl, usuarior=@IdUsuario, fechar=@Fecha, horar=@HoraRegistro,
+                    rpta1=@Formularios, rpta2=@Consentimiento, preparado=@Preparado,
+                    rpta3=@Laboratorio, rpta4=@RayosX, rpta5=@Ekg, alergias=@Alergias,
+                    presion=@Presion, pulso=@Pulso, saturacion=@Saturacion, peso=@Peso,
+                    talla=@Talla, miccion=@Miccion, hora=@HoraMiccion, rpta6=@Via,
+                    obsintravenosa=@ObservacionVia, premedicacion=@Premedicacion,
+                    horapre=@HoraPremedicacion, protesis=@Protesis,
+                    observaciones=@Observaciones, imc=@Imc
+                WHERE fichamedr=@IdOrden;
+            END
+            ELSE
+            BEGIN
+                INSERT INTO qvt_checkpreoperatorio (
+                    fichamedr,nhclr,usuarior,fechar,horar,rpta1,rpta2,preparado,rpta3,rpta4,rpta5,
+                    alergias,presion,pulso,saturacion,peso,talla,miccion,hora,rpta6,obsintravenosa,
+                    premedicacion,horapre,protesis,observaciones,imc)
+                VALUES (
+                    @IdOrden,@Nhcl,@IdUsuario,@Fecha,@HoraRegistro,@Formularios,@Consentimiento,@Preparado,
+                    @Laboratorio,@RayosX,@Ekg,@Alergias,@Presion,@Pulso,@Saturacion,@Peso,@Talla,@Miccion,
+                    @HoraMiccion,@Via,@ObservacionVia,@Premedicacion,@HoraPremedicacion,@Protesis,@Observaciones,@Imc);
+            END";
+
+        const string upsertAlergia = @"
+            IF EXISTS (SELECT 1 FROM vt_antecedentes WHERE antecedente_nhcl=@Nhcl AND ISNULL(antecedente_estado,'A')='A')
+                UPDATE vt_antecedentes SET antecedente_fecha=GETDATE(), antecedente_iduser=@IdUsuario,
+                    antecedente_cliente=@IdCliente, antecedente_descripcion=@Alergias
+                WHERE antecedente_nhcl=@Nhcl AND ISNULL(antecedente_estado,'A')='A';
+            ELSE
+                INSERT INTO vt_antecedentes (antecedente_nhcl,antecedente_fecha,antecedente_iduser,
+                    antecedente_cliente,antecedente_estado,antecedente_descripcion)
+                VALUES (@Nhcl,GETDATE(),@IdUsuario,@IdCliente,'A',@Alergias);";
+
+        try
+        {
+            await _db.ExecuteBatchAsync([(upsertChecklist, p), (upsertAlergia, p)]);
+            try
+            {
+                await _db.RegistrarBitacoraAsync($"Checklist preoperatorio guardado Orden {dto.IdOrden}", idUsuario);
+            }
+            catch
+            {
+                // La bitacora es no bloqueante para el registro clinico.
+            }
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al guardar checklist preoperatorio Orden {IdOrden}", dto.IdOrden);
+            return (false, "No se pudo guardar el checklist preoperatorio.");
+        }
+    }
+
+    private static string NormalizarHora(string? hora)
+    {
+        return TimeSpan.TryParse(hora, out var valor)
+            ? valor.ToString(@"hh\:mm\:ss")
+            : DateTime.Now.ToString("HH:mm:ss");
     }
 }
