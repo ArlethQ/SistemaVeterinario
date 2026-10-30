@@ -23,7 +23,7 @@ public interface IReportExportService
     byte[] GenerarProtocoloQuirurgicoPdf(PacienteHeaderDto paciente, ProtocoloQuirurgicoCompletoDto prot);
     byte[] GenerarRecuperacionPdf(PacienteHeaderDto paciente, List<RecuperacionSignoVitalDto> signos, PostOperatorioChecklistDto post, List<LiquidoRecuperacionDto> ing, List<LiquidoRecuperacionDto> egr, List<ObservacionRecuperacionDto> obs);
     byte[] GenerarFichaMedicaPdf(PacienteHeaderDto paciente, FichaMedicaCompletaDto ficha, List<DiagnosticoCie10Dto> diagnosticos, List<RecetaMedicamentoItemDto> receta);
-    byte[] GenerarRecetaMedicaPdf(PacienteHeaderDto paciente, List<RecetaMedicamentoItemDto> items, List<DiagnosticoCie10Dto> diagnosticos, string indicacionesGenerales);
+    byte[] GenerarRecetaMedicaPdf(PacienteHeaderDto paciente, List<RecetaMedicamentoItemDto> items, List<DiagnosticoCie10Dto> diagnosticos, string indicacionesGenerales, string? identificador = null, DateTime? fechaEmision = null);
     byte[] GenerarEvolucionesPdf(PacienteHeaderDto paciente, List<EvolucionMedicaDto> evoluciones);
     byte[] GenerarAltaMedicaPdf(PacienteHeaderDto paciente, FormularioAltaMedicaDto alta);
     byte[] GenerarOrdenLaboratorioPdf(PacienteHeaderDto paciente, List<OrdenLaboratorioItemDto> ordenes, List<DiagnosticoCie10Dto> diagnosticos);
@@ -1514,9 +1514,13 @@ public class ReportExportService : IReportExportService
         PacienteHeaderDto paciente,
         List<RecetaMedicamentoItemDto> items,
         List<DiagnosticoCie10Dto> diagnosticos,
-        string indicacionesGenerales)
+        string indicacionesGenerales,
+        string? identificador = null,
+        DateTime? fechaEmision = null)
     {
         var qrBytes = GenerarCodigoQrPng($"NUMERICA-{paciente.Nhcl}-{paciente.OrdenAtencionId}");
+        var referencia = string.IsNullOrWhiteSpace(identificador) ? $"ORDEN #{paciente.OrdenAtencionId}" : identificador;
+        var fecha = fechaEmision ?? DateTime.Today;
 
         return Document.Create(container =>
         {
@@ -1533,7 +1537,7 @@ public class ReportExportService : IReportExportService
                         row.RelativeItem().Column(c =>
                         {
                             c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(13).FontColor(Colors.Blue.Darken3);
-                            c.Item().Text($"RECETA MÉDICA VETERINARIA E INDICACIONES AL PROPIETARIO — ORDEN #{paciente.OrdenAtencionId}").Bold().FontSize(10);
+                            c.Item().Text($"RECETA MÉDICA VETERINARIA E INDICACIONES AL PROPIETARIO — {referencia}").Bold().FontSize(10);
                         });
                         row.ConstantItem(48).Image(qrBytes);
                     });
@@ -1542,7 +1546,7 @@ public class ReportExportService : IReportExportService
                     {
                         r.RelativeItem().Text($"Paciente: {paciente.PacienteNombre} ({paciente.Especie} - {paciente.Sexo}) | NHCL: {paciente.Nhcl}").Bold();
                         r.RelativeItem().Text($"Propietario: {paciente.ClienteNombre} (C.I./RUC: {paciente.ClienteCedula})");
-                        r.RelativeItem().Text($"Médico: {paciente.MedicoResponsable} | Fecha: {DateTime.Today:yyyy-MM-dd}");
+                        r.RelativeItem().Text($"Médico: {paciente.MedicoResponsable} | Fecha: {fecha:yyyy-MM-dd}");
                     });
                 });
 

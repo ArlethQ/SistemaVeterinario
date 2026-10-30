@@ -1,0 +1,377 @@
+@page "/consulta/recetario/sin-orden"
+@page "/consulta/recetario/sin-orden/{IdFicha:int}/{Nhcl:int}"
+@inject IConsultaExternaService ConsultaService
+@inject IReportExportService ReportService
+@inject IEFactCatalogService EFactCatalog
+@inject SessionStateService Session
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Receta sin orden - e-ForVets</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+        <div>
+            <small class="text-success fw-bold text-uppercase">Prescripción externa</small>
+            <h2 class="mb-1 fw-bold">Receta médica sin orden</h2>
+            <p class="text-muted mb-0">Emite una receta directamente desde la historia del paciente, sin crear una orden de atención.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-sm btn-outline-primary" href="/consulta/recetario">Recetas con orden</a>
+            <button class="btn btn-sm btn-outline-success" @onclick="NuevaRecetaAsync">Nueva receta</button>
+            <button class="btn btn-sm btn-danger" disabled="@(cabecera.IdFicha <= 0 || medicamentos.Count == 0 || diagnosticos.Count == 0)" @onclick="DescargarPdfAsync">Descargar PDF</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(mensaje))
+    {
+        <div class="alert @(esError ? "alert-danger" : "alert-success") alert-dismissible py-2">
+            @mensaje
+            <button type="button" class="btn-close py-2" @onclick="() => mensaje = string.Empty"></button>
+        </div>
+    }
+
+    @if (cargando)
+    {
+        <LoadingState Message="Cargando receta externa..." />
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold text-primary">1. Seleccionar paciente</h6>
+                @if (cabecera.IdFicha > 0)
+                {
+                    <span class="badge text-bg-success">Receta externa #@cabecera.IdFicha · Serial @cabecera.Serial</span>
+                }
+            </div>
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Buscar por</label>
+                        <select class="form-select form-select-sm" @bind="criterioBusqueda" @bind:after="LimpiarBusqueda">
+                            <option value="apellidos">Apellidos del propietario</option>
+                            <option value="nombres">Nombres del propietario</option>
+                            <option value="cedula">Cédula</option>
+                            <option value="paciente">Nombre del paciente</option>
+                            <option value="nhcl">NHCL</option>
+                        </select>
+                    </div>
+                    <div class="col-md-7">
+                        <label class="form-label small fw-semibold">Criterio</label>
+                        <input class="form-control form-control-sm" autocomplete="off" @bind="filtroBusqueda" @bind:event="oninput" @onkeydown="BuscarConEnterAsync" />
+                    </div>
+                    <div class="col-md-2"><button class="btn btn-sm btn-primary w-100" disabled="@buscando" @onclick="BuscarPacientesAsync">@(buscando ? "Buscando..." : "Consultar")</button></div>
+                </div>
+
+                @if (resultadosPacientes.Count > 0)
+                {
+                    <div class="table-responsive mt-3" style="max-height:260px;overflow:auto">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light"><tr><th>NHCL</th><th>Paciente</th><th>Propietario</th><th>Cédula</th><th>Especie</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var p in resultadosPacientes)
+                                {
+                                    <tr>
+                                        <td class="fw-semibold">@p.Nhcl</td><td>@p.Paciente</td><td>@p.Propietario</td><td>@p.Cedula</td><td>@p.Especie</td>
+                                        <td class="text-end"><button class="btn btn-sm btn-outline-primary" disabled="@(cabecera.IdFicha > 0)" @onclick="() => SeleccionarPaciente(p)">Seleccionar</button></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (paciente is not null || cabecera.Nhcl > 0)
+        {
+            <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
+                <div class="card-body py-2">
+                    <div class="row g-2 small">
+                        <div class="col-md-2"><span class="text-muted">NHCL</span><strong class="d-block text-primary">#@cabecera.Nhcl</strong></div>
+                        <div class="col-md-2"><span class="text-muted">Paciente</span><strong class="d-block">@cabecera.Paciente</strong></div>
+                        <div class="col-md-3"><span class="text-muted">Propietario</span><strong class="d-block">@cabecera.Cliente</strong></div>
+                        <div class="col-md-2"><span class="text-muted">Cédula</span><strong class="d-block">@cabecera.Cedula</strong></div>
+                        <div class="col-md-2"><span class="text-muted">Teléfono</span><strong class="d-block">@cabecera.Telefonos</strong></div>
+                        <div class="col-md-1"><span class="text-muted">Origen</span><strong class="d-block">@(paciente?.Tipo ?? "")</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">2. Encabezado de la receta</h6></div>
+                <div class="card-body row g-3">
+                    <div class="col-md-3"><label class="form-label fw-semibold">Fecha de emisión *</label><input type="date" class="form-control" @bind="cabecera.Fecha" /></div>
+                    <div class="col-md-9"><label class="form-label fw-semibold">Motivo de la receta *</label><input class="form-control" maxlength="500" @bind="cabecera.Motivo" /></div>
+                    <div class="col-12"><label class="form-label fw-semibold">Indicaciones generales</label><textarea class="form-control" rows="3" maxlength="4000" @bind="cabecera.IndicacionesGenerales"></textarea></div>
+                </div>
+                <div class="card-footer bg-white text-end"><button class="btn btn-success fw-semibold" disabled="@guardando" @onclick="GuardarCabeceraAsync">@(guardando ? "Guardando..." : cabecera.IdFicha > 0 ? "Actualizar encabezado" : "Crear receta")</button></div>
+            </div>
+
+            @if (cabecera.IdFicha > 0)
+            {
+                <div class="row g-3">
+                    <div class="col-lg-5">
+                        <div class="card shadow-sm border-0 h-100">
+                            <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">3. Diagnósticos *</h6></div>
+                            <div class="card-body">
+                                <div class="input-group input-group-sm mb-2">
+                                    <input class="form-control" placeholder="Buscar CIE-10" @bind="filtroDiagnostico" @bind:event="oninput" @onkeydown="BuscarDiagnosticoConEnterAsync" />
+                                    <button class="btn btn-outline-primary" @onclick="BuscarDiagnosticosAsync">Buscar</button>
+                                </div>
+                                @if (catalogoDiagnosticos.Count > 0)
+                                {
+                                    <div class="list-group mb-2" style="max-height:160px;overflow:auto">
+                                        @foreach (var d in catalogoDiagnosticos)
+                                        {
+                                            <button class="list-group-item list-group-item-action py-1 small" @onclick="() => SeleccionarDiagnostico(d)"><strong>@d.CieCodigo</strong> · @d.CieDiagnostico</button>
+                                        }
+                                    </div>
+                                }
+                                <div class="row g-2">
+                                    <div class="col-md-8"><label class="form-label small fw-semibold">Diagnóstico seleccionado u otro diagnóstico</label><textarea class="form-control form-control-sm" rows="2" @bind="nuevoDiagnostico.DescripcionObservacion"></textarea></div>
+                                    <div class="col-md-4"><label class="form-label small fw-semibold">Tipo</label><select class="form-select form-select-sm" @bind="nuevoDiagnostico.TipoDiag"><option>Presuntivo</option><option>Definitivo</option></select></div>
+                                    <div class="col-12"><button class="btn btn-sm btn-outline-success w-100" @onclick="AgregarDiagnosticoAsync">Agregar diagnóstico</button></div>
+                                </div>
+                                <hr />
+                                @if (diagnosticos.Count == 0)
+                                {
+                                    <p class="text-muted text-center small">Debe agregar al menos un diagnóstico.</p>
+                                }
+                                @foreach (var d in diagnosticos)
+                                {
+                                    <div class="d-flex justify-content-between gap-2 border-bottom py-2 small">
+                                        <span><strong>@(string.IsNullOrWhiteSpace(d.CodigoDiag) || d.CodigoDiag == "0" ? "OTRO" : d.CodigoDiag)</strong> · @d.DescripcionObservacion <span class="badge text-bg-light border">@d.TipoDiag</span></span>
+                                        <button class="btn btn-sm btn-link text-danger p-0" @onclick="() => EliminarDiagnosticoAsync(d.Sec)">Eliminar</button>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-7">
+                        <div class="card shadow-sm border-0 h-100">
+                            <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">4. Medicamentos *</h6></div>
+                            <div class="card-body">
+                                <div class="row g-2 p-2 bg-light rounded border mb-3">
+                                    <div class="col-md-7"><label class="form-label small fw-semibold">Medicamento del catálogo u otro</label><input class="form-control form-control-sm" list="productosRecetaExterna" @bind="nuevoMedicamento.Descripcionamento" /><datalist id="productosRecetaExterna">@foreach (var prod in catalogoProductos){<option value="@prod.Descripcion">@prod.Codigo</option>}</datalist></div>
+                                    <div class="col-md-2"><label class="form-label small fw-semibold">Cantidad</label><input type="number" min="0.01" step="0.01" class="form-control form-control-sm" @bind="nuevoMedicamento.Cantidad" /></div>
+                                    <div class="col-md-3"><label class="form-label small fw-semibold">Fecha</label><input type="date" class="form-control form-control-sm" @bind="nuevoMedicamento.Fecha" /></div>
+                                    <div class="col-md-9"><label class="form-label small fw-semibold">Dosis, frecuencia y duración</label><textarea class="form-control form-control-sm" rows="2" maxlength="250" @bind="nuevoMedicamento.Indicaciones"></textarea></div>
+                                    <div class="col-md-3 d-flex align-items-end"><button class="btn btn-sm btn-success w-100" @onclick="AgregarMedicamentoAsync">Agregar</button></div>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle small mb-0">
+                                        <thead class="table-light"><tr><th>Medicamento</th><th>Cantidad</th><th>Indicaciones</th><th>Origen</th><th></th></tr></thead>
+                                        <tbody>
+                                            @if (medicamentos.Count == 0){<tr><td colspan="5" class="text-center text-muted py-3">Debe agregar al menos un medicamento.</td></tr>}
+                                            @foreach (var m in medicamentos)
+                                            {
+                                                <tr><td class="fw-semibold">@m.Descripcionamento</td><td>@m.Cantidad</td><td>@m.Indicaciones</td><td><span class="badge text-bg-light border">@(m.Origen == "F" ? "Catálogo" : "Otro")</span></td><td class="text-end"><button class="btn btn-sm btn-link text-danger p-0" @onclick="() => EliminarMedicamentoAsync(m.Sec)">Eliminar</button></td></tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-white d-flex justify-content-between">
+                                <a class="btn btn-sm btn-outline-secondary" href="/facturacion/proformas">Ir a proformas y facturación</a>
+                                <button class="btn btn-sm btn-danger" disabled="@(medicamentos.Count == 0 || diagnosticos.Count == 0)" @onclick="DescargarPdfAsync">Generar receta PDF</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public int IdFicha { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+
+    private RecetaExternaCabeceraDto cabecera = new();
+    private PacienteApunteHistoriaDto? paciente;
+    private List<PacienteApunteHistoriaDto> resultadosPacientes = [];
+    private List<DiagnosticoCie10Dto> diagnosticos = [];
+    private List<RecetaMedicamentoItemDto> medicamentos = [];
+    private List<CatalogoCie10ItemDto> catalogoDiagnosticos = [];
+    private List<CatalogoOperativoDto> catalogoProductos = [];
+    private DiagnosticoCie10Dto nuevoDiagnostico = new() { TipoDiag = "Presuntivo" };
+    private RecetaMedicamentoItemDto nuevoMedicamento = new() { Cantidad = 1, Fecha = DateTime.Today };
+    private string criterioBusqueda = "apellidos";
+    private string filtroBusqueda = string.Empty;
+    private string filtroDiagnostico = string.Empty;
+    private string mensaje = string.Empty;
+    private bool esError;
+    private bool cargando = true;
+    private bool buscando;
+    private bool guardando;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsAuthenticated) { Nav.NavigateTo("/login"); return; }
+        cargando = true;
+        try
+        {
+            if (catalogoProductos.Count == 0)
+            {
+                catalogoProductos = (await EFactCatalog.ObtenerProductosAsync())
+                    .Where(x => x.Estado == "A" && x.Tipo != "SERVICIO").ToList();
+            }
+            if (IdFicha > 0) await CargarRecetaAsync(IdFicha);
+            else
+            {
+                ReiniciarFormulario();
+                var nhclInicial = Nhcl > 0 ? Nhcl : Session.NhclActivo ?? 0;
+                if (nhclInicial > 0)
+                {
+                    var encontrados = await ConsultaService.BuscarPacientesParaApuntesAsync(nhclInicial.ToString(), "nhcl");
+                    var encontrado = encontrados.FirstOrDefault();
+                    if (encontrado is not null) SeleccionarPaciente(encontrado);
+                }
+            }
+        }
+        catch (Exception ex) { esError = true; mensaje = $"No se pudo cargar el recetario: {ex.Message}"; }
+        finally { cargando = false; }
+    }
+
+    private void ReiniciarFormulario()
+    {
+        cabecera = new RecetaExternaCabeceraDto { Fecha = DateTime.Today, Serial = CrearSerial() };
+        paciente = null; diagnosticos = []; medicamentos = []; resultadosPacientes = [];
+        nuevoDiagnostico = new() { TipoDiag = "Presuntivo" };
+        nuevoMedicamento = new() { Cantidad = 1, Fecha = DateTime.Today };
+    }
+
+    private Task NuevaRecetaAsync()
+    {
+        IdFicha = 0; Nhcl = 0; mensaje = string.Empty; ReiniciarFormulario();
+        Nav.NavigateTo("/consulta/recetario/sin-orden", false);
+        return Task.CompletedTask;
+    }
+
+    private static string CrearSerial() => Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+    private void LimpiarBusqueda() => resultadosPacientes = [];
+    private async Task BuscarConEnterAsync(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarPacientesAsync(); }
+    private async Task BuscarDiagnosticoConEnterAsync(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarDiagnosticosAsync(); }
+
+    private async Task BuscarPacientesAsync()
+    {
+        var minimo = criterioBusqueda == "nhcl" ? 1 : 2;
+        if (filtroBusqueda.Trim().Length < minimo) { esError = true; mensaje = "Ingrese un criterio válido para buscar."; return; }
+        buscando = true;
+        try { resultadosPacientes = await ConsultaService.BuscarPacientesParaApuntesAsync(filtroBusqueda, criterioBusqueda); esError = false; }
+        catch (Exception ex) { esError = true; mensaje = $"No se pudo buscar: {ex.Message}"; }
+        finally { buscando = false; }
+    }
+
+    private void SeleccionarPaciente(PacienteApunteHistoriaDto seleccionado)
+    {
+        paciente = seleccionado; Nhcl = seleccionado.Nhcl;
+        cabecera.Nhcl = seleccionado.Nhcl; cabecera.IdCliente = seleccionado.IdCliente;
+        cabecera.Paciente = seleccionado.Paciente; cabecera.Cliente = seleccionado.Propietario;
+        cabecera.Cedula = seleccionado.Cedula; cabecera.Telefonos = seleccionado.Celular;
+        cabecera.Correo = seleccionado.Email; resultadosPacientes = []; filtroBusqueda = string.Empty;
+    }
+
+    private async Task GuardarCabeceraAsync()
+    {
+        guardando = true;
+        try
+        {
+            var r = await ConsultaService.GuardarCabeceraRecetaExternaAsync(cabecera, Session.IdUser);
+            esError = !r.Ok; mensaje = r.Ok ? "Cabecera de receta guardada correctamente." : r.Mensaje ?? "No se pudo guardar.";
+            if (r.Ok)
+            {
+                cabecera.IdFicha = r.IdFicha; IdFicha = r.IdFicha;
+                Nav.NavigateTo($"/consulta/recetario/sin-orden/{IdFicha}/{cabecera.Nhcl}", false);
+            }
+        }
+        finally { guardando = false; }
+    }
+
+    private async Task CargarRecetaAsync(int idFicha)
+    {
+        var existente = await ConsultaService.ObtenerRecetaExternaAsync(idFicha);
+        if (existente is null) { esError = true; mensaje = $"No se encontró la receta externa #{idFicha}."; return; }
+        cabecera = existente; IdFicha = existente.IdFicha; Nhcl = existente.Nhcl;
+        if (string.IsNullOrWhiteSpace(cabecera.Serial)) cabecera.Serial = CrearSerial();
+        var pTask = ConsultaService.BuscarPacientesParaApuntesAsync(Nhcl.ToString(), "nhcl");
+        var dTask = ConsultaService.ObtenerDiagnosticosRecetaExternaAsync(idFicha);
+        var mTask = ConsultaService.ObtenerMedicamentosRecetaExternaAsync(idFicha);
+        await Task.WhenAll(pTask, dTask, mTask);
+        paciente = (await pTask).FirstOrDefault(); diagnosticos = await dTask; medicamentos = await mTask;
+        foreach (var item in medicamentos) item.CantidadLetras = NumeroALetras((int)Math.Round(item.Cantidad));
+        nuevoMedicamento = new() { Cantidad = 1, Fecha = cabecera.Fecha };
+    }
+
+    private async Task BuscarDiagnosticosAsync()
+    {
+        if (filtroDiagnostico.Trim().Length < 2) { esError = true; mensaje = "Ingrese al menos dos caracteres para buscar diagnósticos."; return; }
+        catalogoDiagnosticos = await ConsultaService.BuscarCatalogoCie10Async(filtroDiagnostico);
+    }
+
+    private void SeleccionarDiagnostico(CatalogoCie10ItemDto item)
+    {
+        nuevoDiagnostico.CodigoDiag = item.CieCodigo.ToString(); nuevoDiagnostico.NombreCie10 = item.CieDiagnostico;
+        nuevoDiagnostico.DescripcionObservacion = item.CieDiagnostico; catalogoDiagnosticos = []; filtroDiagnostico = item.CieDiagnostico;
+    }
+
+    private async Task AgregarDiagnosticoAsync()
+    {
+        nuevoDiagnostico.Nhcl = cabecera.Nhcl;
+        var r = await ConsultaService.AgregarDiagnosticoRecetaExternaAsync(cabecera.IdFicha, nuevoDiagnostico, cabecera.Serial);
+        esError = !r.Ok; mensaje = r.Ok ? "Diagnóstico agregado." : r.Mensaje ?? "No se pudo agregar.";
+        if (r.Ok) { diagnosticos = await ConsultaService.ObtenerDiagnosticosRecetaExternaAsync(cabecera.IdFicha); nuevoDiagnostico = new() { TipoDiag = "Presuntivo" }; filtroDiagnostico = string.Empty; }
+    }
+
+    private async Task EliminarDiagnosticoAsync(int sec)
+    {
+        if (await ConsultaService.EliminarDiagnosticoRecetaExternaAsync(sec)) diagnosticos = await ConsultaService.ObtenerDiagnosticosRecetaExternaAsync(cabecera.IdFicha);
+    }
+
+    private async Task AgregarMedicamentoAsync()
+    {
+        var producto = catalogoProductos.FirstOrDefault(x => string.Equals(x.Descripcion.Trim(), nuevoMedicamento.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase));
+        nuevoMedicamento.CodigoProd = producto?.Codigo ?? "0"; nuevoMedicamento.Nhcl = cabecera.Nhcl;
+        var r = await ConsultaService.AgregarMedicamentoRecetaExternaAsync(cabecera.IdFicha, nuevoMedicamento, cabecera.Serial);
+        esError = !r.Ok; mensaje = r.Ok ? "Medicamento agregado." : r.Mensaje ?? "No se pudo agregar.";
+        if (r.Ok)
+        {
+            medicamentos = await ConsultaService.ObtenerMedicamentosRecetaExternaAsync(cabecera.IdFicha);
+            foreach (var item in medicamentos) item.CantidadLetras = NumeroALetras((int)Math.Round(item.Cantidad));
+            nuevoMedicamento = new() { Cantidad = 1, Fecha = cabecera.Fecha };
+        }
+    }
+
+    private async Task EliminarMedicamentoAsync(int sec)
+    {
+        if (await ConsultaService.EliminarMedicamentoRecetaExternaAsync(sec)) medicamentos = await ConsultaService.ObtenerMedicamentosRecetaExternaAsync(cabecera.IdFicha);
+    }
+
+    private async Task DescargarPdfAsync()
+    {
+        if (diagnosticos.Count == 0 || medicamentos.Count == 0) { esError = true; mensaje = "La receta necesita al menos un diagnóstico y un medicamento."; return; }
+        var p = paciente;
+        var encabezado = new PacienteHeaderDto
+        {
+            Nhcl = cabecera.Nhcl, OrdenAtencionId = cabecera.IdFicha, PacienteNombre = cabecera.Paciente,
+            ClienteNombre = cabecera.Cliente, ClienteCedula = cabecera.Cedula, ClienteCodigo = cabecera.IdCliente,
+            Sexo = p?.Sexo ?? string.Empty, Especie = p?.Especie ?? string.Empty, Raza = p?.Raza ?? string.Empty,
+            Origen = p?.Tipo ?? "Externo", FechaNacimiento = p?.FechaNacimiento, MedicoResponsable = string.IsNullOrWhiteSpace(cabecera.Medico) ? Session.NombreUsuario : cabecera.Medico
+        };
+        if (p?.FechaNacimiento is DateTime nacimiento)
+        {
+            var hoy = DateTime.Today; var anios = hoy.Year - nacimiento.Year; if (nacimiento.Date > hoy.AddYears(-anios)) anios--;
+            encabezado.EdadAnios = Math.Max(0, anios); encabezado.EdadMeses = Math.Max(0, ((hoy.Year - nacimiento.Year) * 12 + hoy.Month - nacimiento.Month) % 12);
+        }
+        var bytes = ReportService.GenerarRecetaMedicaPdf(encabezado, medicamentos, diagnosticos, cabecera.IndicacionesGenerales, $"RECETA EXTERNA #{cabecera.IdFicha}", cabecera.Fecha);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Receta_Externa_{cabecera.IdFicha}_NHCL_{cabecera.Nhcl}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+    }
+
+    private static string NumeroALetras(int numero) => numero switch
+    {
+        1 => "UNO", 2 => "DOS", 3 => "TRES", 4 => "CUATRO", 5 => "CINCO", 6 => "SEIS", 7 => "SIETE", 8 => "OCHO", 9 => "NUEVE", 10 => "DIEZ", _ => numero.ToString()
+    };
+}

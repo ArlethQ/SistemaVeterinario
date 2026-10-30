@@ -170,6 +170,25 @@ public class RecetaMedicamentoItemDto
     public decimal Precio { get; set; }
     public DateTime Fecha { get; set; } = DateTime.Today;
     public string Tipo { get; set; } = "M"; // 'M' = Receta, 'I' = Insumo
+    public string Origen { get; set; } = string.Empty; // F = catálogo, O = otro medicamento
+}
+
+public class RecetaExternaCabeceraDto
+{
+    public int IdFicha { get; set; }
+    public int Nhcl { get; set; }
+    public int IdCliente { get; set; }
+    public string Paciente { get; set; } = string.Empty;
+    public string Cliente { get; set; } = string.Empty;
+    public string Cedula { get; set; } = string.Empty;
+    public string Telefonos { get; set; } = string.Empty;
+    public string Correo { get; set; } = string.Empty;
+    public string Motivo { get; set; } = string.Empty;
+    public int IdUsuario { get; set; }
+    public string Medico { get; set; } = string.Empty;
+    public string IndicacionesGenerales { get; set; } = string.Empty;
+    public DateTime Fecha { get; set; } = DateTime.Today;
+    public string Serial { get; set; } = string.Empty;
 }
 
 public class RecetaResumenListadoDto

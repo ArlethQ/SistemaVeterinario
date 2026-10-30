@@ -38,6 +38,14 @@ public interface IConsultaExternaService
     Task<bool> EliminarMedicamentoRecetaAsync(int sec);
     Task<bool> GuardarIndicacionesGeneralesAsync(int idOrden, int nhcl, string indicaciones);
     Task<List<RecetaResumenListadoDto>> BuscarRecetasPorFechasAsync(DateTime desde, DateTime hasta, int? nhcl = null);
+    Task<RecetaExternaCabeceraDto?> ObtenerRecetaExternaAsync(int idFicha);
+    Task<(bool Ok, int IdFicha, string? Mensaje)> GuardarCabeceraRecetaExternaAsync(RecetaExternaCabeceraDto dto, int idUsuario);
+    Task<List<DiagnosticoCie10Dto>> ObtenerDiagnosticosRecetaExternaAsync(int idFicha);
+    Task<(bool Ok, string? Mensaje)> AgregarDiagnosticoRecetaExternaAsync(int idFicha, DiagnosticoCie10Dto dto, string serial);
+    Task<bool> EliminarDiagnosticoRecetaExternaAsync(int sec);
+    Task<List<RecetaMedicamentoItemDto>> ObtenerMedicamentosRecetaExternaAsync(int idFicha);
+    Task<(bool Ok, string? Mensaje)> AgregarMedicamentoRecetaExternaAsync(int idFicha, RecetaMedicamentoItemDto item, string serial);
+    Task<bool> EliminarMedicamentoRecetaExternaAsync(int sec);
 
     // 6. Autorizaciones / Consentimientos y Alta MÃ©dica (vt_autorizaciones + vt_formatos + qvt_formulario_alta)
     Task<List<FormatoPlantillaDto>> ObtenerPlantillasFormatosAsync(string? tipo = null);
@@ -775,6 +783,218 @@ public class ConsultaExternaService : IConsultaExternaService
         });
         return lista.ToList();
     }
+
+    public async Task<RecetaExternaCabeceraDto?> ObtenerRecetaExternaAsync(int idFicha)
+    {
+        const string sql = @"
+            SELECT TOP 1
+                h.idficha AS IdFicha,
+                ISNULL(h.nhcl, 0) AS Nhcl,
+                ISNULL(p.mas_idcliente, 0) AS IdCliente,
+                RTRIM(ISNULL(h.paciente, ISNULL(p.mas_nombre, ''))) AS Paciente,
+                RTRIM(ISNULL(h.cliente, LTRIM(RTRIM(ISNULL(c.pa_nombres, '') + ' ' + ISNULL(c.pa_apellidos, ''))))) AS Cliente,
+                RTRIM(ISNULL(h.cedula, ISNULL(c.pa_cedula, ''))) AS Cedula,
+                RTRIM(ISNULL(h.telefonos, ISNULL(c.pa_telefono, '') + '/' + ISNULL(c.pa_movil, ''))) AS Telefonos,
+                RTRIM(ISNULL(h.correo, ISNULL(c.pa_email, ''))) AS Correo,
+                RTRIM(ISNULL(h.motivo, '')) AS Motivo,
+                ISNULL(h.userid, 0) AS IdUsuario,
+                RTRIM(ISNULL(u.user_nombre, '')) AS Medico,
+                ISNULL(CAST(h.indicag_detalle AS VARCHAR(MAX)), '') AS IndicacionesGenerales,
+                ISNULL((SELECT MIN(m.med_fecha) FROM vt_medicinasexterno m WHERE m.med_id_ficha = h.idficha), GETDATE()) AS Fecha,
+                ISNULL((SELECT TOP 1 CAST(m.med_idorden AS VARCHAR(50)) FROM vt_medicinasexterno m WHERE m.med_id_ficha = h.idficha AND ISNULL(m.med_idorden, '') <> '' ORDER BY m.sec), '') AS Serial
+            FROM vt_cabecerareceta h
+            LEFT JOIN vt_pacientes p ON h.nhcl = p.mas_nhcl
+            LEFT JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
+            LEFT JOIN vt_usuarios u ON h.userid = u.user_numero
+            WHERE h.idficha = @IdFicha";
+
+        return await _db.QueryFirstOrDefaultAsync<RecetaExternaCabeceraDto>(sql, new { IdFicha = idFicha });
+    }
+
+    public async Task<(bool Ok, int IdFicha, string? Mensaje)> GuardarCabeceraRecetaExternaAsync(
+        RecetaExternaCabeceraDto dto, int idUsuario)
+    {
+        if (dto.Nhcl <= 0 || string.IsNullOrWhiteSpace(dto.Paciente) || string.IsNullOrWhiteSpace(dto.Cliente))
+            return (false, 0, "Seleccione un paciente válido.");
+        if (string.IsNullOrWhiteSpace(dto.Motivo))
+            return (false, 0, "El motivo de la receta es obligatorio.");
+
+        try
+        {
+            if (dto.IdFicha <= 0)
+            {
+                dto.IdFicha = await _db.ExecuteScalarAsync<int>(@"
+                    INSERT INTO vt_cabecerareceta (
+                        nhcl, paciente, cliente, cedula, telefonos, correo, motivo, userid, indicag_detalle
+                    ) VALUES (
+                        @Nhcl, @Paciente, @Cliente, @Cedula, @Telefonos, @Correo, @Motivo, @IdUsuario, @IndicacionesGenerales
+                    );
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);", new
+                {
+                    dto.Nhcl,
+                    Paciente = dto.Paciente.Trim(),
+                    Cliente = dto.Cliente.Trim(),
+                    Cedula = dto.Cedula.Trim(),
+                    Telefonos = dto.Telefonos.Trim(),
+                    Correo = dto.Correo.Trim(),
+                    Motivo = dto.Motivo.Trim(),
+                    IdUsuario = idUsuario,
+                    IndicacionesGenerales = dto.IndicacionesGenerales.Trim()
+                });
+            }
+            else
+            {
+                var filas = await _db.ExecuteAsync(@"
+                    UPDATE vt_cabecerareceta SET
+                        paciente=@Paciente, cliente=@Cliente, cedula=@Cedula, telefonos=@Telefonos,
+                        correo=@Correo, motivo=@Motivo, userid=@IdUsuario, indicag_detalle=@IndicacionesGenerales
+                    WHERE idficha=@IdFicha AND nhcl=@Nhcl", new
+                {
+                    dto.IdFicha,
+                    dto.Nhcl,
+                    Paciente = dto.Paciente.Trim(),
+                    Cliente = dto.Cliente.Trim(),
+                    Cedula = dto.Cedula.Trim(),
+                    Telefonos = dto.Telefonos.Trim(),
+                    Correo = dto.Correo.Trim(),
+                    Motivo = dto.Motivo.Trim(),
+                    IdUsuario = idUsuario,
+                    IndicacionesGenerales = dto.IndicacionesGenerales.Trim()
+                });
+                if (filas <= 0) return (false, 0, "La receta externa no existe o pertenece a otro paciente.");
+            }
+
+            try
+            {
+                await _db.RegistrarBitacoraAsync($"Receta externa guardada #{dto.IdFicha} NHCL #{dto.Nhcl}", idUsuario);
+            }
+            catch
+            {
+                // La bitacora no debe impedir el registro clinico.
+            }
+            return (true, dto.IdFicha, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error guardando receta externa NHCL {Nhcl}", dto.Nhcl);
+            return (false, 0, "No se pudo guardar la cabecera de la receta.");
+        }
+    }
+
+    public async Task<List<DiagnosticoCie10Dto>> ObtenerDiagnosticosRecetaExternaAsync(int idFicha)
+    {
+        const string sql = @"
+            SELECT
+                d.sec AS Sec,
+                CAST(ISNULL(d.dig_nhcl, 0) AS INT) AS Nhcl,
+                ISNULL(d.dig_id_ficha, @IdFicha) AS IdOrden,
+                RTRIM(ISNULL(d.dig_codigoDiag, '')) AS CodigoDiag,
+                RTRIM(ISNULL(c.cie_diagnostico, ISNULL(CAST(d.dig_descripcion AS VARCHAR(MAX)), ''))) AS NombreCie10,
+                RTRIM(ISNULL(CAST(d.dig_descripcion AS VARCHAR(MAX)), '')) AS DescripcionObservacion,
+                CASE WHEN RTRIM(ISNULL(d.dig_tipo, 'P')) = 'D' THEN 'Definitivo' ELSE 'Presuntivo' END AS TipoDiag
+            FROM vt_diagnosticosexternos d
+            LEFT JOIN vt_cie10 c ON CAST(c.cie_codigo AS VARCHAR(20)) = RTRIM(d.dig_codigoDiag)
+            WHERE d.dig_id_ficha = @IdFicha
+            ORDER BY d.sec";
+        return (await _db.QueryAsync<DiagnosticoCie10Dto>(sql, new { IdFicha = idFicha })).ToList();
+    }
+
+    public async Task<(bool Ok, string? Mensaje)> AgregarDiagnosticoRecetaExternaAsync(
+        int idFicha, DiagnosticoCie10Dto dto, string serial)
+    {
+        if (idFicha <= 0 || dto.Nhcl <= 0) return (false, "Guarde primero la cabecera de la receta.");
+        var descripcion = string.IsNullOrWhiteSpace(dto.DescripcionObservacion) ? dto.NombreCie10 : dto.DescripcionObservacion;
+        if (string.IsNullOrWhiteSpace(descripcion)) return (false, "Ingrese o seleccione un diagnóstico.");
+        var codigo = string.IsNullOrWhiteSpace(dto.CodigoDiag) ? "0" : dto.CodigoDiag.Trim();
+        if (codigo.Length > 10) codigo = codigo[..10];
+        var tipo = dto.TipoDiag.StartsWith("D", StringComparison.OrdinalIgnoreCase) ? "D" : "P";
+
+        try
+        {
+            await _db.ExecuteAsync(@"
+                INSERT INTO vt_diagnosticosexternos (
+                    dig_nhcl, dig_codigoDiag, dig_id_ficha, dig_descripcion, dig_tipo, dig_orden
+                ) VALUES (
+                    @Nhcl, @Codigo, @IdFicha, @Descripcion, @Tipo, @Serial
+                )", new { dto.Nhcl, Codigo = codigo, IdFicha = idFicha, Descripcion = descripcion.Trim(), Tipo = tipo, Serial = serial });
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error agregando diagnostico a receta externa {IdFicha}", idFicha);
+            return (false, "No se pudo agregar el diagnóstico.");
+        }
+    }
+
+    public async Task<bool> EliminarDiagnosticoRecetaExternaAsync(int sec)
+        => await _db.ExecuteAsync("DELETE FROM vt_diagnosticosexternos WHERE sec=@Sec", new { Sec = sec }) > 0;
+
+    public async Task<List<RecetaMedicamentoItemDto>> ObtenerMedicamentosRecetaExternaAsync(int idFicha)
+    {
+        const string sql = @"
+            SELECT
+                m.sec AS Sec,
+                ISNULL(m.med_id_ficha, @IdFicha) AS IdOrden,
+                ISNULL(m.med_nhcl, 0) AS Nhcl,
+                CAST(ISNULL(m.med_idProdu, 0) AS VARCHAR(50)) AS CodigoProd,
+                RTRIM(COALESCE(NULLIF(m.med_descripcionprodu, ''), NULLIF(m.med_otroMedicamento, ''), '')) AS Descripcionamento,
+                CASE WHEN RTRIM(ISNULL(m.med_origen, 'F')) = 'O' THEN ISNULL(m.med_cantidad1, 0) ELSE ISNULL(m.med_cantidad, 0) END AS Cantidad,
+                RTRIM(ISNULL(m.med_indicaciones, '')) AS Indicaciones,
+                ISNULL(m.med_fecha, GETDATE()) AS Fecha,
+                RTRIM(ISNULL(m.med_tipo, 'M')) AS Tipo,
+                RTRIM(ISNULL(m.med_origen, 'F')) AS Origen
+            FROM vt_medicinasexterno m
+            WHERE m.med_id_ficha = @IdFicha AND ISNULL(m.med_tipo, 'M') = 'M'
+            ORDER BY m.sec";
+        return (await _db.QueryAsync<RecetaMedicamentoItemDto>(sql, new { IdFicha = idFicha })).ToList();
+    }
+
+    public async Task<(bool Ok, string? Mensaje)> AgregarMedicamentoRecetaExternaAsync(
+        int idFicha, RecetaMedicamentoItemDto item, string serial)
+    {
+        if (idFicha <= 0 || item.Nhcl <= 0) return (false, "Guarde primero la cabecera de la receta.");
+        if (item.Cantidad <= 0) return (false, "La cantidad debe ser mayor a cero.");
+        if (string.IsNullOrWhiteSpace(item.Descripcionamento)) return (false, "Ingrese un medicamento.");
+        if (string.IsNullOrWhiteSpace(item.Indicaciones)) return (false, "Ingrese las indicaciones del medicamento.");
+
+        var esCatalogo = !string.IsNullOrWhiteSpace(item.CodigoProd) && item.CodigoProd != "0";
+        var codigoProducto = esCatalogo && int.TryParse(item.CodigoProd, out var codigoNumerico) ? codigoNumerico : 0;
+        try
+        {
+            await _db.ExecuteAsync(@"
+                INSERT INTO vt_medicinasexterno (
+                    med_nhcl, med_idProdu, med_indicaciones, med_cantidad, med_id_ficha,
+                    med_otroMedicamento, med_cantidad1, med_estado, med_fecha, med_tipo,
+                    med_origen, med_descripcionprodu, med_idorden
+                ) VALUES (
+                    @Nhcl, @CodigoProd, @Indicaciones, @CantidadCatalogo, @IdFicha,
+                    @OtroMedicamento, @CantidadOtro, 'Por Entregar', @Fecha, 'M',
+                    @Origen, @DescripcionCatalogo, @Serial
+                )", new
+            {
+                item.Nhcl,
+                CodigoProd = codigoProducto,
+                Indicaciones = item.Indicaciones.Trim(),
+                CantidadCatalogo = esCatalogo ? item.Cantidad : 0,
+                IdFicha = idFicha,
+                OtroMedicamento = esCatalogo ? string.Empty : item.Descripcionamento.Trim().ToUpperInvariant(),
+                CantidadOtro = esCatalogo ? 0 : item.Cantidad,
+                item.Fecha,
+                Origen = esCatalogo ? "F" : "O",
+                DescripcionCatalogo = esCatalogo ? item.Descripcionamento.Trim().ToUpperInvariant() : string.Empty,
+                Serial = serial
+            });
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error agregando medicamento a receta externa {IdFicha}", idFicha);
+            return (false, "No se pudo agregar el medicamento.");
+        }
+    }
+
+    public async Task<bool> EliminarMedicamentoRecetaExternaAsync(int sec)
+        => await _db.ExecuteAsync("DELETE FROM vt_medicinasexterno WHERE sec=@Sec", new { Sec = sec }) > 0;
 
     // ========================================================================
     // 6. AUTORIZACIONES / CONSENTIMIENTOS Y ALTA MÃ‰DICA (vt_autorizaciones + qvt_formulario_alta)

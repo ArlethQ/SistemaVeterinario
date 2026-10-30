@@ -91,7 +91,7 @@
 | vt_razas.aspx | Clientes y pacientes | parcial | CatalogosClinicos.razor | AdministracionClinicaService, AdmisionFacturacionService, KardexService, LaboratorioImagenService |
 | vt_RecepcionPaciente.aspx | Quirófano y anestesia | parcial | ChecklistPreoperatorio.razor | KardexService, QuirofanoService |
 | vt_recetasnew.aspx | Historia clínica | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
-| vt_RecetassinOrden.aspx | Órdenes y recepción | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
+| vt_RecetassinOrden.aspx | Historia clínica | parcial | RecetaSinOrden.razor | ConsultaExternaService, EFactCatalogService, ReportExportService |
 | vt_Recuperacion.aspx | Quirófano y anestesia | parcial | SalaRecuperacion.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_RecuperacionPrincipal.aspx | Quirófano y anestesia | parcial | SalaRecuperacion.razor | QuirofanoService |
 | vt_RegistroIngreso.aspx | Operaciones clínicas | parcial | OperacionesClinicas.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
@@ -1488,19 +1488,19 @@
 ### `vt_RecetassinOrden.aspx`
 
 - **Code-behind:** `vt_RecetassinOrden.aspx.vb`.
-- **Propósito funcional:** Módulo Órdenes y recepción; confirmar el propósito exacto durante la validación funcional.
+- **Propósito funcional:** Emitir una receta médica directamente desde la historia del paciente, sin requerir una orden de atención.
 - **Campos principales:** btnDiagnosticos, btnEnviarFactura, btnGenerar, btnMedicinas, btnnuevo, btntraemed, Buscar, cmbtipodiagnostico, Content1, Content2, ContentPlaceHolder1, CrystalReportSource1, Grdmed, GridView1, GridView5, grvDiagnosticos, GrvMedicinas, head, Image1, LbCodCli, Lbespecialidad, Lbiduser, lbl_iddinamics, lbl_iva, lbl_precio.
 - **Eventos y operaciones:** btnDiagnosticos_Click, btnEnviarFactura_Click, btnGenerar_Click, btnMedicinas_Click, btnnuevo_Click, btntraemed_Click, Buscar_Click, EliminaReservasSO, enviarAdjuntoMail, Grdmed_SelectedIndexChanging, GridView1_SelectedIndexChanging, GridView5_SelectedIndexChanging.
 - **Tablas/vistas/procedimientos:** vt_bodegasBC, vt_cabecerareceta, vt_cie10, vt_clase, vt_clientes, vt_clientes_1, vt_diagnosticosexternos, vt_especialidades, vt_especie, vt_facturasBCsinOrden, vt_localidades, vt_medicinasexterno, vt_medicinasexterno_1, vt_nombres_cientificos, vt_pacientes, vt_pacientes_1, vt_razas, vt_RecetassinOrden, vt_reservaProductosStockBC, vt_sexo, vt_usuarios.
 - **Archivos físicos:** /imagenes/buscar0.png, /imagenes/Delete.png, /imagenes/Edit.png, /Reporteria/HDEV/rptRecetaEmail.rpt, /Reporteria/HDEV/RptrecetaHDEV.rpt.
 - **Reportes Crystal:** /Reporteria/HDEV/rptRecetaEmail.rpt, /Reporteria/HDEV/RptrecetaHDEV.rpt.
 - **Correo:** Sí; revisar implementación y destinatarios en code-behind.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/InventarioService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/RecetaSinOrden.razor`.
+- **Servicio equivalente:** `Services/ConsultaExternaService.cs`, `Services/EFactCatalogService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Búsqueda y selección del paciente, cabecera en `vt_cabecerareceta`, diagnósticos externos, medicamentos de catálogo o libres, indicaciones, serial y generación PDF.
+- **Diferencias encontradas:** El envío automático por correo, la reserva de inventario y la creación directa de factura de Business Central no se ejecutan desde la receta; el usuario continúa hacia el módulo moderno de proformas y facturación.
+- **Trabajo requerido:** Probar el esquema real de las tres tablas externas y definir con administración si deben reactivarse los efectos automáticos de correo, reserva y facturación.
 
 ### `vt_Recuperacion.aspx`
 
