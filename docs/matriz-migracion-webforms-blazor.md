@@ -20,8 +20,8 @@
 | FormasReportes\rep_ListaAtenciones.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | GestionMigradaService, ReportExportService |
 | FormasReportes\rep_ListaFallecidos.aspx | Seguimiento clínico | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
 | FormasReportes\rep_parteoperatorio.aspx | Quirófano y anestesia | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
-| FormasReportes\rep_TotalDiagnosticos.aspx | Operaciones clínicas | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
-| FormasReportes\rep_TotalDiagnosticosCondensado.aspx | Operaciones clínicas | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
+| FormasReportes\rep_TotalDiagnosticos.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | GestionMigradaService, ReportExportService |
+| FormasReportes\rep_TotalDiagnosticosCondensado.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | GestionMigradaService, ReportExportService |
 | Hosp_FichaHospitalizacion.aspx | Hospitalización | parcial | FichaHospitalizacion.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | Hosp_Monitoreo.aspx | Hospitalización | parcial | MonitoreoHospitalario.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
 | Hosp_PreFicha.aspx | Hospitalización | parcial | FichaHospitalizacion.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, InventarioService, KardexService, LaboratorioImagenService, QuirofanoService |
@@ -64,7 +64,7 @@
 | vt_imprimirfichas.aspx | Historia clínica | parcial | HistorialPaciente.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_labmedicospre.aspx | Laboratorio e imagenología | parcial | BandejaResultadosDiagnosticos.razor | AdministracionClinicaService, AdmisionFacturacionService, AuthService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService, QuirofanoService |
 | vt_listaalertas.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | — |
-| vt_listadiagnosticos.aspx | Operaciones clínicas | faltante | — | AdministracionClinicaService, AuthService, ConsultaExternaService, GestionMigradaService |
+| vt_listadiagnosticos.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | ConsultaExternaService, GestionMigradaService, ReportExportService |
 | vt_listafichasmedicas.aspx | Historia clínica | parcial | ReportesClinicos.razor | ConsultaExternaService, GestionMigradaService, ReportExportService |
 | vt_localidades.aspx | Administración | parcial | LocalidadesAdministracion.razor | AdministracionClinicaService, AuthService, GestionMigradaService |
 | vt_notas.aspx | Historia clínica | parcial | FichaMedica.razor | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, HospitalizacionService, KardexService, LaboratorioImagenService |
@@ -281,36 +281,36 @@
 ### `FormasReportes\rep_TotalDiagnosticos.aspx`
 
 - **Code-behind:** `rep_TotalDiagnosticos.aspx.vb`.
-- **Propósito funcional:** Módulo Operaciones clínicas; confirmar el propósito exacto durante la validación funcional.
+- **Propósito funcional:** Emitir el detalle de diagnósticos clínicos por período, localidad y código CIE-10, incluyendo orden, NHCL, paciente, propietario, médico, tipo, edad y sexo.
 - **Campos principales:** CrystalReportSource1, CrystalReportViewer1, form1.
 - **Eventos y operaciones:** Page_Load.
 - **Tablas/vistas/procedimientos:** vt_cie10, vt_clientes, vt_diagnosticos, vt_fichamedica, vt_ordenAtencion, vt_pacientes, vt_totaldiagnosticosrpt, vt_usuarios.
 - **Archivos físicos:** /reports/vt_totaldiagnosticosrpt.rpt, reports\vt_totaldiagnosticosrpt.rpt.
 - **Reportes Crystal:** /reports/vt_totaldiagnosticosrpt.rpt, reports\vt_totaldiagnosticosrpt.rpt.
 - **Correo:** No detectado.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/ReportesClinicos.razor`, pestaña **Reportes de diagnósticos**.
+- **Servicio equivalente:** `Services/GestionMigradaService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** La consulta reproduce los campos y filtros del reporte detallado y la interfaz permite previsualizar y exportar el resultado a PDF y Excel.
+- **Diferencias encontradas:** El visor y archivo Crystal fueron sustituidos por una tabla Blazor y documentos generados con QuestPDF/ClosedXML.
+- **Trabajo requerido:** Comparar el resultado con el Crystal histórico usando un período y diagnóstico conocidos y aprobar el formato visual PDF/Excel.
 
 ### `FormasReportes\rep_TotalDiagnosticosCondensado.aspx`
 
 - **Code-behind:** `rep_TotalDiagnosticosCondensado.aspx.vb`.
-- **Propósito funcional:** Módulo Operaciones clínicas; confirmar el propósito exacto durante la validación funcional.
+- **Propósito funcional:** Agrupar los diagnósticos clínicos por código y descripción, mostrando la cantidad registrada dentro del período y filtros seleccionados.
 - **Campos principales:** CrystalReportSource1, CrystalReportViewer1, form1.
 - **Eventos y operaciones:** Page_Load.
 - **Tablas/vistas/procedimientos:** vt_cie10, vt_clientes, vt_diagnosticos, vt_fichamedica, vt_ordenAtencion, vt_pacientes, vt_totaldiagnosticoscondensadorpt, vt_usuarios.
 - **Archivos físicos:** /reports/vt_totaldiagnosticoscondensadorpt.rpt, reports\vt_totaldiagnosticoscondensadorpt.rpt.
 - **Reportes Crystal:** /reports/vt_totaldiagnosticoscondensadorpt.rpt, reports\vt_totaldiagnosticoscondensadorpt.rpt.
 - **Correo:** No detectado.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/HospitalizacionService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`, `Services/QuirofanoService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/ReportesClinicos.razor`, opción **Reporte condensado** de la pestaña de diagnósticos.
+- **Servicio equivalente:** `Services/GestionMigradaService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Blazor agrupa por código/diagnóstico y cuenta cada registro, conservando la semántica `COUNT(vt_diagnosticos.dig_codigoDiag)` del origen; también exporta PDF y Excel.
+- **Diferencias encontradas:** Ya no se abre una página Crystal separada; el resumen se muestra y descarga desde la misma pantalla.
+- **Trabajo requerido:** Validar con datos reales que cada cantidad coincida con el reporte condensado anterior.
 
 ### `Hosp_FichaHospitalizacion.aspx`
 
@@ -1029,19 +1029,19 @@
 ### `vt_listadiagnosticos.aspx`
 
 - **Code-behind:** `vt_listadiagnosticos.aspx.vb`.
-- **Propósito funcional:** Módulo Operaciones clínicas; confirmar el propósito exacto durante la validación funcional.
+- **Propósito funcional:** Seleccionar fechas, localidad, diagnóstico CIE-10 y formato detallado/condensado para generar el reporte total de diagnósticos.
 - **Campos principales:** btnimprimir, cmblocalidad, CompareValidator1, CompareValidator2, Content1, Content2, ContentPlaceHolder1, head, Label1, Literal1, RadAjaxLoadingPanel1, RadAjaxPanel1, RadScriptManager1, Rdcondensado, Rddetallado, SqlDataDiag, TextBox1, TextBox2, txtDiagnosticos.
 - **Eventos y operaciones:** btnimprimir_Click, Page_Load.
 - **Tablas/vistas/procedimientos:** vt_cie10, vt_listadiagnosticos, vt_localidades.
 - **Archivos físicos:** No detectado.
 - **Reportes Crystal:** No detectado.
 - **Correo:** No detectado.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AuthService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/ReportesClinicos.razor`, pestaña **Reportes de diagnósticos** (`/reportes/clinicos`).
+- **Servicio equivalente:** `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Conserva las fechas predeterminadas del mes actual, localidad activa, búsqueda CIE-10 y selección entre detalle y condensado; añade previsualización y descargas PDF/Excel.
+- **Diferencias encontradas:** Los radio buttons y el iframe Crystal se reemplazaron por una opción condensada y resultado reactivo en la misma vista.
+- **Trabajo requerido:** Probar cada filtro por separado con registros conocidos y comparar el total detallado contra el condensado histórico.
 
 ### `vt_listafichasmedicas.aspx`
 

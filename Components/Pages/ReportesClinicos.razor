@@ -19,6 +19,11 @@
                     <button class="btn btn-outline-danger" disabled="@(!_atenciones.Any() || _cargando)" @onclick="ExportarAtencionesPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF</button>
                     <button class="btn btn-outline-success" disabled="@(!_atenciones.Any() || _cargando)" @onclick="ExportarAtencionesExcelAsync"><i class="bi bi-file-earmark-excel-fill me-1"></i>Excel</button>
                 }
+                else if (_tab == "diagnosticos")
+                {
+                    <button class="btn btn-outline-danger" disabled="@(!_diagnosticos.Any() || _cargando)" @onclick="ExportarDiagnosticosPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF</button>
+                    <button class="btn btn-outline-success" disabled="@(!_diagnosticos.Any() || _cargando)" @onclick="ExportarDiagnosticosExcelAsync"><i class="bi bi-file-earmark-excel-fill me-1"></i>Excel</button>
+                }
                 else if (_tab == "partes")
                 {
                     <button class="btn btn-outline-danger" disabled="@(!_partes.Any() || _cargando)" @onclick="ExportarPartesPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>Imprimir consolidado</button>
@@ -35,9 +40,22 @@
                 @if (_tab == "atenciones")
                 {
                     <div class="col-md-2"><label class="form-label small fw-semibold">Médico</label><select class="form-select" @bind="_idMedico"><option value="0">Todos</option>@foreach (var x in _medicos){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+                }
+                @if (_tab is "atenciones" or "diagnosticos")
+                {
                     <div class="col-md-2"><label class="form-label small fw-semibold">Localidad</label><select class="form-select" @bind="_idLocalidad"><option value="0">Todas</option>@foreach (var x in _localidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+                }
+                @if (_tab == "atenciones")
+                {
                     <div class="col-md-2"><label class="form-label small fw-semibold">Especialidad</label><select class="form-select" @bind="_idEspecialidad"><option value="0">Todas</option>@foreach (var x in _especialidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
                     <div class="col-md-2 d-flex align-items-end"><div class="form-check mb-2"><input id="condensarAtenciones" class="form-check-input" type="checkbox" @bind="_condensado" /><label class="form-check-label fw-semibold" for="condensarAtenciones">Condensar resultado</label></div></div>
+                }
+                else if (_tab == "diagnosticos")
+                {
+                    <div class="col-md-3 d-flex align-items-end"><div class="form-check mb-2"><input id="condensarDiagnosticos" class="form-check-input" type="checkbox" @bind="_condensadoDiagnosticos" /><label class="form-check-label fw-semibold" for="condensarDiagnosticos">Reporte condensado</label></div></div>
+                }
+                @if (_tab is "atenciones" or "diagnosticos")
+                {
                     <div class="col-md-8">
                         <label class="form-label small fw-semibold">Diagnóstico CIE-10</label>
                         <div class="input-group">
@@ -64,7 +82,7 @@
         </div>
 
         <ul class="nav nav-tabs mb-3">
-            @foreach (var t in new[] { ("atenciones", "Atenciones"), ("diagnosticos", "Diagnósticos consolidados"), ("partes", "Parte operatorio") })
+            @foreach (var t in new[] { ("atenciones", "Atenciones"), ("diagnosticos", "Reportes de diagnósticos"), ("partes", "Parte operatorio") })
             {
                 <li class="nav-item"><button class="nav-link @(_tab == t.Item1 ? "active" : "")" @onclick="() => CambiarAsync(t.Item1)">@t.Item2</button></li>
             }
@@ -86,13 +104,26 @@
                     </tbody></table>
                 </div>
             }
+            else if (_tab == "diagnosticos" && _condensadoDiagnosticos)
+            {
+                <div class="card-header bg-white d-flex justify-content-between"><strong>Diagnósticos condensados</strong><span class="badge text-bg-primary">@_diagnosticos.Count diagnóstico(s)</span></div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0"><thead class="table-light"><tr><th>Código</th><th>Diagnóstico</th><th class="text-end">Cantidad</th></tr></thead><tbody>
+                        @foreach (var x in ResumenDiagnosticos)
+                        {
+                            <tr><td class="fw-semibold">@x.Codigo</td><td>@x.Diagnostico</td><td class="text-end fw-bold">@x.Total</td></tr>
+                        }
+                        @if (!_cargando && !ResumenDiagnosticos.Any()) { <tr><td colspan="3" class="text-center text-muted py-4">No existen diagnósticos para los filtros seleccionados.</td></tr> }
+                    </tbody></table>
+                </div>
+            }
             else
             {
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">
                         <thead class="table-light">
                             @if (_tab == "atenciones") { <tr><th>Fecha</th><th>Orden/NHCL</th><th>Paciente/cliente</th><th>Médico/especialidad</th><th>Diagnóstico</th><th>Localidad</th><th>Registrado por</th></tr> }
-                            else if (_tab == "diagnosticos") { <tr><th>Fecha</th><th>Orden/NHCL</th><th>Paciente/cliente</th><th>Médico</th><th>Diagnóstico</th><th>Tipo</th></tr> }
+                            else if (_tab == "diagnosticos") { <tr><th>Fecha</th><th>Orden/NHCL</th><th>Paciente/cliente</th><th>Médico</th><th>Diagnóstico</th><th>Tipo</th><th>Edad/sexo</th></tr> }
                             else { <tr><th>Fecha</th><th>Orden/NHCL</th><th>Paciente/propietario</th><th>Procedimiento</th><th>Diagnóstico</th></tr> }
                         </thead>
                         <tbody>
@@ -105,7 +136,7 @@
                             }
                             else if (_tab == "diagnosticos")
                             {
-                                @foreach (var x in _diagnosticos) { <tr><td>@x.Fecha.ToString("g")</td><td>@x.Orden / @x.Nhcl</td><td><strong>@x.Paciente</strong><small class="d-block">@x.Cliente</small></td><td>@x.Medico</td><td>@x.Diagnostico</td><td>@x.Tipo</td></tr> }
+                                @foreach (var x in _diagnosticos) { <tr><td>@x.Fecha.ToString("g")</td><td>@x.Orden / @x.Nhcl</td><td><strong>@x.Paciente</strong><small class="d-block">@x.Cliente</small></td><td>@x.Medico</td><td><strong>@x.CodigoDiagnostico</strong><small class="d-block">@x.Diagnostico</small></td><td>@x.Tipo</td><td>@x.EdadAnios a @x.EdadMeses m<small class="d-block text-muted">@x.Sexo</small></td></tr> }
                             }
                             else
                             {
@@ -122,7 +153,8 @@
 
 @code {
     private sealed record ResumenAtencion(string Medico, string Especialidad, string Localidad, int Total);
-    private bool _autorizado, _cargando, _condensado;
+    private sealed record ResumenDiagnostico(string Codigo, string Diagnostico, int Total);
+    private bool _autorizado, _cargando, _condensado, _condensadoDiagnosticos;
     private string _tab = "atenciones", _error = "", _filtroDiagnostico = "", _codigoDiagnostico = "", _diagnosticoSeleccionado = "";
     private DateTime _desde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime _hasta = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1).AddDays(-1);
@@ -137,6 +169,11 @@
         .GroupBy(x => new { x.IdMedico, x.Medico, x.IdEspecialidad, x.Especialidad, x.IdLocalidad, x.Localidad })
         .Select(g => new ResumenAtencion(g.Key.Medico, g.Key.Especialidad, g.Key.Localidad, g.Select(x => x.Orden).Distinct().Count()))
         .OrderBy(x => x.Medico).ThenBy(x => x.Especialidad).ThenBy(x => x.Localidad).ToList();
+
+    private List<ResumenDiagnostico> ResumenDiagnosticos => _diagnosticos
+        .GroupBy(x => new { x.CodigoDiagnostico, x.Diagnostico })
+        .Select(g => new ResumenDiagnostico(g.Key.CodigoDiagnostico, g.Key.Diagnostico, g.Count()))
+        .OrderBy(x => x.Diagnostico).ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -163,7 +200,7 @@
         {
             if (_tab == "atenciones")
                 _atenciones = await Service.ObtenerAtencionesAsync(_desde, _hasta, _idLocalidad > 0 ? _idLocalidad : null, _idMedico > 0 ? _idMedico : null, _idEspecialidad > 0 ? _idEspecialidad : null, _codigoDiagnostico);
-            else if (_tab == "diagnosticos") _diagnosticos = await Service.ObtenerDiagnosticosAsync(_desde, _hasta);
+            else if (_tab == "diagnosticos") _diagnosticos = await Service.ObtenerDiagnosticosAsync(_desde, _hasta, _idLocalidad > 0 ? _idLocalidad : null, _codigoDiagnostico);
             else _partes = await Service.ObtenerPartesOperatoriosAsync(_desde, _hasta);
         }
         catch (Exception ex) { _error = $"No se pudo generar el reporte: {ex.Message}"; }
@@ -188,6 +225,16 @@
     {
         var bytes = ReportService.GenerarReporteAtencionesExcel(_atenciones, _desde, _hasta, _condensado);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"Atenciones_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+    private async Task ExportarDiagnosticosPdfAsync()
+    {
+        var bytes = ReportService.GenerarReporteDiagnosticosPdf(_diagnosticos, _desde, _hasta, _condensadoDiagnosticos);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Diagnosticos_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+    }
+    private async Task ExportarDiagnosticosExcelAsync()
+    {
+        var bytes = ReportService.GenerarReporteDiagnosticosExcel(_diagnosticos, _desde, _hasta, _condensadoDiagnosticos);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Diagnosticos_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
     }
     private async Task ExportarPartesPdfAsync()
     {
