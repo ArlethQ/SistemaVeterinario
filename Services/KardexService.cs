@@ -7,6 +7,7 @@ namespace HosvetKardex.Web.Services;
 public interface IKardexService
 {
     Task<List<OrdenActivaResumenDto>> ObtenerOrdenesActivasAsync(string? filtro = null, int top = 40);
+    void InvalidarCacheOrdenesActivas();
     Task<PacienteHeaderDto?> ObtenerCabeceraPacienteAsync(int ordenId, int nhcl);
     Task<PacienteHeaderDto?> ObtenerEncabezadoPacienteAsync(int ordenId, int nhcl) => ObtenerCabeceraPacienteAsync(ordenId, nhcl);
     Task<List<ViaAdministracionDto>> ObtenerViasAdministracionAsync();
@@ -67,7 +68,8 @@ public class KardexService : IKardexService
                     RTRIM(ISNULL(u.user_nombre, '')) AS Medico,
                     RTRIM(ISNULL(esp.es_descripcion, '')) AS Especialidad,
                     ISNULL(o.ordenAten_fecha, GETDATE()) AS FechaOrden,
-                    RTRIM(ISNULL(o.ordenAten_estado, 'A')) AS Estado
+                    RTRIM(ISNULL(o.ordenAten_estado, 'A')) AS Estado,
+                    RTRIM(ISNULL(o.ordenAten_etapa, 'Consulta')) AS Etapa
                 FROM vt_ordenAtencion o
                 INNER JOIN vt_pacientes p ON o.ordenAten_nhcl = p.mas_nhcl
                 INNER JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
@@ -90,6 +92,12 @@ public class KardexService : IKardexService
             _logger.LogError(ex, "Error consultando las órdenes activas en SQL Server.");
             throw;
         }
+    }
+
+    public void InvalidarCacheOrdenesActivas()
+    {
+        _cacheOrdenesActivas = null;
+        _cacheOrdenesExpira = DateTime.MinValue;
     }
 
     public async Task<PacienteHeaderDto?> ObtenerCabeceraPacienteAsync(int ordenId, int nhcl)

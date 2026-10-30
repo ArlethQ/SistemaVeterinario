@@ -205,6 +205,7 @@ public class OrdenActivaResumenDto
     public string Especialidad { get; set; } = string.Empty;
     public DateTime FechaOrden { get; set; }
     public string Estado { get; set; } = string.Empty;
+    public string Etapa { get; set; } = string.Empty;
 }
 
 public record stringCedulaDto(string Valor);

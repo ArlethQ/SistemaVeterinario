@@ -2,6 +2,7 @@
 @using HosvetKardex.Web.Models
 @using HosvetKardex.Web.Services
 @inject IAdmisionFacturacionService AdmisionService
+@inject IKardexService KardexService
 @inject IReportExportService ReportService
 @inject IJSRuntime JS
 @inject SessionStateService SessionState
@@ -547,7 +548,7 @@
     private async Task AnularOrdenAsync(int idOrden)
     {
         bool confirmar=await JS.InvokeAsync<bool>("confirm",$"¿Anular la orden #{idOrden}?");if(!confirmar)return;
-        bool ok=await AdmisionService.AnularOrdenAsync(idOrden,SessionState.IdUser);_esError=!ok;_mensajeAlerta=ok?"Orden anulada.":"No se pudo anular la orden.";await CargarOrdenesAsync();
+        bool ok=await AdmisionService.AnularOrdenAsync(idOrden,SessionState.IdUser);_esError=!ok;_mensajeAlerta=ok?"Orden anulada.":"No se pudo anular la orden.";if(ok)KardexService.InvalidarCacheOrdenesActivas();await CargarOrdenesAsync();
     }
 
     private async Task ExportarPdfAsync(){var bytes=ReportService.GenerarOrdenesAtencionPdf(_ordenes,_fechaConsulta,_fechaConsulta);await DescargarAsync(bytes,"application/pdf",$"Ordenes_{_fechaConsulta:yyyyMMdd}.pdf");}

@@ -1,224 +1,141 @@
-@page "/kardex/ordenes"
-@inject IKardexService KardexService
-@inject NavigationManager Nav
-
-<PageTitle>e-ForVets - Bandeja de Órdenes de Atención</PageTitle>
-
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-        <h3 class="fw-bold text-primary mb-0">📋 Bandeja General de Órdenes de Atención</h3>
-        <small class="text-muted">Explore y gestione las órdenes activas de pacientes en consulta, hospitalización o cirugía para acceder a su Kardex y fichas clínicas.</small>
-    </div>
-    <div class="d-flex gap-2 flex-wrap">
-        <a href="/dashboard" class="btn btn-outline-secondary btn-sm">
-            🏠 Panel Principal
-        </a>
-        <a href="/admision/clientes-pacientes" class="btn btn-outline-dark btn-sm">
-            🐾 Clientes / Pacientes
-        </a>
-        <a href="/admision/ordenes" class="btn btn-success btn-sm">
-            🛎️ Recepción y Nueva Orden
-        </a>
-        <a href="/admision/citas" class="btn btn-outline-info btn-sm">
-            📅 Agenda de Citas
-        </a>
-        <a href="/facturacion/proformas" class="btn btn-warning btn-sm fw-semibold">
-            💳 Proformas
-        </a>
-    </div>
-</div>
-
-<div class="card shadow-sm border-0 mb-4">
-    <div class="card-body">
-        <div class="row g-2 align-items-end">
-            <div class="col-md-5">
-                <label class="form-label small fw-bold">Filtrar por Paciente, Propietario, N° Orden o NHCL:</label>
-                <input class="form-control" @bind="_filtro" @bind:event="oninput" @onkeydown="OnFiltroKeyDown" placeholder="Ej. Max, Pérez, 12450..." />
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-primary w-100" @onclick="CargarOrdenesAsync" disabled="@_cargando">
-                    🔍 Buscar
-                </button>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small fw-bold">Acceso rápido (Orden / NHCL):</label>
-                <div class="input-group">
-                    <input type="number" class="form-control" placeholder="Orden" @bind="_ordenManual" @onkeydown="OnManualKeyDown" />
-                    <input type="number" class="form-control" placeholder="NHCL" @bind="_nhclManual" @onkeydown="OnManualKeyDown" />
-                    <button class="btn btn-success" @onclick="IrKardexManual">Ir</button>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-outline-secondary w-100" @onclick="LimpiarFiltroAsync">
-                    🔄 Limpiar
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-@if (_cargando)
-{
-    <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
-        <div class="spinner-border spinner-border-sm" role="status"></div>
-        <span class="fw-semibold small">Cargando órdenes de atención activas...</span>
-    </div>
-}
-else if (_ordenes.Count == 0)
-{
-    <div class="alert alert-warning">
-        No se encontraron órdenes con el criterio actual o la base de datos remota no devolvió registros. Puede usar el acceso rápido superior para abrir el Kardex con cualquier N° de Orden y NHCL.
-    </div>
-}
-else
-{
-    <div class="table-responsive shadow-sm rounded bg-white">
-        <table class="table table-hover table-striped align-middle mb-0">
-            <thead class="table-primary">
-                <tr>
-                    <th>N° Orden</th>
-                    <th>NHCL</th>
-                    <th>Paciente</th>
-                    <th>Especie / Sexo</th>
-                    <th>Propietario (Cliente)</th>
-                    <th>Médico / Especialidad</th>
-                    <th>Fecha</th>
-                    <th class="text-center">Acciones Clínicas y Kardex</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var item in _ordenes)
-                {
-                    <tr>
-                        <td class="fw-bold">@item.OrdenAtencionId</td>
-                        <td class="text-danger fw-bold">@item.Nhcl</td>
-                        <td class="fw-semibold">@item.Paciente</td>
-                        <td>@item.Especie (@item.Sexo)</td>
-                        <td>@item.Cliente</td>
-                        <td>
-                            <div>@item.Medico</div>
-                            <small class="text-muted">@item.Especialidad</small>
-                        </td>
-                        <td>@item.FechaOrden.ToString("yyyy-MM-dd")</td>
-                        <td class="text-center">
-                            <div class="btn-group btn-group-sm flex-wrap">
-                                <a class="btn btn-primary" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl" title="Kardex Medicación 5 Días">
-                                    💉 Kardex
-                                </a>
-                                <a class="btn btn-outline-primary" href="/kardex/signos/@item.OrdenAtencionId/@item.Nhcl" title="Signos Vitales y Balance Hídrico">
-                                    📈 Signos
-                                </a>
-                                <a class="btn btn-outline-success" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl" title="Ficha de Hospitalización 24h">
-                                    🏥 Ficha 24h
-                                </a>
-                                <a class="btn btn-outline-dark" href="/hospitalizacion/monitoreo/@item.OrdenAtencionId/@item.Nhcl" title="Monitoreo Clínico 24h">
-                                    🩺 Monitoreo
-                                </a>
-                                <a class="btn btn-outline-danger" href="/quirofano/preanestesia/@item.OrdenAtencionId/@item.Nhcl" title="Pre-Anestesia">
-                                    🧪 Pre-Anest.
-                                </a>
-                                <a class="btn btn-outline-info" href="/quirofano/anestesia/@item.OrdenAtencionId/@item.Nhcl" title="Hoja de Anestesia Intraoperatoria">
-                                    🫁 Anestesia
-                                </a>
-                                <a class="btn btn-outline-secondary" href="/quirofano/protocolo/@item.OrdenAtencionId/@item.Nhcl" title="Protocolo Quirúrgico">
-                                    🔪 Protocolo
-                                </a>
-                                <a class="btn btn-outline-warning text-dark" href="/quirofano/recuperacion/@item.OrdenAtencionId/@item.Nhcl" title="Sala de Recuperación">
-                                    🛏️ Recup.
-                                </a>
-                                <a class="btn btn-outline-primary" href="/consulta/fichamedica/@item.OrdenAtencionId/@item.Nhcl" title="Historia Clínica SOAP">
-                                    📋 SOAP
-                                </a>
-                                <a class="btn btn-outline-info" href="/consulta/evoluciones/@item.OrdenAtencionId/@item.Nhcl" title="Evoluciones Médicas">
-                                    📝 Evolución
-                                </a>
-                                <a class="btn btn-outline-success" href="/consulta/recetario/@item.OrdenAtencionId/@item.Nhcl" title="Recetario Médico">
-                                    💊 Receta
-                                </a>
-                                <a class="btn btn-outline-secondary" href="/consulta/autorizaciones/@item.OrdenAtencionId/@item.Nhcl" title="Consentimientos y Plan de Alta">
-                                    📄 Alta
-                                </a>
-                                <a class="btn btn-outline-primary" href="/diagnostico/laboratorio/@item.OrdenAtencionId/@item.Nhcl" title="Órdenes de Laboratorio Clínico">
-                                    🔬 Lab
-                                </a>
-                                <a class="btn btn-outline-info" href="/diagnostico/imagenologia/@item.OrdenAtencionId/@item.Nhcl" title="Órdenes de Rayos X y Ecografía">
-                                    ☢️ RX/Eco
-                                </a>
-                                <a class="btn btn-outline-dark" href="/diagnostico/bandeja/@item.OrdenAtencionId/@item.Nhcl" title="Bandeja de Resultados e Informes">
-                                    📥 Informes
-                                </a>
-                            </div>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-}
-
-@code {
-    private List<OrdenActivaResumenDto> _ordenes = [];
-    private string _filtro = string.Empty;
-    private string _filtroAplicado = string.Empty;
-    private bool _cargando;
-    private int? _ordenManual;
-    private int? _nhclManual;
-
-    protected override async Task OnInitializedAsync()
-    {
-        await CargarOrdenesAsync();
-    }
-
-    private async Task CargarOrdenesAsync()
-    {
-        _cargando = true;
-        await Task.Yield();
-        try
-        {
-            _ordenes = await KardexService.ObtenerOrdenesActivasAsync(_filtro);
-            _filtroAplicado = _filtro;
-        }
-        finally
-        {
-            _cargando = false;
-        }
-    }
-
-    private async Task LimpiarFiltroAsync()
-    {
-        bool teniaBusqueda = !string.IsNullOrWhiteSpace(_filtroAplicado);
-        _filtro = string.Empty;
-        _filtroAplicado = string.Empty;
-        _ordenManual = null;
-        _nhclManual = null;
-
-        if (teniaBusqueda)
-        {
-            await CargarOrdenesAsync();
-        }
-    }
-
-    private void IrKardexManual()
-    {
-        if (_ordenManual.HasValue && _ordenManual.Value > 0 && _nhclManual.HasValue && _nhclManual.Value > 0)
-        {
-            Nav.NavigateTo($"/kardex/enfermeria?orden={_ordenManual.Value}&nhcl={_nhclManual.Value}");
-        }
-    }
-
-    private async Task OnFiltroKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await CargarOrdenesAsync();
-        }
-    }
-
-    private void OnManualKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            IrKardexManual();
-        }
-    }
-}
+@page "/kardex/ordenes"
+@inject IKardexService KardexService
+@inject IAdmisionFacturacionService AdmisionService
+@inject IWebHostEnvironment Env
+
+<PageTitle>e-ForVets - Bandeja de Órdenes de Atención</PageTitle>
+
+<div class="orders-page">
+    <header class="orders-header">
+        <div class="orders-title"><span class="orders-title-icon"><i class="bi bi-clipboard2-pulse-fill"></i></span><div><h1>Bandeja General de <span>Órdenes de Atención</span></h1><p>Gestiona las órdenes activas de pacientes en consulta, hospitalización o cirugía para acceder a su Kardex y fichas clínicas.</p></div></div>
+        <nav class="orders-nav" aria-label="Accesos principales">
+            <a href="/dashboard"><i class="bi bi-house-door-fill"></i> Panel Principal</a><a href="/admision/clientes-pacientes"><i class="bi bi-people-fill"></i> Clientes / Pacientes</a><a href="/admision/ordenes" class="nav-green"><i class="bi bi-plus-circle-fill"></i> Recepción y Nueva Orden</a><a href="/admision/citas" class="nav-blue"><i class="bi bi-calendar3"></i> Agenda de Citas</a><a href="/facturacion/proformas" class="nav-amber"><i class="bi bi-file-earmark-text-fill"></i> Proformas</a>
+        </nav>
+    </header>
+
+    <section class="orders-kpis" aria-label="Resumen de órdenes">
+        <div class="kpi kpi-total"><span class="kpi-icon"><i class="bi bi-file-earmark-text"></i></span><div><small>Total Órdenes</small><strong>@_ordenes.Count</strong></div><i class="bi bi-graph-up-arrow kpi-tail"></i></div>
+        <div class="kpi kpi-consulta"><span class="kpi-icon"><i class="bi bi-stethoscope"></i></span><div><small>En Consulta</small><strong>@ContarEtapa("consulta")</strong><span class="kpi-bar"><i></i></span></div></div>
+        <div class="kpi kpi-hospital"><span class="kpi-icon"><i class="bi bi-hospital-fill"></i></span><div><small>Hospitalización</small><strong>@ContarEtapa("hospital")</strong><span class="kpi-bar"><i></i></span></div></div>
+        <div class="kpi kpi-cirugia"><span class="kpi-icon"><i class="bi bi-bandaid-fill"></i></span><div><small>En Cirugía</small><strong>@ContarEtapa("cirug")</strong><span class="kpi-bar"><i></i></span></div></div>
+        <div class="kpi kpi-citas"><span class="kpi-icon"><i class="bi bi-calendar-event-fill"></i></span><div><small>Citas de Hoy</small><strong>@_citasHoy</strong><span class="kpi-bar"><i></i></span></div></div>
+    </section>
+
+    <section class="orders-filters">
+        <div class="filter-search"><label>Filtrar por Paciente, Propietario, N° Orden o NHCL</label><div class="input-icon"><i class="bi bi-search"></i><input @bind="_filtro" @bind:event="oninput" @onkeydown="OnFiltroKeyDown" placeholder="Buscar por paciente, propietario, NHCL o número de orden..." /></div></div>
+        <div class="filter-select"><label><i class="bi bi-paw-fill"></i> Especie</label><select @bind="_especieFiltro"><option value="">Todas</option>@foreach (var especie in EspeciesDisponibles){<option value="@especie">@especie</option>}</select></div>
+        <div class="filter-select"><label><i class="bi bi-list-task"></i> Estado</label><select @bind="_estadoFiltro"><option value="">Todos</option><option value="consulta">En consulta</option><option value="hospital">Hospitalización</option><option value="cirug">En cirugía</option><option value="final">Finalizada</option><option value="pend">Pendiente</option><option value="cancel">Cancelada</option></select></div>
+        <div class="filter-date"><label><i class="bi bi-calendar3"></i> Fecha</label><input type="date" @bind="_fechaFiltro" /></div>
+        <button class="filter-button search-button" @onclick="CargarOrdenesAsync" disabled="@_cargando"><i class="bi bi-search"></i> Buscar</button><button class="filter-button clear-button" @onclick="LimpiarFiltroAsync"><i class="bi bi-arrow-clockwise"></i> Limpiar</button>
+    </section>
+
+    @if (_cargando)
+    {
+        <div class="orders-loading"><span class="spinner-border spinner-border-sm"></span> Cargando órdenes de atención...</div>
+    }
+    else
+    {
+        <section class="orders-list-card">
+            <div class="orders-list-header"><div><span><i class="bi bi-briefcase-fill"></i></span><h2>Listado de Órdenes de Atención</h2></div><small>@OrdenesFiltradas.Count() registros</small></div>
+            @if (!OrdenesFiltradas.Any())
+            {
+                <div class="orders-empty"><i class="bi bi-inbox"></i><strong>No se encontraron órdenes</strong><span>Prueba con otros criterios de búsqueda.</span></div>
+            }
+            else
+            {
+                <div class="table-responsive orders-table-wrapper"><table class="table orders-table align-middle mb-0">
+                    <thead><tr><th>N° Orden</th><th>NHCL</th><th>Paciente</th><th>Propietario</th><th>Médico / Especialidad</th><th>Fecha</th><th class="text-center">Acciones</th></tr></thead>
+                    <tbody>@foreach (var item in OrdenesFiltradas){<tr>
+                        <td><span class="order-number">@item.OrdenAtencionId</span></td><td class="nhcl">@item.Nhcl</td>
+                        <td><div class="patient-cell"><span class="patient-avatar">@if (!string.IsNullOrEmpty(ObtenerFotoPaciente(item.Nhcl))){<img src="@ObtenerFotoPaciente(item.Nhcl)" alt="Foto de @item.Paciente" />}else{<b>@InicialPaciente(item.Paciente)</b>}</span><span class="patient-data"><strong>@item.Paciente <i class="bi @(EsHembra(item.Sexo) ? "bi-gender-female female" : "bi-gender-male male")"></i></strong><small><i class="bi bi-paw-fill"></i> @item.Especie · <em class="@(EsHembra(item.Sexo) ? "female" : "male")">@item.Sexo</em></small></span></div></td>
+                        <td><div class="owner-cell"><i class="bi bi-person-fill"></i>@item.Cliente</div></td><td><div class="doctor-cell"><i class="bi bi-stethoscope"></i><span>@item.Medico<small>@item.Especialidad</small></span></div></td>
+                        <td><div class="date-cell"><i class="bi bi-calendar3"></i><span>@item.FechaOrden.ToString("yyyy-MM-dd")<small><i class="bi bi-clock"></i> @item.FechaOrden.ToString("HH:mm")</small></span></div></td>
+                        <td class="text-center orders-actions-cell"><div class="orders-actions">
+                            <a class="btn action-main action-kardex" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl"><i class="bi bi-folder-fill"></i> Kardex</a><a class="btn action-main action-signos" href="/kardex/signos/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-activity"></i> Signos</a><a class="btn action-main action-ficha" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-file-earmark-text-fill"></i> Ficha 24h</a>
+                            <details class="actions-more"><summary class="btn action-more-button" title="Más acciones"><i class="bi bi-three-dots-vertical"></i></summary><div class="actions-menu"><div class="actions-menu-title">Más acciones clínicas</div>
+                                <a class="actions-menu-item" href="/hospitalizacion/monitoreo/@item.OrdenAtencionId/@item.Nhcl">🩺 Monitoreo</a><a class="actions-menu-item" href="/quirofano/preanestesia/@item.OrdenAtencionId/@item.Nhcl">🧪 Pre-Anestesia</a><a class="actions-menu-item" href="/quirofano/anestesia/@item.OrdenAtencionId/@item.Nhcl">🫁 Anestesia</a><a class="actions-menu-item" href="/quirofano/protocolo/@item.OrdenAtencionId/@item.Nhcl">🔪 Protocolo Quirúrgico</a><a class="actions-menu-item" href="/quirofano/recuperacion/@item.OrdenAtencionId/@item.Nhcl">🛏️ Recuperación</a><a class="actions-menu-item" href="/consulta/fichamedica/@item.OrdenAtencionId/@item.Nhcl">📋 Historia Clínica SOAP</a><a class="actions-menu-item" href="/consulta/evoluciones/@item.OrdenAtencionId/@item.Nhcl">📝 Evolución Médica</a><a class="actions-menu-item" href="/consulta/recetario/@item.OrdenAtencionId/@item.Nhcl">💊 Recetario</a><a class="actions-menu-item" href="/consulta/autorizaciones/@item.OrdenAtencionId/@item.Nhcl">📄 Consentimientos y Alta</a><a class="actions-menu-item" href="/diagnostico/laboratorio/@item.OrdenAtencionId/@item.Nhcl">🔬 Laboratorio</a><a class="actions-menu-item" href="/diagnostico/imagenologia/@item.OrdenAtencionId/@item.Nhcl">☢️ RX / Ecografía</a><a class="actions-menu-item" href="/diagnostico/bandeja/@item.OrdenAtencionId/@item.Nhcl">📥 Informes</a>
+                            </div></details>
+                        </div></td>
+                    </tr>}</tbody>
+                </table></div><footer class="orders-footer">Mostrando @OrdenesFiltradas.Count() de @_ordenes.Count órdenes</footer>
+            }
+        </section>
+    }
+</div>
+
+<style>
+    .orders-page { width: 100%; max-width: 100%; min-width: 0; overflow-x: hidden; font-size: 13px; }
+    .orders-header { margin-bottom: 12px; }
+    .orders-title-icon { width: 40px; height: 44px; font-size: 32px; }
+    .orders-title h1 { font-size: 25px; }
+    .orders-title p { font-size: 13px; }
+    .orders-nav { gap: 7px; }
+    .orders-nav a { padding: 9px 11px; font-size: 12px; }
+    .orders-kpis { gap: 12px; margin-bottom: 12px; }
+    .kpi { min-height: 78px; height: 78px; padding: 8px 12px; gap: 10px; }
+    .kpi-icon { flex-basis: 48px; height: 52px; font-size: 24px; }
+    .kpi small { font-size: 12px; }
+    .kpi strong { font-size: 23px; }
+    .kpi-tail { font-size: 22px; }
+    .kpi-bar { height: 7px; }
+    .orders-filters { gap: 10px; margin-bottom: 12px; padding: 12px; }
+    .orders-filters label { margin-bottom: 5px; font-size: 12px; }
+    .orders-filters input, .orders-filters select { height: 38px; padding: 0 10px; font-size: 12px; }
+    .input-icon input { padding-left: 34px; }
+    .filter-button { height: 40px; font-size: 12px; }
+    .orders-list-header { padding: 6px 10px; }
+    .orders-list-header > div > span { width: 32px; height: 30px; }
+    .orders-list-header h2 { font-size: 14px; }
+    .orders-list-card, .orders-table-wrapper { width: 100%; max-width: 100%; min-width: 0; }
+    .orders-table-wrapper { overflow-x: auto !important; }
+    .orders-table { width: 100%; min-width: 930px; table-layout: fixed; font-size: 10px; }
+    .orders-table th:nth-child(1) { width: 62px; }
+    .orders-table th:nth-child(2) { width: 58px; }
+    .orders-table th:nth-child(3) { width: 175px; }
+    .orders-table th:nth-child(4) { width: 135px; }
+    .orders-table th:nth-child(5) { width: 145px; }
+    .orders-table th:nth-child(6) { width: 95px; }
+    .orders-table th:nth-child(7) { width: 260px; }
+    .orders-table thead th { padding: 6px 4px; font-size: 9px; }
+    .orders-table tbody td { padding: 4px; overflow: hidden; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+    .order-number { padding: 5px 7px; }
+    .patient-avatar { width: 28px; height: 28px; flex: 0 0 28px; overflow: hidden; }
+    .patient-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .patient-data { display: grid; min-width: 0; }
+    .patient-data strong { overflow: hidden; text-overflow: ellipsis; }
+    .patient-data small { margin-top: 2px; color: #60748f; font-size: 9px; }
+    .patient-data small i { color: #287bc9; }
+    .patient-data em { font-style: normal; }
+    .patient-cell, .species-cell, .owner-cell, .doctor-cell, .date-cell { gap: 6px; }
+    .species-cell small, .doctor-cell small, .date-cell small { font-size: 9px; }
+    .status-pill { min-width: 86px; padding: 5px 6px; font-size: 9px; }
+    .orders-actions-cell { min-width: 0; overflow: visible !important; }
+    .orders-actions { gap: 4px; }
+    .action-main { min-width: 68px; padding: 6px 7px; font-size: 9px; }
+    .action-ficha { min-width: 76px; }
+    .action-more-button { width: 28px; height: 26px; font-size: 10px; }
+    .orders-footer { padding: 8px 12px; font-size: 11px; }
+</style>
+
+@code {
+    private List<OrdenActivaResumenDto> _ordenes = [];
+    private string _filtro = string.Empty, _filtroAplicado = string.Empty, _especieFiltro = string.Empty, _estadoFiltro = string.Empty;
+    private DateTime? _fechaFiltro;
+    private bool _cargando;
+    private int _citasHoy;
+
+    private IEnumerable<OrdenActivaResumenDto> OrdenesFiltradas => _ordenes.Where(x => string.IsNullOrEmpty(_especieFiltro) || x.Especie.Equals(_especieFiltro, StringComparison.OrdinalIgnoreCase)).Where(x => string.IsNullOrEmpty(_estadoFiltro) || EstadoVisual(x).Contains(_estadoFiltro, StringComparison.OrdinalIgnoreCase)).Where(x => !_fechaFiltro.HasValue || x.FechaOrden.Date == _fechaFiltro.Value.Date);
+    private IEnumerable<string> EspeciesDisponibles => _ordenes.Select(x => x.Especie).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().Order();
+
+    protected override async Task OnInitializedAsync(){var ordenesTask=CargarOrdenesAsync();var citasTask=AdmisionService.ObtenerCitasPorFechaAsync(DateTime.Today,DateTime.Today);await Task.WhenAll(ordenesTask,citasTask);_citasHoy=citasTask.Result.Count;}
+    private async Task CargarOrdenesAsync(){_cargando=true;try{_ordenes=await KardexService.ObtenerOrdenesActivasAsync(_filtro);_filtroAplicado=_filtro;}finally{_cargando=false;}}
+    private async Task LimpiarFiltroAsync(){var recargar=!string.IsNullOrWhiteSpace(_filtroAplicado);_filtro=_filtroAplicado=_especieFiltro=_estadoFiltro=string.Empty;_fechaFiltro=null;if(recargar)await CargarOrdenesAsync();}
+    private async Task OnFiltroKeyDown(KeyboardEventArgs e){if(e.Key=="Enter")await CargarOrdenesAsync();}
+    private int ContarEtapa(string etapa)=>_ordenes.Count(x=>!EsCancelada(x.Estado)&&NormalizarEtapa(x.Etapa).Contains(etapa,StringComparison.OrdinalIgnoreCase));
+    private static string InicialPaciente(string nombre)=>string.IsNullOrWhiteSpace(nombre)?"P":nombre.Trim()[0].ToString().ToUpperInvariant();
+    private string ObtenerFotoPaciente(int nhcl){if(nhcl<=0)return string.Empty;string directorio=Path.Combine(Env.WebRootPath,"PacientesFotos");if(!Directory.Exists(directorio))return string.Empty;string? archivo=Directory.EnumerateFiles(directorio,$"{nhcl}.*").FirstOrDefault();return archivo is null?string.Empty:$"/pacientes-fotos/{nhcl}?v={File.GetLastWriteTimeUtc(archivo).Ticks}";}
+    private static bool EsHembra(string sexo)=>sexo.Contains("hembra",StringComparison.OrdinalIgnoreCase)||sexo.Equals("H",StringComparison.OrdinalIgnoreCase);
+    private static bool EsCancelada(string estado)=>(estado??string.Empty).Trim().Equals("I",StringComparison.OrdinalIgnoreCase)||(estado??string.Empty).Contains("cancel",StringComparison.OrdinalIgnoreCase);
+    private static string NormalizarEtapa(string etapa)=>(etapa??string.Empty).Trim().ToLowerInvariant() switch{"consulta" or "en consulta"=>"consulta","hospitalización" or "hospitalizacion" or "hospitalizado"=>"hospital","quirófano" or "quirofano" or "cirugía" or "cirugia" or "en cirugía"=>"cirug","procesado" or "procesada" or "finalizado" or "finalizada"=>"final","pendiente"=>"pend",var valor=>valor};
+    private static string EstadoVisual(OrdenActivaResumenDto item)=>EsCancelada(item.Estado)?"cancel":NormalizarEtapa(item.Etapa);
+}
