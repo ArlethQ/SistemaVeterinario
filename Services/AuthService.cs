@@ -1,12 +1,20 @@
 using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Models;
+using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 
 namespace HosvetKardex.Web.Services;
 
 public class SessionStateService
 {
+    private const string StorageKey = "hosvet.session";
     private static readonly TimeSpan SessionTimeout = TimeSpan.FromMinutes(30);
+    private readonly ProtectedLocalStorage _storage;
     private DateTimeOffset? _lastActivityUtc;
+
+    public SessionStateService(ProtectedLocalStorage storage)
+    {
+        _storage = storage;
+    }
 
     public int IdUser { get; private set; }
     public int TipoUser { get; private set; }
@@ -42,7 +50,7 @@ public class SessionStateService
 
     public event Action? OnChange;
 
-    public void SetSession(UsuarioModel user, int localidad = 1, string localidadDesc = "HOSPITAL DE ESPECIALIDADES VETERINARIAS")
+    public async Task SetSessionAsync(UsuarioModel user, int localidad = 1, string localidadDesc = "HOSPITAL DE ESPECIALIDADES VETERINARIAS")
     {
         IdUser = user.UserNumero;
         TipoUser = user.UserTipoUserNumero;
@@ -58,7 +66,42 @@ public class SessionStateService
         LocalidadDescripcion = localidadDesc;
         Apostrofe = localidad == 2 ? "EQ" : "HV";
         _lastActivityUtc = DateTimeOffset.UtcNow;
+        await SaveAsync();
         NotifyStateChanged();
+    }
+
+    public async Task<bool> RestoreAsync()
+    {
+        if (IsAuthenticated) return true;
+
+        try
+        {
+            var result = await _storage.GetAsync<PersistedSession>(StorageKey);
+            if (!result.Success || result.Value is null || result.Value.ExpiresUtc <= DateTimeOffset.UtcNow)
+            {
+                await _storage.DeleteAsync(StorageKey);
+                return false;
+            }
+
+            var saved = result.Value;
+            IdUser = saved.IdUser;
+            TipoUser = saved.TipoUser;
+            EspUser = saved.EspUser;
+            Localidad = saved.Localidad;
+            LocalidadDescripcion = saved.LocalidadDescripcion;
+            Apostrofe = saved.Apostrofe;
+            LoginUser = saved.LoginUser;
+            NombreUsuario = saved.NombreUsuario;
+            Iniciales = saved.Iniciales;
+            _lastActivityUtc = DateTimeOffset.UtcNow;
+            await SaveAsync();
+            NotifyStateChanged();
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     public bool ValidateAndTouch()
@@ -73,11 +116,16 @@ public class SessionStateService
         return true;
     }
 
-    public void Logout()
+    public async Task LogoutAsync()
     {
         ClearSession();
+        await _storage.DeleteAsync(StorageKey);
         NotifyStateChanged();
     }
+
+    private async Task SaveAsync() => await _storage.SetAsync(StorageKey, new PersistedSession(
+        IdUser, TipoUser, EspUser, Localidad, LocalidadDescripcion, Apostrofe,
+        LoginUser, NombreUsuario, Iniciales, DateTimeOffset.UtcNow.Add(SessionTimeout)));
 
     private void ClearSession()
     {
@@ -96,6 +144,11 @@ public class SessionStateService
     }
 
     private void NotifyStateChanged() => OnChange?.Invoke();
+
+    public sealed record PersistedSession(
+        int IdUser, int TipoUser, int EspUser, int Localidad, string LocalidadDescripcion,
+        string Apostrofe, string LoginUser, string NombreUsuario, string Iniciales,
+        DateTimeOffset ExpiresUtc);
 }
 
 public interface IAuthService
@@ -180,7 +233,7 @@ public class AuthService : IAuthService
 
         LoginAttempts.TryRemove(loginKey, out _);
         await _sql.RegistrarBitacoraAsync($"Ingresa al Sistema: {user.UserNombre}", user.UserNumero);
-        _session.SetSession(user, localidad);
+        await _session.SetSessionAsync(user, localidad);
 
         return (true, "Bienvenido", user, false);
     }

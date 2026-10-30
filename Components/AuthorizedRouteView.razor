@@ -38,6 +38,8 @@ else
     {
         _evaluando = true;
         _esPublica = EsPaginaPublica(RouteData.PageType);
+        if (!_esPublica)
+            await Session.RestoreAsync();
         _autenticado = _esPublica || Session.ValidateAndTouch();
         _autorizado = _esPublica || (_autenticado && await AuthService.TieneAccesoRutaAsync(Navigation.ToBaseRelativePath(Navigation.Uri)));
         _evaluando = false;
