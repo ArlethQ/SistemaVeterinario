@@ -12,10 +12,9 @@
 La revisión de código redujo los doce registros marcados originalmente como faltantes a estas brechas funcionales:
 
 1. **Reporte base de pacientes/órdenes:** falta reproducir `vt_basereport.aspx` + `FormasReportes/rep_basereport.aspx` con sus datos de contacto y período; `RecepcionOrdenes.razor` cubre la operación diaria, pero no el reporte histórico exacto.
-2. **Reporte de fallecidos:** `SeguimientoClinico.razor` consulta y presenta los fallecidos, pero falta la descarga PDF/Excel equivalente a `rep_ListaFallecidos.aspx`.
-3. **Antecedentes epidemiológicos TUERI:** `FichaMedica.razor` registra descripción, alimentación y contacto con mascotas, pero aún faltan contacto con personas, tiempos de contacto y la anulación restringida al usuario/primeras 25 horas de `vt_antFinal.aspx`.
-4. **Grupos diagnósticos:** el CRUD está en `CatalogosOperativos.razor`, pero `GestionMigradaService` aún no conserva `vt_grupoestado`; actualmente fuerza estado `A`.
-5. **Parte operatorio consolidado:** existe impresión individual completa en `ProtocoloQuirurgico.razor` y resumen en `ReportesClinicos.razor`; falta validar/ampliar el consolidado para incluir diagnósticos y procedimientos extra del Crystal `rep_parteoperatorio.aspx`.
+2. **Antecedentes epidemiológicos TUERI:** `FichaMedica.razor` registra descripción, alimentación y contacto con mascotas, pero aún faltan contacto con personas, tiempos de contacto y la anulación restringida al usuario/primeras 25 horas de `vt_antFinal.aspx`.
+3. **Grupos diagnósticos:** el CRUD está en `CatalogosOperativos.razor`, pero `GestionMigradaService` aún no conserva `vt_grupoestado`; actualmente fuerza estado `A`.
+4. **Parte operatorio consolidado:** existe impresión individual completa en `ProtocoloQuirurgico.razor` y resumen en `ReportesClinicos.razor`; falta validar/ampliar el consolidado para incluir diagnósticos y procedimientos extra del Crystal `rep_parteoperatorio.aspx`.
 
 No faltan vistas independientes para I-STAT, evolución impresa, recetas con/sin orden, equipo quirúrgico, archivos quirúrgicos, impresión masiva de fichas ni grupos diagnósticos; esas funciones ya tienen equivalente Blazor y quedan clasificadas como parciales hasta validación con datos reales.
 
@@ -30,7 +29,7 @@ No faltan vistas independientes para I-STAT, evolución impresa, recetas con/sin
 | FormasReportes\rep_i_stat.aspx | Seguimiento clínico | parcial | OperacionesClinicas.razor | AdministracionClinicaService, ReportExportService |
 | FormasReportes\rep_ListaAlertas.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | AdministracionClinicaService, ReportExportService |
 | FormasReportes\rep_ListaAtenciones.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | GestionMigradaService, ReportExportService |
-| FormasReportes\rep_ListaFallecidos.aspx | Seguimiento clínico | faltante | — | AdministracionClinicaService, AdmisionFacturacionService, ConsultaExternaService, GestionMigradaService, KardexService, LaboratorioImagenService |
+| FormasReportes\rep_ListaFallecidos.aspx | Seguimiento clínico | parcial | SeguimientoClinico.razor | AdministracionClinicaService, ReportExportService |
 | FormasReportes\rep_parteoperatorio.aspx | Quirófano y anestesia | parcial | ReportesClinicos.razor / ProtocoloQuirurgico.razor | GestionMigradaService, QuirofanoService, ReportExportService |
 | FormasReportes\rep_TotalDiagnosticos.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | GestionMigradaService, ReportExportService |
 | FormasReportes\rep_TotalDiagnosticosCondensado.aspx | Operaciones clínicas | parcial | ReportesClinicos.razor | GestionMigradaService, ReportExportService |
@@ -266,12 +265,12 @@ No faltan vistas independientes para I-STAT, evolución impresa, recetas con/sin
 - **Archivos físicos:** /reports/vt_listafallecidos.rpt, reports\vt_listafallecidos.rpt.
 - **Reportes Crystal:** /reports/vt_listafallecidos.rpt, reports\vt_listafallecidos.rpt.
 - **Correo:** No detectado.
-- **Blazor equivalente:** No identificado.
-- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/AdmisionFacturacionService.cs`, `Services/ConsultaExternaService.cs`, `Services/GestionMigradaService.cs`, `Services/KardexService.cs`, `Services/LaboratorioImagenService.cs`.
-- **Estado:** **faltante**.
-- **Evidencia:** Sin página Razor equivalente demostrable por nombre o mapeo funcional.
-- **Diferencias encontradas:** La presencia de pantalla/servicio no demuestra paridad; quedan por contrastar validaciones, eliminación/anulación, impresión, permisos y efectos secundarios.
-- **Trabajo requerido:** Definir equivalencia vigente e implementar o justificar obsolescencia.
+- **Blazor equivalente:** `Components/Pages/SeguimientoClinico.razor`, pestaña **Fallecidos**.
+- **Servicio equivalente:** `Services/AdministracionClinicaService.cs`, `Services/ReportExportService.cs`.
+- **Estado:** **parcial**.
+- **Evidencia:** Consulta por rango de fechas y exportación del listado a PDF y Excel con fecha, NHCL, paciente, propietario y motivo.
+- **Diferencias encontradas:** El visor Crystal fue sustituido por descargas generadas con QuestPDF y ClosedXML.
+- **Trabajo requerido:** Validar visualmente y comparar el resultado con el Crystal histórico usando pacientes fallecidos reales.
 
 ### `FormasReportes\rep_parteoperatorio.aspx`
 

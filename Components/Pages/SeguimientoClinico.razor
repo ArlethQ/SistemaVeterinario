@@ -27,6 +27,11 @@
                     <button class="btn btn-outline-danger" disabled="@(!_alertas.Any() || _cargando)" @onclick="ExportarAlertasPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF</button>
                     <button class="btn btn-outline-success" disabled="@(!_alertas.Any() || _cargando)" @onclick="ExportarAlertasExcelAsync"><i class="bi bi-file-earmark-excel-fill me-1"></i>Excel</button>
                 }
+                else if (_tab == "fallecidos")
+                {
+                    <button class="btn btn-outline-danger" disabled="@(!_fallecidos.Any() || _cargando)" @onclick="ExportarFallecidosPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF</button>
+                    <button class="btn btn-outline-success" disabled="@(!_fallecidos.Any() || _cargando)" @onclick="ExportarFallecidosExcelAsync"><i class="bi bi-file-earmark-excel-fill me-1"></i>Excel</button>
+                }
                 <button class="btn btn-primary" disabled="@_cargando" @onclick="CargarAsync">@(_cargando ? "Consultando..." : "Consultar")</button>
             </div>
         </div>
@@ -167,5 +172,15 @@
     {
         var bytes = ReportService.GenerarAlertasSeguimientoExcel(_alertas, _desde, _hasta, _estado);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"AlertasQuirurgicas_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+    private async Task ExportarFallecidosPdfAsync()
+    {
+        var bytes = ReportService.GenerarFallecidosPdf(_fallecidos, _desde, _hasta);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"PacientesFallecidos_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+    }
+    private async Task ExportarFallecidosExcelAsync()
+    {
+        var bytes = ReportService.GenerarFallecidosExcel(_fallecidos, _desde, _hasta);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"PacientesFallecidos_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
     }
 }

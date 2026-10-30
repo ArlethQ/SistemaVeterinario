@@ -44,6 +44,8 @@ public interface IReportExportService
     byte[] GenerarRecordatoriosSeguimientoExcel(List<RecordatorioVacunaDto> recordatorios, DateTime desde, DateTime hasta, bool porRevision);
     byte[] GenerarAlertasSeguimientoPdf(List<AlertaClinicaDto> alertas, DateTime desde, DateTime hasta, string estado);
     byte[] GenerarAlertasSeguimientoExcel(List<AlertaClinicaDto> alertas, DateTime desde, DateTime hasta, string estado);
+    byte[] GenerarFallecidosPdf(List<PacienteFallecidoDto> fallecidos, DateTime desde, DateTime hasta);
+    byte[] GenerarFallecidosExcel(List<PacienteFallecidoDto> fallecidos, DateTime desde, DateTime hasta);
     byte[] GenerarIStatPdf(PacienteHeaderDto paciente, IStatDto istat, string? nombreMedico = null);
     byte[] GenerarFichasMedicasLotePdf(PacienteHeaderDto paciente, List<FichaLoteItemDto> lote);
     byte[] GenerarCodigoQrPng(string texto);
@@ -378,6 +380,51 @@ public class ReportExportService : IReportExportService
         ws.Range(1, 1, 1, headers.Length).Style.Font.Bold = true; ws.Range(1, 1, 1, headers.Length).Style.Fill.BackgroundColor = XLColor.LightBlue;
         ws.SheetView.FreezeRows(1); ws.RangeUsed()?.SetAutoFilter(); ws.Columns().AdjustToContents();
         ws.Cell(ws.LastRowUsed()?.RowNumber() + 2 ?? 3, 1).Value = $"Período: {desde:dd/MM/yyyy} - {hasta:dd/MM/yyyy}; estado: {(string.IsNullOrWhiteSpace(estado) ? "Todos" : estado)}";
+        using var stream = new MemoryStream(); wb.SaveAs(stream); return stream.ToArray();
+    }
+
+    public byte[] GenerarFallecidosPdf(
+        List<PacienteFallecidoDto> fallecidos, DateTime desde, DateTime hasta)
+    {
+        return Document.Create(doc => doc.Page(page =>
+        {
+            page.Size(PageSizes.A4); page.Margin(28); page.DefaultTextStyle(x => x.FontSize(9));
+            page.Header().Column(col =>
+            {
+                col.Item().Text("REPORTE DE PACIENTES FALLECIDOS").Bold().FontSize(14).FontColor(Colors.Blue.Darken3);
+                col.Item().Text($"Período: {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy} · {fallecidos.Count} registro(s)").FontColor(Colors.Grey.Darken2);
+            });
+            page.Content().PaddingTop(10).Table(table =>
+            {
+                table.ColumnsDefinition(c => { c.ConstantColumn(70); c.ConstantColumn(60); c.RelativeColumn(1.2f); c.RelativeColumn(1.5f); c.RelativeColumn(1.8f); });
+                table.Header(h => { foreach (var texto in new[] { "Fecha", "NHCL", "Paciente", "Propietario", "Motivo" }) h.Cell().Background(Colors.Blue.Lighten4).Padding(5).Text(texto).Bold(); });
+                foreach (var item in fallecidos)
+                {
+                    foreach (var valor in new[] { item.Fecha.ToString("dd/MM/yyyy"), item.Nhcl.ToString(), item.Paciente, item.Propietario, item.Motivo })
+                        table.Cell().BorderBottom(.5f).BorderColor(Colors.Grey.Lighten2).Padding(4).Text(valor ?? string.Empty);
+                }
+            });
+            page.Footer().AlignCenter().Text($"Generado por e-ForVets · {DateTime.Now:dd/MM/yyyy HH:mm}");
+        })).GeneratePdf();
+    }
+
+    public byte[] GenerarFallecidosExcel(
+        List<PacienteFallecidoDto> fallecidos, DateTime desde, DateTime hasta)
+    {
+        using var wb = new XLWorkbook(); var ws = wb.Worksheets.Add("Pacientes fallecidos");
+        string[] headers = ["Fecha", "NHCL", "Paciente", "Propietario", "Motivo"];
+        for (var i = 0; i < headers.Length; i++) ws.Cell(1, i + 1).Value = headers[i];
+        var fila = 2;
+        foreach (var x in fallecidos)
+        {
+            object[] valores = [x.Fecha, x.Nhcl, x.Paciente, x.Propietario, x.Motivo];
+            for (var i = 0; i < valores.Length; i++) ws.Cell(fila, i + 1).Value = XLCellValue.FromObject(valores[i]);
+            fila++;
+        }
+        ws.Column(1).Style.DateFormat.Format = "dd/mm/yyyy";
+        ws.Range(1, 1, 1, headers.Length).Style.Font.Bold = true; ws.Range(1, 1, 1, headers.Length).Style.Fill.BackgroundColor = XLColor.LightBlue;
+        ws.SheetView.FreezeRows(1); ws.RangeUsed()?.SetAutoFilter(); ws.Columns().AdjustToContents();
+        ws.Cell(ws.LastRowUsed()?.RowNumber() + 2 ?? 3, 1).Value = $"Período: {desde:dd/MM/yyyy} - {hasta:dd/MM/yyyy}";
         using var stream = new MemoryStream(); wb.SaveAs(stream); return stream.ToArray();
     }
 
