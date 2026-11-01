@@ -122,9 +122,9 @@ public class KardexService : IKardexService
         {
             const string sql = @"
                 SELECT TOP 1
-                    ISNULL(o.ordenAten_nhcl, ISNULL(p.mas_nhcl, @Nhcl)) AS Nhcl,
+                    ISNULL(p.mas_nhcl, ISNULL(o.ordenAten_nhcl, @Nhcl)) AS Nhcl,
                     ISNULL(o.ordenAten_id, @OrdenId) AS OrdenAtencionId,
-                    RTRIM(ISNULL(o.ordenAten_nombre, ISNULL(p.mas_nombre, 'PACIENTE'))) AS PacienteNombre,
+                    RTRIM(ISNULL(NULLIF(p.mas_nombre, ''), ISNULL(NULLIF(o.ordenAten_nombre, ''), 'PACIENTE'))) AS PacienteNombre,
                     CASE 
                         WHEN c.pa_nombres IS NOT NULL OR c.pa_apellidos IS NOT NULL 
                             THEN RTRIM(ISNULL(c.pa_apellidos, '')) + ' ' + RTRIM(ISNULL(c.pa_nombres, ''))
@@ -136,6 +136,7 @@ public class KardexService : IKardexService
                          WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 'Macho'
                          ELSE RTRIM(ISNULL(p.mas_sexo, 'Indefinido')) END AS Sexo,
                     RTRIM(ISNULL(e.especie_descripcion, 'Canino')) AS Especie,
+                    RTRIM(ISNULL(r.des_raza, 'Mestizo')) AS Raza,
                     CASE WHEN RTRIM(ISNULL(p.mas_origen, 'M')) = 'M' THEN 'Doméstico' ELSE 'Silvestre' END AS Origen,
                     p.mas_fechanace AS FechaNacimiento,
                     RTRIM(ISNULL(u.user_nombre, 'Médico de Turno')) AS MedicoResponsable,
@@ -143,14 +144,15 @@ public class KardexService : IKardexService
                     CAST(CASE WHEN ISNULL(p.fallecido, 'False') = 'True' OR ISNULL(p.fallecido, '0') = '1' THEN 1 ELSE 0 END AS BIT) AS Fallecido,
                     p.fechafallecido AS FechaFallecido,
                     p.motivofallece AS MotivoFallece
-                FROM vt_ordenAtencion o
-                LEFT JOIN vt_pacientes p ON o.ordenAten_nhcl = p.mas_nhcl
-                LEFT JOIN vt_clientes c ON o.ordenAten_idcliente = c.pa_codigo OR p.mas_idcliente = c.pa_codigo
+                FROM vt_pacientes p
+                LEFT JOIN vt_ordenAtencion o ON p.mas_nhcl = o.ordenAten_nhcl AND (@OrdenId <= 0 OR o.ordenAten_id = @OrdenId)
+                LEFT JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo OR o.ordenAten_idcliente = c.pa_codigo
                 LEFT JOIN vt_especie e ON p.mas_especie = e.especie_id
+                LEFT JOIN vt_razas r ON p.mas_raza = r.id_raza
                 LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
                 WHERE (@OrdenId > 0 AND o.ordenAten_id = @OrdenId)
-                   OR (@OrdenId <= 0 AND @Nhcl > 0 AND o.ordenAten_nhcl = @Nhcl)
-                ORDER BY o.ordenAten_id DESC";
+                   OR (@OrdenId <= 0 AND @Nhcl > 0 AND p.mas_nhcl = @Nhcl)
+                ORDER BY ISNULL(o.ordenAten_id, 0) DESC";
 
             var header = await _sql.QueryFirstOrDefaultAsync<PacienteHeaderDto>(sql, new { OrdenId = ordenId, Nhcl = nhcl });
             if (header is not null)
