@@ -3,6 +3,7 @@
 @page "/consulta/historial/{Nhcl:int}/{TabInicial}"
 @inject SessionStateService Session
 @inject IAdministracionClinicaService AdminService
+@inject IConsultaExternaService ConsultaService
 @inject IWebHostEnvironment Environment
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -45,9 +46,9 @@
             }
         </div>
         <div class="d-flex gap-2">
-            <a class="btn btn-outline-primary btn-sm" href="/consulta/historial/apuntes/@Nhcl">
-                <i class="bi bi-journal-text me-1"></i>Apuntes
-            </a>
+            <button class="btn btn-outline-primary btn-sm @(_tab == "apuntes" ? "active" : "")" @onclick='() => _tab = "apuntes"'>
+                <i class="bi bi-journal-text me-1"></i>Apuntes (@_apuntes.Count)
+            </button>
             @if (_tab == "crecimiento")
             {
                 <button class="btn btn-outline-secondary btn-sm" @onclick="ImprimirGraficoAsync">
@@ -78,6 +79,11 @@
         <li class="nav-item">
             <button class="nav-link @(_tab=="crecimiento"?"active fw-bold text-primary":"")" @onclick='()=>_tab="crecimiento"'>
                 📈 Curva de Crecimiento y Constantes (@_mediciones.Count)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(_tab=="apuntes"?"active fw-bold text-success":"")" @onclick='()=>_tab="apuntes"'>
+                📝 Apuntes (@_apuntes.Count)
             </button>
         </li>
         <li class="nav-item">
@@ -601,29 +607,309 @@
             </div>
         </div>
     }
+    else if (_tab == "apuntes")
+    {
+        <!-- PESTAÑA: APUNTES A HISTORIAS CLÍNICAS -->
+        @if (!string.IsNullOrWhiteSpace(_mensajeApunte))
+        {
+            <div class="alert @(_esErrorApunte ? "alert-danger" : "alert-success") alert-dismissible py-2 mb-3" role="alert">
+                @_mensajeApunte
+                <button type="button" class="btn-close py-2" @onclick="() => _mensajeApunte = string.Empty"></button>
+            </div>
+        }
+
+        <div class="row g-3">
+            <!-- Formulario de nuevo apunte -->
+            <div class="col-lg-5">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white fw-bold text-primary">
+                        <i class="bi bi-pencil-square me-1"></i>Nuevo Apunte Clínico
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Fecha del Apunte *</label>
+                            <input type="date" class="form-control form-control-sm" @bind="_nuevoApunte.Fecha" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold">Observación Clínica *</label>
+                            <textarea class="form-control form-control-sm" rows="11" maxlength="10000"
+                                      placeholder="Escriba el apunte u observación médica que debe permanecer registrada en la historia del paciente..."
+                                      @bind="_nuevoApunte.Observacion" @bind:event="oninput"></textarea>
+                            <div class="d-flex justify-content-between mt-1">
+                                <small class="text-muted">Se registrará en el expediente longitudinal del paciente.</small>
+                                <small class="text-muted">@_nuevoApunte.Observacion.Length / 10000</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-white text-end">
+                        <button class="btn btn-sm btn-success fw-semibold" disabled="@_guardandoApunte" @onclick="GuardarApunteAsync">
+                            <i class="bi bi-floppy-fill me-1"></i>@(_guardandoApunte ? "Guardando..." : "Guardar Apunte")
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Listado de apuntes anteriores -->
+            <div class="col-lg-7">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-dark">
+                            <i class="bi bi-clock-history me-1"></i>Apuntes Registrados (@_apuntes.Count)
+                        </span>
+                        <span class="badge bg-primary-subtle text-primary border">Expediente Clínico</span>
+                    </div>
+                    <div class="card-body" style="max-height: 540px; overflow-y: auto;">
+                        @if (_apuntes.Count == 0)
+                        {
+                            <div class="text-center text-muted py-5">
+                                <i class="bi bi-journal-x display-6 d-block mb-2 opacity-50"></i>
+                                No existen apuntes registrados para este paciente todavía.
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var apunte in _apuntes.OrderByDescending(x => x.Fecha).ThenByDescending(x => x.Id))
+                            {
+                                <article class="border rounded p-3 mb-3 bg-light shadow-sm">
+                                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2 pb-1 border-bottom">
+                                        <div>
+                                            <strong class="text-primary"><i class="bi bi-calendar-event me-1"></i>@apunte.Fecha.ToString("yyyy-MM-dd")</strong>
+                                            <span class="text-muted ms-2"><i class="bi bi-person me-1"></i>@apunte.RegistradoPor</span>
+                                            <span class="badge bg-white text-dark border ms-2">@apunte.Tipo</span>
+                                        </div>
+                                        @if (_idApunteAAnular == apunte.Id)
+                                        {
+                                            <div class="d-flex gap-1 align-items-center">
+                                                <small class="text-danger fw-semibold me-1">¿Anular?</small>
+                                                <button class="btn btn-xs btn-danger py-0 px-2" disabled="@_anulandoApunte" @onclick="() => AnularApunteAsync(apunte.Id)">Sí, anular</button>
+                                                <button class="btn btn-xs btn-outline-secondary py-0 px-2" @onclick="() => _idApunteAAnular = 0">Cancelar</button>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-xs btn-outline-danger py-0 px-2" @onclick="() => _idApunteAAnular = apunte.Id" title="Anular este apunte">
+                                                <i class="bi bi-trash3 me-1"></i>Anular
+                                            </button>
+                                        }
+                                    </div>
+                                    <div class="text-dark" style="white-space: pre-wrap; word-break: break-word; font-size: 0.93rem;">@apunte.Observacion</div>
+                                </article>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
     else
     {
         <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-paperclip me-1"></i>Archivos, Fotos y Documentos Adjuntos (@_archivos.Count)
+                </span>
+                <span class="badge bg-light text-muted border">
+                    Ruta: archivosPacientes/@Nhcl/ingreso
+                </span>
+            </div>
             <div class="card-body">
-                <label class="form-label fw-semibold">Adjuntar archivo clínico</label>
-                <InputFile OnChange="SubirArchivoAsync" class="form-control mb-3" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.docx" />
                 @if (!string.IsNullOrWhiteSpace(_mensaje))
                 {
-                    <div class="alert alert-success py-2">@_mensaje</div>
+                    <div class="alert alert-success alert-dismissible py-2 mb-3" role="alert">
+                        <i class="bi bi-check-circle-fill me-1"></i>@_mensaje
+                        <button type="button" class="btn-close py-2" @onclick="() => _mensaje = string.Empty"></button>
+                    </div>
                 }
-                <div class="list-group">
-                    @foreach (var archivo in _archivos)
-                    {
-                        <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="@archivo.Url" target="_blank">
-                            <span>📎 @archivo.Nombre</span>
-                            <small class="text-muted">@archivo.Fecha.ToString("yyyy-MM-dd HH:mm")</small>
-                        </a>
-                    }
+                @if (!string.IsNullOrWhiteSpace(_error))
+                {
+                    <div class="alert alert-danger alert-dismissible py-2 mb-3" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>@_error
+                        <button type="button" class="btn-close py-2" @onclick="() => _error = string.Empty"></button>
+                    </div>
+                }
+
+                <!-- Formulario de Subida con Texto Opcional -->
+                <div class="bg-light p-3 rounded mb-3 border">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-5">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                <i class="bi bi-file-earmark-arrow-up me-1 text-primary"></i>Seleccionar archivo o foto:
+                            </label>
+                            <InputFile OnChange="OnArchivoSeleccionado" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.docx" />
+                            <small class="text-muted d-block mt-1">Fotos (JPG, PNG, WEBP), PDF, DOCX o XLSX (máx 15MB).</small>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                <i class="bi bi-chat-left-text me-1 text-primary"></i>Texto o comentario opcional del archivo:
+                            </label>
+                            <input type="text" class="form-control form-control-sm" placeholder="Ej: Foto de la lesión, ecografía abdominal, informe..." @bind="_nuevoArchivoComentario" />
+                            <small class="text-muted d-block mt-1">Descripción para identificar rápidamente el contenido del archivo.</small>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-sm btn-primary w-100 fw-semibold" disabled="@(_archivoSeleccionado == null || _subiendoArchivo)" @onclick="SubirArchivoAsync">
+                                <i class="bi bi-cloud-arrow-up-fill me-1"></i>@(_subiendoArchivo ? "Subiendo..." : "Subir Archivo")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabla de Archivos y Fotos con opción de Quitar / Comentar -->
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered align-middle small mb-0">
+                        <thead class="table-light text-secondary">
+                            <tr>
+                                <th style="width: 60px;" class="text-center">Tipo</th>
+                                <th>Nombre y Comentario del Archivo</th>
+                                <th style="width: 160px;">Fecha y Hora</th>
+                                <th style="width: 100px;">Tamaño</th>
+                                <th style="width: 220px;" class="text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!_archivos.Any())
+                            {
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-5">
+                                        <i class="bi bi-folder2-open display-6 d-block mb-2 text-secondary opacity-50"></i>
+                                        No hay fotos ni archivos adjuntos para este paciente aún.
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var arc in _archivos)
+                                {
+                                    bool esFoto = arc.Nombre.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                                               || arc.Nombre.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                                               || arc.Nombre.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+                                               || arc.Nombre.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
+                                    bool esPdf = arc.Nombre.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+                                    bool esDoc = arc.Nombre.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) || arc.Nombre.EndsWith(".doc", StringComparison.OrdinalIgnoreCase);
+
+                                    <tr>
+                                        <td class="text-center">
+                                            @if (esFoto)
+                                            {
+                                                <a href="@arc.Url" target="_blank" title="Haga clic para ver la foto en tamaño completo">
+                                                    <img src="@arc.Url" alt="@arc.Nombre" class="rounded border shadow-sm" style="width: 42px; height: 42px; object-fit: cover;" />
+                                                </a>
+                                            }
+                                            else if (esPdf)
+                                            {
+                                                <i class="bi bi-file-earmark-pdf-fill text-danger fs-3"></i>
+                                            }
+                                            else if (esDoc)
+                                            {
+                                                <i class="bi bi-file-earmark-word-fill text-primary fs-3"></i>
+                                            }
+                                            else
+                                            {
+                                                <i class="bi bi-file-earmark-text text-secondary fs-3"></i>
+                                            }
+                                        </td>
+                                        <td>
+                                            <a href="@arc.Url" target="_blank" class="fw-bold text-decoration-none text-dark d-block">
+                                                @arc.Nombre
+                                            </a>
+                                            @if (!string.IsNullOrWhiteSpace(arc.Comentario))
+                                            {
+                                                <div class="mt-1 p-1 px-2 bg-light rounded border-start border-3 border-primary text-secondary" style="font-size: 0.85rem;">
+                                                    <i class="bi bi-chat-left-dots text-primary me-1"></i>@arc.Comentario
+                                                </div>
+                                            }
+                                        </td>
+                                        <td>
+                                            <i class="bi bi-calendar-event me-1 text-muted"></i>@arc.Fecha.ToString("yyyy-MM-dd HH:mm")
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-light text-muted border">@FormatearTamano(arc.TamanoBytes)</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="btn-group btn-group-sm">
+                                                <a href="@arc.Url" target="_blank" class="btn btn-xs btn-outline-primary py-1 px-2" title="Abrir / Ver">
+                                                    <i class="bi bi-eye-fill me-1"></i>Ver
+                                                </a>
+                                                <a href="@arc.Url" download="@arc.Nombre" class="btn btn-xs btn-outline-secondary py-1 px-2" title="Descargar">
+                                                    <i class="bi bi-download"></i>
+                                                </a>
+                                                <button class="btn btn-xs btn-outline-info py-1 px-2 text-dark" @onclick="() => AbrirEditarComentario(arc)" title="Editar texto o comentario">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <button class="btn btn-xs btn-outline-danger py-1 px-2" @onclick="() => ConfirmarEliminarArchivo(arc.Nombre)" title="Quitar / Eliminar archivo">
+                                                    <i class="bi bi-trash3-fill me-1"></i>Quitar
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     }
 </div>
+
+<!-- Modal Confirmar Eliminación de Archivo -->
+@if (_mostrarModalEliminarArchivo)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content shadow border-0">
+                <div class="modal-header bg-danger text-white py-2">
+                    <h5 class="modal-title fs-6 fw-bold">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Confirmar Eliminación de Archivo
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CancelarEliminarArchivo"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <p class="mb-2">¿Está seguro de que desea quitar este archivo del expediente del paciente?</p>
+                    <div class="alert alert-warning py-2 mb-2 small">
+                        <strong><i class="bi bi-file-earmark-x me-1"></i>@_archivoAEliminar</strong>
+                    </div>
+                    <small class="text-muted d-block">Esta acción eliminará el archivo del servidor de forma permanente.</small>
+                </div>
+                <div class="modal-footer py-2 bg-light">
+                    <button type="button" class="btn btn-sm btn-secondary" @onclick="CancelarEliminarArchivo">Cancelar</button>
+                    <button type="button" class="btn btn-sm btn-danger fw-semibold" @onclick="EliminarArchivoConfirmado">
+                        <i class="bi bi-trash3-fill me-1"></i>Sí, Quitar Archivo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal Editar Comentario de Archivo -->
+@if (_mostrarModalEditarComentario)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content shadow border-0">
+                <div class="modal-header bg-primary text-white py-2">
+                    <h5 class="modal-title fs-6 fw-bold">
+                        <i class="bi bi-chat-left-text-fill me-2"></i>Texto / Comentario del Archivo
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => _mostrarModalEditarComentario = false"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <div class="mb-2 small text-muted">
+                        Archivo: <strong>@_archivoAEditarComentario</strong>
+                    </div>
+                    <label class="form-label small fw-semibold">Comentario u observación:</label>
+                    <textarea class="form-control form-control-sm" rows="3" placeholder="Escriba un comentario o descripción para este archivo..." @bind="_comentarioEditando"></textarea>
+                </div>
+                <div class="modal-footer py-2 bg-light">
+                    <button type="button" class="btn btn-sm btn-secondary" @onclick="() => _mostrarModalEditarComentario = false">Cancelar</button>
+                    <button type="button" class="btn btn-sm btn-primary fw-semibold" @onclick="GuardarComentarioEditado">
+                        <i class="bi bi-check-circle-fill me-1"></i>Guardar Comentario
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 }
 
 @code {
@@ -722,8 +1008,15 @@
     };
     private List<MedicionCrecimientoDto> _mediciones = [];
     private List<ArchivoPaciente> _archivos = [];
+    private List<ApunteHistoriaClinicaDto> _apuntes = [];
+    private ApunteHistoriaClinicaDto _nuevoApunte = new() { Fecha = DateTime.Today };
+    private bool _guardandoApunte;
+    private bool _anulandoApunte;
+    private int _idApunteAAnular;
+    private string _mensajeApunte = string.Empty;
+    private bool _esErrorApunte;
 
-    public sealed record ArchivoPaciente(string Nombre, string Url, DateTime Fecha);
+    public sealed record ArchivoPaciente(string Nombre, string Url, DateTime Fecha, long TamanoBytes, string? Comentario);
     public sealed record PuntoGrafico(int Indice, DateTime Fecha, int EdadMeses, decimal Valor);
 
     private string TituloMetricaActual => _metricaActiva switch
@@ -763,12 +1056,14 @@
             var h = AdminService.ObtenerResumenHistorialAsync(Nhcl);
             var c = AdminService.ObtenerCurvaCrecimientoAsync(Nhcl);
             var p = AdminService.ObtenerInfoPacienteCrecimientoAsync(Nhcl);
+            var a = ConsultaService.ObtenerApuntesHistoriaAsync(Nhcl);
 
-            await Task.WhenAll(h, c, p);
+            await Task.WhenAll(h, c, p, a);
 
             _historial = h.Result;
             _mediciones = c.Result;
             _pacienteInfo = p.Result;
+            _apuntes = a.Result;
 
             CargarArchivos();
         }
@@ -822,17 +1117,63 @@
 
     private string DirectorioRelativo => $"archivosPacientes/{Nhcl}/ingreso";
     private string DirectorioFisico => Path.Combine(Environment.WebRootPath, "archivosPacientes", Nhcl.ToString(), "ingreso");
+    private string RutaMetadataComentarios => Path.Combine(DirectorioFisico, "_metadata_comentarios.json");
+
+    private IBrowserFile? _archivoSeleccionado;
+    private string _nuevoArchivoComentario = string.Empty;
+    private bool _subiendoArchivo;
+    private string? _archivoAEliminar;
+    private bool _mostrarModalEliminarArchivo;
+    private string? _archivoAEditarComentario;
+    private string _comentarioEditando = string.Empty;
+    private bool _mostrarModalEditarComentario;
+
+    private static string FormatearTamano(long bytes)
+    {
+        if (bytes >= 1024 * 1024) return $"{(bytes / (1024.0 * 1024.0)):F1} MB";
+        if (bytes >= 1024) return $"{(bytes / 1024.0):F1} KB";
+        return $"{bytes} B";
+    }
+
+    private Dictionary<string, string> ObtenerDiccionarioComentarios()
+    {
+        try
+        {
+            if (File.Exists(RutaMetadataComentarios))
+            {
+                var json = File.ReadAllText(RutaMetadataComentarios);
+                return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+            }
+        }
+        catch { }
+        return new();
+    }
+
+    private void GuardarDiccionarioComentarios(Dictionary<string, string> dict)
+    {
+        try
+        {
+            Directory.CreateDirectory(DirectorioFisico);
+            File.WriteAllText(RutaMetadataComentarios, System.Text.Json.JsonSerializer.Serialize(dict));
+        }
+        catch { }
+    }
 
     private void CargarArchivos()
     {
         try
         {
             Directory.CreateDirectory(DirectorioFisico);
-            _archivos = Directory.EnumerateFiles(DirectorioFisico)
+            var comentarios = ObtenerDiccionarioComentarios();
+            var di = new DirectoryInfo(DirectorioFisico);
+            _archivos = di.EnumerateFiles()
+                .Where(f => !f.Name.StartsWith("_metadata_"))
                 .Select(x => new ArchivoPaciente(
-                    Path.GetFileName(x),
-                    $"/{DirectorioRelativo}/{Uri.EscapeDataString(Path.GetFileName(x))}",
-                    File.GetLastWriteTime(x)))
+                    x.Name,
+                    $"/{DirectorioRelativo}/{Uri.EscapeDataString(x.Name)}",
+                    x.LastWriteTime,
+                    x.Length,
+                    comentarios.TryGetValue(x.Name, out var c) ? c : null))
                 .OrderByDescending(x => x.Fecha)
                 .ToList();
         }
@@ -842,32 +1183,206 @@
         }
     }
 
-    private async Task SubirArchivoAsync(InputFileChangeEventArgs e)
+    private void OnArchivoSeleccionado(InputFileChangeEventArgs e)
     {
-        var archivo = e.File;
-        if (archivo.Size > 15 * 1024 * 1024)
+        _archivoSeleccionado = e.File;
+        _error = string.Empty;
+    }
+
+    private async Task SubirArchivoAsync()
+    {
+        if (_archivoSeleccionado == null)
         {
-            _error = "El archivo supera el límite de 15 MB.";
+            _error = "Por favor seleccione un archivo o foto para subir.";
             return;
         }
 
-        var extensiones = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf", ".png", ".jpg", ".jpeg", ".xlsx", ".docx" };
-        var ext = Path.GetExtension(archivo.Name);
-        if (!extensiones.Contains(ext))
+        if (_archivoSeleccionado.Size > 15 * 1024 * 1024)
         {
-            _error = "Tipo de archivo no permitido.";
+            _error = "El archivo supera el límite máximo permitido de 15 MB.";
             return;
         }
 
-        Directory.CreateDirectory(DirectorioFisico);
-        var nombre = $"{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileNameWithoutExtension(archivo.Name)}{ext}";
+        var extensiones = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xlsx", ".docx" };
+        var ext = Path.GetExtension(_archivoSeleccionado.Name);
+        if (string.IsNullOrWhiteSpace(ext) || !extensiones.Contains(ext))
+        {
+            _error = $"Tipo de archivo no permitido ('{ext}'). Solo se admiten fotos (JPG, PNG, WEBP), PDF, DOCX y XLSX.";
+            return;
+        }
 
-        await using var entrada = archivo.OpenReadStream(15 * 1024 * 1024);
-        await using var salida = File.Create(Path.Combine(DirectorioFisico, nombre));
-        await entrada.CopyToAsync(salida);
+        _subiendoArchivo = true;
+        try
+        {
+            Directory.CreateDirectory(DirectorioFisico);
+            var nombre = $"{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileNameWithoutExtension(_archivoSeleccionado.Name)}{ext}";
+            var fullPath = Path.Combine(DirectorioFisico, nombre);
 
-        _error = "";
-        _mensaje = "Archivo cargado correctamente.";
+            await using var entrada = _archivoSeleccionado.OpenReadStream(15 * 1024 * 1024);
+            await using var salida = File.Create(fullPath);
+            await entrada.CopyToAsync(salida);
+
+            if (!string.IsNullOrWhiteSpace(_nuevoArchivoComentario))
+            {
+                var dict = ObtenerDiccionarioComentarios();
+                dict[nombre] = _nuevoArchivoComentario.Trim();
+                GuardarDiccionarioComentarios(dict);
+            }
+
+            _archivoSeleccionado = null;
+            _nuevoArchivoComentario = string.Empty;
+            _error = "";
+            _mensaje = $"Archivo '{nombre}' subido correctamente.";
+            CargarArchivos();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error al subir el archivo: {ex.Message}";
+        }
+        finally
+        {
+            _subiendoArchivo = false;
+        }
+    }
+
+    private void ConfirmarEliminarArchivo(string nombre)
+    {
+        _archivoAEliminar = nombre;
+        _mostrarModalEliminarArchivo = true;
+    }
+
+    private void CancelarEliminarArchivo()
+    {
+        _archivoAEliminar = null;
+        _mostrarModalEliminarArchivo = false;
+    }
+
+    private void EliminarArchivoConfirmado()
+    {
+        if (string.IsNullOrWhiteSpace(_archivoAEliminar)) return;
+
+        try
+        {
+            var ruta = Path.Combine(DirectorioFisico, _archivoAEliminar);
+            if (File.Exists(ruta))
+            {
+                File.Delete(ruta);
+            }
+
+            var dict = ObtenerDiccionarioComentarios();
+            if (dict.ContainsKey(_archivoAEliminar))
+            {
+                dict.Remove(_archivoAEliminar);
+                GuardarDiccionarioComentarios(dict);
+            }
+
+            _mensaje = $"Archivo '{_archivoAEliminar}' eliminado correctamente.";
+            _error = "";
+            _archivoAEliminar = null;
+            _mostrarModalEliminarArchivo = false;
+            CargarArchivos();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error al eliminar el archivo: {ex.Message}";
+            _mostrarModalEliminarArchivo = false;
+        }
+    }
+
+    private void AbrirEditarComentario(ArchivoPaciente arc)
+    {
+        _archivoAEditarComentario = arc.Nombre;
+        _comentarioEditando = arc.Comentario ?? string.Empty;
+        _mostrarModalEditarComentario = true;
+    }
+
+    private void GuardarComentarioEditado()
+    {
+        if (string.IsNullOrWhiteSpace(_archivoAEditarComentario)) return;
+
+        var dict = ObtenerDiccionarioComentarios();
+        if (string.IsNullOrWhiteSpace(_comentarioEditando))
+        {
+            dict.Remove(_archivoAEditarComentario);
+        }
+        else
+        {
+            dict[_archivoAEditarComentario] = _comentarioEditando.Trim();
+        }
+        GuardarDiccionarioComentarios(dict);
+
+        _mostrarModalEditarComentario = false;
+        _archivoAEditarComentario = null;
+        _mensaje = "Comentario actualizado correctamente.";
         CargarArchivos();
+    }
+
+    private async Task GuardarApunteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nuevoApunte.Observacion))
+        {
+            _mensajeApunte = "Debe escribir una observación clínica para guardar el apunte.";
+            _esErrorApunte = true;
+            return;
+        }
+
+        _guardandoApunte = true;
+        try
+        {
+            _nuevoApunte.Nhcl = Nhcl;
+            _nuevoApunte.Tipo = "HDEV";
+            var (ok, errorMsg) = await ConsultaService.AgregarApunteHistoriaAsync(_nuevoApunte, Session.CurrentUser?.UserNumero ?? 1);
+            if (ok)
+            {
+                _mensajeApunte = "Apunte clínico guardado correctamente.";
+                _esErrorApunte = false;
+                _nuevoApunte = new() { Fecha = DateTime.Today };
+                _apuntes = await ConsultaService.ObtenerApuntesHistoriaAsync(Nhcl);
+            }
+            else
+            {
+                _mensajeApunte = errorMsg ?? "No se pudo guardar el apunte.";
+                _esErrorApunte = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _mensajeApunte = $"Error al guardar apunte: {ex.Message}";
+            _esErrorApunte = true;
+        }
+        finally
+        {
+            _guardandoApunte = false;
+        }
+    }
+
+    private async Task AnularApunteAsync(int id)
+    {
+        _anulandoApunte = true;
+        try
+        {
+            var (ok, errorMsg) = await ConsultaService.AnularApunteHistoriaAsync(id, Session.CurrentUser?.UserNumero ?? 1);
+            if (ok)
+            {
+                _idApunteAAnular = 0;
+                _mensajeApunte = "Apunte anulado correctamente.";
+                _esErrorApunte = false;
+                _apuntes = await ConsultaService.ObtenerApuntesHistoriaAsync(Nhcl);
+            }
+            else
+            {
+                _mensajeApunte = errorMsg ?? "No se pudo anular el apunte.";
+                _esErrorApunte = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _mensajeApunte = $"Error al anular apunte: {ex.Message}";
+            _esErrorApunte = true;
+        }
+        finally
+        {
+            _anulandoApunte = false;
+        }
     }
 }
