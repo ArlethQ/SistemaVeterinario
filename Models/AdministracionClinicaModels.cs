@@ -65,6 +65,7 @@ public sealed class HistorialPacienteItemDto
 
 public sealed class MedicionCrecimientoDto
 {
+    public int IdOrden { get; set; }
     public DateTime Fecha { get; set; }
     public decimal? Peso { get; set; }
     public decimal? FrecuenciaCardiaca { get; set; }

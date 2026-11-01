@@ -206,7 +206,9 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
     public async Task<List<MedicionCrecimientoDto>> ObtenerCurvaCrecimientoAsync(int nhcl)
     {
         const string sql = @"
-            SELECT f.med_fecha AS Fecha, TRY_CAST(f.peso AS decimal(18,2)) AS Peso,
+            SELECT ISNULL(f.med_orden, 0) AS IdOrden,
+                f.med_fecha AS Fecha,
+                TRY_CAST(f.peso AS decimal(18,2)) AS Peso,
                 TRY_CAST(f.frecuenciacardiaca AS decimal(18,2)) AS FrecuenciaCardiaca,
                 TRY_CAST(f.frecuenciarespiratoria AS decimal(18,2)) AS FrecuenciaRespiratoria,
                 DATEDIFF(month,p.mas_fechanace,f.med_fecha) AS EdadMeses

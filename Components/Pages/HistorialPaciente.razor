@@ -577,11 +577,13 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
+                            <th style="width: 130px;">Orden</th>
                             <th>Fecha</th>
                             <th>Edad del Paciente</th>
                             <th class="@(_metricaActiva == "peso" ? "table-primary fw-bold" : "")">Peso (kg)</th>
                             <th class="@(_metricaActiva == "fc" ? "table-danger fw-bold" : "")">FC (lpm)</th>
                             <th class="@(_metricaActiva == "fr" ? "table-success fw-bold" : "")">FR (rpm)</th>
+                            <th style="width: 110px;" class="text-end">Acción</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -589,6 +591,11 @@
                         {
                             bool rowSelected = _puntoSeleccionado?.Fecha == x.Fecha;
                             <tr class="@(rowSelected ? "table-active border-primary" : "")" style="cursor: pointer;" @onclick='() => SeleccionarPuntoPorFecha(x.Fecha)'>
+                                <td>
+                                    <span class="badge bg-light text-dark border">
+                                        Ord #@x.IdOrden
+                                    </span>
+                                </td>
                                 <td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td>
                                 <td>@(x.EdadMeses / 12) año(s) @(x.EdadMeses % 12) mes(es)</td>
                                 <td class="@(_metricaActiva == "peso" ? "fw-bold text-primary" : "")">
@@ -599,6 +606,14 @@
                                 </td>
                                 <td class="@(_metricaActiva == "fr" ? "fw-bold text-success" : "")">
                                     @(x.FrecuenciaRespiratoria.HasValue ? x.FrecuenciaRespiratoria.Value.ToString("N0") : "-")
+                                </td>
+                                <td class="text-end">
+                                    @if (x.IdOrden > 0)
+                                    {
+                                        <a href="/consulta/fichamedica/@x.IdOrden/@Nhcl" class="btn btn-xs btn-outline-primary py-0 px-2" title="Abrir Historia Clínica SOAP de esta orden">
+                                            Ver Ficha
+                                        </a>
+                                    }
                                 </td>
                             </tr>
                         }
