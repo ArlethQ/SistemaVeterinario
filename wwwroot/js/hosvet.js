@@ -383,9 +383,10 @@ document.addEventListener('paste', function (e) {
 });
 
 // ============================================================================
-// Editor Visual de Documentos y Plantillas Clínicas (WYSIWYG)
+// Editor Visual de Documentos y Plantillas Clínicas (WYSIWYG) con Redimensionamiento
 // ============================================================================
 window.hosvetEditor = {
+    activeImg: null,
     getContent: function(elementId) {
         const el = document.getElementById(elementId);
         return el ? el.innerHTML : "";
@@ -394,6 +395,7 @@ window.hosvetEditor = {
         const el = document.getElementById(elementId);
         if (el) {
             el.innerHTML = html || "";
+            window.hosvetEditor.initImageResizer(elementId);
         }
     },
     format: function(command, value = null) {
@@ -411,7 +413,6 @@ window.hosvetEditor = {
         const img = document.createElement("img");
         img.src = src;
         img.style.maxWidth = "100%";
-        img.style.maxHeight = "350px";
         img.style.height = "auto";
         img.style.display = "block";
         img.style.margin = "12px auto";
@@ -431,5 +432,230 @@ window.hosvetEditor = {
         } else {
             editor.appendChild(img);
         }
+
+        window.hosvetEditor.initImageResizer(elementId);
+        setTimeout(function() {
+            window.hosvetEditor.selectImage(img);
+        }, 80);
+    },
+    initImageResizer: function(elementId) {
+        const editor = document.getElementById(elementId);
+        if (!editor) return;
+
+        // Ensure overlay elements exist once in document.body
+        let resizerBox = document.getElementById("hosvet-img-resizer-overlay");
+        if (!resizerBox) {
+            resizerBox = document.createElement("div");
+            resizerBox.id = "hosvet-img-resizer-overlay";
+            resizerBox.style.cssText = "position:absolute; display:none; pointer-events:none; z-index:9999; border:2px dashed #0d6efd; box-sizing:border-box;";
+
+            // Corner handles: nw, ne, sw, se
+            const handles = ['nw', 'ne', 'sw', 'se'];
+            handles.forEach(function(pos) {
+                const h = document.createElement("div");
+                h.className = "hosvet-resize-handle";
+                h.dataset.pos = pos;
+                let cursor = (pos === 'nw' || pos === 'se') ? 'nwse-resize' : 'nesw-resize';
+                h.style.cssText = 'position:absolute; width:12px; height:12px; background:#0d6efd; border:2px solid #ffffff; border-radius:50%; box-shadow:0 0 4px rgba(0,0,0,0.4); pointer-events:auto; cursor:' + cursor + ';';
+                if (pos.includes('n')) h.style.top = "-6px";
+                if (pos.includes('s')) h.style.bottom = "-6px";
+                if (pos.includes('w')) h.style.left = "-6px";
+                if (pos.includes('e')) h.style.right = "-6px";
+                resizerBox.appendChild(h);
+            });
+
+            // Floating Mini-Toolbar
+            const toolbar = document.createElement("div");
+            toolbar.id = "hosvet-img-toolbar";
+            toolbar.style.cssText = "position:absolute; top:-40px; left:50%; transform:translateX(-50%); display:flex; gap:3px; background:#212529; padding:4px 8px; border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.35); pointer-events:auto; z-index:10000; white-space:nowrap; align-items:center;";
+            toolbar.innerHTML = [
+                '<span style="color:#adb5bd; font-size:10px; font-weight:bold; margin-right:4px;">TAMAÑO:</span>',
+                '<button type="button" class="btn btn-outline-light btn-xs py-0 px-2" data-act="p25" title="Ajustar al 25% del ancho" style="font-size:11px;">25%</button>',
+                '<button type="button" class="btn btn-outline-light btn-xs py-0 px-2" data-act="p50" title="Ajustar al 50% del ancho" style="font-size:11px;">50%</button>',
+                '<button type="button" class="btn btn-outline-light btn-xs py-0 px-2" data-act="p75" title="Ajustar al 75% del ancho" style="font-size:11px;">75%</button>',
+                '<button type="button" class="btn btn-outline-light btn-xs py-0 px-2" data-act="p100" title="Ajustar al 100% del ancho" style="font-size:11px;">100%</button>',
+                '<span style="border-right:1px solid #495057; height:18px; margin:0 3px;"></span>',
+                '<button type="button" class="btn btn-dark btn-xs py-0 px-2 border border-secondary" data-act="zoomOut" title="Reducir 15%" style="font-size:12px; font-weight:bold;">➖</button>',
+                '<button type="button" class="btn btn-dark btn-xs py-0 px-2 border border-secondary" data-act="zoomIn" title="Aumentar 15%" style="font-size:12px; font-weight:bold;">➕</button>',
+                '<span style="border-right:1px solid #495057; height:18px; margin:0 3px;"></span>',
+                '<button type="button" class="btn btn-dark btn-xs py-0 px-2 border border-secondary" data-act="alignLeft" title="Alinear a la izquierda" style="font-size:11px;">⬅</button>',
+                '<button type="button" class="btn btn-dark btn-xs py-0 px-2 border border-secondary" data-act="alignCenter" title="Centrar imagen" style="font-size:11px;">⏺</button>',
+                '<button type="button" class="btn btn-dark btn-xs py-0 px-2 border border-secondary" data-act="alignRight" title="Alinear a la derecha" style="font-size:11px;">➡</button>',
+                '<span style="border-right:1px solid #495057; height:18px; margin:0 3px;"></span>',
+                '<button type="button" class="btn btn-danger btn-xs py-0 px-2" data-act="remove" title="Eliminar imagen" style="font-size:11px;">🗑</button>'
+            ].join('');
+            resizerBox.appendChild(toolbar);
+            document.body.appendChild(resizerBox);
+
+            // Handle toolbar clicks
+            toolbar.addEventListener('click', function(e) {
+                const btn = e.target.closest('button[data-act]');
+                if (!btn || !window.hosvetEditor.activeImg) return;
+                e.preventDefault();
+                e.stopPropagation();
+
+                const act = btn.dataset.act;
+                const img = window.hosvetEditor.activeImg;
+                const parentEd = img.closest('[contenteditable="true"]');
+                img.style.maxHeight = 'none';
+
+                if (act === 'p25') {
+                    img.style.width = '25%';
+                    img.style.height = 'auto';
+                } else if (act === 'p50') {
+                    img.style.width = '50%';
+                    img.style.height = 'auto';
+                } else if (act === 'p75') {
+                    img.style.width = '75%';
+                    img.style.height = 'auto';
+                } else if (act === 'p100') {
+                    img.style.width = '100%';
+                    img.style.height = 'auto';
+                } else if (act === 'zoomOut') {
+                    const curW = img.offsetWidth;
+                    const newW = Math.max(50, Math.round(curW * 0.85));
+                    img.style.width = newW + 'px';
+                    img.style.height = 'auto';
+                } else if (act === 'zoomIn') {
+                    const curW = img.offsetWidth;
+                    const maxW = parentEd ? (parentEd.clientWidth - 20) : 1000;
+                    const newW = Math.min(maxW, Math.round(curW * 1.15));
+                    img.style.width = newW + 'px';
+                    img.style.height = 'auto';
+                } else if (act === 'alignLeft') {
+                    img.style.display = 'block';
+                    img.style.margin = '10px auto 10px 0';
+                } else if (act === 'alignCenter') {
+                    img.style.display = 'block';
+                    img.style.margin = '10px auto';
+                } else if (act === 'alignRight') {
+                    img.style.display = 'block';
+                    img.style.margin = '10px 0 10px auto';
+                } else if (act === 'remove') {
+                    img.remove();
+                    window.hosvetEditor.hideResizer();
+                    if (parentEd) parentEd.dispatchEvent(new Event('input', { bubbles: true }));
+                    return;
+                }
+
+                window.hosvetEditor.updateResizerPosition();
+                if (parentEd) parentEd.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+
+            // Handle dragging corner handles
+            let isDragging = false;
+            let dragPos = '';
+            let startX = 0;
+            let startW = 0;
+
+            resizerBox.querySelectorAll('.hosvet-resize-handle').forEach(function(h) {
+                h.addEventListener('mousedown', function(e) {
+                    if (!window.hosvetEditor.activeImg) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    isDragging = true;
+                    dragPos = h.dataset.pos;
+                    startX = e.clientX;
+                    startW = window.hosvetEditor.activeImg.offsetWidth;
+
+                    function onDragMove(ev) {
+                        if (!isDragging || !window.hosvetEditor.activeImg) return;
+                        ev.preventDefault();
+
+                        let deltaX = ev.clientX - startX;
+                        if (dragPos.includes('w')) {
+                            deltaX = -deltaX;
+                        }
+
+                        const currentImg = window.hosvetEditor.activeImg;
+                        const parentEd = currentImg.closest('[contenteditable="true"]');
+                        const maxW = parentEd ? (parentEd.clientWidth - 20) : 1200;
+                        let newW = Math.max(50, Math.min(maxW, startW + deltaX));
+
+                        currentImg.style.width = newW + 'px';
+                        currentImg.style.height = 'auto';
+                        currentImg.style.maxHeight = 'none';
+
+                        window.hosvetEditor.updateResizerPosition();
+                    }
+
+                    function onDragEnd() {
+                        if (!isDragging) return;
+                        isDragging = false;
+                        document.removeEventListener('mousemove', onDragMove);
+                        document.removeEventListener('mouseup', onDragEnd);
+                        if (window.hosvetEditor.activeImg) {
+                            window.hosvetEditor.updateResizerPosition();
+                            const parentEd = window.hosvetEditor.activeImg.closest('[contenteditable="true"]');
+                            if (parentEd) parentEd.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    }
+
+                    document.addEventListener('mousemove', onDragMove);
+                    document.addEventListener('mouseup', onDragEnd);
+                });
+            });
+
+            // Global click outside to dismiss
+            document.addEventListener('mousedown', function(e) {
+                if (resizerBox.contains(e.target)) return;
+                const ed = document.getElementById(elementId);
+                if (ed && ed.contains(e.target)) {
+                    if (e.target.tagName !== 'IMG') {
+                        window.hosvetEditor.hideResizer();
+                    }
+                } else {
+                    window.hosvetEditor.hideResizer();
+                }
+            });
+
+            // Window and scroll adjustments
+            window.addEventListener('resize', function() { window.hosvetEditor.updateResizerPosition(); });
+            document.addEventListener('scroll', function() { window.hosvetEditor.updateResizerPosition(); }, true);
+        }
+
+        // Setup image click listeners on editor
+        if (!editor.__hasResizerListener) {
+            editor.__hasResizerListener = true;
+            editor.addEventListener('click', function(e) {
+                if (e.target && e.target.tagName === 'IMG') {
+                    window.hosvetEditor.selectImage(e.target);
+                    e.stopPropagation();
+                } else {
+                    window.hosvetEditor.hideResizer();
+                }
+            });
+
+            editor.addEventListener('scroll', function() { window.hosvetEditor.updateResizerPosition(); });
+            editor.addEventListener('input', function() {
+                if (window.hosvetEditor.activeImg) window.hosvetEditor.updateResizerPosition();
+            });
+        }
+    },
+    selectImage: function(img) {
+        this.activeImg = img;
+        this.updateResizerPosition();
+    },
+    hideResizer: function() {
+        const resizerBox = document.getElementById("hosvet-img-resizer-overlay");
+        if (resizerBox) resizerBox.style.display = 'none';
+        this.activeImg = null;
+    },
+    updateResizerPosition: function() {
+        const resizerBox = document.getElementById("hosvet-img-resizer-overlay");
+        if (!resizerBox) return;
+        if (!this.activeImg || !this.activeImg.isConnected) {
+            resizerBox.style.display = 'none';
+            this.activeImg = null;
+            return;
+        }
+
+        const rect = this.activeImg.getBoundingClientRect();
+        resizerBox.style.display = 'block';
+        resizerBox.style.top = (rect.top + window.scrollY) + 'px';
+        resizerBox.style.left = (rect.left + window.scrollX) + 'px';
+        resizerBox.style.width = rect.width + 'px';
+        resizerBox.style.height = rect.height + 'px';
     }
 };

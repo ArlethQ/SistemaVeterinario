@@ -1162,20 +1162,20 @@ public class ConsultaExternaService : IConsultaExternaService
                 RTRIM(ISNULL(c.pa_movil, '')) AS Celular,
                 RTRIM(ISNULL(c.pa_telefono, '')) AS Telefono,
                 RTRIM(ISNULL(c.pa_direccion, '')) AS Direccion,
-                RTRIM(ISNULL(e.especie_nombre, '')) AS Especie,
-                RTRIM(ISNULL(r.raza_nombre, '')) AS Raza,
+                RTRIM(ISNULL(e.especie_descripcion, '')) AS Especie,
+                RTRIM(ISNULL(r.des_raza, '')) AS Raza,
                 CASE 
                     WHEN UPPER(RTRIM(ISNULL(p.mas_sexo, ''))) = 'M' THEN 'Macho'
                     WHEN UPPER(RTRIM(ISNULL(p.mas_sexo, ''))) = 'H' THEN 'Hembra'
                     ELSE RTRIM(ISNULL(p.mas_sexo, ''))
                 END AS Sexo,
-                p.mas_fechanac AS FechaNacimiento,
+                p.mas_fechanace AS FechaNacimiento,
                 RTRIM(ISNULL(u.user_nombre, 'Médico Veterinario')) AS Medico
             FROM vt_pacientes p
             INNER JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
             LEFT JOIN vt_especie e ON p.mas_especie = e.especie_id
-            LEFT JOIN vt_raza r ON p.mas_raza = r.raza_id
-            LEFT JOIN vt_ordenesatencion o ON p.mas_nhcl = o.ordenAten_nhcl
+            LEFT JOIN vt_razas r ON p.mas_raza = r.id_raza
+            LEFT JOIN vt_ordenAtencion o ON p.mas_nhcl = o.ordenAten_nhcl
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             WHERE p.mas_nhcl = @Nhcl
             ORDER BY o.ordenAten_id DESC", new { Nhcl = nhcl });

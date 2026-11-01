@@ -85,7 +85,7 @@
                 </div>
                 <div class="card-body">
                     <div class="row g-2 mb-3 align-items-end">
-                        <div class="col-md-5">
+                        <div class="col-md-4">
                             <label class="form-label small fw-semibold">Seleccionar Plantilla Oficial</label>
                             <select class="form-select form-select-sm" @bind="FormatoSeleccionadoId" @bind:after="CargarPlantillaFormatoAsync">
                                 <option value="0">-- Seleccione formato institucional --</option>
@@ -107,6 +107,11 @@
                                     }
                                 </optgroup>
                             </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-sm btn-outline-primary w-100 fw-semibold" @onclick="CrearNuevaPlantillaAsync" title="Limpiar y crear una nueva plantilla en blanco">
+                                <i class="bi bi-file-earmark-plus me-1"></i>Nueva Plantilla
+                            </button>
                         </div>
                         <div class="col-md-2">
                             <button class="btn btn-sm btn-outline-warning text-dark w-100 fw-semibold" @onclick="GuardarPlantillaAsync" title="Guarda los cambios de este documento en la plantilla para que se mantengan en el futuro">
@@ -133,9 +138,9 @@
                                 </button>
                             }
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <button class="btn btn-sm btn-primary w-100 fw-semibold" @onclick="GuardarAutorizacionAsync" title="Registra este documento en el historial legal del paciente">
-                                <i class="bi bi-floppy-fill me-1"></i>Guardar Documento
+                                <i class="bi bi-floppy-fill me-1"></i>Guardar Doc
                             </button>
                         </div>
                     </div>
@@ -234,8 +239,17 @@
                              @onblur="SincronizarDesdeEditorVisualAsync">
                         </div>
 
+                        <style>
+                            #editorDocVisual img {
+                                cursor: pointer;
+                                transition: outline 0.15s ease-in-out;
+                            }
+                            #editorDocVisual img:hover {
+                                outline: 2px dashed #0d6efd;
+                            }
+                        </style>
                         <small class="text-muted d-block mt-1">
-                            <i class="bi bi-info-circle me-1"></i>Haga clic directamente en el documento para modificar textos, párrafos, tablas o imágenes antes de guardar.
+                            <i class="bi bi-info-circle me-1"></i>Haga clic en el texto para editarlo. <strong>Haga clic sobre cualquier imagen</strong> para redimensionarla (arrastrando las esquinas o con los botones rápidos 25%, 50%, 100%, ➖, ➕) o alinearla.
                         </small>
                     </div>
 
@@ -479,11 +493,33 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !string.IsNullOrEmpty(NuevaAutorizacion.DetalleHtml))
+        if (firstRender)
         {
             await Task.Delay(50);
-            await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorDocVisual", NuevaAutorizacion.DetalleHtml);
+            if (!string.IsNullOrEmpty(NuevaAutorizacion.DetalleHtml))
+            {
+                await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorDocVisual", NuevaAutorizacion.DetalleHtml);
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("hosvetEditor.initImageResizer", "editorDocVisual");
+            }
         }
+    }
+
+    private async Task CrearNuevaPlantillaAsync()
+    {
+        FormatoSeleccionadoId = 0;
+        NuevaAutorizacion.AutorizacionId = 0;
+        NuevaAutorizacion.Documento = "Nueva Plantilla Personalizada";
+        NuevaAutorizacion.Tipo = "PERSONALIZADO";
+        NuevaAutorizacion.DetalleHtml = "<p><br></p>";
+
+        StateHasChanged();
+        await Task.Delay(40);
+        await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorDocVisual", "<p><br></p>");
+        MensajeAlerta = "Plantilla en blanco preparada. Escriba el título del documento, redacte el contenido o inserte imágenes y haga clic en 'Guardar Plantilla'.";
+        EsErrorAlerta = false;
     }
 
     private async Task CargarPlantillaFormatoAsync()
@@ -648,13 +684,11 @@
             if (ok)
             {
                 Plantillas = await ConsultaService.ObtenerPlantillasFormatosAsync();
-                if (FormatoSeleccionadoId <= 0)
+                var guardada = Plantillas.FirstOrDefault(p => p.FormNombre.Equals(nombrePlantilla, StringComparison.OrdinalIgnoreCase))
+                               ?? Plantillas.LastOrDefault(p => p.EsPersonalizada);
+                if (guardada != null)
                 {
-                    var nueva = Plantillas.FirstOrDefault(p => p.FormNombre.Equals(nombrePlantilla, StringComparison.OrdinalIgnoreCase));
-                    if (nueva != null)
-                    {
-                        FormatoSeleccionadoId = nueva.FormId;
-                    }
+                    FormatoSeleccionadoId = guardada.FormId;
                 }
 
                 MensajeAlerta = $"Plantilla oficial '{nombrePlantilla}' guardada exitosamente. Los próximos documentos generados mantendrán este nuevo formato e imágenes.";
