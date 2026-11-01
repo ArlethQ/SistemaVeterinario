@@ -657,5 +657,67 @@ window.hosvetEditor = {
         resizerBox.style.left = (rect.left + window.scrollX) + 'px';
         resizerBox.style.width = rect.width + 'px';
         resizerBox.style.height = rect.height + 'px';
+    },
+    printDocument: function(title, html) {
+        const printWindow = window.open('', '_blank', 'width=900,height=900');
+        if (!printWindow) {
+            alert('Por favor permita las ventanas emergentes (popups) en su navegador para poder imprimir el documento.');
+            return;
+        }
+
+        printWindow.document.open();
+        printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>${title || 'Documento Clínico'}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.5;
+            color: #212529;
+            margin: 20mm 25mm;
+            padding: 0;
+            background: #fff;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+        }
+        table, th, td {
+            border: 1px solid #adb5bd;
+        }
+        th, td {
+            padding: 6px 10px;
+        }
+        @media print {
+            @page {
+                margin: 15mm 20mm;
+                size: auto;
+            }
+            body {
+                margin: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    ${html || ''}
+    <script>
+        window.onload = function() {
+            setTimeout(function() {
+                window.print();
+            }, 300);
+        };
+    <\/script>
+</body>
+</html>`);
+        printWindow.document.close();
     }
 };

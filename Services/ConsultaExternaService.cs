@@ -54,6 +54,7 @@ public interface IConsultaExternaService
     Task<(bool Ok, string? Mensaje)> EliminarPlantillaFormatoAsync(int formId);
     Task<List<AutorizacionClinicaDto>> ObtenerAutorizacionesPacienteAsync(int nhcl);
     Task<bool> GuardarAutorizacionAsync(AutorizacionClinicaDto dto);
+    Task<bool> ActualizarArchivoAutorizacionAsync(int autorizacionId, string? archivoUrl, string? archivoNombre);
     Task<FormularioAltaMedicaDto> ObtenerFormularioAltaAsync(int idOrden, int nhcl);
     Task<bool> GuardarFormularioAltaAsync(FormularioAltaMedicaDto dto, int idUsuario);
 
@@ -313,6 +314,25 @@ public class ConsultaExternaService : IConsultaExternaService
 
         var lista = await _db.QueryAsync<CatalogoCie10ItemDto>(sql, new { Filtro = filtro?.Trim() ?? "" });
         return lista.ToList();
+    }
+
+    public async Task<bool> ActualizarArchivoAutorizacionAsync(int autorizacionId, string? archivoUrl, string? archivoNombre)
+    {
+        try
+        {
+            const string sql = @"
+                UPDATE vt_autorizaciones
+                SET autorizacion_archivo_url = @ArchivoUrl,
+                    autorizacion_archivo_nombre = @ArchivoNombre
+                WHERE autorizacion_id = @AutorizacionId";
+            await _db.ExecuteAsync(sql, new { AutorizacionId = autorizacionId, ArchivoUrl = archivoUrl, ArchivoNombre = archivoNombre });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar archivo adjunto de autorizacion {AutorizacionId}", autorizacionId);
+            return false;
+        }
     }
 
     public async Task<List<DiagnosticoCie10Dto>> ObtenerDiagnosticosOrdenAsync(int idOrden)
@@ -1243,7 +1263,9 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(a.autorizacion_documento, 'Consentimiento Informado') AS Documento,
                 ISNULL(a.autorizacion_tipo, 'HDEV') AS Tipo,
                 ISNULL(a.autorizacion_detalle, '') AS DetalleHtml,
-                ISNULL(u.user_nombre, 'MÃ©dico') AS NombreMedico
+                ISNULL(u.user_nombre, 'Médico') AS NombreMedico,
+                a.autorizacion_archivo_url AS ArchivoUrl,
+                a.autorizacion_archivo_nombre AS ArchivoNombre
             FROM vt_autorizaciones a
             LEFT JOIN vt_usuarios u ON a.autorizacion_iduser = u.user_numero
             WHERE a.autorizacion_nhcl = @Nhcl

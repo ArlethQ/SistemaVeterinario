@@ -233,6 +233,8 @@ public class AutorizacionClinicaDto
     public string Tipo { get; set; } = "HDEV";
     public string DetalleHtml { get; set; } = string.Empty;
     public string NombreMedico { get; set; } = string.Empty;
+    public string? ArchivoUrl { get; set; }
+    public string? ArchivoNombre { get; set; }
 }
 
 public class FormularioAltaMedicaDto

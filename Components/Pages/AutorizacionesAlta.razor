@@ -147,7 +147,7 @@
 
                     <div class="mb-2">
                         <label class="form-label small fw-semibold">Título del Documento</label>
-                        <input type="text" class="form-control form-control-sm" @bind="NuevaAutorizacion.Documento" />
+                        <input type="text" id="docTituloInput" class="form-control form-control-sm" @bind="NuevaAutorizacion.Documento" />
                     </div>
 
                     <div class="mb-3">
@@ -229,6 +229,12 @@
                             <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('removeFormat')" title="Limpiar formato">
                                 <i class="bi bi-eraser"></i>
                             </button>
+
+                            <span class="vr mx-1 my-1"></span>
+
+                            <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none text-dark fw-semibold" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.printDocument(document.getElementById('docTituloInput')?.value, window.hosvetEditor.getContent('editorDocVisual'))" title="Imprimir este documento o guardar como PDF">
+                                <i class="bi bi-printer-fill text-dark me-1"></i>Imprimir / PDF
+                            </button>
                         </div>
 
                         <!-- Documento con edición visual directa -->
@@ -253,36 +259,7 @@
                         </small>
                     </div>
 
-                    <h6 class="fw-bold text-secondary small border-bottom pb-1">Historial de Autorizaciones del Paciente (@AutorizacionesEmitidas.Count)</h6>
-                    <div class="table-responsive" style="max-height: 180px; overflow-y: auto;">
-                        <table class="table table-sm table-hover small mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Fecha</th>
-                                    <th>Documento</th>
-                                    <th>Médico</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var a in AutorizacionesEmitidas)
-                                {
-                                    <tr>
-                                        <td>#@a.AutorizacionId</td>
-                                        <td>@a.Fecha.ToString("yyyy-MM-dd")</td>
-                                        <td class="fw-semibold">@a.Documento</td>
-                                        <td>@a.NombreMedico</td>
-                                        <td class="text-end">
-                                            <button class="btn btn-xs btn-outline-primary py-0 px-2" @onclick="() => CargarAutorizacionExistenteAsync(a)">
-                                                Ver
-                                            </button>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
+
                 </div>
             </div>
         </div>
@@ -323,6 +300,119 @@
                             <textarea class="form-control form-control-sm" rows="3" @bind="AltaForm.Medicacion"
                                       placeholder="Resumen de analgésicos/antibióticos en casa y fecha de control o retiro de puntos..."></textarea>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fila Completa Horizontal: Historial de Autorizaciones y Documentos Firmados (Abarca todo el ancho) -->
+        <div class="col-12 mt-2">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center py-2">
+                    <span>
+                        <i class="bi bi-clock-history me-1"></i>3. Historial de Autorizaciones y Documentos Firmados del Paciente (@AutorizacionesEmitidas.Count)
+                    </span>
+                    <span class="badge bg-primary-subtle text-primary border fw-normal">
+                        Expediente Legal del Paciente | C.I.: @(Paciente?.ClienteCedula ?? "-")
+                    </span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 small">
+                            <thead class="table-light text-secondary">
+                                <tr>
+                                    <th style="width: 70px;" class="ps-3">ID</th>
+                                    <th style="width: 140px;">Fecha y Hora</th>
+                                    <th>Documento / Consentimiento</th>
+                                    <th style="width: 170px;">Médico Emisor</th>
+                                    <th style="width: 120px;">Orden / Tipo</th>
+                                    <th style="min-width: 310px;">Documento Firmado por Propietario (Físico/Escaneo)</th>
+                                    <th style="width: 210px;" class="text-end pe-3">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!AutorizacionesEmitidas.Any())
+                                {
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted py-4">
+                                            <i class="bi bi-folder2-open display-6 d-block mb-1 text-secondary opacity-50"></i>
+                                            No se han emitido autorizaciones ni consentimientos para este paciente todavía.
+                                        </td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var a in AutorizacionesEmitidas)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold text-secondary ps-3">#@a.AutorizacionId</td>
+                                            <td>
+                                                <i class="bi bi-calendar-event me-1 text-muted"></i>@a.Fecha.ToString("yyyy-MM-dd HH:mm")
+                                            </td>
+                                            <td>
+                                                <div class="fw-semibold text-dark">
+                                                    <i class="bi bi-file-earmark-medical text-primary me-1"></i>@a.Documento
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <i class="bi bi-person-badge me-1 text-muted"></i>@a.NombreMedico
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-dark border">
+                                                    Ord #@a.Orden
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(a.ArchivoUrl))
+                                                {
+                                                    <div class="d-flex align-items-center gap-1">
+                                                        <a href="@a.ArchivoUrl" target="_blank" class="btn btn-xs btn-outline-success py-1 px-2 d-inline-flex align-items-center text-truncate shadow-sm" style="max-width: 240px;" title="Ver o descargar archivo firmado (@a.ArchivoNombre)">
+                                                            @if (a.ArchivoNombre?.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) == true)
+                                                            {
+                                                                <i class="bi bi-file-earmark-pdf-fill text-danger me-1"></i>
+                                                            }
+                                                            else if (a.ArchivoNombre?.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) == true || a.ArchivoNombre?.EndsWith(".doc", StringComparison.OrdinalIgnoreCase) == true)
+                                                            {
+                                                                <i class="bi bi-file-earmark-word-fill text-primary me-1"></i>
+                                                            }
+                                                            else
+                                                            {
+                                                                <i class="bi bi-file-earmark-image-fill text-success me-1"></i>
+                                                            }
+                                                            <span class="text-truncate">@(string.IsNullOrEmpty(a.ArchivoNombre) ? "Ver Firmado" : a.ArchivoNombre)</span>
+                                                        </a>
+                                                        <label class="btn btn-xs btn-outline-secondary py-1 px-2 mb-0" style="cursor: pointer;" title="Reemplazar archivo firmado">
+                                                            <i class="bi bi-arrow-repeat"></i>
+                                                            <InputFile OnChange="@(e => SubirArchivoFirmadoAsync(e, a))" accept="image/*,application/pdf,.doc,.docx" style="display: none;" />
+                                                        </label>
+                                                        <button class="btn btn-xs btn-outline-danger py-1 px-2" @onclick="() => EliminarArchivoFirmadoAsync(a)" title="Eliminar archivo firmado adjunto">
+                                                            <i class="bi bi-trash3"></i>
+                                                        </button>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <label class="btn btn-xs btn-outline-secondary py-1 px-2 mb-0 d-inline-flex align-items-center fw-semibold text-dark shadow-sm" style="cursor: pointer;" title="Subir foto, escaneo PDF o Word con la firma del cliente">
+                                                        <i class="bi bi-cloud-arrow-up-fill text-primary me-1"></i>Subir Firmado (PDF, Foto, DOCX)
+                                                        <InputFile OnChange="@(e => SubirArchivoFirmadoAsync(e, a))" accept="image/*,application/pdf,.doc,.docx" style="display: none;" />
+                                                    </label>
+                                                }
+                                            </td>
+                                            <td class="text-end pe-3">
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-xs btn-outline-primary py-1 px-2" @onclick="() => CargarAutorizacionExistenteAsync(a)" title="Cargar y ver en el editor de arriba">
+                                                        <i class="bi bi-pencil-square me-1"></i>Ver en Editor
+                                                    </button>
+                                                    <button class="btn btn-xs btn-outline-dark py-1 px-2" @onclick="() => ImprimirDocumentoAsync(a)" title="Imprimir o guardar directamente en PDF">
+                                                        <i class="bi bi-printer-fill me-1"></i>Imprimir / PDF
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -819,6 +909,111 @@
         catch (Exception ex)
         {
             MensajeAlerta = $"Error al generar el PDF de alta: {ex.Message}";
+            EsErrorAlerta = true;
+        }
+    }
+
+    private async Task ImprimirDocumentoAsync(AutorizacionClinicaDto item)
+    {
+        try
+        {
+            string titulo = string.IsNullOrWhiteSpace(item.Documento) ? "Documento Clínico" : item.Documento;
+            string html = item.DetalleHtml;
+            if (string.IsNullOrWhiteSpace(html))
+            {
+                MensajeAlerta = "El documento seleccionado no contiene texto para imprimir.";
+                EsErrorAlerta = true;
+                return;
+            }
+            await JS.InvokeVoidAsync("hosvetEditor.printDocument", titulo, html);
+        }
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al enviar a impresión: {ex.Message}";
+            EsErrorAlerta = true;
+        }
+    }
+
+    private async Task SubirArchivoFirmadoAsync(InputFileChangeEventArgs e, AutorizacionClinicaDto item)
+    {
+        try
+        {
+            var file = e.File;
+            if (file == null) return;
+
+            if (file.Size > 25 * 1024 * 1024)
+            {
+                MensajeAlerta = "El archivo firmado no puede superar los 25MB.";
+                EsErrorAlerta = true;
+                return;
+            }
+
+            string uploadsFolder = Path.Combine(Environment.WebRootPath, "archivosPacientes", item.Nhcl.ToString(), "autorizaciones");
+            if (!Directory.Exists(uploadsFolder))
+            {
+                Directory.CreateDirectory(uploadsFolder);
+            }
+
+            string ext = Path.GetExtension(file.Name).ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(ext)) ext = ".pdf";
+            string safeDoc = System.Text.RegularExpressions.Regex.Replace(item.Documento, @"[^a-zA-Z0-9_\-]", "_");
+            string fileName = $"Firmado_{item.AutorizacionId}_{safeDoc}_{DateTime.Now:yyyyMMddHHmmss}{ext}";
+            string filePath = Path.Combine(uploadsFolder, fileName);
+
+            await using (var stream = file.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024))
+            await using (var fs = new FileStream(filePath, FileMode.Create))
+            {
+                await stream.CopyToAsync(fs);
+            }
+
+            string fileUrl = $"/archivosPacientes/{item.Nhcl}/autorizaciones/{fileName}";
+            var ok = await ConsultaService.ActualizarArchivoAutorizacionAsync(item.AutorizacionId, fileUrl, file.Name);
+            if (ok)
+            {
+                item.ArchivoUrl = fileUrl;
+                item.ArchivoNombre = file.Name;
+                MensajeAlerta = $"Documento firmado '{file.Name}' subido y vinculado exitosamente a la autorización #{item.AutorizacionId}.";
+                EsErrorAlerta = false;
+            }
+            else
+            {
+                MensajeAlerta = "No se pudo actualizar el registro del archivo en la base de datos.";
+                EsErrorAlerta = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al subir archivo firmado: {ex.Message}";
+            EsErrorAlerta = true;
+        }
+    }
+
+    private async Task EliminarArchivoFirmadoAsync(AutorizacionClinicaDto item)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(item.ArchivoUrl))
+            {
+                string rel = item.ArchivoUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+                string physicalPath = Path.Combine(Environment.WebRootPath, rel);
+                if (File.Exists(physicalPath))
+                {
+                    File.Delete(physicalPath);
+                }
+            }
+
+            var ok = await ConsultaService.ActualizarArchivoAutorizacionAsync(item.AutorizacionId, null, null);
+            if (ok)
+            {
+                item.ArchivoUrl = null;
+                item.ArchivoNombre = null;
+                MensajeAlerta = $"Archivo firmado de la autorización #{item.AutorizacionId} eliminado correctamente.";
+                EsErrorAlerta = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            MensajeAlerta = $"Error al eliminar archivo firmado: {ex.Message}";
             EsErrorAlerta = true;
         }
     }
