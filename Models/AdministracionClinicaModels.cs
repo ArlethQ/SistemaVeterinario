@@ -59,6 +59,8 @@ public sealed class HistorialPacienteItemDto
     public string Codigo { get; set; } = string.Empty;
     public string Descripcion { get; set; } = string.Empty;
     public int NumeroVeces { get; set; }
+    public DateTime Fecha { get; set; } = DateTime.Now;
+    public int IdOrden { get; set; }
 }
 
 public sealed class MedicionCrecimientoDto

@@ -96,38 +96,251 @@
     }
     else if (_tab == "resumen")
     {
-        <div class="row g-3">
-            @foreach (var grupo in _historial.GroupBy(x => x.Categoria))
-            {
-                <div class="col-lg-6">
-                    <div class="card border-0 shadow-sm h-100">
-                        <div class="card-header bg-white fw-bold">@grupo.Key</div>
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover mb-0 align-middle">
-                                <thead class="table-light">
-                                    <tr><th>Descripción</th><th class="text-end">Registros</th></tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var x in grupo.OrderByDescending(x => x.NumeroVeces))
-                                    {
-                                        <tr>
-                                            <td>
-                                                @if (!string.IsNullOrWhiteSpace(x.Codigo))
-                                                {
-                                                    <code class="me-1">@x.Codigo</code>
-                                                }
-                                                @x.Descripcion
-                                            </td>
-                                            <td class="text-end fw-semibold">@x.NumeroVeces</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
+        <!-- BARRA DE FILTROS POR FECHA Y BÚSQUEDA -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-2 col-6">
+                        <label class="form-label small fw-semibold text-muted mb-1">
+                            <i class="bi bi-calendar3 me-1"></i>Fecha Desde:
+                        </label>
+                        <input type="date" class="form-control form-control-sm" @bind="_filtroDesde" />
+                    </div>
+                    <div class="col-md-2 col-6">
+                        <label class="form-label small fw-semibold text-muted mb-1">
+                            <i class="bi bi-calendar3 me-1"></i>Fecha Hasta:
+                        </label>
+                        <input type="date" class="form-control form-control-sm" @bind="_filtroHasta" />
+                    </div>
+                    <div class="col-md-3 col-12">
+                        <label class="form-label small fw-semibold text-muted mb-1">
+                            <i class="bi bi-search me-1"></i>Buscar en historial:
+                        </label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" placeholder="Buscar medicamento, diagnóstico..." @bind="_filtroTexto" @bind:event="oninput" />
+                            @if (!string.IsNullOrWhiteSpace(_filtroTexto))
+                            {
+                                <button class="btn btn-outline-secondary" type="button" @onclick='() => _filtroTexto = ""'>
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-12">
+                        <label class="form-label small fw-semibold text-muted mb-1">Filtros rápidos:</label>
+                        <div class="btn-group btn-group-sm w-100" role="group">
+                            <button type="button" class="btn btn-outline-secondary py-1 @(!_filtroDesde.HasValue && !_filtroHasta.HasValue ? "active fw-semibold" : "")" @onclick='() => FiltrarRangoRapido("todos")'>
+                                Todos
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary py-1" @onclick='() => FiltrarRangoRapido("ano")'>
+                                Este año
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary py-1" @onclick='() => FiltrarRangoRapido("6meses")'>
+                                6 meses
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary py-1" @onclick='() => FiltrarRangoRapido("mes")'>
+                                Este mes
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-12 text-md-end">
+                        <label class="form-label small fw-semibold text-muted mb-1 d-none d-md-block">Vista:</label>
+                        <div class="btn-group btn-group-sm w-100" role="group">
+                            <button type="button" class="btn @(_modoVistaResumen == "categorias" ? "btn-primary" : "btn-outline-primary") py-1" @onclick='() => _modoVistaResumen = "categorias"' title="Vista agrupada por tarjetas de categorías">
+                                <i class="bi bi-grid-fill me-1"></i>Categorías
+                            </button>
+                            <button type="button" class="btn @(_modoVistaResumen == "cronologico" ? "btn-primary" : "btn-outline-primary") py-1" @onclick='() => _modoVistaResumen = "cronologico"' title="Vista cronológica día por día">
+                                <i class="bi bi-clock-history me-1"></i>Cronológico
+                            </button>
                         </div>
                     </div>
                 </div>
-            }
+
+                @if (_filtroDesde.HasValue || _filtroHasta.HasValue || !string.IsNullOrWhiteSpace(_filtroTexto))
+                {
+                    <div class="mt-2 pt-2 border-top d-flex flex-wrap justify-content-between align-items-center small text-muted">
+                        <span>
+                            <i class="bi bi-funnel-fill text-primary me-1"></i>
+                            Filtro aplicado:
+                            @if (_filtroDesde.HasValue && _filtroHasta.HasValue)
+                            {
+                                <span class="badge bg-primary-subtle text-primary border me-1">@_filtroDesde.Value.ToString("yyyy-MM-dd") al @_filtroHasta.Value.ToString("yyyy-MM-dd")</span>
+                            }
+                            else if (_filtroDesde.HasValue)
+                            {
+                                <span class="badge bg-primary-subtle text-primary border me-1">Desde @_filtroDesde.Value.ToString("yyyy-MM-dd")</span>
+                            }
+                            else if (_filtroHasta.HasValue)
+                            {
+                                <span class="badge bg-primary-subtle text-primary border me-1">Hasta @_filtroHasta.Value.ToString("yyyy-MM-dd")</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_filtroTexto))
+                            {
+                                <span class="badge bg-secondary-subtle text-secondary border me-1">Texto: "@_filtroTexto"</span>
+                            }
+                            — <strong>@HistorialFiltrado.Count()</strong> registros en este período
+                        </span>
+                        <button class="btn btn-link btn-sm text-decoration-none p-0 text-danger" @onclick='() => FiltrarRangoRapido("todos")'>
+                            <i class="bi bi-x-circle me-1"></i>Restablecer filtros
+                        </button>
+                    </div>
+                }
+            </div>
         </div>
+
+        @if (_modoVistaResumen == "categorias")
+        {
+            <div class="row g-3">
+                @foreach (var grupo in CategoriasDisponibles)
+                {
+                    var itemsGrupo = HistorialFiltrado.Where(x => x.Categoria == grupo).ToList();
+                    var itemsAgrupados = itemsGrupo
+                        .GroupBy(x => new { x.Codigo, x.Descripcion })
+                        .Select(g => new {
+                            Codigo = g.Key.Codigo,
+                            Descripcion = g.Key.Descripcion,
+                            NumeroVeces = g.Count(),
+                            UltimaFecha = g.Max(x => x.Fecha),
+                            Fechas = g.Select(x => x.Fecha).OrderByDescending(f => f).Distinct().ToList(),
+                            Ordenes = g.Select(x => x.IdOrden).Where(o => o > 0).Distinct().ToList()
+                        })
+                        .OrderByDescending(x => x.UltimaFecha)
+                        .ThenByDescending(x => x.NumeroVeces)
+                        .ToList();
+
+                    <div class="col-lg-6">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                                <span>
+                                    @ObtenerIconoCategoria(grupo) @grupo
+                                </span>
+                                <span class="badge bg-light text-muted border">
+                                    @itemsGrupo.Count registros
+                                </span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0 align-middle">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Descripción</th>
+                                            <th style="width: 140px;">Fecha</th>
+                                            <th style="width: 80px;" class="text-end">Veces</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if (!itemsAgrupados.Any())
+                                        {
+                                            <tr>
+                                                <td colspan="3" class="text-center text-muted py-3 small">
+                                                    No se registran @grupo.ToLower() en el rango de fechas seleccionado.
+                                                </td>
+                                            </tr>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var x in itemsAgrupados)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        @if (!string.IsNullOrWhiteSpace(x.Codigo))
+                                                        {
+                                                            <code class="me-1 text-danger">@x.Codigo</code>
+                                                        }
+                                                        <span class="fw-semibold text-dark">@x.Descripcion</span>
+                                                        @if (x.Ordenes.Any())
+                                                        {
+                                                            <span class="text-muted d-block small" style="font-size: 0.75rem;">
+                                                                Ord: @string.Join(", ", x.Ordenes.Select(o => $"#{o}"))
+                                                            </span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-light text-dark border">
+                                                            <i class="bi bi-calendar-event me-1 text-primary"></i>@x.UltimaFecha.ToString("yyyy-MM-dd")
+                                                        </span>
+                                                        @if (x.Fechas.Count > 1)
+                                                        {
+                                                            <span class="badge bg-info-subtle text-info border ms-1" title="@string.Join(", ", x.Fechas.Select(f => f.ToString("yyyy-MM-dd")))">
+                                                                +@(x.Fechas.Count - 1)
+                                                            </span>
+                                                        }
+                                                    </td>
+                                                    <td class="text-end fw-bold text-primary">@x.NumeroVeces</td>
+                                                </tr>
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <!-- VISTA CRONOLÓGICA DÍA POR DÍA -->
+            @if (!HistorialFiltrado.Any())
+            {
+                <div class="alert alert-light border text-center py-4 my-2">
+                    <i class="bi bi-calendar-x fs-3 text-muted d-block mb-1"></i>
+                    <h6 class="text-muted fw-semibold">No se encontraron atenciones ni procedimientos en este período.</h6>
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var fechaGrupo in HistorialFiltrado.GroupBy(x => x.Fecha.Date).OrderByDescending(g => g.Key))
+                    {
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center py-2">
+                                <span class="fw-bold text-dark">
+                                    <i class="bi bi-calendar2-check-fill text-primary me-2"></i>@fechaGrupo.Key.ToString("dddd, dd 'de' MMMM 'de' yyyy", new System.Globalization.CultureInfo("es-ES")).ToUpperInvariant()
+                                </span>
+                                <span class="badge bg-light text-dark border">
+                                    @fechaGrupo.Count() @(fechaGrupo.Count() == 1 ? "registro realizado" : "registros realizados") este día
+                                </span>
+                            </div>
+                            <div class="card-body p-2">
+                                <div class="row g-2">
+                                    @foreach (var subGrupo in fechaGrupo.GroupBy(x => x.Categoria))
+                                    {
+                                        <div class="col-md-6">
+                                            <div class="p-2 border rounded bg-light h-100">
+                                                <div class="d-flex align-items-center gap-1 mb-2 pb-1 border-bottom">
+                                                    <span class="badge @ObtenerBadgeColorCategoria(subGrupo.Key)">
+                                                        @ObtenerIconoCategoria(subGrupo.Key) @subGrupo.Key
+                                                    </span>
+                                                    <small class="text-muted ms-auto">@subGrupo.Count() @(subGrupo.Count() == 1 ? "ítem" : "ítems")</small>
+                                                </div>
+                                                <ul class="list-unstyled mb-0 small">
+                                                    @foreach (var item in subGrupo)
+                                                    {
+                                                        <li class="py-1 border-bottom border-light-subtle d-flex justify-content-between align-items-center">
+                                                            <div>
+                                                                @if (!string.IsNullOrWhiteSpace(item.Codigo))
+                                                                {
+                                                                    <code class="me-1">@item.Codigo</code>
+                                                                }
+                                                                <span>@item.Descripcion</span>
+                                                            </div>
+                                                            @if (item.IdOrden > 0)
+                                                            {
+                                                                <span class="badge bg-white text-muted border ms-2">Ord #@item.IdOrden</span>
+                                                            }
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
     }
     else if (_tab == "crecimiento")
     {
@@ -424,6 +637,89 @@
 
     private PacienteResumenCrecimientoDto? _pacienteInfo;
     private List<HistorialPacienteItemDto> _historial = [];
+
+    // Filtros de fecha y búsqueda para Resumen Clínico
+    private DateTime? _filtroDesde;
+    private DateTime? _filtroHasta;
+    private string _filtroTexto = string.Empty;
+    private string _modoVistaResumen = "categorias"; // "categorias" o "cronologico"
+
+    private static readonly string[] CategoriasDisponibles = new[]
+    {
+        "Diagnósticos", "Medicamentos", "Insumos", "Fisioterapia", "Imagenología", "Procedimientos", "Laboratorio"
+    };
+
+    private IEnumerable<HistorialPacienteItemDto> HistorialFiltrado
+    {
+        get
+        {
+            var q = _historial.AsEnumerable();
+            if (_filtroDesde.HasValue)
+            {
+                q = q.Where(x => x.Fecha.Date >= _filtroDesde.Value.Date);
+            }
+            if (_filtroHasta.HasValue)
+            {
+                q = q.Where(x => x.Fecha.Date <= _filtroHasta.Value.Date);
+            }
+            if (!string.IsNullOrWhiteSpace(_filtroTexto))
+            {
+                var term = _filtroTexto.Trim();
+                q = q.Where(x => x.Descripcion.Contains(term, StringComparison.OrdinalIgnoreCase)
+                              || (!string.IsNullOrEmpty(x.Codigo) && x.Codigo.Contains(term, StringComparison.OrdinalIgnoreCase)));
+            }
+            return q;
+        }
+    }
+
+    private void FiltrarRangoRapido(string opcion)
+    {
+        var hoy = DateTime.Today;
+        switch (opcion)
+        {
+            case "mes":
+                _filtroDesde = new DateTime(hoy.Year, hoy.Month, 1);
+                _filtroHasta = hoy;
+                break;
+            case "ano":
+                _filtroDesde = new DateTime(hoy.Year, 1, 1);
+                _filtroHasta = hoy;
+                break;
+            case "6meses":
+                _filtroDesde = hoy.AddMonths(-6);
+                _filtroHasta = hoy;
+                break;
+            default: // "todos"
+                _filtroDesde = null;
+                _filtroHasta = null;
+                _filtroTexto = string.Empty;
+                break;
+        }
+    }
+
+    private static string ObtenerIconoCategoria(string cat) => cat switch
+    {
+        "Diagnósticos" => "🩺",
+        "Medicamentos" => "💊",
+        "Insumos" => "📦",
+        "Fisioterapia" => "🩹",
+        "Imagenología" => "🩻",
+        "Procedimientos" => "🔬",
+        "Laboratorio" => "🧪",
+        _ => "📋"
+    };
+
+    private static string ObtenerBadgeColorCategoria(string cat) => cat switch
+    {
+        "Diagnósticos" => "bg-danger",
+        "Medicamentos" => "bg-primary",
+        "Insumos" => "bg-info text-dark",
+        "Fisioterapia" => "bg-success",
+        "Imagenología" => "bg-warning text-dark",
+        "Procedimientos" => "bg-dark",
+        "Laboratorio" => "bg-secondary",
+        _ => "bg-secondary"
+    };
     private List<MedicionCrecimientoDto> _mediciones = [];
     private List<ArchivoPaciente> _archivos = [];
 
