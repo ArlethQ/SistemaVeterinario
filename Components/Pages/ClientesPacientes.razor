@@ -25,11 +25,8 @@
             </div>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-sm action-new-owner" @onclick="NuevoCliente">
-                <i class="bi bi-person-plus-fill me-1"></i>+ Nuevo propietario
-            </button>
-            <button class="btn btn-sm action-new-patient" @onclick="NuevoPacienteDesdeEncabezadoAsync">
-                <i class="bi bi-heart-pulse-fill me-1"></i>+ Nuevo paciente
+            <button class="btn btn-sm action-register-all" @onclick="IniciarRegistroCompleto">
+                <i class="bi bi-person-plus-fill me-1"></i>+ Registrar
             </button>
             <a href="/admision/ordenes" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-clipboard2-plus me-1"></i>Ir a Recepción / Órdenes
@@ -80,8 +77,27 @@
     {
         <div class="owner-editor-backdrop" @onclick="CancelarEdicionCliente"></div>
         <aside class="owner-editor inline-panel">
-            <div class="owner-editor-title"><span>Nuevo propietario</span><button class="btn-close" @onclick="CancelarEdicionCliente"></button></div>
-            <div class="owner-editor-summary new-owner-summary"><div class="summary-person-icon"><i class="bi bi-person-plus"></i></div><div><strong>Registrar propietario</strong><small>Complete la información personal y de contacto</small></div></div>
+            <div class="owner-editor-title">
+                <span>
+                    @if (_flujoRegistroCompleto)
+                    {
+                        <span class="badge bg-primary me-2">Paso 1 de 2</span>
+                        <span>Datos del Propietario</span>
+                    }
+                    else
+                    {
+                        <span>Nuevo propietario</span>
+                    }
+                </span>
+                <button class="btn-close" @onclick="CancelarEdicionCliente"></button>
+            </div>
+            <div class="owner-editor-summary new-owner-summary">
+                <div class="summary-person-icon"><i class="bi bi-person-plus"></i></div>
+                <div>
+                    <strong>@(_flujoRegistroCompleto ? "Registro integral: Propietario y Paciente" : "Registrar propietario")</strong>
+                    <small>@(_flujoRegistroCompleto ? "Complete los datos del propietario; a continuación registrará los datos del animal" : "Complete la información personal y de contacto")</small>
+                </div>
+            </div>
             <div class="editor-tabs"><span class="active">Información</span><span>Observaciones</span><span>Historial</span></div>
             <div class="card-body editor-form">
                 @FormularioCliente
@@ -229,7 +245,29 @@
         <div class="patient-modal-backdrop" @onclick="CancelarEdicionMascota"></div>
         <section class="patient-modal" role="dialog" aria-modal="true" aria-label="Ficha del paciente">
             <header class="patient-modal-header">
-                <div><small>@(_editandoMascotaNhcl == 0 ? "NUEVO PACIENTE" : $"NHCL #{_editandoMascotaNhcl}")</small><h5>@(_editandoMascotaNhcl == 0 ? "Agregar paciente" : "Ver y editar paciente")</h5></div>
+                <div>
+                    <small>
+                        @if (_flujoRegistroCompleto)
+                        {
+                            <span class="badge bg-success me-1">PASO 2 DE 2</span>
+                            <span>DATOS DE LA MASCOTA</span>
+                        }
+                        else
+                        {
+                            @(_editandoMascotaNhcl == 0 ? "NUEVO PACIENTE" : $"NHCL #{_editandoMascotaNhcl}")
+                        }
+                    </small>
+                    <h5>
+                        @if (_flujoRegistroCompleto)
+                        {
+                            <span>Registrar paciente para @_clienteEditando.NombreCompleto</span>
+                        }
+                        else
+                        {
+                            @(_editandoMascotaNhcl == 0 ? "Agregar paciente" : "Ver y editar paciente")
+                        }
+                    </h5>
+                </div>
                 <button type="button" class="modal-close" title="Cerrar" @onclick="CancelarEdicionMascota">×</button>
             </header>
             <div class="patient-modal-body">@FormularioMascota</div>
@@ -261,6 +299,7 @@
     private List<CatalogoItemGenericoDto> _provincias = new();
     private List<CatalogoItemGenericoDto> _ciudades = new();
 
+    private bool _flujoRegistroCompleto;
     private ClienteDto? _clienteSeleccionado;
     private ClienteDto _clienteEditando = new() { PaDocumento = "CEDULA" };
     private PacienteMascotaDto _mascotaEditando = new();
@@ -437,12 +476,14 @@
             _clienteExpandido = cli.PaCodigo;
             await CargarPacientesClienteAsync(cli.PaCodigo);
         }
+        _flujoRegistroCompleto = false;
         CargarClienteEnFormulario(cli);
         _editandoClienteId = cli.PaCodigo;
     }
 
     private void CancelarEdicionCliente()
     {
+        _flujoRegistroCompleto = false;
         _editandoClienteId = null;
     }
 
@@ -515,6 +556,12 @@
         ValidarMovilEnVivo(_clienteEditando.PaMovil);
         _errorEmail = null;
         ValidarTelefonoEnVivo(_clienteEditando.PaTelefono);
+    }
+
+    private void IniciarRegistroCompleto()
+    {
+        _flujoRegistroCompleto = true;
+        NuevoCliente();
     }
 
     private void NuevoCliente()
@@ -837,7 +884,16 @@
             _clienteExpandido = idGuardado;
             await CargarPacientesClienteAsync(idGuardado);
             _esError = false;
-            _mensajeAlerta = $"Propietario #{idGuardado} ({_clienteEditando.NombreCompleto}) guardado exitosamente en la base de datos.";
+
+            if (_flujoRegistroCompleto)
+            {
+                await NuevaMascotaAsync(idGuardado, "M");
+                _mensajeAlerta = $"Propietario guardado exitosamente. Ahora ingrese los datos del paciente.";
+            }
+            else
+            {
+                _mensajeAlerta = $"Propietario #{idGuardado} ({_clienteEditando.NombreCompleto}) guardado exitosamente en la base de datos.";
+            }
         }
         catch (DocumentoDuplicadoException ex)
         {
@@ -876,6 +932,7 @@
 
     private async Task AgregarMascotaDesdeFilaAsync(ClienteDto cli)
     {
+        _flujoRegistroCompleto = false;
         _clienteExpandido = cli.PaCodigo;
         await CargarPacientesClienteAsync(cli.PaCodigo);
         await NuevaMascotaAsync(cli.PaCodigo, "M");
@@ -909,6 +966,11 @@
 
     private void CancelarEdicionMascota()
     {
+        if (_flujoRegistroCompleto)
+        {
+            _flujoRegistroCompleto = false;
+            _mensajeAlerta = $"El propietario #{_clienteEditando.PaCodigo} ({_clienteEditando.NombreCompleto}) fue registrado exitosamente. Puede registrarle mascotas en cualquier momento con el botón 'Agregar mascota'.";
+        }
         _editandoMascotaNhcl = null;
         _fotoMascota = null;
         _fotoMascotaPreview = null;
@@ -1085,7 +1147,16 @@
             await CargarPacientesClienteAsync(_mascotaEditando.MasIdCliente);
             _editandoMascotaNhcl = null;
             _esError = false;
-            _mensajeAlerta = $"Paciente NHCL #{nhcl} ({_mascotaEditando.MasNombre}) guardado correctamente en la base de datos.";
+
+            if (_flujoRegistroCompleto)
+            {
+                _flujoRegistroCompleto = false;
+                _mensajeAlerta = $"¡Registro completado! Propietario #{_mascotaEditando.MasIdCliente} ({_clienteEditando.NombreCompleto}) y paciente '{_mascotaEditando.MasNombre}' (NHCL #{nhcl}) registrados exitosamente.";
+            }
+            else
+            {
+                _mensajeAlerta = $"Paciente NHCL #{nhcl} ({_mascotaEditando.MasNombre}) guardado correctamente en la base de datos.";
+            }
         }
         catch (Exception ex)
         {
@@ -1273,7 +1344,14 @@
                             <div class="d-flex justify-content-end gap-2 mt-3">
                                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelarEdicionCliente">Cancelar</button>
                                 <button type="submit" class="btn btn-primary btn-sm">
-                                    <i class="bi bi-save me-1"></i>Guardar Propietario
+                                    @if (_flujoRegistroCompleto)
+                                    {
+                                        <span>Siguiente: Registrar Paciente</span><i class="bi bi-arrow-right-circle-fill ms-1"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-save me-1"></i><span>Guardar Propietario</span>
+                                    }
                                 </button>
                             </div>
                         </EditForm>
