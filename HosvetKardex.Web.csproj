@@ -4,6 +4,10 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <CompressionEnabled>false</CompressionEnabled>
+    <!-- El modulo se compila mediante su ProjectReference; no debe compilarse
+         nuevamente como parte del proyecto web principal. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Modules\FacturacionNumerica\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,6 +18,11 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.*" />
     <PackageReference Include="QRCoder" Version="1.8.1" />
     <PackageReference Include="QuestPDF" Version="2026.9.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Modules\FacturacionNumerica\Simetric.csproj"
+                      AdditionalProperties="CompressionEnabled=false" />
   </ItemGroup>
 
 </Project>

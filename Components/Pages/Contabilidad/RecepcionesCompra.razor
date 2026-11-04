@@ -1,0 +1,809 @@
+@page "/e-contax/compras/recepciones"
+@page "/e-contax/compras/recepciones/nueva"
+@using System.Net.Http.Json
+@using System.Security.Claims
+@using System.Text.Json
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
+@using Simetric.DTOs.EContax
+@using Simetric.Services
+@inject HttpClient Http
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+@inject ISimpleExcelExportService ExcelExportService
+
+<PageTitle>Recepciones de compra | E-Contax</PageTitle>
+<link rel="stylesheet" href="/css/econtax-compras.css?v=20261023-compras-buttons" />
+
+<div class="container-fluid py-4 purchase-receptions-page purchase-flow-shell">
+    <header class="purchase-hero">
+        <div class="purchase-hero-copy">
+            <div class="purchase-hero-icon purchase-hero-icon-reception"><i class="ri-inbox-archive-line"></i></div>
+            <div>
+                <span class="purchase-eyebrow">ABASTECIMIENTO · E-CONTAX</span>
+                <h1>Recepciones de compra</h1>
+                <p>Registra lo recibido, controla faltantes y conserva la trazabilidad de cada entrega.</p>
+            </div>
+        </div>
+        <div class="purchase-hero-actions">
+            <button class="purchase-secondary-btn" type="button" @onclick='() => NavManager.NavigateTo("/e-contax/compras/ordenes")'><i class="ri-file-list-3-line"></i><span>Órdenes</span></button>
+            <button class="purchase-primary-btn" type="button" @onclick="AbrirNuevaAsync" disabled="@cargando"><i class="ri-add-line"></i><span>Nueva recepción</span></button>
+        </div>
+    </header>
+
+    <nav class="purchase-flow-steps" aria-label="Flujo de compras">
+        <button type="button" class="purchase-flow-step is-done" @onclick='() => NavManager.NavigateTo("/e-contax/proveedores")'><span>1</span><strong>Proveedores</strong></button>
+        <i class="ri-arrow-right-line"></i>
+        <button type="button" class="purchase-flow-step is-done" @onclick='() => NavManager.NavigateTo("/e-contax/compras/ordenes")'><span>2</span><strong>Orden de compra</strong></button>
+        <i class="ri-arrow-right-line"></i>
+        <button type="button" class="purchase-flow-step is-active" aria-current="step" disabled><span>3</span><strong>Recepción</strong></button>
+    </nav>
+
+    <section class="purchase-kpis" aria-label="Resumen de recepciones">
+        <article class="purchase-kpi"><span><i class="ri-draft-line"></i>Borradores</span><strong>@TotalBorradores</strong><small>Pendientes de confirmar</small></article>
+        <article class="purchase-kpi purchase-kpi-success"><span><i class="ri-checkbox-circle-line"></i>Completas</span><strong>@TotalCompletas</strong><small>Ordenes cerradas</small></article>
+        <article class="purchase-kpi purchase-kpi-info"><span><i class="ri-pie-chart-line"></i>Parciales</span><strong>@TotalParciales</strong><small>Con cantidades pendientes</small></article>
+        <article class="purchase-kpi purchase-kpi-total"><span><i class="ri-inbox-line"></i>Unidades recibidas</span><strong>@TotalRecibido.ToString("0.####")</strong><small>@recepciones.Count recepción(es)</small></article>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger" role="alert">@error</div>
+    }
+
+    <div class="card shadow-sm mb-3 purchase-filter-card">
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-6 col-lg-5">
+                    <label class="form-label">Buscar</label>
+                    <input class="form-control" @bind="filtro" @bind:event="oninput" placeholder="Recepción, orden o proveedor" />
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label">Estado</label>
+                    <select class="form-select" @bind="estadoFiltro">
+                        <option value="">Todos</option>
+                        <option value="BORRADOR">Borrador</option>
+                        <option value="RECIBIDA_PARCIAL">Recibida parcial</option>
+                        <option value="RECIBIDA_COMPLETA">Recibida completa</option>
+                        <option value="ANULADA">Anulada</option>
+                    </select>
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label">Desde</label>
+                    <input class="form-control" type="date" @bind="fechaDesde" />
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label">Hasta</label>
+                    <input class="form-control" type="date" @bind="fechaHasta" />
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label">Ordenar por</label>
+                    <select class="form-select" @bind="ordenListado" @bind:after="ReiniciarPaginacion">
+                        <option value="fecha-desc">Más recientes</option>
+                        <option value="fecha-asc">Más antiguas</option>
+                        <option value="cantidad-desc">Mayor cantidad</option>
+                        <option value="cantidad-asc">Menor cantidad</option>
+                        <option value="estado">Estado</option>
+                    </select>
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <button class="purchase-secondary-btn purchase-filter-btn" type="button" @onclick="CargarAsync" disabled="@cargando">
+                        <i class="ri-search-line"></i><span>Consultar</span>
+                    </button>
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <button class="purchase-primary-btn purchase-filter-btn" type="button" @onclick="ExportarExcelAsync" disabled="@(cargando || recepciones.Count == 0)"><i class="ri-file-excel-2-line"></i><span>Excel</span></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm purchase-table-card">
+        <div class="purchase-table-heading"><div><span>TRAZABILIDAD DE ENTRADAS</span><h2>Recepciones registradas</h2></div><span class="purchase-count">@recepciones.Count registro@(recepciones.Count == 1 ? string.Empty : "s")</span></div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 purchase-data-table">
+                <thead>
+                    <tr><th>Recepción</th><th>Orden</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th class="text-end">Cantidad</th><th class="text-end">Acciones</th></tr>
+                </thead>
+                <tbody>
+                    @if (cargando)
+                    {
+                        <tr><td colspan="7"><div class="purchase-table-state" aria-live="polite"><i class="ri-loader-4-line"></i><span>Cargando recepciones...</span></div></td></tr>
+                    }
+                    else if (recepciones.Count == 0)
+                    {
+                        <tr><td colspan="7"><div class="purchase-table-state is-empty" aria-live="polite"><i class="ri-inbox-line"></i><span>No hay recepciones para los filtros seleccionados.</span></div></td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var recepcion in RecepcionesPagina)
+                        {
+                            <tr @key="recepcion.IdRecepcion">
+                                <td><strong>@recepcion.NumeroRecepcion</strong><small class="d-block text-muted">@recepcion.Lineas línea(s)</small></td>
+                                <td>@recepcion.NumeroOrden</td>
+                                <td>@recepcion.NombreProveedor</td>
+                                <td>@recepcion.FechaRecepcion.ToString("dd/MM/yyyy")</td>
+                                <td><span class="badge @ClaseEstado(recepcion.Estado)">@TextoEstado(recepcion.Estado)</span></td>
+                                <td class="text-end">@recepcion.TotalRecibido.ToString("0.####")</td>
+                                <td class="text-end text-nowrap"><div class="purchase-table-actions">
+                                    <button class="purchase-table-btn is-primary" type="button" @onclick="() => EditarAsync(recepcion.IdRecepcion)"><i class="ri-eye-line"></i><span>Ver / editar</span></button>
+                                    @if (recepcion.Estado == "BORRADOR")
+                                    {
+                                        <button class="purchase-table-btn is-success" type="button" @onclick="() => ConfirmarAsync(recepcion.IdRecepcion)"><i class="ri-checkbox-circle-line"></i><span>Confirmar</span></button>
+                                    }
+                                    @if (recepcion.Estado is "BORRADOR" or "RECIBIDA_PARCIAL" or "RECIBIDA_COMPLETA")
+                                    {
+                                        <button class="purchase-table-btn is-danger" type="button" @onclick="() => AnularAsync(recepcion.IdRecepcion)"><i class="ri-close-circle-line"></i><span>Anular</span></button>
+                                    }
+                                </div></td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (!cargando && recepciones.Count > 0)
+        {
+            <div class="purchase-pagination" aria-label="Paginación de recepciones">
+                <span>Mostrando @PrimerRegistroPagina–@UltimoRegistroPagina de @recepciones.Count</span>
+                <div class="purchase-pagination-actions">
+                    <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(-1)" disabled="@(PaginaActualSegura == 1)"><i class="ri-arrow-left-s-line"></i><span>Anterior</span></button>
+                    <strong>Página @PaginaActualSegura de @TotalPaginas</strong>
+                    <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(1)" disabled="@(PaginaActualSegura == TotalPaginas)"><span>Siguiente</span><i class="ri-arrow-right-s-line"></i></button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@if (mostrarEditor)
+{
+    <div class="reception-modal-backdrop" @onclick="CerrarEditorAsync">
+        <section class="reception-modal purchase-modal" role="dialog" aria-modal="true" aria-labelledby="recepcion-compra-modal-title" @onclick:stopPropagation="true">
+            <header class="purchase-modal-header">
+                <div>
+                    <span class="purchase-eyebrow">RECEPCIÓN DE COMPRA</span>
+                    <h2 id="recepcion-compra-modal-title">@(editor.Id == 0 ? "Nueva recepción" : editor.NumeroRecepcion)</h2>
+                    <p>Confirma las cantidades entregadas y documenta cualquier diferencia.</p>
+                    @if (TieneCambiosSinGuardar)
+                    {
+                        <span class="purchase-dirty-indicator"><i class="ri-save-3-line"></i>Cambios sin guardar</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(editor.NumeroOrden))
+                    {
+                        <small class="text-muted">Orden @editor.NumeroOrden · @editor.NombreProveedor</small>
+                    }
+                </div>
+                <button type="button" class="purchase-modal-close" aria-label="Cerrar" @onclick="CerrarEditorAsync"><i class="ri-close-line"></i></button>
+            </header>
+
+            <div class="purchase-modal-body p-4 overflow-auto">
+                <div class="purchase-editor-card mb-3">
+                    <div class="purchase-section-heading"><div><span>CABECERA</span><h3>Documento de recepción</h3></div><i class="ri-inbox-archive-line"></i></div>
+                    <div class="row g-3 p-3">
+                    <div class="col-md-8">
+                        <label class="form-label">Orden de compra <span class="text-danger">*</span></label>
+                        <select class="form-select @(MostrarErrorOrden ? "is-invalid" : string.Empty)" @bind="editor.IdOrdenCompra" @bind:after="CargarOrdenSeleccionadaAsync" required disabled="@(guardando || editor.Id > 0)">
+                            <option value="0">Seleccione una orden aprobada o enviada</option>
+                            @foreach (var orden in ordenesDisponibles)
+                            {
+                                <option value="@orden.IdOrdenCompra">@orden.NumeroOrden · @orden.NombreProveedor</option>
+                            }
+                        </select>
+                        @if (MostrarErrorOrden)
+                        {
+                            <small class="purchase-field-error">Selecciona una orden con cantidades pendientes.</small>
+                        }
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Fecha de recepción <span class="text-danger">*</span></label>
+                        <input class="form-control @(MostrarErrorFecha ? "is-invalid" : string.Empty)" type="date" @bind="editor.FechaRecepcion" required disabled="@(guardando || !PuedeEditar)" />
+                        @if (MostrarErrorFecha)
+                        {
+                            <small class="purchase-field-error">Indica la fecha de recepción.</small>
+                        }
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Observación general</label>
+                        <input class="form-control" @bind="editor.Observacion" maxlength="1000" disabled="@(guardando || !PuedeEditar)" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Factura del proveedor</label>
+                        <input class="form-control" @bind="editor.NumeroFacturaProveedor" maxlength="50" disabled="@(guardando || !PuedeEditar)" placeholder="001-001-000000001" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Clave de acceso</label>
+                        <input class="form-control" @bind="editor.ClaveAccesoProveedor" maxlength="60" disabled="@(guardando || !PuedeEditar)" />
+                    </div>
+                    </div>
+                </div>
+
+                @if (editor.Detalles.Count == 0)
+                {
+                    <div class="alert alert-light border">Selecciona una orden para consultar sus cantidades pendientes.</div>
+                }
+                else
+                {
+                    <div class="purchase-editor-card">
+                    <div class="purchase-section-heading"><div><span>CONTROL DE ENTREGA</span><h3>Verificación de la recepción</h3></div><div class="purchase-section-heading-actions"><span class="purchase-count">@editor.Detalles.Count línea(s)</span>@if (PuedeEditar) { <button type="button" class="purchase-table-btn purchase-section-action" @onclick="MarcarTodoVerificado" disabled="@guardando"><i class="ri-checkbox-multiple-line"></i><span>Marcar todo verificado</span></button><button type="button" class="purchase-table-btn purchase-section-action" @onclick="RecibirTodoPendiente" disabled="@guardando"><i class="ri-check-double-line"></i><span>Recibir todo pendiente</span></button> }</div></div>
+                        <div class="reception-editor-summary" aria-label="Resumen de recepción">
+                            <div><span>PENDIENTE</span><strong>@TotalPendienteEditor.ToString("0.####")</strong></div>
+                            <div><span>RECIBIR AHORA</span><strong>@TotalRecibirEditor.ToString("0.####")</strong></div>
+                            <div><span>CON DIFERENCIA</span><strong>@LineasConDiferencia</strong></div>
+                            <div><span>VERIFICADAS</span><strong>@LineasVerificadas/@editor.Detalles.Count</strong></div>
+                        </div>
+                        <div class="row g-2 align-items-end px-3 pt-3">
+                            <div class="col-lg-6">
+                                <label class="form-label" for="codigo-barras-recepcion"><i class="ri-barcode-line me-1"></i>Escanear código de barras</label>
+                                <input id="codigo-barras-recepcion"
+                                       class="form-control"
+                                       @bind="codigoBarrasRecepcion"
+                                       @bind:event="oninput"
+                                       @onkeydown="ProcesarCodigoBarrasRecepcionAsync"
+                                       placeholder="Escanea el producto y presiona Enter"
+                                       autocomplete="off"
+                                       disabled="@(guardando || !PuedeEditar)" />
+                                <small class="text-muted">Cada lectura suma una unidad a la línea pendiente.</small>
+                            </div>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(mensajeEscaneoRecepcion))
+                        {
+                            <div class="alert alert-info py-2 mx-3 mt-3 mb-0">@mensajeEscaneoRecepcion</div>
+                        }
+                        @if (MostrarErrorSinCantidad)
+                        {
+                            <div class="purchase-inline-error">Registra al menos una cantidad recibida antes de guardar.</div>
+                        }
+                        <div class="table-responsive p-3">
+                        <table class="table table-sm align-middle mb-0 purchase-lines-table">
+                            <thead><tr><th>Producto</th><th style="width: 135px">Verificación</th><th class="text-end">Ordenado</th><th class="text-end">Ya recibido</th><th class="text-end">Pendiente</th><th class="text-end">Costo orden</th><th class="text-end">Variación</th><th style="width: 145px">Recibir ahora</th><th style="width: 145px">Costo real</th><th style="width: 210px">Lote</th><th style="width: 150px">Vencimiento</th><th style="width: 220px">Novedad / observación</th></tr></thead>
+                            <tbody>
+                                @foreach (var linea in editor.Detalles)
+                                {
+                                    <tr @key="linea.IdDetalleOrdenCompra">
+                                        <td>@linea.Descripcion<small class="d-block text-muted">@linea.CodigoPrincipal</small><span class="reception-line-state @ClaseEstadoLinea(linea)">@TextoEstadoLinea(linea)</span></td>
+                                        <td>
+                                            <label class="purchase-check-control @(linea.Verificado ? "is-checked" : string.Empty)">
+                                                <input type="checkbox" @bind="linea.Verificado" disabled="@(guardando || !PuedeEditar)" />
+                                                <span>@(linea.Verificado ? "Revisado" : "Pendiente")</span>
+                                            </label>
+                                        </td>
+                                        <td class="text-end">@linea.CantidadOrdenada.ToString("0.####")</td>
+                                        <td class="text-end">@linea.CantidadYaRecibida.ToString("0.####")</td>
+                                        <td class="text-end"><strong>@PendienteDespues(linea).ToString("0.####")</strong></td>
+                                        <td class="text-end">@linea.PrecioUnitarioOrden.ToString("C2")</td>
+                                        <td class="text-end">@TextoVariacionCosto(linea)</td>
+                                        <td><input class="form-control form-control-sm @(MostrarErrorCantidad(linea) ? "is-invalid" : string.Empty)" type="number" min="0" max="@linea.CantidadPendiente" step="0.0001" @bind="linea.CantidadRecibida" @bind:event="oninput" disabled="@(guardando || !PuedeEditar)" />@if (MostrarErrorCantidad(linea)) { <small class="purchase-field-error">No puede superar lo pendiente.</small> }</td>
+                                        <td><input class="form-control form-control-sm @(MostrarErrorCosto(linea) ? "is-invalid" : string.Empty)" type="number" min="0" step="0.0001" @bind="linea.CostoUnitario" disabled="@(guardando || !PuedeEditar)" />@if (MostrarErrorCosto(linea)) { <small class="purchase-field-error">No puede ser negativo.</small> }</td>
+                                        <td><input class="form-control form-control-sm" @bind="linea.NumeroLote" maxlength="80" disabled="@(guardando || !PuedeEditar)" /></td>
+                                        <td><input class="form-control form-control-sm" type="date" min="@FechaMinimaLote" @bind="linea.FechaVencimiento" disabled="@(guardando || !PuedeEditar)" /></td>
+                                        <td>
+                                            <input class="form-control form-control-sm" @bind="linea.Observacion" maxlength="500" disabled="@(guardando || !PuedeEditar)" placeholder="Faltante, daño, empaque..." />
+                                            <small class="text-muted">Diferencia: @Diferencia(linea).ToString("0.####")</small>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <footer class="purchase-modal-footer">
+                <span><i class="ri-information-line"></i>Confirma la recepción cuando hayas validado la entrega física.</span>
+                <div>
+                @if (editor.Id > 0)
+                {
+                    <button type="button" class="purchase-secondary-btn" @onclick="ImprimirAsync" disabled="@guardando"><i class="ri-printer-line"></i> Imprimir / PDF</button>
+                }
+                <button type="button" class="purchase-secondary-btn" @onclick="CerrarEditorAsync" disabled="@guardando">Cerrar</button>
+                @if (PuedeEditar)
+                {
+                    <button type="button" class="purchase-primary-btn" @onclick="GuardarAsync" disabled="@guardando">@(guardando ? "Guardando..." : "Guardar borrador")</button>
+                }
+                </div>
+            </footer>
+        </section>
+    </div>
+}
+
+@code {
+    private const string ApiUrl = "api/e-contax/compras/recepciones";
+    private const string Borrador = "BORRADOR";
+    private readonly List<EContaxRecepcionCompraListaDto> recepciones = new();
+    private readonly List<EContaxRecepcionOrdenDto> ordenesDisponibles = new();
+    private string filtro = string.Empty;
+    private string estadoFiltro = string.Empty;
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+    private string? error;
+    private bool cargando;
+    private bool guardando;
+    private string codigoBarrasRecepcion = string.Empty;
+    private string? mensajeEscaneoRecepcion;
+    private bool procesandoCodigoBarrasRecepcion;
+    private bool mostrarEditor;
+    private bool mostrarErrores;
+    private int usuarioId;
+    private EditorModel editor = new();
+    private string? editorSnapshot;
+    private string ordenListado = "fecha-desc";
+    private int paginaActual = 1;
+    private const int RegistrosPorPagina = 10;
+    private bool PuedeEditar => editor.Id == 0 || editor.Estado == Borrador;
+    private string FechaMinimaLote => DateTime.Today.AddDays(1).ToString("yyyy-MM-dd");
+    private int TotalBorradores => recepciones.Count(x => x.Estado == "BORRADOR");
+    private int TotalCompletas => recepciones.Count(x => x.Estado == "RECIBIDA_COMPLETA");
+    private int TotalParciales => recepciones.Count(x => x.Estado == "RECIBIDA_PARCIAL");
+    private decimal TotalRecibido => recepciones.Sum(x => x.TotalRecibido);
+    private IEnumerable<EContaxRecepcionCompraListaDto> RecepcionesOrdenadas => ordenListado switch
+    {
+        "fecha-asc" => recepciones.OrderBy(x => x.FechaRecepcion).ThenBy(x => x.NumeroRecepcion),
+        "cantidad-desc" => recepciones.OrderByDescending(x => x.TotalRecibido).ThenByDescending(x => x.FechaRecepcion),
+        "cantidad-asc" => recepciones.OrderBy(x => x.TotalRecibido).ThenByDescending(x => x.FechaRecepcion),
+        "estado" => recepciones.OrderBy(x => x.Estado).ThenByDescending(x => x.FechaRecepcion),
+        _ => recepciones.OrderByDescending(x => x.FechaRecepcion).ThenByDescending(x => x.IdRecepcion)
+    };
+    private int TotalPaginas => Math.Max(1, (int)Math.Ceiling(recepciones.Count / (double)RegistrosPorPagina));
+    private int PaginaActualSegura => Math.Min(paginaActual, TotalPaginas);
+    private IEnumerable<EContaxRecepcionCompraListaDto> RecepcionesPagina => RecepcionesOrdenadas.Skip((PaginaActualSegura - 1) * RegistrosPorPagina).Take(RegistrosPorPagina);
+    private int PrimerRegistroPagina => recepciones.Count == 0 ? 0 : ((PaginaActualSegura - 1) * RegistrosPorPagina) + 1;
+    private int UltimoRegistroPagina => Math.Min(PaginaActualSegura * RegistrosPorPagina, recepciones.Count);
+    private bool TieneCambiosSinGuardar => mostrarEditor && editorSnapshot is not null && editorSnapshot != JsonSerializer.Serialize(editor);
+    private bool MostrarErrorOrden => mostrarErrores && editor.IdOrdenCompra <= 0;
+    private bool MostrarErrorFecha => mostrarErrores && editor.FechaRecepcion == default;
+    private bool MostrarErrorSinCantidad => mostrarErrores && (editor.IdOrdenCompra > 0 && editor.Detalles.All(x => x.CantidadRecibida <= 0));
+    private decimal TotalPendienteEditor => editor.Detalles.Sum(x => x.CantidadPendiente);
+    private decimal TotalRecibirEditor => editor.Detalles.Sum(x => x.CantidadRecibida);
+    private int LineasConDiferencia => editor.Detalles.Count(x => Math.Abs(x.CantidadPendiente - x.CantidadRecibida) > 0.0001m);
+    private int LineasVerificadas => editor.Detalles.Count(x => x.Verificado);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        var claim = state.User.FindFirst("IdUsuario")?.Value ?? state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int.TryParse(claim, out usuarioId);
+        await CargarAsync();
+        if (NavManager.Uri.TrimEnd('/').EndsWith("/nueva", StringComparison.OrdinalIgnoreCase))
+            await AbrirNuevaAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        if (usuarioId <= 0)
+        {
+            error = "No se pudo identificar la sesión actual.";
+            return;
+        }
+
+        cargando = true;
+        error = null;
+        paginaActual = 1;
+        recepciones.Clear();
+        try
+        {
+            var url = $"{ApiUrl}?userId={usuarioId}&search={Uri.EscapeDataString(filtro)}&estado={Uri.EscapeDataString(estadoFiltro)}" +
+                $"&fechaDesde={Uri.EscapeDataString(fechaDesde?.ToString("yyyy-MM-dd") ?? string.Empty)}&fechaHasta={Uri.EscapeDataString(fechaHasta?.ToString("yyyy-MM-dd") ?? string.Empty)}";
+            var resultado = await Http.GetFromJsonAsync<List<EContaxRecepcionCompraListaDto>>(url) ?? new();
+            recepciones.Clear();
+            recepciones.AddRange(resultado);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task ExportarExcelAsync()
+    {
+        await CargarAsync();
+        if (recepciones.Count == 0)
+            return;
+
+        var resumen = (IReadOnlyList<IReadOnlyList<string>>)[
+            ["Filtro de texto", string.IsNullOrWhiteSpace(filtro) ? "Todos" : filtro],
+            ["Estado", string.IsNullOrWhiteSpace(estadoFiltro) ? "Todos" : TextoEstado(estadoFiltro)],
+            ["Fecha desde", fechaDesde?.ToString("dd/MM/yyyy") ?? "Todas"],
+            ["Fecha hasta", fechaHasta?.ToString("dd/MM/yyyy") ?? "Todas"],
+            ["Registros", recepciones.Count.ToString("N0")],
+            ["Borradores", TotalBorradores.ToString("N0")],
+            ["Completas", TotalCompletas.ToString("N0")],
+            ["Parciales", TotalParciales.ToString("N0")],
+            ["Cantidad recibida", TotalRecibido.ToString("N4")]
+        ];
+        var rows = recepciones.Select(x => (IReadOnlyList<string>)[
+            x.NumeroRecepcion,
+            x.NumeroOrden,
+            x.NombreProveedor,
+            x.FechaRecepcion.ToString("dd/MM/yyyy"),
+            TextoEstado(x.Estado),
+            x.TotalRecibido.ToString("N4"),
+            x.Lineas.ToString()
+        ]).ToList();
+        var archivo = ExcelExportService.Create(
+            $"recepciones_compra_{DateTime.Now:yyyyMMdd_HHmm}.xlsx",
+            new ExcelSheetData("Resumen", ["Indicador", "Valor"], resumen),
+            new ExcelSheetData("Recepciones", ["Recepción", "Orden", "Proveedor", "Fecha", "Estado", "Cantidad recibida", "Líneas"], rows));
+        await using var stream = new MemoryStream(archivo.Content);
+        using var streamRef = new DotNetStreamReference(stream);
+        await JS.InvokeVoidAsync("downloadFileFromStream", archivo.FileName, streamRef);
+    }
+
+    private async Task AbrirNuevaAsync()
+    {
+        error = null;
+        editor = new EditorModel { FechaRecepcion = DateTime.Today };
+        codigoBarrasRecepcion = string.Empty;
+        mensajeEscaneoRecepcion = null;
+        mostrarErrores = false;
+        try
+        {
+            await CargarOrdenesDisponiblesAsync();
+            editorSnapshot = JsonSerializer.Serialize(editor);
+            mostrarEditor = true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task CargarOrdenesDisponiblesAsync()
+    {
+        try
+        {
+            var resultado = await Http.GetFromJsonAsync<List<EContaxRecepcionOrdenDto>>($"{ApiUrl}/ordenes-disponibles?userId={usuarioId}") ?? new();
+            ordenesDisponibles.Clear();
+            ordenesDisponibles.AddRange(resultado);
+            if (ordenesDisponibles.Count == 0)
+                throw new InvalidOperationException("No hay órdenes aprobadas o enviadas con cantidades pendientes.");
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            throw;
+        }
+    }
+
+    private async Task CargarOrdenSeleccionadaAsync()
+    {
+        if (editor.IdOrdenCompra <= 0)
+        {
+            editor.Detalles.Clear();
+            editor.NumeroOrden = string.Empty;
+            editor.NombreProveedor = string.Empty;
+            return;
+        }
+
+        try
+        {
+            var orden = await Http.GetFromJsonAsync<EContaxRecepcionOrdenDto>($"{ApiUrl}/ordenes-disponibles/{editor.IdOrdenCompra}?userId={usuarioId}");
+            if (orden is null)
+                return;
+            editor.NumeroOrden = orden.NumeroOrden;
+            editor.NombreProveedor = orden.NombreProveedor;
+            editor.Detalles = orden.Detalles.Select(x => new EditorDetail
+            {
+                IdDetalleOrdenCompra = x.IdDetalleOrdenCompra,
+                CodigoProducto = x.CodigoProducto,
+                CodigoPrincipal = x.CodigoPrincipal,
+                Descripcion = x.Descripcion,
+                CantidadOrdenada = x.CantidadOrdenada,
+                PrecioUnitarioOrden = x.PrecioUnitarioOrden,
+                CantidadYaRecibida = x.CantidadYaRecibida,
+                CantidadPendiente = x.CantidadPendiente
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task EditarAsync(int id)
+    {
+        error = null;
+        try
+        {
+            var detalle = await Http.GetFromJsonAsync<EContaxRecepcionCompraDto>($"{ApiUrl}/{id}?userId={usuarioId}");
+            if (detalle is null)
+                return;
+            editor = EditorModel.From(detalle);
+            codigoBarrasRecepcion = string.Empty;
+            mensajeEscaneoRecepcion = null;
+            mostrarErrores = false;
+            editorSnapshot = JsonSerializer.Serialize(editor);
+            mostrarEditor = true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        mostrarErrores = true;
+        if (editor.IdOrdenCompra <= 0 || editor.Detalles.All(x => x.CantidadRecibida <= 0))
+        {
+            error = "Selecciona una orden y registra al menos una cantidad recibida.";
+            return;
+        }
+        if (editor.FechaRecepcion == default || editor.Detalles.Any(x => x.CantidadRecibida < 0 || x.CantidadRecibida > x.CantidadPendiente || x.CostoUnitario < 0))
+        {
+            error = "Revisa la fecha y las cantidades recibidas; no pueden superar lo pendiente.";
+            return;
+        }
+
+        guardando = true;
+        error = null;
+        try
+        {
+            var dto = new EContaxRecepcionCompraUpsertDto
+            {
+                IdOrdenCompra = editor.IdOrdenCompra,
+                FechaRecepcion = editor.FechaRecepcion,
+                NumeroFacturaProveedor = editor.NumeroFacturaProveedor,
+                ClaveAccesoProveedor = editor.ClaveAccesoProveedor,
+                Observacion = editor.Observacion,
+                Detalles = editor.Detalles.Select(x => new EContaxRecepcionCompraDetalleUpsertDto
+                {
+                    IdDetalleOrdenCompra = x.IdDetalleOrdenCompra,
+                    CantidadRecibida = x.CantidadRecibida,
+                    CostoUnitario = x.CostoUnitario,
+                    Observacion = x.Observacion,
+                    NumeroLote = x.NumeroLote,
+                    FechaVencimiento = x.FechaVencimiento
+                }).ToList()
+            };
+            var response = editor.Id == 0
+                ? await Http.PostAsJsonAsync($"{ApiUrl}?userId={usuarioId}", dto)
+                : await Http.PutAsJsonAsync($"{ApiUrl}/{editor.Id}?userId={usuarioId}", dto);
+            await ExigirRespuestaExitosaAsync(response, "No se pudo guardar la recepción de compra.");
+            mostrarEditor = false;
+            editorSnapshot = null;
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private async Task ConfirmarAsync(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "¿Confirmas esta recepción? Después de confirmar, sus cantidades actualizarán el inventario."))
+            return;
+
+        try
+        {
+            var response = await Http.PutAsync($"{ApiUrl}/{id}/confirmar?userId={usuarioId}", null);
+            await ExigirRespuestaExitosaAsync(response, "No se pudo confirmar la recepción de compra.");
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task AnularAsync(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "¿Deseas anular esta recepción? Esta acción no se puede deshacer."))
+            return;
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"{ApiUrl}/{id}/anular?userId={usuarioId}", new EContaxOrdenCompraEstadoDto { Observacion = "Anulada desde recepciones de compra." });
+            await ExigirRespuestaExitosaAsync(response, "No se pudo anular la recepción de compra.");
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private static async Task ExigirRespuestaExitosaAsync(HttpResponseMessage response, string mensajePredeterminado)
+    {
+        if (response.IsSuccessStatusCode)
+            return;
+
+        var mensaje = await response.Content.ReadAsStringAsync();
+        throw new InvalidOperationException(string.IsNullOrWhiteSpace(mensaje)
+            ? $"{mensajePredeterminado} Código HTTP {(int)response.StatusCode}."
+            : mensaje.Trim('"'));
+    }
+
+    private decimal PendienteDespues(EditorDetail linea) =>
+        editor.Estado == Borrador
+            ? Math.Max(0, linea.CantidadPendiente - linea.CantidadRecibida)
+            : linea.CantidadPendiente;
+    private decimal Diferencia(EditorDetail linea) => Math.Max(0, linea.CantidadPendiente - linea.CantidadRecibida);
+    private void RecibirTodoPendiente()
+    {
+        if (!PuedeEditar)
+            return;
+
+        foreach (var linea in editor.Detalles)
+            linea.CantidadRecibida = linea.CantidadPendiente;
+    }
+
+    private Task ProcesarCodigoBarrasRecepcionAsync(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || guardando || !PuedeEditar || procesandoCodigoBarrasRecepcion)
+            return Task.CompletedTask;
+
+        var codigo = (codigoBarrasRecepcion ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(codigo))
+            return Task.CompletedTask;
+
+        procesandoCodigoBarrasRecepcion = true;
+        try
+        {
+            var linea = editor.Detalles.FirstOrDefault(x =>
+                string.Equals(x.CodigoPrincipal?.Trim(), codigo, StringComparison.OrdinalIgnoreCase) ||
+                x.CodigoProducto.ToString() == codigo);
+
+            if (linea is null)
+            {
+                mensajeEscaneoRecepcion = $"No se encontró el producto {codigo} en la orden seleccionada.";
+                return Task.CompletedTask;
+            }
+
+            if (linea.CantidadRecibida >= linea.CantidadPendiente)
+            {
+                mensajeEscaneoRecepcion = $"{linea.Descripcion} ya completó la cantidad pendiente.";
+                return Task.CompletedTask;
+            }
+
+            linea.CantidadRecibida = Math.Min(linea.CantidadPendiente, linea.CantidadRecibida + 1m);
+            linea.Verificado = true;
+            mensajeEscaneoRecepcion = $"Producto recibido: {linea.Descripcion} ({linea.CantidadRecibida:0.####}).";
+            error = null;
+            return Task.CompletedTask;
+        }
+        finally
+        {
+            codigoBarrasRecepcion = string.Empty;
+            procesandoCodigoBarrasRecepcion = false;
+        }
+    }
+
+    private void MarcarTodoVerificado()
+    {
+        if (!PuedeEditar)
+            return;
+
+        foreach (var linea in editor.Detalles)
+            linea.Verificado = true;
+    }
+
+    private static string TextoEstadoLinea(EditorDetail linea) => linea.CantidadRecibida switch
+    {
+        <= 0 => "Pendiente",
+        _ when linea.CantidadRecibida < linea.CantidadPendiente => "Parcial",
+        _ => "Completa"
+    };
+
+    private static string ClaseEstadoLinea(EditorDetail linea) => linea.CantidadRecibida switch
+    {
+        <= 0 => "is-pending",
+        _ when linea.CantidadRecibida < linea.CantidadPendiente => "is-partial",
+        _ => "is-complete"
+    };
+
+    private void ReiniciarPaginacion() => paginaActual = 1;
+    private void CambiarPagina(int delta) => paginaActual = Math.Clamp(PaginaActualSegura + delta, 1, TotalPaginas);
+    private static string TextoVariacionCosto(EditorDetail linea) =>
+        linea.CostoUnitario.HasValue && linea.PrecioUnitarioOrden > 0
+            ? $"{(linea.CostoUnitario.Value - linea.PrecioUnitarioOrden) / linea.PrecioUnitarioOrden:P2}"
+            : "-";
+    private Task ImprimirAsync() => JS.InvokeVoidAsync("print").AsTask();
+    private async Task CerrarEditorAsync()
+    {
+        if (guardando)
+            return;
+        if (TieneCambiosSinGuardar && !await JS.InvokeAsync<bool>("confirm", "Hay cambios sin guardar. ¿Deseas cerrar y descartarlos?"))
+            return;
+        mostrarEditor = false;
+        editorSnapshot = null;
+        codigoBarrasRecepcion = string.Empty;
+        mensajeEscaneoRecepcion = null;
+        mostrarErrores = false;
+    }
+
+    private bool MostrarErrorCantidad(EditorDetail linea) => mostrarErrores && (linea.CantidadRecibida < 0 || linea.CantidadRecibida > linea.CantidadPendiente);
+    private bool MostrarErrorCosto(EditorDetail linea) => mostrarErrores && linea.CostoUnitario < 0;
+
+    private static string TextoEstado(string estado) => estado switch
+    {
+        "BORRADOR" => "Borrador",
+        "RECIBIDA_PARCIAL" => "Recibida parcial",
+        "RECIBIDA_COMPLETA" => "Recibida completa",
+        "ANULADA" => "Anulada",
+        _ => estado
+    };
+
+    private static string ClaseEstado(string estado) => estado switch
+    {
+        "RECIBIDA_COMPLETA" => "text-bg-success",
+        "RECIBIDA_PARCIAL" => "text-bg-primary",
+        "ANULADA" => "text-bg-danger",
+        _ => "text-bg-secondary"
+    };
+
+    private sealed class EditorModel
+    {
+        public int Id { get; set; }
+        public string NumeroRecepcion { get; set; } = string.Empty;
+        public int IdOrdenCompra { get; set; }
+        public string NumeroOrden { get; set; } = string.Empty;
+        public string NombreProveedor { get; set; } = string.Empty;
+        public DateTime FechaRecepcion { get; set; } = DateTime.Today;
+        public string Estado { get; set; } = Borrador;
+        public string? NumeroFacturaProveedor { get; set; }
+        public string? ClaveAccesoProveedor { get; set; }
+        public string? Observacion { get; set; }
+        public List<EditorDetail> Detalles { get; set; } = new();
+
+        public static EditorModel From(EContaxRecepcionCompraDto dto) => new()
+        {
+            Id = dto.IdRecepcion,
+            NumeroRecepcion = dto.NumeroRecepcion,
+            IdOrdenCompra = dto.IdOrdenCompra,
+            NumeroOrden = dto.NumeroOrden,
+            NombreProveedor = dto.NombreProveedor,
+            FechaRecepcion = dto.FechaRecepcion,
+            Estado = dto.Estado,
+            NumeroFacturaProveedor = dto.NumeroFacturaProveedor,
+            ClaveAccesoProveedor = dto.ClaveAccesoProveedor,
+            Observacion = dto.Observacion,
+            Detalles = dto.Detalles.Select(x => new EditorDetail
+            {
+                IdDetalleOrdenCompra = x.IdDetalleOrdenCompra,
+                CodigoProducto = x.CodigoProducto,
+                CodigoPrincipal = x.CodigoPrincipal,
+                Descripcion = x.Descripcion,
+                CantidadOrdenada = x.CantidadOrdenada,
+                CantidadYaRecibida = x.CantidadYaRecibida,
+                CantidadRecibida = x.CantidadRecibida,
+                CantidadPendiente = dto.Estado == Borrador ? x.CantidadPendiente + x.CantidadRecibida : x.CantidadPendiente,
+                PrecioUnitarioOrden = x.PrecioUnitarioOrden,
+                CostoUnitario = x.CostoUnitario,
+                Observacion = x.Observacion
+                ,NumeroLote = x.NumeroLote
+                ,FechaVencimiento = x.FechaVencimiento
+            }).ToList()
+        };
+    }
+
+    private sealed class EditorDetail
+    {
+        public int IdDetalleOrdenCompra { get; set; }
+        public int CodigoProducto { get; set; }
+        public string? CodigoPrincipal { get; set; }
+        public string Descripcion { get; set; } = string.Empty;
+        public decimal CantidadOrdenada { get; set; }
+        public decimal CantidadYaRecibida { get; set; }
+        public decimal CantidadRecibida { get; set; }
+        public decimal CantidadPendiente { get; set; }
+        public decimal PrecioUnitarioOrden { get; set; }
+        public decimal? CostoUnitario { get; set; }
+        public string? Observacion { get; set; }
+        public bool Verificado { get; set; }
+        public string? NumeroLote { get; set; }
+        public DateTime? FechaVencimiento { get; set; }
+    }
+}
+

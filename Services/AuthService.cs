@@ -231,6 +231,25 @@ public class AuthService : IAuthService
             return (false, "Los datos introducidos no son válidos.", null, false);
         }
 
+        const string localidadQuery = @"
+            SELECT TOP (1) RTRIM(ISNULL(l.loc_descripcion, ''))
+            FROM vt_usuarioLocalidades ul
+            INNER JOIN vt_localidades l ON l.loc_id = ul.ul_idLocalidad
+            WHERE ul.ul_idUsuario = @IdUsuario
+              AND ul.ul_idLocalidad = @IdLocalidad
+              AND ISNULL(ul.ul_estado, 'A') = 'A'
+              AND ISNULL(l.loc_estado, 'A') = 'A'";
+        var localidadDescripcion = await _sql.QueryFirstOrDefaultAsync<string>(
+            localidadQuery,
+            new { IdUsuario = user.UserNumero, IdLocalidad = localidad });
+        if (string.IsNullOrWhiteSpace(localidadDescripcion))
+        {
+            await _sql.RegistrarBitacoraAsync(
+                $"Acceso rechazado a localidad {localidad}: {user.UserNombre}",
+                user.UserNumero);
+            return (false, "El usuario no tiene acceso a la veterinaria o sucursal seleccionada.", null, false);
+        }
+
         LoginAttempts.TryRemove(loginKey, out _);
         await _sql.RegistrarBitacoraAsync($"Ingresa al Sistema: {user.UserNombre}", user.UserNumero);
         await _session.SetSessionAsync(user, localidad);

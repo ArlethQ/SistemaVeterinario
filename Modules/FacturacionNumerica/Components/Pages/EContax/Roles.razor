@@ -1,0 +1,330 @@
+@page "/invitaciones/e-contax"
+@page "/e-contax/administracion/roles-internos"
+@page "/e-contax/usuarios"
+@using Simetric.Models.EContax
+@using Simetric.Services.EContax
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>@(EsRutaUsuarios ? "Usuarios | E-Contax" : "Roles y permisos | E-Contax")</PageTitle>
+<div class="security-shell">
+    <section class="security-hero"><div class="hero-copy"><span class="hero-eyebrow">@(EsRutaUsuarios ? "Equipo de la empresa" : "Control de accesos")</span><h2>@(EsRutaUsuarios ? "Usuarios E-Contax" : "Roles y permisos")</h2><p>@resumen?.Empresa.Nombre</p></div></section>
+    @if (error is not null) { <div class="alert alert-danger" role="alert">@error</div> }
+    @if (mensaje is not null) { <div class="alert alert-success" role="status">@mensaje</div> }
+    @if (cargando) { <p>Cargando…</p> }
+    else if (Codigo is not null && Codigo != codigoProcesado && invitacion is not null)
+    {
+        <section class="roles-panel invitation-preview">
+            <div class="invitation-preview-head">
+                <div><span class="panel-kicker">Invitación de empresa</span><h3>Acceso a E-Contax de @invitacion.Empresa</h3></div>
+                <span class="assignment-badge"><i class="bi bi-building-check"></i> Acceso por empresa</span>
+            </div>
+            <p class="invitation-intro">Al aceptar, tu cuenta de E-Fact quedará vinculada a esta empresa. Desde ahora verás en E-Contax la información y operación habilitadas para la sucursal asignada.</p>
+            <div class="invitation-details">
+                <div class="invitation-detail"><span>Empresa</span><strong>@invitacion.Empresa</strong><small>@(invitacion.IdentificacionEmpresa ?? "Información empresarial")</small></div>
+                <div class="invitation-detail"><span>Sucursal</span><strong>@invitacion.Sucursal</strong><small>Alcance de tu acceso</small></div>
+                <div class="invitation-detail"><span>Rol asignado</span><strong>@invitacion.Rol</strong><small>@(invitacion.EsAdminSucursal ? "Administrador de sucursal" : "Permisos definidos por la empresa")</small></div>
+            </div>
+            <p class="invitation-account"><i class="bi bi-envelope"></i> Cuenta invitada: <strong>@invitacion.Email</strong>. Inicia sesión con ese correo para aceptar.</p>
+            @if (invitacion.Vigente)
+            {
+                <button class="primary-btn" disabled="@ocupado" @onclick="AceptarInvitacionAsync"><i class="bi bi-check2-circle"></i> Aceptar y acceder a la empresa</button>
+                <small class="invitation-expiry">Este enlace vence el @invitacion.Vence.ToLocalTime().ToString("dd/MM/yyyy HH:mm") y solo puede utilizarse una vez.</small>
+            }
+            else
+            {
+                <div class="assignment-note"><i class="bi bi-exclamation-triangle"></i> Esta invitación venció, fue cancelada o el rol ya no está disponible.</div>
+            }
+        </section>
+    }
+    else if (Codigo is not null && Codigo != codigoProcesado && invitacion is null)
+    {
+        <section class="roles-panel invitation-preview"><h3>Invitación no disponible</h3><p>Solicita al administrador de la empresa que genere una nueva invitación.</p></section>
+    }
+    else if (resumen is not null)
+    {
+        <nav class="nav nav-tabs mb-3" aria-label="Gestión de permisos">
+            @foreach (var item in Tabs)
+            { <button @key="item" class="@("nav-link " + (tab == item ? "active" : ""))" @onclick="() => CambiarTab(item)">@item</button> }
+        </nav>
+        <section class="roles-panel p-3">
+        @if (tab == "Mi cuenta")
+        {
+            <div class="account-access-card">
+                <div class="account-access-head"><div><span class="panel-kicker">Contexto activo</span><strong>Información de la empresa</strong></div><span class="assignment-badge"><i class="bi bi-shield-check"></i> Acceso habilitado</span></div>
+                <p>Tu sesión está vinculada a la información de <strong>@resumen.Empresa.Nombre</strong>. En E-Contax solo verás los módulos y datos permitidos para tu alcance.</p>
+                <div class="account-access-grid">
+                    <div><span>Empresa</span><strong>@resumen.Empresa.Nombre</strong></div>
+                    <div><span>Sucursal</span><strong>@SucursalActual</strong></div>
+                    <div><span>Rol</span><strong>@resumen.Contexto.Rol</strong></div>
+                </div>
+            </div>
+            <h3>Vínculo con la empresa</h3><p>Al abandonar pierdes todo acceso a esta empresa y sucursal. La información permanece en la empresa.</p>
+            @if (resumen.Contexto.EsJefeEmpresa)
+            {
+                <label>Transferir titularidad a</label><select class="form-select mb-3" @bind="nuevoTitular">
+                    <option value="0">Selecciona un miembro</option>
+                    @foreach (var usuario in resumen.Usuarios.Where(x => x.IdUsuario != userId && !x.Suspendido && x.Usuario?.Estado == true))
+                    { <option @key="usuario.IdUsuario" value="@usuario.IdUsuario">@usuario.Usuario?.NombreCompleto — @usuario.Usuario?.Email</option> }
+                </select>
+                <label class="d-block mb-3"><input type="checkbox" @bind="confirmarTransferencia" /> Confirmo transferir la titularidad y administración de la empresa</label>
+                <button class="primary-btn" disabled="@(ocupado || !confirmarTransferencia)" @onclick="TransferirAsync">Transferir titularidad</button>
+            }
+            else
+            {
+                <label class="d-block mb-3"><input type="checkbox" @bind="confirmarAbandono" /> Confirmo abandonar la empresa</label>
+                <button class="btn btn-danger" disabled="@(ocupado || !confirmarAbandono)" @onclick="AbandonarAsync">Abandonar empresa</button>
+            }
+        }
+        else if (resumen.EsAdmin)
+        {
+            @if (tab == "Sucursales")
+            {
+                <h3>Menús por sucursal</h3><p>Los permisos del empleado quedan limitados a los menús habilitados de su sucursal.</p>
+                <select class="form-select mb-3" value="@sucursalId" @onchange="SeleccionarSucursal">
+                    <option value="0">Selecciona una sucursal</option>
+                    @foreach (var sucursal in resumen.Sucursales)
+                    { <option @key="sucursal.IdSucursal" value="@sucursal.IdSucursal">@sucursal.Nombre</option> }
+                </select>
+                @if (resumen.Contexto.EsJefeEmpresa)
+                {
+                    <label>Nueva sucursal</label><input class="form-control mb-2" @bind="nombreSucursal" maxlength="200" />
+                    <button class="secondary-btn mb-3" disabled="@ocupado" @onclick="CrearSucursalAsync">Crear sucursal</button>
+                }
+                @if (sucursalId > 0)
+                {
+                    @MenuChecks()
+                    @if (resumen.Contexto.EsJefeEmpresa)
+                    { <button class="primary-btn" disabled="@ocupado" @onclick="GuardarSucursalAsync">Guardar menús de sucursal</button> }
+                }
+            }
+            else if (tab == "Roles")
+            {
+                <button class="secondary-btn mb-3" @onclick="NuevoPerfil">Nuevo rol</button>
+                <select class="form-select mb-3" value="@perfilId" @onchange="SeleccionarPerfil">
+                    <option value="0">Selecciona un rol para editar</option>
+                    @foreach (var perfil in resumen.Perfiles)
+                    { <option @key="perfil.IdPerfil" value="@perfil.IdPerfil">@perfil.Nombre</option> }
+                </select>
+                @if (RolCompartido) { <p class="alert alert-info">Este rol es compartido. Solo el titular puede modificarlo.</p> }
+                <label>Nombre del rol</label><input class="form-control mb-3" maxlength="200" @bind="nombrePerfil" @bind:after="() => confirmarImpacto = false" disabled="@(ocupado || RolCompartido)" />
+                <label>Alcance</label><select class="form-select mb-3" @bind="sucursalId" disabled="@(ocupado || RolCompartido)" @bind:after="() => confirmarImpacto = false">
+                    @if (resumen.Contexto.EsJefeEmpresa) { <option value="0">Todas las sucursales de la empresa</option> }
+                    @foreach (var sucursal in resumen.Sucursales)
+                    { <option @key="sucursal.IdSucursal" value="@sucursal.IdSucursal">@sucursal.Nombre</option> }
+                </select>
+                @MenuChecks()
+                @if (perfilId > 0 && !RolCompartido)
+                {
+                    <p>Este cambio afecta a @UsuariosAfectados usuario(s) que heredan los permisos del rol.</p>
+                    @if (UsuariosAfectados > 0)
+                    { <label class="d-block mb-3"><input type="checkbox" @bind="confirmarImpacto" disabled="@ocupado" /> Confirmo actualizar los permisos de estos usuarios</label> }
+                }
+                <button class="primary-btn" disabled="@(ocupado || RolCompartido || (perfilId > 0 && UsuariosAfectados > 0 && !confirmarImpacto))" @onclick="GuardarPerfilAsync">Guardar rol</button>
+                @if (perfilId > 0 && !RolCompartido)
+                { <button class="btn btn-outline-danger ms-2" disabled="@ocupado" @onclick="DesactivarRolAsync">Desactivar rol</button> }
+            }
+            else if (tab == "Usuarios")
+            {
+                <div class="user-management-head">
+                    <div>
+                        <span class="panel-kicker">Equipo de la empresa</span>
+                        <h3>Usuarios y asignaciones</h3>
+                        <p>Crea cuentas y vincúlalas a un rol específico de la sucursal correspondiente.</p>
+                    </div>
+                    <button class="secondary-btn" @onclick="NuevaCuenta"><i class="bi bi-person-plus"></i> Crear cuenta</button>
+                </div>
+
+                <div class="user-management-body">
+                    <div class="roles-field roles-field-full">
+                        <span>Usuario</span>
+                        <select class="roles-input" value="@usuarioEditando" @onchange="SeleccionarUsuario">
+                            <option value="0">Nueva cuenta</option>
+                            @foreach (var miembro in resumen.Usuarios)
+                            { <option @key="miembro.IdUsuario" value="@miembro.IdUsuario">@miembro.Usuario?.NombreCompleto — @(miembro.IdUsuario == resumen.Empresa.IdTitular ? "Titular" : miembro.EsAdminSucursal ? "Administrador sucursal" : "Empleado") @(miembro.Suspendido ? "(Suspendido)" : "")</option> }
+                        </select>
+                    </div>
+
+                    <div class="user-record-card">
+                        <div class="user-record-avatar">
+                            <div class="user-avatar-preview">
+                                @if (!string.IsNullOrWhiteSpace(avatarUrl))
+                                {
+                                    <img src="@avatarUrl" alt="Avatar del usuario" />
+                                }
+                                else
+                                {
+                                    <i class="bi bi-person-fill"></i>
+                                }
+                            </div>
+                            <button type="button" class="avatar-change-btn" @onclick="() => avatarSelectorAbierto = !avatarSelectorAbierto" disabled="@(ocupado || !UsuarioEditable)">
+                                <i class="bi bi-camera"></i> Cambiar avatar
+                            </button>
+                            @if (avatarSelectorAbierto)
+                            {
+                                <div class="user-avatar-options">
+                                    @foreach (var avatar in AvataresDisponibles)
+                                    {
+                                        <button type="button" class="user-avatar-option @(avatarUrl == avatar ? "selected" : "")" @onclick="() => SeleccionarAvatar(avatar)">
+                                            <img src="@avatar" alt="Avatar disponible" />
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div class="roles-form-grid">
+                            <div class="roles-field"><span>Nombres</span><input class="roles-input" @bind="nombres" maxlength="100" disabled="@(ocupado || !UsuarioEditable)" /></div>
+                            <div class="roles-field"><span>Apellidos</span><input class="roles-input" @bind="apellidos" maxlength="100" disabled="@(ocupado || !UsuarioEditable)" /></div>
+                            <div class="roles-field"><span>Email corporativo</span><input class="roles-input" type="email" @bind="email" maxlength="320" disabled="@(ocupado || !UsuarioEditable)" /></div>
+                            <div class="roles-field"><span>Fecha de nacimiento</span><input class="roles-input" type="date" @bind="fechaNacimiento" disabled="@(ocupado || !UsuarioEditable)" /></div>
+                            <div class="roles-field"><span>Tipo de cliente</span>
+                                <select class="roles-input" @bind="tipoCliente" @bind:after="CambiarTipoCliente" disabled="@(ocupado || !UsuarioEditable)">
+                                    <option value="1">Persona natural</option>
+                                    <option value="2">Empresa</option>
+                                </select>
+                            </div>
+                            <div class="roles-field"><span>Tipo de identificación</span>
+                                <select class="roles-input" @bind="tipoIdentificacion" disabled="@(ocupado || !UsuarioEditable)">
+                                    <option value="1">Cédula</option>
+                                    <option value="2">RUC</option>
+                                    <option value="3">Identificación del exterior</option>
+                                </select>
+                            </div>
+                            <div class="roles-field"><span>Identificación</span><input class="roles-input" @bind="identificacion" maxlength="13" inputmode="numeric" disabled="@(ocupado || !UsuarioEditable)" /></div>
+                            <div class="roles-field"><span>Celular</span><input class="roles-input" @bind="celular" maxlength="30" inputmode="tel" disabled="@(ocupado || !UsuarioEditable)" /></div>
+                            <div class="roles-field roles-field-full"><span>Empresa</span><input class="roles-input" value="@resumen.Empresa.Nombre" readonly /></div>
+                            @if (usuarioEditando == 0)
+                            {
+                                <div class="roles-field roles-field-full"><span>Contraseña inicial</span><input class="roles-input" type="password" @bind="clave" autocomplete="new-password" disabled="@ocupado" /></div>
+                            }
+                        </div>
+                    </div>
+
+                    @Asignacion()
+                </div>
+                @if (usuarioEditando > 0)
+                {
+                    <label class="d-block my-3"><input type="checkbox" @bind="permisosUnicos" disabled="@(ocupado || !UsuarioEditable)" /> Usar permisos individuales en lugar de los del rol</label>
+                    <p>Los permisos individuales reemplazan los del rol y siguen limitados por la empresa y sucursal.</p>
+                    @if (adminSucursal) { <p>Los administradores de sucursal acceden a todas las acciones habilitadas en su sucursal; el rol y las excepciones individuales no limitan ese acceso.</p> }
+                    @if (permisosUnicos) { @MenuChecks() }
+                    @if (resumen.Usuarios.First(x => x.IdUsuario == usuarioEditando).MenusJson is not null)
+                    { <button class="secondary-btn mb-3" disabled="@(ocupado || !UsuarioEditable)" @onclick="RestablecerRolAsync">Restablecer permisos del rol</button> }
+                }
+                <button class="primary-btn" disabled="@(ocupado || !UsuarioEditable)" @onclick="GuardarUsuarioAsync">@(usuarioEditando == 0 ? "Crear cuenta" : "Guardar asignación")</button>
+                @if (usuarioEditando > 0)
+                {
+                    var miembro = resumen.Usuarios.First(x => x.IdUsuario == usuarioEditando);
+                    @if (usuarioEditando != userId && usuarioEditando != resumen.Empresa.IdTitular && (resumen.Contexto.EsJefeEmpresa || !miembro.EsAdminSucursal))
+                    {
+                        <button class="btn btn-outline-danger ms-2" disabled="@ocupado" @onclick="() => CambiarSuspensionAsync(!miembro.Suspendido)">@(miembro.Suspendido ? "Reactivar acceso" : "Suspender acceso")</button>
+                        @if (!miembro.Suspendido)
+                        {
+                            <button class="btn btn-outline-secondary ms-2" disabled="@ocupado" @onclick="() => confirmarDesvinculacion = true">Desvincular usuario</button>
+                        }
+                    }
+                    @if (confirmarDesvinculacion)
+                    {
+                        <div class="assignment-note mt-2"><span>Se quitará su acceso a esta empresa, pero no se borrará su cuenta de E-Fact.</span><button class="btn btn-danger btn-sm ms-2" disabled="@ocupado" @onclick="DesvincularAsync">Confirmar</button><button class="btn btn-light btn-sm ms-2" disabled="@ocupado" @onclick="() => confirmarDesvinculacion = false">Cancelar</button></div>
+                    }
+                    <h4 class="mt-4">Acceso efectivo guardado</h4>
+                    <p>Esta vista muestra la asignación guardada. Guarda los cambios para actualizarla.</p>
+                    <div class="table-responsive"><table class="table"><thead><tr><th>Menú</th><th>Acciones permitidas</th><th>Origen o limitación</th></tr></thead><tbody>
+                    @foreach (var menu in resumen.CatalogoMenus.Where(x => x.UrlMenu is not null))
+                    {
+                        var permitidas = accesoEfectivo.GetValueOrDefault(menu.IdMenu);
+                        <tr @key="menu.IdMenu"><td>@menu.NombreMenu</td><td>@(permitidas == 0 ? "Sin acceso" : string.Join(", ", AccionesEditables.Where(x => permitidas.HasFlag(x))))</td><td>@MotivoAcceso(menu)</td></tr>
+                    }
+                    </tbody></table></div>
+                }
+            }
+            else if (tab == "Invitaciones")
+            {
+                <h3>Invitar a una cuenta de E-Fact</h3>
+                <p>Envía el enlace al correo de una cuenta existente de E-Fact. Al aceptarlo, esa persona conservará su contraseña y verá en E-Contax la información de tu empresa, limitada a la sucursal y al rol asignados.</p>
+                <label>Correo</label><input class="form-control mb-3" type="email" @bind="email" maxlength="320" />
+                @Asignacion()
+                <button class="primary-btn my-3" disabled="@ocupado" @onclick="InvitarAsync">Enviar invitación</button>
+                @if (ultimoEnlaceInvitacion is not null)
+                {
+                    <div class="invitation-link-card"><i class="bi bi-link-45deg"></i><div><strong>Enlace generado y enviado</strong><small>También puedes compartirlo directamente con la cuenta invitada.</small><a href="@ultimoEnlaceInvitacion" target="_blank" rel="noopener">Abrir enlace de invitación</a></div></div>
+                }
+                <table class="table"><thead><tr><th>Correo</th><th>Vencimiento (UTC)</th><th></th></tr></thead><tbody>
+                @foreach (var invitacion in resumen.Invitaciones)
+                {
+                    <tr @key="invitacion.IdInvitacion"><td>@invitacion.Email</td><td>@invitacion.Vence.ToString("dd/MM/yyyy HH:mm")</td><td><button class="btn btn-outline-danger" disabled="@ocupado" @onclick="() => CancelarAsync(invitacion.IdInvitacion)">Cancelar</button></td></tr>
+                }
+                </tbody></table>
+            }
+            else if (tab == "Historial")
+            {
+                <h3>Historial de roles y permisos</h3><p>Últimos 100 cambios visibles para tu ámbito. Fechas en UTC.</p>
+                <div class="table-responsive"><table class="table"><thead><tr><th>Fecha</th><th>Responsable</th><th>Cambio</th><th>Detalle</th></tr></thead><tbody>
+                @foreach (var cambio in historial)
+                {
+                    <tr @key="cambio.IdAuditoria"><td>@cambio.Fecha.ToString("dd/MM/yyyy HH:mm")</td><td>@(cambio.Usuario?.NombreCompleto ?? $"Usuario {cambio.IdUsuario}")</td><td>@cambio.Detalles</td>
+                        <td><details><summary>Ver antes y después</summary><p>Antes: @TextoCambio(cambio.ValoresPrevios)</p><p>Después: @TextoCambio(cambio.ValorNuevo)</p></details></td></tr>
+                }
+                </tbody></table></div>
+            }
+        }
+        </section>
+    }
+</div>
+
+@code {
+    private RenderFragment MenuChecks() => @<div class="my-3">
+        <p>@seleccion.Count menú(s) seleccionado(s). Habilita «Ver» antes de conceder otras acciones.</p>
+        @foreach (var grupo in GruposMenus)
+        {
+            var editables = grupo.Where(x => MenuDisponible(x.IdMenu)).ToList();
+            var bloqueado = ocupado || RolCompartido || (tab == "Usuarios" && !UsuarioEditable) || (tab == "Sucursales" && !resumen!.Contexto.EsJefeEmpresa);
+            <fieldset @key="grupo.Key" class="border rounded p-3 mb-3" disabled="@bloqueado">
+                <legend class="fs-6">@grupo.Key — @grupo.Count(x => seleccion.Contains(x.IdMenu))/@grupo.Count()</legend>
+                <label class="d-block mb-2"><input type="checkbox" checked="@(editables.Count > 0 && editables.All(x => seleccion.Contains(x.IdMenu)))" disabled="@(editables.Count == 0)" @onchange="e => ToggleGrupo(editables, e.Value is true)" /> Seleccionar grupo</label>
+                @foreach (var menu in grupo)
+                {
+                    var disponible = MenuDisponible(menu.IdMenu);
+                    <div @key="menu.IdMenu" class="mb-3">
+                        <label><input type="checkbox" checked="@seleccion.Contains(menu.IdMenu)" disabled="@(!disponible)" @onchange="e => ToggleMenu(menu.IdMenu, e.Value is true)" /> @menu.NombreMenu</label>
+                        @if (!disponible) { <small class="d-block text-muted">@(RolCompartido ? "Rol compartido de solo lectura" : "No habilitado en la empresa, sucursal o tu ámbito")</small> }
+                        @if (tab != "Sucursales")
+                        {
+                            <div class="d-flex flex-wrap gap-3 mt-1">
+                            @foreach (var accion in AccionesEditables)
+                            { <label @key="accion"><input type="checkbox" checked="@(seleccion.Contains(menu.IdMenu) && acciones.GetValueOrDefault(menu.IdMenu).HasFlag(accion))" disabled="@(!disponible || (accion != EContaxAccion.Ver && !seleccion.Contains(menu.IdMenu)))" @onchange="e => ToggleAccion(menu.IdMenu, accion, e.Value is true)" /> @accion</label> }
+                            </div>
+                        }
+                    </div>
+                }
+            </fieldset>
+        }
+    </div>;
+    private RenderFragment Asignacion() => @<div class="assignment-card">
+        <div class="assignment-card-head">
+            <div><span class="panel-kicker">Alcance operativo</span><strong>Sucursal y rol</strong></div>
+            <span class="assignment-badge"><i class="bi bi-shield-check"></i> Por sucursal</span>
+        </div>
+        <div class="roles-form-grid">
+            <div class="roles-field">
+                <span>Sucursal</span>
+                <select class="roles-input" @bind="sucursalId" @bind:after="CambiarSucursalAsignada" disabled="@(ocupado || (tab == "Usuarios" && !UsuarioEditable))">
+                    <option value="0">Selecciona una sucursal</option>
+                    @foreach (var sucursal in resumen!.Sucursales)
+                    { <option @key="sucursal.IdSucursal" value="@sucursal.IdSucursal">@sucursal.Nombre</option> }
+                </select>
+            </div>
+            <div class="roles-field">
+                <span>Rol de la sucursal</span>
+                <select class="roles-input" @bind="perfilAsignado" @bind:after="CambiarPerfilAsignado" disabled="@(ocupado || (tab == "Usuarios" && !UsuarioEditable) || sucursalId <= 0)">
+                    <option value="0">@(sucursalId > 0 ? "Selecciona un rol" : "Selecciona primero la sucursal")</option>
+                    @foreach (var perfil in PerfilesSucursal)
+                    { <option @key="perfil.IdPerfil" value="@perfil.IdPerfil">@perfil.Nombre</option> }
+                </select>
+            </div>
+        </div>
+        @if (sucursalId > 0 && !PerfilesSucursal.Any())
+        { <div class="assignment-note"><i class="bi bi-info-circle"></i> Esta sucursal todavía no tiene roles propios. Créalo primero desde “Roles y permisos”.</div> }
+        @if (resumen.Contexto.EsJefeEmpresa)
+        { <label class="assignment-check"><input type="checkbox" @bind="adminSucursal" disabled="@(ocupado || (tab == "Usuarios" && !UsuarioEditable))" /> <span>Administrador de sucursal <small>Puede administrar la operación de esta sucursal.</small></span></label> }
+    </div>;
+}

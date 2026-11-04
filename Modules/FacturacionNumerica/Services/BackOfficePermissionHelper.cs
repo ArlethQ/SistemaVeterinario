@@ -1,0 +1,145 @@
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using Simetric.Data;
+
+namespace Simetric.Services;
+
+public static class BackOfficePermissionHelper
+{
+    private const string UsuarioERubricaEmail = "servicioalcliente@numerosasesores.com";
+    private const string GestorCatalogoBackOfficeEmail = "lguairacaja@numerosasesores.com";
+    public const string UsuarioBackOfficeMultiServicioEmail = "backoffice@numericasoftware.com";
+
+    public const int SuperAdministradorRoleId = 2;
+    public const int BackOfficeRoleId = 7;
+    public const int AdministradorBackOfficeTipoCliente = 1;
+    public const int CobranzasBackOfficeTipoCliente = 3;
+
+    public static bool PuedeAprobarTransferencias(int? idTipoUsuario, int? tipoCliente) =>
+        idTipoUsuario == SuperAdministradorRoleId ||
+        (idTipoUsuario == BackOfficeRoleId &&
+            (tipoCliente == AdministradorBackOfficeTipoCliente ||
+             tipoCliente == CobranzasBackOfficeTipoCliente));
+
+    public static bool EsAdministradorBackOffice(int? idTipoUsuario, int? tipoCliente) =>
+        idTipoUsuario == SuperAdministradorRoleId ||
+        (idTipoUsuario == BackOfficeRoleId && tipoCliente == AdministradorBackOfficeTipoCliente);
+
+    public static bool PuedeVerTelemetria(int? idTipoUsuario, int? tipoCliente) =>
+        idTipoUsuario == SuperAdministradorRoleId;
+
+    public static bool PuedeVerERubrica(string? email) =>
+        string.Equals(email?.Trim(), UsuarioERubricaEmail, StringComparison.OrdinalIgnoreCase);
+
+    public static bool PuedeGestionarUanacreditos(string? email) => false;
+
+    public static bool PuedeGestionarCatalogo(string? email) =>
+        string.Equals(email?.Trim(), GestorCatalogoBackOfficeEmail, StringComparison.OrdinalIgnoreCase);
+
+    public static async Task<bool> PuedeGestionarCatalogoAsync(
+        ClaimsPrincipal user,
+        IDbContextFactory<AppDbContext> dbFactory)
+    {
+        if (PuedeGestionarCatalogo(user.FindFirst(ClaimTypes.Email)?.Value))
+            return true;
+
+        if (!int.TryParse(user.FindFirst("IdUsuario")?.Value, out var idUsuario))
+            return false;
+
+        await using var context = await dbFactory.CreateDbContextAsync();
+        var emailActual = await context.Usuarios
+            .AsNoTracking()
+            .Where(usuario => usuario.IdUsuario == idUsuario)
+            .Select(usuario => usuario.Email)
+            .FirstOrDefaultAsync();
+
+        return PuedeGestionarCatalogo(emailActual);
+    }
+
+    public static bool PuedeCambiarServicioBackOffice(string? email) =>
+        string.Equals(email?.Trim(), UsuarioBackOfficeMultiServicioEmail, StringComparison.OrdinalIgnoreCase);
+
+    public static bool PuedeAccederERubrica(int? idTipoUsuario, int? tipoCliente, string? email) =>
+        PuedeVerERubrica(email) ||
+        idTipoUsuario == SuperAdministradorRoleId ||
+        (idTipoUsuario == BackOfficeRoleId && tipoCliente == AdministradorBackOfficeTipoCliente);
+
+    public static async Task<bool> PuedeComprarFirmasAsync(
+        ClaimsPrincipal user,
+        IDbContextFactory<AppDbContext> dbFactory)
+    {
+        if (user.Identity?.IsAuthenticated != true ||
+            !int.TryParse(user.FindFirst("IdUsuario")?.Value, out var idUsuario))
+            return false;
+
+        await using var context = await dbFactory.CreateDbContextAsync();
+        return await context.Usuarios.AsNoTracking().AnyAsync(usuario =>
+            usuario.IdUsuario == idUsuario && usuario.Estado == true &&
+            (usuario.IdTipoUsuario == SuperAdministradorRoleId ||
+             (usuario.IdTipoUsuario == BackOfficeRoleId &&
+              usuario.TipoCliente != 2)));
+    }
+    public static async Task<bool> PuedeAccederERubricaAsync(
+        ClaimsPrincipal user,
+        IDbContextFactory<AppDbContext> dbFactory)
+    {
+        if (!int.TryParse(user.FindFirst("IdUsuario")?.Value, out var idUsuario))
+        {
+            return PuedeAccederERubrica(
+                int.TryParse(user.FindFirst("IdTipoUsuario")?.Value, out var idTipoUsuario) ? idTipoUsuario : null,
+                int.TryParse(user.FindFirst("TipoCliente")?.Value, out var tipoCliente) ? tipoCliente : null,
+                user.FindFirst(ClaimTypes.Email)?.Value);
+        }
+
+        await using var context = await dbFactory.CreateDbContextAsync();
+        var usuarioActual = await context.Usuarios
+            .AsNoTracking()
+            .Where(usuario => usuario.IdUsuario == idUsuario)
+            .Select(usuario => new { usuario.Email, usuario.IdTipoUsuario, usuario.TipoCliente })
+            .FirstOrDefaultAsync();
+
+        return usuarioActual is not null &&
+            PuedeAccederERubrica(usuarioActual.IdTipoUsuario, usuarioActual.TipoCliente, usuarioActual.Email);
+    }
+
+    public static async Task<bool> PuedeGestionarUanacreditosAsync(
+        ClaimsPrincipal user,
+        IDbContextFactory<AppDbContext> dbFactory)
+    {
+        if (PuedeGestionarUanacreditos(user.FindFirst(ClaimTypes.Email)?.Value))
+        {
+            return true;
+        }
+
+        if (!int.TryParse(user.FindFirst("IdUsuario")?.Value, out var idUsuario))
+        {
+            return false;
+        }
+
+        await using var context = await dbFactory.CreateDbContextAsync();
+        var emailActual = await context.Usuarios
+            .AsNoTracking()
+            .Where(usuario => usuario.IdUsuario == idUsuario)
+            .Select(usuario => usuario.Email)
+            .FirstOrDefaultAsync();
+
+        return PuedeGestionarUanacreditos(emailActual);
+    }
+
+    public static async Task<bool> PuedeGestionarUanacreditosAsync(
+        int userId,
+        IDbContextFactory<AppDbContext> dbFactory)
+    {
+        if (userId <= 0)
+            return false;
+
+        await using var context = await dbFactory.CreateDbContextAsync();
+        var emailActual = await context.Usuarios
+            .AsNoTracking()
+            .Where(usuario => usuario.IdUsuario == userId && usuario.Estado == true)
+            .Select(usuario => usuario.Email)
+            .FirstOrDefaultAsync();
+
+        return PuedeGestionarUanacreditos(emailActual);
+    }
+}

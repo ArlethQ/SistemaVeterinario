@@ -20,7 +20,7 @@
                 <label>Usuario o correo electrónico<input autocomplete="username" @bind="_username" placeholder="Ingresa tu usuario" /></label>
                 <label>Contraseña<span class="password-control"><input type="@(_mostrarClave ? "text" : "password")" autocomplete="current-password" @bind="_password" placeholder="Ingresa tu contraseña" /><button type="button" @onclick="() => _mostrarClave = !_mostrarClave">@(_mostrarClave ? "Ocultar" : "Mostrar")</button></span></label>
                 <div class="form-options"><span></span><a href="/olvide-contrasena">¿Olvidaste tu contraseña?</a></div>
-                <label>Localidad / Sucursal<select @bind="_localidad"><option value="1">Hospital de Especialidades Veterinarias</option><option value="2">Clínica Equina / Fauna Silvestre</option></select></label>
+                <label>Veterinaria / Sucursal<select @bind="_localidad">@foreach (var localidad in _localidades) { <option value="@localidad.Id">@localidad.Descripcion</option> }</select></label>
                 <button type="submit" disabled="@_cargando">@(_cargando ? "Validando credenciales..." : "Ingresar")</button>
             </form>
             <p class="register-prompt">Las cuentas son administradas por personal autorizado.</p>
@@ -35,9 +35,17 @@
     private string _username = string.Empty;
     private string _password = string.Empty;
     private int _localidad = 1;
+    private List<CatalogoItemGenericoDto> _localidades = [];
     private string? _mensajeError;
     private bool _cargando;
     private bool _mostrarClave;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _localidades = await AuthService.ObtenerLocalidadesUsuarioAsync();
+        if (_localidades.Count > 0) _localidad = _localidades[0].Id;
+    }
+
     private async Task IngresarAsync() {
         _mensajeError = null; _cargando = true;
         try

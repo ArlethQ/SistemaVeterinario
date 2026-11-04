@@ -1,0 +1,2622 @@
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using MimeKit;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
+using Simetric.Components.Helpers;
+using Simetric.Data;
+using Simetric.Models;
+using Simetric.Services;
+using Simetric.ViewModels;
+using System.Diagnostics;
+using System.Net;
+using System.Globalization;
+using MimeKit.Utils;
+
+public interface IEmailService
+{
+    Task EnviarInvitacionEContaxAsync(string emailDestino, string empresa, string sucursal, string rol, string url);
+    Task EnviarClaveTemporal(string emailDestino, string claveTemporal);
+    Task EnviarClaveTemporal(string emailDestino, string claveTemporal, int minutosExpira, string motivo);
+    Task EnviarBienvenidaVendedorBackOfficeAsync(string emailDestino, string nombreVendedor, string loginUrl, string usuario, string? codigoAcceso = null, string? setupUrl = null, int? minutosExpira = null);
+    Task EnviarCredencialesBackOfficeAsync(string emailDestino, string nombreUsuario, string perfil, string loginUrl, string usuario, string contrasenaTemporal);
+    Task EnviarCuentaCreadaAsync(string emailDestino, string? nombreUsuario, string? claveTemporal = null);
+    Task EnviarAvisoRenovacionAliadoAsync(string emailDestino, string nombreAliado, string cliente, string producto, DateTime fechaVencimiento, int diasRestantes);
+    Task EnviarAvisoComisionAliadoAsync(string emailDestino, string nombreDestinatario, string periodo, decimal total, string estado);
+    Task EnviarCorreccionFacturaAliadoAsync(string emailDestino, string nombreAliado, string periodo, string observacion);
+    Task EnviarAvisoComisionBackOfficeAsync(string emailDestino, string periodo, decimal total, string estado, string aliado);
+    Task EnviarAvisoFacturaLiquidacionAsync(string emailDestino, string nombreAliado, string periodo, decimal total, string razonSocial, string? ruc, string? direccion, string? emailEmisor, string? telefonoEmisor);
+    Task EnviarAvisoRenovacionClienteAsync(string emailDestino, string nombreCliente, string servicio, int? documentosDisponibles, DateTime? fechaVencimiento, int? diasRestantes);
+    Task EnviarFacturaAsync(
+        string numeroFactura,
+        IEnumerable<string> destinatarios,
+        string? nombreCliente,
+        decimal? totalFactura,
+        string rutaXmlAdjunto,
+        string rutaPdfAdjunto,
+        IEnumerable<string>? copiasOcultas = null);
+    Task EnviarAvisoFacturaAnuladaBackOfficeAsync(
+        string numeroFactura,
+        IEnumerable<string> destinatarios,
+        string? nombreCliente,
+        string? identificacionCliente,
+        decimal? totalFactura,
+        DateTime? fechaEmision,
+        string? estadoSri,
+        string? numeroAutorizacion);
+    Task EnviarNotaCreditoAsync(
+        string numeroNotaCredito,
+        string numeroDocumentoModificado,
+        IEnumerable<string> destinatarios,
+        string? nombreCliente,
+        decimal? totalNotaCredito,
+        string rutaXmlAdjunto,
+        string? rutaPdfAdjunto);
+    Task EnviarAvisoNotaCreditoAnuladaBackOfficeAsync(
+        string numeroNotaCredito,
+        string? numeroDocumentoModificado,
+        IEnumerable<string> destinatarios,
+        string? nombreCliente,
+        string? identificacionCliente,
+        decimal? totalNotaCredito,
+        DateTime? fechaDocumentoModificado,
+        string? estadoSri,
+        string? numeroAutorizacion);
+    Task EnviarNotaDebitoAsync(
+        string numeroNotaDebito,
+        string numeroDocumentoModificado,
+        IEnumerable<string> destinatarios,
+        string? nombreCliente,
+        decimal? totalNotaDebito,
+        string rutaXmlAdjunto,
+        string? rutaPdfAdjunto);
+    Task EnviarGuiaRemisionAsync(
+        string numeroGuiaRemision,
+        string numeroDocumentoSustento,
+        IEnumerable<string> destinatarios,
+        string? nombreDestinatario,
+        string rutaXmlAdjunto,
+        string? rutaPdfAdjunto);
+    Task EnviarLiquidacionCompraAsync(
+        string numeroLiquidacion,
+        IEnumerable<string> destinatarios,
+        string? nombreProveedor,
+        decimal? totalLiquidacion,
+        string rutaXmlAdjunto,
+        string? rutaPdfAdjunto);
+    Task EnviarRetencionAsync(
+        string numeroRetencion,
+        string numeroDocumentoSustento,
+        IEnumerable<string> destinatarios,
+        string? nombreProveedor,
+        decimal? totalRetenido,
+        string rutaXmlAdjunto,
+        string? rutaPdfAdjunto);
+    Task EnviarEstadoCuentaAsync(
+        IEnumerable<string> destinatarios,
+        EstadoCuentaDetalleVM detalle,
+        byte[] pdfAdjunto,
+        string nombreArchivoPdf);
+    Task EnviarConfirmacionCompraDocumentosAsync(
+        string emailDestino,
+        string? nombreCliente,
+        int documentosComprados,
+        int saldoActual,
+        decimal montoTotal,
+        string? reference,
+        string? authorizationCode);
+    Task EnviarAvisoCobroPendienteAsync(
+        string emailDestino,
+        string? nombreCliente,
+        string? producto,
+        string? planPaquete,
+        decimal montoTotal,
+        string? formaPago,
+        string? referencia);
+    Task EnviarNotificacionPagoFirmaElectronicaAsync(
+        string? nombreSolicitante,
+        string? identificacion,
+        string? correoSolicitante,
+        string? tipoFirma,
+        string? vigencia,
+        decimal montoTotal,
+        string? reference,
+        string? authorizationCode,
+        int solicitudId);
+    Task EnviarSolicitudFirmaProcesadaAsync(
+        string emailDestino,
+        string? nombreCliente,
+        int solicitudId);
+    Task EnviarSolicitudFirmaRechazadaAsync(
+        string emailDestino,
+        string? nombreCliente,
+        int solicitudId,
+        string? motivo);
+    Task EnviarAvisoRenovacionFirmaAsync(
+        string emailDestino,
+        string? nombreCliente,
+        string? ruc,
+        DateTime fechaExpiracion,
+        int diasRestantes);
+    Task EnviarAvisoDocumentosAgotadosClienteAsync(
+        string emailDestino,
+        string? nombreCliente);
+    Task EnviarAvisoDocumentosAgotadosAdministrativoAsync(
+        string? nombreCliente,
+        string? identificacion,
+        string? correoCliente,
+        string? telefonoCliente,
+        DateTime? fechaUltimaRecarga,
+        string? paqueteAnterior,
+        DateTime fechaAgotamiento);
+}
+
+public class EmailService : IEmailService
+{
+    private const string EfactInfoUrl = "https://numericasoftware.com/";
+    private const string EfactInfoDisplayUrl = "numericasoftware.com";
+    private const string EfactContactPhone = "+593 98 413 0238";
+    private const string EfactLogoUrl = "https://efact.numericasoftware.com/images/services/efact.png";
+    private const string ContabilidadNotificacionPagos = "contabilidad@numericasoftware.com";
+    private const string AdministrativoDocumentosAgotados = "administrativo@numericasoftware.com";
+    private readonly AppDbContext _db;
+    private readonly AuditService _auditService;
+    private readonly ILogger<EmailService> _logger;
+    private readonly string _host;
+    private readonly int _puerto;
+    private readonly string _usuario;
+    private readonly string _pass;
+    private readonly string _nombreRemitente;
+    private readonly int _timeoutMs;
+    private readonly SecureSocketOptions _seguridadPreferida;
+    private readonly List<string> _notificacionPagosDestinatarios;
+    private readonly string _urlAccesoPlataforma;
+    private readonly string _urlRecargasDesdeLogin;
+    private readonly string _urlSoportePlataforma;
+    private readonly string _urlConfiguracionFirma;
+    private readonly string _urlSolicitudesFirma;
+    private readonly string _asesoraComercial;
+    private readonly string _telefonoAsesoraComercial;
+    private readonly string _webRootPath;
+
+    public EmailService(
+        AppDbContext db,
+        AuditService auditService,
+        IConfiguration configuration,
+        ILogger<EmailService> logger,
+        IWebHostEnvironment webHostEnvironment)
+    {
+        _db = db;
+        _auditService = auditService;
+        _logger = logger;
+        _webRootPath = webHostEnvironment.WebRootPath;
+
+        _host = GetConfigValue(
+            configuration,
+            "EmailComprobantes:Smtp:Host",
+            "EmailComprobantes:Host",
+            "Smtp:Host") ?? "mail.numericasoftware.com";
+        _puerto = GetConfigInt(
+            configuration,
+            "EmailComprobantes:Smtp:Puerto",
+            "EmailComprobantes:Puerto",
+            "Smtp:Puerto") ?? 8889;
+        _usuario = GetConfigValue(
+            configuration,
+            "EmailComprobantes:Smtp:Usuario",
+            "EmailComprobantes:Usuario",
+            "Smtp:Usuario") ?? string.Empty;
+        _pass = GetConfigValue(
+            configuration,
+            "EmailComprobantes:Smtp:Password",
+            "EmailComprobantes:Password",
+            "Smtp:Password") ?? string.Empty;
+        _nombreRemitente = GetConfigValue(
+            configuration,
+            "EmailComprobantes:Smtp:NombreRemitente",
+            "EmailComprobantes:NombreRemitente",
+            "Smtp:NombreRemitente") ?? "Sistema E-Fact";
+        var appBaseUrl = configuration["AppBaseUrl"] ?? "https://efact.numericasoftware.com/";
+        _urlAccesoPlataforma = new Uri(new Uri(appBaseUrl.TrimEnd('/') + "/"), "login").ToString();
+        _urlSoportePlataforma = new Uri(new Uri(appBaseUrl.TrimEnd('/') + "/"), "soporte").ToString();
+        _urlConfiguracionFirma = new Uri(new Uri(appBaseUrl.TrimEnd('/') + "/"), "e-sign/configuracion/firma").ToString();
+        _urlSolicitudesFirma = new Uri(new Uri(appBaseUrl.TrimEnd('/') + "/"), "solicitud/pagos").ToString();
+        var appRootUrl = new Uri(appBaseUrl.TrimEnd('/') + "/");
+        _urlAccesoPlataforma = new Uri(appRootUrl, "login").ToString();
+        _urlRecargasDesdeLogin = new Uri(appRootUrl, "login?returnUrl=%2Frecargas").ToString();
+        _urlSoportePlataforma = new Uri(appRootUrl, "soporte").ToString();
+        _asesoraComercial = configuration["WhatsAppCloudApi:CommercialAdvisorName"]?.Trim() ?? "Brigitte";
+        _telefonoAsesoraComercial = new string(
+            (configuration["WhatsAppCloudApi:CommercialAdvisorPhoneNumber"] ?? string.Empty)
+                .Where(char.IsDigit)
+                .ToArray());
+        _timeoutMs = GetConfigInt(
+            configuration,
+            "EmailComprobantes:Smtp:TimeoutMs",
+            "EmailComprobantes:TimeoutMs",
+            "Smtp:TimeoutMs") ?? 15000;
+        _seguridadPreferida = ParseSecureSocketOption(GetConfigValue(
+            configuration,
+            "EmailComprobantes:Smtp:Seguridad",
+            "EmailComprobantes:Seguridad",
+            "Smtp:Seguridad"));
+        _notificacionPagosDestinatarios = NormalizarListaCorreos(
+            (configuration.GetSection("EmailComprobantes:NotificacionPagosDestinatarios").Get<string[]>() ?? Array.Empty<string>())
+                .Concat(ParseCorreosConfigurados(configuration["EmailComprobantes:NotificacionPagosCorreo"]))
+                .Concat(ParseCorreosConfigurados(configuration["EmailComprobantes:ContabilidadCorreo"]))
+                .Concat(ParseCorreosConfigurados(configuration["EmailComprobantes:ContabilidadDestinatarios"]))
+                .Append(ContabilidadNotificacionPagos));
+
+        _logger.LogInformation(
+            "SMTP configurado para {Host}:{Puerto} con seguridad {Seguridad} y remitente {Remitente}.",
+            _host,
+            _puerto,
+            _seguridadPreferida,
+            _usuario);
+    }
+
+    public Task EnviarClaveTemporal(string emailDestino, string claveTemporal)
+        => EnviarClaveTemporal(
+            emailDestino,
+            claveTemporal,
+            RecoveryCodeHelper.MinutosExpiracionPorDefecto,
+            "Seguridad / Recuperacion");
+
+    public async Task EnviarCuentaCreadaAsync(string emailDestino, string? nombreUsuario, string? claveTemporal = null)
+    {
+        emailDestino = NormalizarEmail(emailDestino);
+        var nombreSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreUsuario) ? "Usuario" : nombreUsuario.Trim());
+        var claveSegura = WebUtility.HtmlEncode(claveTemporal?.Trim() ?? string.Empty);
+        var urlAccesoSegura = WebUtility.HtmlEncode(_urlAccesoPlataforma);
+        var bloqueClave = string.IsNullOrWhiteSpace(claveTemporal)
+            ? string.Empty
+            : $@"
+                  <div style='background:linear-gradient(180deg,#f6fbff 0%,#ebf4fc 100%);border:1px solid #cfe0f0;border-radius:24px;padding:22px 20px;text-align:center;'>
+                    <div style='font-size:11px;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;color:#5b7d99;margin-bottom:10px;'>Clave temporal</div>
+                    <div style='display:inline-block;background:#006bb5;color:#ffffff;border-radius:18px;padding:14px 24px;font-size:30px;font-weight:900;letter-spacing:0.08em;'>{claveSegura}</div>
+                  </div>";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(emailDestino));
+        mensaje.Subject = "Tu cuenta ha sido confirmada satisfactoriamente";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = $@"
+<div style='margin:0;padding:0;background:#f4f7f6;'>
+  <div style='display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;'>
+    Tu cuenta en E-FACT fue creada correctamente.
+  </div>
+
+  <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;background:linear-gradient(180deg,#f4f7f6 0%,#eaf2fb 100%);margin:0;padding:24px 0;'>
+    <tr>
+      <td align='center' style='padding:0 14px;'>
+        <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='max-width:600px;width:100%;'>
+          <tr>
+            <td style='padding:0;'>
+              <div style='background:#ffffff;border:1px solid #d8e5f1;border-radius:28px;overflow:hidden;box-shadow:0 24px 60px rgba(0,74,124,0.14);'>
+                <div style='background:linear-gradient(135deg,#006bb5 0%,#004a7c 100%);padding:28px 28px 26px 28px;color:#ffffff;'>
+                  <div style='display:inline-block;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.18);font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#dcecff;'>
+                    Nuevo acceso
+                  </div>
+                  <div style='font-family:Segoe UI,Arial,sans-serif;font-size:34px;line-height:1.05;font-weight:800;letter-spacing:0.02em;margin-top:16px;'>
+                    E-FACT
+                  </div>
+                  <div style='font-family:Segoe UI,Arial,sans-serif;font-size:16px;line-height:1.45;font-weight:600;color:#e2effa;margin-top:8px;'>
+                    Tu cuenta ha sido confirmada satisfactoriamente
+                  </div>
+                </div>
+
+                <div style='padding:30px 28px 24px 28px;font-family:Segoe UI,Arial,sans-serif;color:#2c3e50;'>
+                  <div style='font-size:24px;line-height:1.2;font-weight:800;color:#17324d;margin:0 0 10px 0;'>
+                    Hola, {nombreSeguro}
+                  </div>
+                  <div style='font-size:15px;line-height:1.75;color:#47627c;margin:0 0 22px 0;'>
+                    Tu cuenta en <strong>E-FACT</strong> fue creada y confirmada satisfactoriamente. Ya puedes acceder a la plataforma con tu correo registrado.
+                  </div>
+
+                  {bloqueClave}
+
+                  <div style='text-align:center;margin-top:22px;'>
+                    <a href='{urlAccesoSegura}' style='display:inline-block;background:#006bb5;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 24px;font-size:15px;font-weight:800;'>Acceder a la plataforma</a>
+                  </div>
+
+                  <div style='margin-top:24px;background:#f8fbfe;border:1px solid #dde9f3;border-radius:20px;padding:18px;'>
+                    <div style='font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:#6b88a3;margin:0 0 12px 0;'>
+                      Importante
+                    </div>
+                    <div style='font-size:14px;line-height:1.7;color:#47627c;margin:0 0 12px 0;'>
+                      Ingresa a la plataforma desde el enlace anterior usando tu correo registrado.
+                    </div>
+                    <div style='font-size:14px;line-height:1.7;color:#47627c;margin:0 0 12px 0;'>
+                      <strong>Recuerda cambiar la contraseña en tu primer intento de ingreso.</strong>
+                    </div>
+                  </div>
+
+                  <div style='margin-top:22px;padding-top:18px;border-top:1px solid #e2ebf3;font-size:13px;line-height:1.75;color:#6b7f92;'>
+                    Por seguridad, cambia esta clave apenas ingreses y no la compartas con terceros.
+                  </div>
+                </div>
+
+                <div style='padding:0 28px 24px 28px;'>
+                  <div style='background:#eff6fc;border:1px solid #d8e7f4;border-radius:18px;padding:14px 16px;font-family:Segoe UI,Arial,sans-serif;font-size:12px;line-height:1.7;color:#5d7891;'>
+                    Numerica Software · <a href='https://numericasoftware.com/' target='_blank' style='color:#006bb5;font-weight:800;text-decoration:none;'>numericasoftware.com</a> · +593 98 413 0238
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</div>"
+        };
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoRenovacionAliadoAsync(string emailDestino, string nombreAliado, string cliente, string producto, DateTime fechaVencimiento, int diasRestantes)
+    {
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(NormalizarEmail(emailDestino)));
+        mensaje.Subject = $"Renovación próxima: {cliente}";
+        var nombre = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreAliado) ? "Aliado" : nombreAliado.Trim());
+        var clienteSeguro = WebUtility.HtmlEncode(cliente);
+        var productoSeguro = WebUtility.HtmlEncode(producto);
+        var dias = diasRestantes == 0 ? "hoy" : $"en {diasRestantes} día(s)";
+        mensaje.Body = new BodyBuilder
+        {
+            HtmlBody = $"<div style='font-family:Segoe UI,Arial,sans-serif;color:#17324d'><h2>Hola, {nombre}</h2><p>La renovación de <strong>{clienteSeguro}</strong> ({productoSeguro}) vence <strong>{dias}</strong>.</p><p>Fecha de vencimiento: {fechaVencimiento:dd/MM/yyyy}</p><p>Ingresa al Portal de Aliados para registrar la gestión.</p></div>"
+        }.ToMessageBody();
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarCorreccionFacturaAliadoAsync(string emailDestino, string nombreAliado, string periodo, string observacion)
+    {
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(NormalizarEmail(emailDestino)));
+        mensaje.Subject = $"Acción requerida: corrige tu factura de {periodo}";
+        mensaje.Body = new BodyBuilder
+        {
+            TextBody = $"Hola, {nombreAliado}. Tu factura del período {periodo} no fue aprobada. Motivo: {observacion}. Corrige la factura y vuelve a cargarla en Portal de Aliados > Facturas para pago.",
+            HtmlBody = $"<div style='font-family:Segoe UI,Arial,sans-serif;color:#541329'><h2>Hola, {WebUtility.HtmlEncode(nombreAliado)}</h2><p>Tu factura del período <strong>{WebUtility.HtmlEncode(periodo)}</strong> no fue aprobada.</p><p><strong>Cambio solicitado:</strong> {WebUtility.HtmlEncode(observacion)}</p><p>Corrige la factura y vuelve a cargarla en <strong>Portal de Aliados &gt; Facturas para pago</strong> para continuar con tu pago.</p></div>"
+        }.ToMessageBody();
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoComisionAliadoAsync(string emailDestino, string nombreDestinatario, string periodo, decimal total, string estado)
+    {
+        if (string.IsNullOrWhiteSpace(emailDestino)) return;
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(NormalizarEmail(emailDestino)));
+        mensaje.Subject = $"Comisiones {periodo}: {estado}";
+        mensaje.Body = new BodyBuilder { HtmlBody = $"<div style='font-family:Segoe UI,Arial,sans-serif;color:#17324d'><h2>Hola, {WebUtility.HtmlEncode(nombreDestinatario)}</h2><p>Tu período de comisiones <strong>{WebUtility.HtmlEncode(periodo)}</strong> tiene un total de <strong>${total:N2}</strong>.</p><p>Estado: <strong>{WebUtility.HtmlEncode(estado)}</strong>.</p><p>Consulta el detalle en el Portal de Aliados.</p></div>" }.ToMessageBody();
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoComisionBackOfficeAsync(string emailDestino, string periodo, decimal total, string estado, string aliado)
+    {
+        if (string.IsNullOrWhiteSpace(emailDestino)) return;
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(NormalizarEmail(emailDestino)));
+        mensaje.Subject = $"Portal de Aliados: {estado} · {periodo}";
+        mensaje.Body = new BodyBuilder { HtmlBody = $"<div style='font-family:Segoe UI,Arial,sans-serif;color:#17324d'><h2>Notificación de comisiones</h2><p>El aliado <strong>{WebUtility.HtmlEncode(aliado)}</strong> tiene el período <strong>{WebUtility.HtmlEncode(periodo)}</strong> por <strong>${total:N2}</strong>.</p><p>Estado: <strong>{WebUtility.HtmlEncode(estado)}</strong>. Revisa el BackOffice para aprobar o registrar el pago.</p></div>" }.ToMessageBody();
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoFacturaLiquidacionAsync(string emailDestino, string nombreAliado, string periodo, decimal total, string razonSocial, string? ruc, string? direccion, string? emailEmisor, string? telefonoEmisor)
+    {
+        if (string.IsNullOrWhiteSpace(emailDestino)) return;
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(NormalizarEmail(emailDestino)));
+        mensaje.Subject = $"Factura requerida para pagar tus liquidaciones · {periodo}";
+        var receptor = WebUtility.HtmlEncode(razonSocial);
+        mensaje.Body = new BodyBuilder { HtmlBody = $"<div style='font-family:Segoe UI,Arial,sans-serif;color:#17324d'><h2>Hola, {WebUtility.HtmlEncode(nombreAliado)}</h2><p>Debes subir una factura para solicitar el pago de tus liquidaciones del período <strong>{WebUtility.HtmlEncode(periodo)}</strong>.</p><p>Emítela a <strong>{receptor}</strong> por el valor de <strong>${total:N2}</strong>.</p><p>Datos del receptor: RUC {WebUtility.HtmlEncode(ruc ?? "No configurado")} · Dirección {WebUtility.HtmlEncode(direccion ?? "No configurada")} · Teléfono {WebUtility.HtmlEncode(telefonoEmisor ?? "No configurado")} · Correo {WebUtility.HtmlEncode(emailEmisor ?? "No configurado")}.</p><p>Carga el PDF o XML desde el Portal de Aliados. La comisión mensual es fija y no se puede editar.</p></div>" }.ToMessageBody();
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoRenovacionClienteAsync(
+        string emailDestino,
+        string nombreCliente,
+        string servicio,
+        int? documentosDisponibles,
+        DateTime? fechaVencimiento,
+        int? diasRestantes)
+    {
+        if (string.IsNullOrWhiteSpace(emailDestino))
+            return;
+
+        var clienteSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreCliente) ? "Cliente" : nombreCliente.Trim());
+        var servicioSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(servicio) ? "tu servicio" : servicio);
+        var esFirma = string.Equals(servicio, "E-RÚBRICA", StringComparison.OrdinalIgnoreCase);
+        var detalle = esFirma
+            ? ConstruirDetalleFirma(fechaVencimiento, diasRestantes)
+            : ConstruirDetalleDocumentos(documentosDisponibles);
+        var accion = esFirma
+            ? "Renueva tu firma electrónica en E-RÚBRICA antes de que caduque."
+            : "Recarga tus documentos E-FACT antes de agotarlos para continuar facturando.";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(NormalizarEmail(emailDestino)));
+        mensaje.Subject = $"Acción requerida: renovación {servicio} | E-FACT";
+        mensaje.Body = new BodyBuilder
+        {
+            HtmlBody = $"<div style='font-family:Segoe UI,Arial,sans-serif;color:#17324d'><h2>Hola, {clienteSeguro}</h2><p>Te escribimos para avisarte que tu servicio <strong>{servicioSeguro}</strong> requiere atención.</p><p>{detalle}</p><p><strong>Acción recomendada:</strong> {accion}</p><p>Ingresa a E-FACT o comunícate con nuestro equipo para completar la renovación.</p></div>"
+        }.ToMessageBody();
+        await SendMessageAsync(mensaje);
+    }
+
+    private static string ConstruirDetalleDocumentos(int? documentosDisponibles)
+    {
+        var documentos = Math.Max(documentosDisponibles ?? 0, 0);
+        return documentos switch
+        {
+            0 => "Ya no tienes documentos disponibles. Si se acaban, no podrás emitir nuevas facturas.",
+            1 => "Te queda 1 documento disponible. Cuando se acabe, no podrás emitir nuevas facturas.",
+            _ => $"Te quedan {documentos} documentos disponibles. Cuando se acaben, no podrás emitir nuevas facturas."
+        };
+    }
+
+    private static string ConstruirDetalleFirma(DateTime? fechaVencimiento, int? diasRestantes)
+    {
+        var fecha = fechaVencimiento.HasValue ? $" ({fechaVencimiento:dd/MM/yyyy})" : string.Empty;
+        return diasRestantes switch
+        {
+            null => $"Tu firma electrónica va a caducar pronto{fecha}.",
+            <= 0 => $"Tu firma electrónica ya caducó{fecha}.",
+            1 => $"Tu firma electrónica caducará mañana{fecha}.",
+            _ => $"Tu firma electrónica caducará en {diasRestantes} días{fecha}."
+        };
+    }
+
+    private static string TextoVencimiento(int? diasRestantes) => diasRestantes switch
+    {
+        null => "próximamente",
+        < 0 => $"venció hace {Math.Abs(diasRestantes.Value)} día(s)",
+        0 => "hoy",
+        _ => $"en {diasRestantes} día(s)"
+    };
+
+    public async Task EnviarClaveTemporal(string emailDestino, string claveTemporal, int minutosExpira, string motivo)
+    {
+        emailDestino = NormalizarEmail(emailDestino);
+        minutosExpira = minutosExpira > 0 ? minutosExpira : RecoveryCodeHelper.MinutosExpiracionPorDefecto;
+        motivo = string.IsNullOrWhiteSpace(motivo) ? "Seguridad / Recuperacion" : motivo.Trim();
+        var codigoRecuperacion = PrepararCodigoRecuperacionParaCorreo(claveTemporal);
+
+        // =========================================================
+        // 1) Encontrar el usuario por email para sacar el IdUsuario
+        //    (cambia u.Correo por el nombre real si es distinto)
+        // =========================================================
+        var usuario = await _db.Usuarios
+            .FirstOrDefaultAsync(u => u.Email == emailDestino); // <-- si tu campo NO se llama Correo, cámbialo
+
+        int? idUsuario = usuario?.IdUsuario;
+
+        // =========================================================
+        // 2) Capturar valores ANTES (previos) - NO metas la clave real
+        // =========================================================
+        var valoresPrevios = usuario == null ? null : new
+        {
+            usuario.IdUsuario,
+            usuario.Email,
+            usuario.Estado,
+            // Ejemplos comunes (si existen en tu modelo):
+            // usuario.IntentosFallidos,
+            // usuario.Bloqueado,
+            // usuario.BloqueadoHasta,
+            // usuario.ClaveTemporalExpira,
+            // TieneClaveTemporal = usuario.ClaveTemporalHash != null
+        };
+
+        if (usuario != null)
+        {
+            usuario.TokenRecuperacion = Simetric.Components.Helpers.SecurityHelper.HashPassword(codigoRecuperacion);
+            usuario.FechaExpiracionToken = DateTime.Now.AddMinutes(minutosExpira);
+            await _db.SaveChangesAsync();
+        }
+
+        // =========================================================
+        // 4) Capturar valores DESPUÉS (nuevo)
+        // =========================================================
+        var usuarioDespues = usuario == null
+            ? null
+            : await _db.Usuarios.AsNoTracking().FirstOrDefaultAsync(u => u.IdUsuario == usuario.IdUsuario);
+
+        var valorNuevo = usuarioDespues == null ? null : new
+        {
+            usuarioDespues.IdUsuario,
+            usuarioDespues.Email,
+            usuarioDespues.Estado,
+            // Ejemplos si existen:
+            // usuarioDespues.IntentosFallidos,
+            // usuarioDespues.Bloqueado,
+            // usuarioDespues.BloqueadoHasta,
+            // usuarioDespues.ClaveTemporalExpira,
+            // TieneClaveTemporal = usuarioDespues.ClaveTemporalHash != null
+        };
+
+        // =========================================================
+        // 5) Armar correo
+        // =========================================================
+        var motivoSeguro = WebUtility.HtmlEncode(motivo);
+        var codigoSeguro = WebUtility.HtmlEncode(codigoRecuperacion);
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(emailDestino));
+        mensaje.Subject = "Codigo de acceso para actualizar tu clave | E-FACT";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = $@"
+<div style='margin:0;padding:0;background:#f4f7f6;'>
+  <div style='display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;'>
+    Tu codigo de acceso E-FACT vence en {minutosExpira} minutos.
+  </div>
+
+  <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;background:linear-gradient(180deg,#f4f7f6 0%,#eaf2fb 100%);margin:0;padding:24px 0;'>
+    <tr>
+      <td align='center' style='padding:0 14px;'>
+        <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='max-width:600px;width:100%;'>
+          <tr>
+            <td style='padding:0;'>
+              <div style='background:#ffffff;border:1px solid #d8e5f1;border-radius:28px;overflow:hidden;box-shadow:0 24px 60px rgba(0,74,124,0.14);'>
+                <div style='background:linear-gradient(135deg,#006bb5 0%,#004a7c 100%);padding:28px 28px 26px 28px;color:#ffffff;'>
+                  <div style='display:inline-block;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.18);font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#dcecff;'>
+                    Seguridad activa
+                  </div>
+                  <div style='font-family:Segoe UI,Arial,sans-serif;font-size:34px;line-height:1.05;font-weight:800;letter-spacing:0.02em;margin-top:16px;'>
+                    E-FACT
+                  </div>
+                  <div style='font-family:Segoe UI,Arial,sans-serif;font-size:16px;line-height:1.45;font-weight:600;color:#e2effa;margin-top:8px;'>
+                    Codigo de acceso para actualizar tu clave
+                  </div>
+                  <div style='font-family:Segoe UI,Arial,sans-serif;font-size:13px;line-height:1.5;color:#cfe5f8;margin-top:10px;max-width:420px;'>
+                    {motivoSeguro}
+                  </div>
+                </div>
+
+                <div style='padding:30px 28px 24px 28px;font-family:Segoe UI,Arial,sans-serif;color:#2c3e50;'>
+                  <div style='font-size:24px;line-height:1.2;font-weight:800;color:#17324d;margin:0 0 10px 0;'>
+                    Hola,
+                  </div>
+                  <div style='font-size:15px;line-height:1.75;color:#47627c;margin:0 0 22px 0;'>
+                    Generamos un codigo de acceso para que puedas continuar con el cambio de tu contrasña.
+                    Este codigo vence en <span style='color:#006bb5;font-weight:800;'>{minutosExpira} minutos</span>.
+                  </div>
+
+                  <div style='background:linear-gradient(180deg,#f6fbff 0%,#ebf4fc 100%);border:1px solid #cfe0f0;border-radius:24px;padding:22px 20px;text-align:center;box-shadow:inset 0 1px 0 rgba(255,255,255,0.7);'>
+                    <div style='font-size:11px;line-height:1.4;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;color:#5b7d99;margin:0 0 10px 0;'>
+                      Tu codigo de acceso
+                    </div>
+                    <div style='display:inline-block;background:linear-gradient(135deg,#006bb5 0%,#004a7c 100%);color:#ffffff;border-radius:18px;padding:14px 24px;font-size:30px;line-height:1;font-weight:900;letter-spacing:0.22em;box-shadow:0 14px 28px rgba(0,107,181,0.28);'>
+                      {codigoSeguro}
+                    </div>
+                  </div>
+
+                  <div style='margin-top:24px;background:#f8fbfe;border:1px solid #dde9f3;border-radius:20px;padding:18px 18px 6px 18px;'>
+                    <div style='font-size:12px;line-height:1.4;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:#6b88a3;margin:0 0 12px 0;'>
+                      Como usarlo
+                    </div>
+                    <div style='font-size:14px;line-height:1.7;color:#47627c;margin:0 0 12px 0;'>
+                      1. Ingresa al sistema con tu contraséña temporal: <strong>00000000</strong>.
+                    </div>
+                    <div style='font-size:14px;line-height:1.7;color:#47627c;margin:0 0 12px 0;'>
+                      2. Escribe este codigo en la pantalla de cambio de clave.
+                    </div>
+                    <div style='font-size:14px;line-height:1.7;color:#47627c;margin:0 0 12px 0;'>
+                      3. Define tu nueva contraseña y finaliza el proceso.
+                    </div>
+                  </div>
+
+                  <div style='margin-top:22px;padding-top:18px;border-top:1px solid #e2ebf3;font-size:13px;line-height:1.75;color:#6b7f92;'>
+                    No compartas este codigo con nadie. Si tu no solicitaste este cambio, ignora este correo o contacta soporte.
+                  </div>
+                </div>
+
+                <div style='padding:0 28px 24px 28px;'>
+                  <div style='background:#eff6fc;border:1px solid #d8e7f4;border-radius:18px;padding:14px 16px;font-family:Segoe UI,Arial,sans-serif;font-size:12px;line-height:1.7;color:#5d7891;'>
+                    Numerica Software · <a href='https://numericasoftware.com/' target='_blank' style='color:#006bb5;font-weight:800;text-decoration:none;'>numericasoftware.com</a> · +593 98 413 0238
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</div>"
+        };
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        try
+        {
+            await SendMessageAsync(mensaje);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enviando clave temporal a {Email}.", EnmascararEmail(emailDestino));
+
+            // Auditoría de error (sin romper más cosas)
+            await _auditService.RegistrarAuditoriaAsync(
+                idUsuario,
+                "ERROR_ENVIO_CLAVE_TEMPORAL",
+                valoresPrevios,
+                valorNuevo,
+                new { Email = EnmascararEmail(emailDestino), Motivo = motivo, Error = ex.Message }
+            );
+
+            throw;
+        }
+
+        // =========================================================
+        // 7) Auditoría OK (NO debe bloquear el envío)
+        // =========================================================
+        await _auditService.RegistrarAuditoriaAsync(
+     idUsuario,
+     "RECUPERACION_SOLICITADA",
+     valoresPreviosObj: new
+     {
+         Evento = "OlvidoContrasena",
+         Email = EnmascararEmail(emailDestino),
+         Fecha = DateTime.Now
+     },
+     valorNuevoObj: new
+     {
+         Evento = "ClaveTemporalEnviada",
+         Email = EnmascararEmail(emailDestino),
+         ExpiraEnMinutos = minutosExpira
+     },
+     detallesObj: new
+     {
+         Motivo = motivo,
+         ClaveTemporal = "NO_GUARDADA_POR_SEGURIDAD"
+     }
+ );
+    }
+
+    public async Task EnviarBienvenidaVendedorBackOfficeAsync(string emailDestino, string nombreVendedor, string loginUrl, string usuario, string? codigoAcceso = null, string? setupUrl = null, int? minutosExpira = null)
+    {
+        emailDestino = NormalizarEmail(emailDestino);
+
+        var nombreSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreVendedor) ? "Vendedor" : nombreVendedor.Trim());
+        var loginSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(loginUrl) ? "/login" : loginUrl.Trim());
+        var usuarioSeguro = WebUtility.HtmlEncode((usuario ?? string.Empty).Trim());
+        var setupSeguro = WebUtility.HtmlEncode(esUrlVacia(setupUrl) ? loginUrl : setupUrl!.Trim());
+        var codigoSeguro = WebUtility.HtmlEncode((codigoAcceso ?? string.Empty).Trim());
+        var minutosTexto = minutosExpira.GetValueOrDefault(RecoveryCodeHelper.MinutosExpiracionPorDefecto);
+        var incluyeCodigo = !string.IsNullOrWhiteSpace(codigoAcceso);
+        var esContrasenaDirecta = incluyeCodigo && string.IsNullOrWhiteSpace(setupUrl);
+        var botonUrl = esContrasenaDirecta ? loginSeguro : setupSeguro;
+        var botonTexto = esContrasenaDirecta ? "Abrir BackOffice" : "Crear contraseña";
+        string bloqueAccesoHtml;
+        if (incluyeCodigo)
+        {
+            var pasosVendedor = new[]
+            {
+                $"Haz clic en el boton <strong>{botonTexto}</strong>",
+                $"En la pantalla de login escribe este usuario/correo: <strong>{usuarioSeguro}</strong>",
+                $"En el campo de contrasena escribe la contrasena temporal que aparece abajo: <strong>{codigoSeguro}</strong>",
+                "Presiona <strong>Iniciar sesion</strong>"
+            };
+            var credencialesVendedor = esContrasenaDirecta
+                ? new (string? Label, string? Value)[]
+                {
+                    ("Usuario / correo", $"<a href='mailto:{usuarioSeguro}' style='color:#2563eb;text-decoration:underline;'>{usuarioSeguro}</a>"),
+                    ("Contrasena temporal", BuildOutlookCodeBox(codigoSeguro))
+                }
+                : new (string? Label, string? Value)[]
+                {
+                    ("Usuario / correo", $"<a href='mailto:{usuarioSeguro}' style='color:#2563eb;text-decoration:underline;'>{usuarioSeguro}</a>"),
+                    ("Codigo de acceso", BuildOutlookCodeBox(codigoSeguro)),
+                    ("Vigencia", $"Este codigo vence en {minutosTexto} minutos.")
+                };
+            var notaCrearClave = esContrasenaDirecta
+                ? string.Empty
+                : "<p style='Margin:18px 0 0 0;font-family:Segoe UI,Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;'>Primero crea tu contrasena con el codigo de acceso. Luego podras iniciar sesion normalmente.</p>";
+
+            bloqueAccesoHtml = BuildOutlookStepsTable(pasosVendedor)
+                + BuildOutlookCredentialBox(credencialesVendedor)
+                + BuildOutlookButton(botonUrl, botonTexto)
+                + notaCrearClave;
+        }
+        else
+        {
+            bloqueAccesoHtml = BuildOutlookCredentialBox(new (string? Label, string? Value)[]
+                {
+                    ("Usuario", usuarioSeguro)
+                })
+                + "<p style='Margin:18px 0 0 0;font-family:Segoe UI,Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;'>Puedes cambiar la contrasena cuando quieras desde Mi perfil dentro del BackOffice.</p>";
+        }
+        var bloqueAccesoTexto = incluyeCodigo
+            ? esContrasenaDirecta
+                ? $"\nPasos:\n1. Abre BackOffice: {loginUrl}\n2. Escribe este usuario/correo: {usuario}\n3. Escribe esta contraseña temporal: {codigoAcceso}\n4. Presiona Iniciar sesion\n5. Luego puedes cambiarla desde Mi perfil\n\nCredenciales:\nUsuario: {usuario}\nContraseña temporal: {codigoAcceso}\n"
+                : $"\nUsuario: {usuario}\nCodigo de acceso: {codigoAcceso}\nCrear contraseña: {setupUrl}\nEste codigo vence en {minutosTexto} minutos.\n"
+            : "\nPuedes cambiar la contraseña cuando quieras desde Mi perfil en BackOffice.\n";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(emailDestino));
+        mensaje.Subject = "Tus credenciales de acceso BackOffice";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildOutlookEmailShell(
+                "Tus credenciales de acceso BackOffice",
+                "Numerica BackOffice",
+                $"Bienvenido, {nombreSeguro}",
+                "Se creo tu usuario de vendedor. Sigue estos pasos uno por uno para entrar a BackOffice.",
+                bloqueAccesoHtml),
+            TextBody = $"Bienvenido, {nombreVendedor}\n\nLogin: {loginUrl}\nUsuario: {usuario}\n{bloqueAccesoTexto}"
+        };
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+        await SendMessageAsync(mensaje);
+
+        static bool esUrlVacia(string? url) => string.IsNullOrWhiteSpace(url);
+    }
+
+    public async Task EnviarCredencialesBackOfficeAsync(string emailDestino, string nombreUsuario, string perfil, string loginUrl, string usuario, string contrasenaTemporal)
+    {
+        emailDestino = NormalizarEmail(emailDestino);
+
+        var nombreSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreUsuario) ? "Usuario" : nombreUsuario.Trim());
+        var perfilSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(perfil) ? "BackOffice" : perfil.Trim());
+        var loginSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(loginUrl) ? "/login" : loginUrl.Trim());
+        var usuarioSeguro = WebUtility.HtmlEncode((usuario ?? string.Empty).Trim());
+        var claveSeguro = WebUtility.HtmlEncode((contrasenaTemporal ?? string.Empty).Trim());
+        var pasosBackOffice = new[]
+        {
+            "Haz clic en el boton <strong>Abrir BackOffice</strong>",
+            $"En la pantalla de login escribe este usuario/correo: <strong>{usuarioSeguro}</strong>",
+            $"En el campo de contrasena escribe la contrasena temporal que aparece abajo: <strong>{claveSeguro}</strong>",
+            "Presiona <strong>Iniciar sesion</strong>",
+            "Cuando ya estes dentro, puedes cambiar la contrasena desde <strong>Mi perfil</strong>"
+        };
+        var contenidoBackOffice = BuildOutlookStepsTable(pasosBackOffice)
+            + BuildOutlookCredentialBox(new (string? Label, string? Value)[]
+            {
+                ("Perfil", perfilSeguro),
+                ("Usuario / correo", $"<a href='mailto:{usuarioSeguro}' style='color:#2563eb;text-decoration:underline;'>{usuarioSeguro}</a>"),
+                ("Contrasena temporal", BuildOutlookCodeBox(claveSeguro))
+            })
+            + BuildOutlookButton(loginSeguro, "Abrir BackOffice")
+            + "<p style='Margin:18px 0 0 0;font-family:Segoe UI,Arial,sans-serif;font-size:13px;line-height:20px;color:#6b7280;'>No necesitas crear una contrasena antes de entrar. Usa la contrasena temporal de este correo y luego cambiala desde Mi perfil.</p>";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(emailDestino));
+        mensaje.Subject = $"Tus credenciales de acceso {perfilSeguro} | E-FACT";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildOutlookEmailShell(
+                $"Tus credenciales de acceso {perfilSeguro}",
+                "Numerica BackOffice",
+                $"Bienvenido, {nombreSeguro}",
+                $"Se creo tu usuario de <strong>{perfilSeguro}</strong>. Sigue estos pasos uno por uno para entrar a BackOffice.",
+                contenidoBackOffice),
+            TextBody = $"Bienvenido, {nombreUsuario}\n\nPasos:\n1. Abre BackOffice: {loginUrl}\n2. Escribe este usuario/correo: {usuario}\n3. Escribe esta contrasena temporal: {contrasenaTemporal}\n4. Presiona Iniciar sesion\n5. Luego puedes cambiarla desde Mi perfil\n\nCredenciales:\nPerfil: {perfil}\nUsuario: {usuario}\nContrasena temporal: {contrasenaTemporal}\n"
+        };
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarNotificacionAprobacion(string emailAsociado, string nombreJefe)
+    {
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(new MailboxAddress("", emailAsociado));
+        mensaje.Subject = "¡Tu acceso ha sido aprobado!";
+
+        mensaje.Body = new TextPart("html")
+        {
+            Text = $@"
+        <div style='font-family: sans-serif; padding: 20px;'>
+            <h2>Acceso Concedido</h2>
+            <p>Hola, tu solicitud de acceso ha sido aprobada por <b>{nombreJefe}</b>.</p>
+            <p>Ya puedes iniciar sesión con tu correo y contraseña.</p>
+            <a href='https://tu-dominio.com/' style='background: #006bb5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Iniciar Sesión</a>
+        </div>"
+        };
+        await SendMessageAsync(mensaje);
+    }
+    public async Task EnviarFacturaAsync(
+        string numeroFactura,
+        IEnumerable<string> destinatarios,
+        string? nombreCliente,
+        decimal? totalFactura,
+        string rutaXmlAdjunto,
+        string rutaPdfAdjunto,
+        IEnumerable<string>? copiasOcultas = null)
+    {
+        var destinatariosNormalizados = destinatarios
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var copiasNormalizadas = (copiasOcultas ?? Array.Empty<string>())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Where(x => !destinatariosNormalizados.Contains(x, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Debug.WriteLine($"[SMTP-FACTURA] Numero: {numeroFactura}");
+        Debug.WriteLine($"[SMTP-FACTURA] Destinatarios: {string.Join(", ", destinatariosNormalizados)}");
+        Debug.WriteLine($"[SMTP-FACTURA] XML: {rutaXmlAdjunto}");
+        Debug.WriteLine($"[SMTP-FACTURA] PDF: {rutaPdfAdjunto}");
+        _logger.LogInformation(
+            "SMTP factura {NumeroFactura} - destinatarios:{Destinatarios} - xml:{RutaXml} - pdf:{RutaPdf}",
+            numeroFactura,
+            string.Join(", ", destinatariosNormalizados),
+            rutaXmlAdjunto,
+            rutaPdfAdjunto);
+
+        if (!destinatariosNormalizados.Any())
+            throw new InvalidOperationException("La factura no tiene destinatarios válidos para el envío.");
+
+        if (string.IsNullOrWhiteSpace(rutaXmlAdjunto) || !File.Exists(rutaXmlAdjunto))
+            throw new FileNotFoundException("No se encontró el XML de la factura para adjuntarlo al correo.", rutaXmlAdjunto);
+
+        if (!File.Exists(rutaPdfAdjunto))
+            throw new FileNotFoundException("No se encontró el PDF de la factura para adjuntarlo al correo.", rutaPdfAdjunto);
+
+        var asunto = $"Factura electrónica {numeroFactura}";
+
+        var clienteSeguro = string.IsNullOrWhiteSpace(nombreCliente)
+            ? "cliente"
+            : System.Net.WebUtility.HtmlEncode(nombreCliente.Trim());
+
+        var totalTexto = (totalFactura ?? 0m).ToString("N2", new CultureInfo("es-EC"));
+        var archivosAdjuntos = "PDF y XML electrónicos";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+
+        foreach (var correo in destinatariosNormalizados)
+            mensaje.To.Add(MailboxAddress.Parse(correo));
+
+        foreach (var correo in copiasNormalizadas)
+            mensaje.Bcc.Add(MailboxAddress.Parse(correo));
+
+        mensaje.Subject = asunto;
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildTransactionalEmailLayout(
+                previewText: $"Factura electrónica {numeroFactura} disponible en PDF y XML.",
+                eyebrow: "Comprobante electrónico",
+                title: $"Factura electrónica {WebUtility.HtmlEncode(numeroFactura)}",
+                subtitle: "Adjuntamos el comprobante emitido desde E-FACT.",
+                bodyHtml: $@"
+{BuildBodyParagraph("Estimado cliente,")}
+{BuildBodyParagraph($"Adjuntamos los archivos correspondientes a la factura electrónica <strong>{WebUtility.HtmlEncode(numeroFactura)}</strong> emitida para <strong>{clienteSeguro}</strong>.")}
+{BuildInfoTable(
+    ("Factura", WebUtility.HtmlEncode(numeroFactura)),
+    ("Cliente", clienteSeguro),
+    ("Total", $"${totalTexto}"),
+    ("Archivos adjuntos", WebUtility.HtmlEncode(archivosAdjuntos)))}
+{BuildNoticeBox("Este correo fue generado automáticamente por el sistema de facturación electrónica. Si necesitas una nueva copia o una corrección en los destinatarios, por favor contacta al emisor.")}")
+        };
+
+        bodyBuilder.Attachments.Add(rutaXmlAdjunto);
+        bodyBuilder.Attachments.Add(rutaPdfAdjunto);
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoFacturaAnuladaBackOfficeAsync(
+        string numeroFactura,
+        IEnumerable<string> destinatarios,
+        string? nombreCliente,
+        string? identificacionCliente,
+        decimal? totalFactura,
+        DateTime? fechaEmision,
+        string? estadoSri,
+        string? numeroAutorizacion)
+    {
+        var destinatariosNormalizados = destinatarios
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!destinatariosNormalizados.Any())
+            throw new InvalidOperationException("No hay destinatarios configurados para notificar la anulación.");
+
+        var numeroSeguro = WebUtility.HtmlEncode(numeroFactura);
+        var clienteSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreCliente) ? "Consumidor final" : nombreCliente.Trim());
+        var identificacionSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(identificacionCliente) ? "Sin identificación" : identificacionCliente.Trim());
+        var estadoSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(estadoSri) ? "Sin estado SRI registrado" : estadoSri.Trim());
+        var autorizacionSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(numeroAutorizacion) ? "Sin autorización registrada" : numeroAutorizacion.Trim());
+        var fechaTexto = fechaEmision?.ToString("dd/MM/yyyy", new CultureInfo("es-EC")) ?? "Sin fecha registrada";
+        var totalTexto = (totalFactura ?? 0m).ToString("N2", new CultureInfo("es-EC"));
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+
+        foreach (var correo in destinatariosNormalizados)
+            mensaje.To.Add(MailboxAddress.Parse(correo));
+
+        mensaje.Subject = $"BackOffice: factura anulada pendiente de gestión SRI {numeroFactura}";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildTransactionalEmailLayout(
+                previewText: $"Factura anulada en BackOffice: {numeroFactura}. Requiere gestión en SRI.",
+                eyebrow: "BackOffice",
+                title: $"Factura anulada {numeroSeguro}",
+                subtitle: "Notificación interna para Cobranzas.",
+                bodyHtml: $@"
+{BuildBodyParagraph("Estimadas,")}
+{BuildBodyParagraph($"Se anuló la factura <strong>{numeroSeguro}</strong> dentro de BackOffice. Por favor revisar y gestionar la anulación correspondiente en el portal del <strong>SRI</strong>, cuando aplique.")}
+{BuildInfoTable(
+    ("Factura", numeroSeguro),
+    ("Cliente", clienteSeguro),
+    ("Identificación", identificacionSeguro),
+    ("Fecha de emisión", WebUtility.HtmlEncode(fechaTexto)),
+    ("Total", $"${totalTexto}"),
+    ("Estado SRI", estadoSeguro),
+    ("Autorización", autorizacionSeguro))}
+{BuildNoticeBox("<strong>Acción requerida:</strong> validar la anulación tributaria en el SRI y dar seguimiento desde Cobranzas. Este aviso fue generado automáticamente al anular la factura en BackOffice.")}",
+                footerText: "Notificación interna BackOffice")
+        };
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarNotaCreditoAsync(
+        string numeroNotaCredito,
+        string numeroDocumentoModificado,
+        IEnumerable<string> destinatarios,
+        string? nombreCliente,
+        decimal? totalNotaCredito,
+        string rutaXmlAdjunto,
+        string? rutaPdfAdjunto)
+    {
+        var destinatariosNormalizados = destinatarios
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!destinatariosNormalizados.Any())
+            throw new InvalidOperationException("La nota de crédito no tiene destinatarios válidos para el envío.");
+
+        if (string.IsNullOrWhiteSpace(rutaXmlAdjunto) || !File.Exists(rutaXmlAdjunto))
+            throw new FileNotFoundException("No se encontró el XML de la nota de crédito para adjuntarlo al correo.", rutaXmlAdjunto);
+
+        if (!string.IsNullOrWhiteSpace(rutaPdfAdjunto) && !File.Exists(rutaPdfAdjunto))
+            throw new FileNotFoundException("No se encontró el PDF de la nota de crédito para adjuntarlo al correo.", rutaPdfAdjunto);
+
+        var clienteSeguro = string.IsNullOrWhiteSpace(nombreCliente)
+            ? "cliente"
+            : System.Net.WebUtility.HtmlEncode(nombreCliente.Trim());
+
+        var totalTexto = (totalNotaCredito ?? 0m).ToString("N2", new CultureInfo("es-EC"));
+        var documentoModificadoSeguro = string.IsNullOrWhiteSpace(numeroDocumentoModificado)
+            ? "documento relacionado"
+            : System.Net.WebUtility.HtmlEncode(numeroDocumentoModificado.Trim());
+        var archivosAdjuntos = !string.IsNullOrWhiteSpace(rutaPdfAdjunto)
+            ? "PDF y XML electrónicos"
+            : "XML electrónico";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+
+        foreach (var correo in destinatariosNormalizados)
+            mensaje.To.Add(MailboxAddress.Parse(correo));
+
+        mensaje.Subject = $"Nota de crédito electrónica {numeroNotaCredito}";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildTransactionalEmailLayout(
+                previewText: $"Nota de crédito electrónica {numeroNotaCredito} disponible en PDF y XML.",
+                eyebrow: "Comprobante electrónico",
+                title: $"Nota de crédito {WebUtility.HtmlEncode(numeroNotaCredito)}",
+                subtitle: "Adjuntamos el comprobante emitido desde E-FACT.",
+                bodyHtml: $@"
+{BuildBodyParagraph("Estimado cliente,")}
+{BuildBodyParagraph($"Adjuntamos los archivos correspondientes a la nota de crédito electrónica <strong>{WebUtility.HtmlEncode(numeroNotaCredito)}</strong> emitida para <strong>{clienteSeguro}</strong>.")}
+{BuildInfoTable(
+    ("Nota de crédito", WebUtility.HtmlEncode(numeroNotaCredito)),
+    ("Documento relacionado", documentoModificadoSeguro),
+    ("Cliente", clienteSeguro),
+    ("Total", $"${totalTexto}"),
+    ("Archivos adjuntos", WebUtility.HtmlEncode(archivosAdjuntos)))}
+{BuildNoticeBox("Este correo fue generado automáticamente por el sistema de facturación electrónica. Si necesitas una nueva copia o una corrección en los destinatarios, por favor contacta al emisor.")}")
+        };
+
+        bodyBuilder.Attachments.Add(rutaXmlAdjunto);
+        if (!string.IsNullOrWhiteSpace(rutaPdfAdjunto))
+            bodyBuilder.Attachments.Add(rutaPdfAdjunto);
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoNotaCreditoAnuladaBackOfficeAsync(
+        string numeroNotaCredito,
+        string? numeroDocumentoModificado,
+        IEnumerable<string> destinatarios,
+        string? nombreCliente,
+        string? identificacionCliente,
+        decimal? totalNotaCredito,
+        DateTime? fechaDocumentoModificado,
+        string? estadoSri,
+        string? numeroAutorizacion)
+    {
+        var destinatariosNormalizados = destinatarios
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!destinatariosNormalizados.Any())
+            throw new InvalidOperationException("No hay destinatarios configurados para notificar la anulación.");
+
+        var numeroSeguro = WebUtility.HtmlEncode(numeroNotaCredito);
+        var documentoSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(numeroDocumentoModificado) ? "Sin documento relacionado" : numeroDocumentoModificado.Trim());
+        var clienteSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreCliente) ? "Consumidor final" : nombreCliente.Trim());
+        var identificacionSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(identificacionCliente) ? "Sin identificación" : identificacionCliente.Trim());
+        var estadoSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(estadoSri) ? "Sin estado SRI registrado" : estadoSri.Trim());
+        var autorizacionSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(numeroAutorizacion) ? "Sin autorización registrada" : numeroAutorizacion.Trim());
+        var fechaTexto = fechaDocumentoModificado?.ToString("dd/MM/yyyy", new CultureInfo("es-EC")) ?? "Sin fecha registrada";
+        var totalTexto = (totalNotaCredito ?? 0m).ToString("N2", new CultureInfo("es-EC"));
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+
+        foreach (var correo in destinatariosNormalizados)
+            mensaje.To.Add(MailboxAddress.Parse(correo));
+
+        mensaje.Subject = $"BackOffice: nota de crédito anulada pendiente de gestión SRI {numeroNotaCredito}";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildTransactionalEmailLayout(
+                previewText: $"Nota de crédito anulada en BackOffice: {numeroNotaCredito}. Requiere gestión en SRI.",
+                eyebrow: "BackOffice",
+                title: $"Nota de crédito anulada {numeroSeguro}",
+                subtitle: "Notificación interna para Cobranzas.",
+                bodyHtml: $@"
+{BuildBodyParagraph("Estimadas,")}
+{BuildBodyParagraph($"Se anuló la nota de crédito <strong>{numeroSeguro}</strong> dentro de BackOffice. Por favor revisar y gestionar la anulación correspondiente en el portal del <strong>SRI</strong>, cuando aplique.")}
+{BuildInfoTable(
+    ("Nota de crédito", numeroSeguro),
+    ("Documento relacionado", documentoSeguro),
+    ("Cliente", clienteSeguro),
+    ("Identificación", identificacionSeguro),
+    ("Fecha sustento", WebUtility.HtmlEncode(fechaTexto)),
+    ("Total", $"${totalTexto}"),
+    ("Estado SRI", estadoSeguro),
+    ("Autorización", autorizacionSeguro))}
+{BuildNoticeBox("<strong>Acción requerida:</strong> validar la anulación tributaria en el SRI y dar seguimiento desde Cobranzas. Este aviso fue generado automáticamente al anular la nota de crédito en BackOffice.")}",
+                footerText: "Notificación interna BackOffice")
+        };
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarNotaDebitoAsync(
+        string numeroNotaDebito,
+        string numeroDocumentoModificado,
+        IEnumerable<string> destinatarios,
+        string? nombreCliente,
+        decimal? totalNotaDebito,
+        string rutaXmlAdjunto,
+        string? rutaPdfAdjunto)
+    {
+        var destinatariosNormalizados = destinatarios
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!destinatariosNormalizados.Any())
+            throw new InvalidOperationException("La nota de débito no tiene destinatarios válidos para el envío.");
+
+        if (string.IsNullOrWhiteSpace(rutaXmlAdjunto) || !File.Exists(rutaXmlAdjunto))
+            throw new FileNotFoundException("No se encontró el XML de la nota de débito para adjuntarlo al correo.", rutaXmlAdjunto);
+
+        if (!string.IsNullOrWhiteSpace(rutaPdfAdjunto) && !File.Exists(rutaPdfAdjunto))
+            throw new FileNotFoundException("No se encontró el PDF de la nota de débito para adjuntarlo al correo.", rutaPdfAdjunto);
+
+        var clienteSeguro = string.IsNullOrWhiteSpace(nombreCliente)
+            ? "cliente"
+            : System.Net.WebUtility.HtmlEncode(nombreCliente.Trim());
+
+        var totalTexto = (totalNotaDebito ?? 0m).ToString("N2", new CultureInfo("es-EC"));
+        var documentoModificadoSeguro = string.IsNullOrWhiteSpace(numeroDocumentoModificado)
+            ? "documento relacionado"
+            : System.Net.WebUtility.HtmlEncode(numeroDocumentoModificado.Trim());
+        var archivosAdjuntos = !string.IsNullOrWhiteSpace(rutaPdfAdjunto)
+            ? "PDF y XML electrónicos"
+            : "XML electrónico";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+
+        foreach (var correo in destinatariosNormalizados)
+            mensaje.To.Add(MailboxAddress.Parse(correo));
+
+        mensaje.Subject = $"Nota de débito electrónica {numeroNotaDebito}";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildTransactionalEmailLayout(
+                previewText: $"Nota de débito electrónica {numeroNotaDebito} disponible en PDF y XML.",
+                eyebrow: "Comprobante electrónico",
+                title: $"Nota de débito {WebUtility.HtmlEncode(numeroNotaDebito)}",
+                subtitle: "Adjuntamos el comprobante emitido desde E-FACT.",
+                bodyHtml: $@"
+{BuildBodyParagraph("Estimado cliente,")}
+{BuildBodyParagraph($"Adjuntamos los archivos correspondientes a la nota de débito electrónica <strong>{WebUtility.HtmlEncode(numeroNotaDebito)}</strong> emitida para <strong>{clienteSeguro}</strong>.")}
+{BuildInfoTable(
+    ("Nota de débito", WebUtility.HtmlEncode(numeroNotaDebito)),
+    ("Documento relacionado", documentoModificadoSeguro),
+    ("Cliente", clienteSeguro),
+    ("Total", $"${totalTexto}"),
+    ("Archivos adjuntos", WebUtility.HtmlEncode(archivosAdjuntos)))}
+{BuildNoticeBox("Este correo fue generado automáticamente por el sistema de facturación electrónica. Si necesitas una nueva copia o una corrección en los destinatarios, por favor contacta al emisor.")}")
+        };
+
+        bodyBuilder.Attachments.Add(rutaXmlAdjunto);
+        if (!string.IsNullOrWhiteSpace(rutaPdfAdjunto))
+            bodyBuilder.Attachments.Add(rutaPdfAdjunto);
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarGuiaRemisionAsync(
+        string numeroGuiaRemision,
+        string numeroDocumentoSustento,
+        IEnumerable<string> destinatarios,
+        string? nombreDestinatario,
+        string rutaXmlAdjunto,
+        string? rutaPdfAdjunto)
+    {
+        var destinatariosNormalizados = destinatarios
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!destinatariosNormalizados.Any())
+            throw new InvalidOperationException("La guía de remisión no tiene destinatarios válidos para el envío.");
+
+        if (string.IsNullOrWhiteSpace(rutaXmlAdjunto) || !File.Exists(rutaXmlAdjunto))
+            throw new FileNotFoundException("No se encontró el XML de la guía de remisión para adjuntarlo al correo.", rutaXmlAdjunto);
+
+        if (!string.IsNullOrWhiteSpace(rutaPdfAdjunto) && !File.Exists(rutaPdfAdjunto))
+            throw new FileNotFoundException("No se encontró el PDF de la guía de remisión para adjuntarlo al correo.", rutaPdfAdjunto);
+
+        var destinatarioSeguro = string.IsNullOrWhiteSpace(nombreDestinatario)
+            ? "destinatario"
+            : System.Net.WebUtility.HtmlEncode(nombreDestinatario.Trim());
+        var documentoSustentoSeguro = string.IsNullOrWhiteSpace(numeroDocumentoSustento)
+            ? "documento sustento"
+            : System.Net.WebUtility.HtmlEncode(numeroDocumentoSustento.Trim());
+        var archivosAdjuntos = !string.IsNullOrWhiteSpace(rutaPdfAdjunto)
+            ? "PDF y XML electrónicos"
+            : "XML electrónico";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+
+        foreach (var correo in destinatariosNormalizados)
+            mensaje.To.Add(MailboxAddress.Parse(correo));
+
+        mensaje.Subject = $"Guía de remisión electrónica {numeroGuiaRemision}";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildTransactionalEmailLayout(
+                previewText: $"Guía de remisión electrónica {numeroGuiaRemision} disponible en PDF y XML.",
+                eyebrow: "Comprobante electrónico",
+                title: $"Guía de remisión {WebUtility.HtmlEncode(numeroGuiaRemision)}",
+                subtitle: "Adjuntamos el comprobante emitido desde E-FACT.",
+                bodyHtml: $@"
+{BuildBodyParagraph("Estimado cliente,")}
+{BuildBodyParagraph($"Adjuntamos los archivos correspondientes a la guía de remisión electrónica <strong>{WebUtility.HtmlEncode(numeroGuiaRemision)}</strong> emitida para <strong>{destinatarioSeguro}</strong>.")}
+{BuildInfoTable(
+    ("Guía de remisión", WebUtility.HtmlEncode(numeroGuiaRemision)),
+    ("Destinatario", destinatarioSeguro),
+    ("Documento sustento", documentoSustentoSeguro),
+    ("Archivos adjuntos", WebUtility.HtmlEncode(archivosAdjuntos)))}
+{BuildNoticeBox("Este correo fue generado automáticamente por el sistema de facturación electrónica. Si necesitas una nueva copia o una corrección en los destinatarios, por favor contacta al emisor.")}")
+        };
+
+        bodyBuilder.Attachments.Add(rutaXmlAdjunto);
+        if (!string.IsNullOrWhiteSpace(rutaPdfAdjunto))
+            bodyBuilder.Attachments.Add(rutaPdfAdjunto);
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarLiquidacionCompraAsync(
+        string numeroLiquidacion,
+        IEnumerable<string> destinatarios,
+        string? nombreProveedor,
+        decimal? totalLiquidacion,
+        string rutaXmlAdjunto,
+        string? rutaPdfAdjunto)
+    {
+        var destinatariosNormalizados = destinatarios
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!destinatariosNormalizados.Any())
+            throw new InvalidOperationException("La liquidación de compra no tiene destinatarios válidos para el envío.");
+
+        if (string.IsNullOrWhiteSpace(rutaXmlAdjunto) || !File.Exists(rutaXmlAdjunto))
+            throw new FileNotFoundException("No se encontró el XML de la liquidación de compra para adjuntarlo al correo.", rutaXmlAdjunto);
+
+        if (!string.IsNullOrWhiteSpace(rutaPdfAdjunto) && !File.Exists(rutaPdfAdjunto))
+            throw new FileNotFoundException("No se encontró el PDF de la liquidación de compra para adjuntarlo al correo.", rutaPdfAdjunto);
+
+        var proveedorSeguro = string.IsNullOrWhiteSpace(nombreProveedor)
+            ? "proveedor"
+            : System.Net.WebUtility.HtmlEncode(nombreProveedor.Trim());
+        var totalTexto = (totalLiquidacion ?? 0m).ToString("N2", new CultureInfo("es-EC"));
+        var archivosAdjuntos = !string.IsNullOrWhiteSpace(rutaPdfAdjunto)
+            ? "PDF y XML electrónicos"
+            : "XML electrónico";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+
+        foreach (var correo in destinatariosNormalizados)
+            mensaje.To.Add(MailboxAddress.Parse(correo));
+
+        mensaje.Subject = $"Liquidación de compra electrónica {numeroLiquidacion}";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildTransactionalEmailLayout(
+                previewText: $"Liquidación de compra electrónica {numeroLiquidacion} disponible en PDF y XML.",
+                eyebrow: "Comprobante electrónico",
+                title: $"Liquidación de compra {WebUtility.HtmlEncode(numeroLiquidacion)}",
+                subtitle: "Adjuntamos el comprobante emitido desde E-FACT.",
+                bodyHtml: $@"
+{BuildBodyParagraph("Estimado proveedor,")}
+{BuildBodyParagraph($"Adjuntamos los archivos correspondientes a la liquidación de compra electrónica <strong>{WebUtility.HtmlEncode(numeroLiquidacion)}</strong> emitida para <strong>{proveedorSeguro}</strong>.")}
+{BuildInfoTable(
+    ("Liquidación", WebUtility.HtmlEncode(numeroLiquidacion)),
+    ("Proveedor", proveedorSeguro),
+    ("Total", $"${totalTexto}"),
+    ("Archivos adjuntos", WebUtility.HtmlEncode(archivosAdjuntos)))}
+{BuildNoticeBox("Este correo fue generado automáticamente por el sistema de facturación electrónica. Si necesitas una nueva copia o una corrección en los destinatarios, por favor contacta al emisor.")}")
+        };
+
+        bodyBuilder.Attachments.Add(rutaXmlAdjunto);
+        if (!string.IsNullOrWhiteSpace(rutaPdfAdjunto))
+            bodyBuilder.Attachments.Add(rutaPdfAdjunto);
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarRetencionAsync(
+        string numeroRetencion,
+        string numeroDocumentoSustento,
+        IEnumerable<string> destinatarios,
+        string? nombreProveedor,
+        decimal? totalRetenido,
+        string rutaXmlAdjunto,
+        string? rutaPdfAdjunto)
+    {
+        var destinatariosNormalizados = destinatarios
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!destinatariosNormalizados.Any())
+            throw new InvalidOperationException("La retención no tiene destinatarios válidos para el envío.");
+
+        if (string.IsNullOrWhiteSpace(rutaXmlAdjunto) || !File.Exists(rutaXmlAdjunto))
+            throw new FileNotFoundException("No se encontró el XML de la retención para adjuntarlo al correo.", rutaXmlAdjunto);
+
+        if (!string.IsNullOrWhiteSpace(rutaPdfAdjunto) && !File.Exists(rutaPdfAdjunto))
+            throw new FileNotFoundException("No se encontró el PDF de la retención para adjuntarlo al correo.", rutaPdfAdjunto);
+
+        var proveedorSeguro = string.IsNullOrWhiteSpace(nombreProveedor)
+            ? "proveedor"
+            : System.Net.WebUtility.HtmlEncode(nombreProveedor.Trim());
+
+        var documentoSustentoSeguro = string.IsNullOrWhiteSpace(numeroDocumentoSustento)
+            ? "documento relacionado"
+            : System.Net.WebUtility.HtmlEncode(numeroDocumentoSustento.Trim());
+
+        var totalTexto = (totalRetenido ?? 0m).ToString("N2", new CultureInfo("es-EC"));
+        var archivosAdjuntos = !string.IsNullOrWhiteSpace(rutaPdfAdjunto)
+            ? "PDF y XML electrónicos"
+            : "XML electrónico";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+
+        foreach (var correo in destinatariosNormalizados)
+            mensaje.To.Add(MailboxAddress.Parse(correo));
+
+        mensaje.Subject = $"Comprobante de retención electrónico {numeroRetencion}";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildTransactionalEmailLayout(
+                previewText: $"Comprobante de retención electrónico {numeroRetencion} disponible en PDF y XML.",
+                eyebrow: "Comprobante electrónico",
+                title: $"Comprobante de retención {WebUtility.HtmlEncode(numeroRetencion)}",
+                subtitle: "Adjuntamos el comprobante emitido desde E-FACT.",
+                bodyHtml: $@"
+{BuildBodyParagraph("Estimado proveedor,")}
+{BuildBodyParagraph($"Adjuntamos los archivos correspondientes al comprobante de retención electrónico <strong>{WebUtility.HtmlEncode(numeroRetencion)}</strong> emitido para <strong>{proveedorSeguro}</strong>.")}
+{BuildInfoTable(
+    ("Retención", WebUtility.HtmlEncode(numeroRetencion)),
+    ("Documento sustento", documentoSustentoSeguro),
+    ("Proveedor", proveedorSeguro),
+    ("Total retenido", $"${totalTexto}"),
+    ("Archivos adjuntos", WebUtility.HtmlEncode(archivosAdjuntos)))}
+{BuildNoticeBox("Este correo fue generado automáticamente por el sistema de facturación electrónica. Si necesitas una nueva copia o una corrección en los destinatarios, por favor contacta al emisor.")}")
+        };
+
+        bodyBuilder.Attachments.Add(rutaXmlAdjunto);
+        if (!string.IsNullOrWhiteSpace(rutaPdfAdjunto))
+            bodyBuilder.Attachments.Add(rutaPdfAdjunto);
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarConfirmacionCompraDocumentosAsync(
+        string emailDestino,
+        string? nombreCliente,
+        int documentosComprados,
+        int saldoActual,
+        decimal montoTotal,
+        string? reference,
+        string? authorizationCode)
+    {
+        emailDestino = NormalizarEmail(emailDestino);
+        var clienteSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreCliente) ? "Cliente E-FACT" : nombreCliente.Trim());
+        var referenceSegura = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(reference) ? "Pendiente de referencia" : reference.Trim());
+        var autorizacionSegura = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(authorizationCode) ? "Pendiente de autorizacion" : authorizationCode.Trim());
+        var totalTexto = montoTotal.ToString("N2", CultureInfo.GetCultureInfo("es-EC"));
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(emailDestino));
+
+        foreach (var correoNotificacion in await ObtenerDestinatariosNotificacionPagosAsync(emailDestino))
+            mensaje.Bcc.Add(MailboxAddress.Parse(correoNotificacion));
+
+        mensaje.Subject = "Confirmacion de recarga de documentos | E-FACT";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = BuildOutlookEmailShell(
+                "Tu recarga de documentos fue acreditada en E-FACT.",
+                "Pago aprobado",
+                "Recarga acreditada con exito",
+                $"Hola <strong>{clienteSeguro}</strong>, tu compra de documentos ya fue procesada y el saldo se actualizo en tu cuenta.",
+                $@"
+                {BuildInfoTable(
+                    ("Documentos acreditados", documentosComprados.ToString(CultureInfo.InvariantCulture)),
+                    ("Saldo actual disponible", $"{saldoActual} documentos"),
+                    ("Monto pagado", $"${totalTexto}"),
+                    ("Referencia", referenceSegura),
+                    ("Autorizacion", autorizacionSegura))}
+                <p style='margin:18px 0 0 0;font-size:13px;line-height:1.7;color:#5e738a;'>
+                  Si no reconoces esta operacion, por favor contacta al equipo de soporte de inmediato.
+                </p>")
+        };
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoCobroPendienteAsync(
+        string emailDestino,
+        string? nombreCliente,
+        string? producto,
+        string? planPaquete,
+        decimal montoTotal,
+        string? formaPago,
+        string? referencia)
+    {
+        emailDestino = NormalizarEmail(emailDestino);
+        var clienteSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreCliente) ? "Cliente" : nombreCliente.Trim());
+        var productoSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(producto) ? "Servicio" : producto.Trim());
+        var planSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(planPaquete) ? "Servicio contratado" : planPaquete.Trim());
+        var formaPagoSegura = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(formaPago) ? "Pendiente de confirmar" : formaPago.Trim());
+        var referenciaSegura = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(referencia) ? "Sin referencia registrada" : referencia.Trim());
+        var totalTexto = montoTotal.ToString("N2", CultureInfo.GetCultureInfo("es-EC"));
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(emailDestino));
+
+        foreach (var correoNotificacion in await ObtenerDestinatariosNotificacionPagosAsync(emailDestino))
+            mensaje.Bcc.Add(MailboxAddress.Parse(correoNotificacion));
+
+        mensaje.Subject = "Tienes un cobro pendiente | E-FACT";
+        mensaje.Body = new BodyBuilder
+        {
+            HtmlBody = BuildOutlookEmailShell(
+                "Tienes un cobro pendiente por revisar en E-FACT.",
+                "E-FACT",
+                "Cobro pendiente",
+                $"Hola <strong>{clienteSeguro}</strong>, registramos un cobro pendiente asociado a tu cuenta.",
+                $@"
+                <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border:1px solid #e5e7eb;border-collapse:collapse;Margin:18px 0;font-family:Segoe UI,Arial,sans-serif;'>
+                  <tr><td style='padding:14px 16px;border-bottom:1px solid #e5e7eb;'><strong>Servicio:</strong> {productoSeguro}</td></tr>
+                  <tr><td style='padding:14px 16px;border-bottom:1px solid #e5e7eb;'><strong>Detalle:</strong> {planSeguro}</td></tr>
+                  <tr><td style='padding:14px 16px;border-bottom:1px solid #e5e7eb;'><strong>Monto pendiente:</strong> ${totalTexto}</td></tr>
+                  <tr><td style='padding:14px 16px;border-bottom:1px solid #e5e7eb;'><strong>Forma de pago:</strong> {formaPagoSegura}</td></tr>
+                  <tr><td style='padding:14px 16px;'><strong>Referencia:</strong> {referenciaSegura}</td></tr>
+                </table>
+                <p style='Margin:18px 0 0 0;font-size:14px;line-height:22px;color:#4b5563;'>
+                  Puedes revisar el estado de tu pago desde tu cuenta. Si ya realizaste la transferencia, nuestro equipo validara el comprobante y actualizara el estado del cobro.
+                </p>")
+        }.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoDocumentosAgotadosClienteAsync(
+        string emailDestino,
+        string? nombreCliente)
+    {
+        emailDestino = NormalizarEmail(emailDestino);
+        var clienteSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreCliente) ? "Cliente" : nombreCliente.Trim());
+        var recargasUrlSegura = WebUtility.HtmlEncode(_urlRecargasDesdeLogin);
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(emailDestino));
+        mensaje.Subject = "Tus documentos disponibles se han agotado | E-FACT";
+        var bodyBuilder = new BodyBuilder();
+        var logoSrc = AddEfactLogoResource(bodyBuilder);
+        bodyBuilder.HtmlBody = BuildOutlookEmailShell(
+                "Tu cuenta E-FACT llego a 0 documentos disponibles.",
+                "E-FACT",
+                "Tus documentos disponibles se han agotado",
+                $"Hola, <strong style='color:#006bb5;'>{clienteSeguro}</strong>:",
+                $@"
+                <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;margin:0 0 22px 0;'>
+                  <tr>
+                    <td valign='top' width='150' style='width:150px;padding:0 20px 12px 0;'>
+                      <table role='presentation' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;width:132px;'>
+                        <tr>
+                          <td align='center' style='height:132px;border:3px solid #0b73d9;border-radius:16px;background:#ffffff;font-family:Segoe UI,Arial,sans-serif;color:#0f1c3f;'>
+                            <div style='font-size:44px;line-height:48px;color:#ef1748;font-weight:900;'>0</div>
+                            <div style='font-size:13px;line-height:17px;font-weight:900;text-transform:uppercase;'>Documentos<br>disponibles</div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td valign='top' style='padding:0;font-family:Segoe UI,Arial,sans-serif;'>
+                      <p style='margin:0 0 12px 0;font-size:15px;line-height:24px;color:#21324d;'>
+                        Te informamos que actualmente tu cuenta de <strong>e-fact</strong> ha llegado a <strong style='color:#ef1748;'>0 documentos disponibles</strong>.
+                      </p>
+                      <p style='margin:0 0 18px 0;font-size:15px;line-height:24px;color:#21324d;'>
+                        Para continuar emitiendo tus comprobantes electronicos con normalidad, realiza una recarga de documentos.
+                      </p>
+                      <table role='presentation' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;'>
+                        <tr>
+                          <td bgcolor='#31a313' style='background:#31a313;border-radius:999px;'>
+                            <a href='{recargasUrlSegura}' target='_blank' style='display:inline-block;padding:13px 24px;font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:18px;font-weight:900;color:#ffffff;text-decoration:none;text-transform:uppercase;'>
+                              &#128722;&nbsp; Recargar documentos
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style='margin:12px 0 0 0;font-size:12px;line-height:18px;color:#31679c;font-weight:800;'>&#128737; Proceso seguro y rapido</p>
+                    </td>
+                  </tr>
+                </table>" + $@"
+                <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' bgcolor='#eef6ff' style='width:100%;border-collapse:collapse;background:#eef6ff;border:1px solid #dbeafe;'>
+                  <tr>
+                    <td valign='middle' width='72' style='width:72px;padding:18px 10px 18px 18px;font-family:Segoe UI,Arial,sans-serif;'>
+                      <table role='presentation' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;'>
+                        <tr>
+                          <td align='center' valign='middle' bgcolor='#dceeff' style='width:54px;height:54px;border-radius:27px;background:#dceeff;color:#006bb5;font-size:22px;line-height:54px;font-weight:900;'>?</td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td valign='middle' style='padding:18px 16px 18px 0;font-family:Segoe UI,Arial,sans-serif;'>
+                      <div style='font-size:15px;line-height:20px;font-weight:900;color:#0054a6;margin:0 0 4px 0;'>&iquest;Necesitas ayuda?</div>
+                      <div style='font-size:12px;line-height:18px;color:#14213d;'>Nuestro equipo de soporte est&aacute; disponible para asistirte.</div>
+                    </td>
+                    <td valign='middle' width='230' style='width:230px;padding:18px;border-left:1px solid #bfd7ef;font-family:Segoe UI,Arial,sans-serif;color:#14213d;'>
+                      <div style='font-size:12px;line-height:20px;margin:0 0 3px 0;white-space:nowrap;color:#14213d;text-decoration:none;'>&#9742;&nbsp; {WebUtility.HtmlEncode(EfactContactPhone)}</div>
+                      <div style='font-size:12px;line-height:20px;margin:0 0 3px 0;white-space:nowrap;color:#14213d;text-decoration:none;'>&#9993;&nbsp; soporte&#8203;&#64;numericasoftware.com</div>
+                      <div style='font-size:12px;line-height:20px;margin:0;white-space:nowrap;color:#14213d;text-decoration:none;'>&#9719;&nbsp; Lunes a Viernes 08h00 - 18h00</div>
+                    </td>
+                  </tr>
+                </table>",
+                enlazarLogo: false,
+                mostrarLinkFooter: false,
+                logoSrc: logoSrc);
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoDocumentosAgotadosAdministrativoAsync(
+        string? nombreCliente,
+        string? identificacion,
+        string? correoCliente,
+        string? telefonoCliente,
+        DateTime? fechaUltimaRecarga,
+        string? paqueteAnterior,
+        DateTime fechaAgotamiento)
+    {
+        var clienteSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreCliente) ? "Cliente sin nombre" : nombreCliente.Trim());
+        var identificacionSegura = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(identificacion) ? "No registrada" : identificacion.Trim());
+        var correoSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(correoCliente) ? "No registrado" : correoCliente.Trim());
+        var telefonoSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(telefonoCliente) ? "No registrado" : telefonoCliente.Trim());
+        var paqueteSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(paqueteAnterior) ? "No registrado" : paqueteAnterior.Trim());
+        var cultura = CultureInfo.GetCultureInfo("es-EC");
+        var ultimaRecargaTexto = fechaUltimaRecarga?.ToString("dd/MM/yyyy", cultura) ?? "Sin registros";
+        var agotamientoTexto = fechaAgotamiento.ToString("dd/MM/yyyy HH:mm", cultura);
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(NormalizarEmail(AdministrativoDocumentosAgotados)));
+        mensaje.Subject = "Cliente e-fact sin documentos disponibles";
+        var bodyBuilder = new BodyBuilder();
+        var logoSrc = AddEfactLogoResource(bodyBuilder);
+        bodyBuilder.HtmlBody = BuildOutlookEmailShell(
+                "Un cliente E-FACT agoto sus documentos disponibles.",
+                "E-FACT",
+                "Cliente e-fact sin documentos disponibles",
+                "Hola:",
+                $@"
+                <p style='margin:0 0 16px 0;font-size:15px;line-height:24px;color:#334155;'>
+                  El siguiente cliente ha agotado sus documentos disponibles en <strong>e-fact</strong>:
+                </p>
+                {BuildInfoTable(
+                    ("Cliente", clienteSeguro),
+                    ("RUC/Cedula", identificacionSegura),
+                    ("Correo", correoSeguro),
+                    ("Telefono", telefonoSeguro),
+                    ("Documentos disponibles", "<strong style='color:#dc2626;'>0</strong>"),
+                    ("Ultima recarga", WebUtility.HtmlEncode(ultimaRecargaTexto)),
+                    ("Ultimo paquete adquirido", paqueteSeguro),
+                    ("Fecha de agotamiento", WebUtility.HtmlEncode(agotamientoTexto)))}
+                <p style='margin:0 0 16px 0;font-size:15px;line-height:24px;color:#334155;'>
+                  El cliente ya recibio automaticamente un correo informandole que debe realizar una recarga.
+                </p>
+                {BuildNoticeBox("<strong>Accion sugerida:</strong> verificar si realiza la recarga. Si no la efectua dentro del plazo establecido, contactar al cliente para ofrecer asistencia.")}",
+                enlazarLogo: false,
+                mostrarLinkFooter: false,
+                logoSrc: logoSrc);
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarEstadoCuentaAsync(
+        IEnumerable<string> destinatarios,
+        EstadoCuentaDetalleVM detalle,
+        byte[] pdfAdjunto,
+        string nombreArchivoPdf)
+    {
+        var destinatariosNormalizados = destinatarios
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!destinatariosNormalizados.Any())
+            throw new InvalidOperationException("El estado de cuenta no tiene destinatarios válidos para el envío.");
+
+        if (detalle == null)
+            throw new InvalidOperationException("No se encontró la información del estado de cuenta a enviar.");
+
+        if (pdfAdjunto == null || pdfAdjunto.Length == 0)
+            throw new InvalidOperationException("No se pudo generar el PDF del estado de cuenta para adjuntarlo al correo.");
+
+        var clienteSeguro = string.IsNullOrWhiteSpace(detalle.NombreCliente)
+            ? "cliente"
+            : WebUtility.HtmlEncode(detalle.NombreCliente.Trim());
+        var identificacionSegura = string.IsNullOrWhiteSpace(detalle.NumeroIdentificacion)
+            ? "-"
+            : WebUtility.HtmlEncode(detalle.NumeroIdentificacion.Trim());
+        var fechaCorteTexto = DateTime.Now.ToString("dd/MM/yyyy", new CultureInfo("es-EC"));
+        var saldoTexto = detalle.SaldoTotal.ToString("N2", new CultureInfo("es-EC"));
+        var ultimoAbonoTexto = detalle.MontoUltimoAbono.ToString("N2", new CultureInfo("es-EC"));
+        var fechaUltimoAbonoTexto = detalle.FechaUltimoAbono?.ToString("dd/MM/yyyy", new CultureInfo("es-EC")) ?? "Sin registros";
+        var diasVencidosTexto = detalle.DiasVencidosMaximos > 0 ? detalle.DiasVencidosMaximos.ToString() : "0";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+
+        foreach (var correo in destinatariosNormalizados)
+            mensaje.To.Add(MailboxAddress.Parse(correo));
+
+        mensaje.Subject = $"Estado de cuenta de {detalle.NombreCliente} - corte {fechaCorteTexto}";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            TextBody =
+$@"Estimado/a {detalle.NombreCliente},
+
+Adjuntamos su estado de cuenta actualizado generado el {fechaCorteTexto}.
+
+Resumen:
+- Cliente: {detalle.NombreCliente}
+- Identificación: {detalle.NumeroIdentificacion}
+- Saldo pendiente: ${saldoTexto}
+- Facturas pendientes: {detalle.FacturasPendientes}
+- Último abono: ${ultimoAbonoTexto}
+- Fecha último abono: {fechaUltimoAbonoTexto}
+- Máximo de días vencidos: {diasVencidosTexto}
+
+En el archivo PDF adjunto encontrará el detalle completo de facturas, abonos y movimientos.
+
+Si necesita aclaraciones o desea registrar un pago, responda a este correo o comuníquese con nosotros.
+
+Atentamente,
+{_nombreRemitente}",
+            HtmlBody = $@"
+<div style='margin:0;padding:24px;background-color:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#1f2937;'>
+  <table role='presentation' cellpadding='0' cellspacing='0' border='0' width='100%' style='max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #d9e3f0;border-radius:12px;overflow:hidden;'>
+    <tr>
+      <td style='background:#0f172a;padding:22px 28px;color:#ffffff;'>
+        <div style='font-size:20px;font-weight:700;line-height:1.2;'>Estado de cuenta actualizado</div>
+        <div style='font-size:13px;opacity:0.88;margin-top:6px;'>Numerica e-fact</div>
+      </td>
+    </tr>
+    <tr>
+      <td style='padding:28px;'>
+        <p style='margin:0 0 14px 0;font-size:15px;line-height:1.6;'>Estimado/a <strong>{clienteSeguro}</strong>,</p>
+        <p style='margin:0 0 18px 0;font-size:15px;line-height:1.6;color:#374151;'>
+          Le compartimos su estado de cuenta con corte al <strong>{fechaCorteTexto}</strong>. En el PDF adjunto encontrará el detalle completo de facturas, abonos y movimientos registrados.
+        </p>
+
+        <table role='presentation' cellpadding='0' cellspacing='0' border='0' width='100%' style='border-collapse:collapse;background:#f8fbff;border:1px solid #d9e8fb;border-radius:10px;'>
+          <tr>
+            <td style='padding:16px 18px;font-size:14px;line-height:1.75;color:#1f2937;'>
+              <div><strong>Cliente:</strong> {clienteSeguro}</div>
+              <div><strong>Identificación:</strong> {identificacionSegura}</div>
+              <div><strong>Saldo pendiente:</strong> ${saldoTexto}</div>
+              <div><strong>Facturas pendientes:</strong> {detalle.FacturasPendientes}</div>
+              <div><strong>Último abono:</strong> ${ultimoAbonoTexto}</div>
+              <div><strong>Fecha último abono:</strong> {fechaUltimoAbonoTexto}</div>
+              <div><strong>Máximo de días vencidos:</strong> {diasVencidosTexto}</div>
+            </td>
+          </tr>
+        </table>
+
+        <p style='margin:18px 0 0 0;font-size:14px;line-height:1.65;color:#374151;'>
+          Si desea revisar su saldo con nosotros o registrar un pago, puede responder directamente a este correo y con gusto le ayudaremos.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style='padding:18px 28px;background:#f8fafc;border-top:1px solid #e5edf6;font-size:12px;line-height:1.6;color:#64748b;'>
+        Este mensaje fue generado automáticamente por Numerica e-fact. Archivo adjunto: <strong>{WebUtility.HtmlEncode(nombreArchivoPdf)}</strong>.
+      </td>
+    </tr>
+  </table>
+</div>"
+        };
+
+        bodyBuilder.Attachments.Add(nombreArchivoPdf, pdfAdjunto, ContentType.Parse("application/pdf"));
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarNotificacionPagoFirmaElectronicaAsync(
+        string? nombreSolicitante,
+        string? identificacion,
+        string? correoSolicitante,
+        string? tipoFirma,
+        string? vigencia,
+        decimal montoTotal,
+        string? reference,
+        string? authorizationCode,
+        int solicitudId)
+    {
+        var destinatarios = ObtenerDestinatariosNotificacionPagos();
+        if (!destinatarios.Any())
+        {
+            _logger.LogWarning(
+                "Se omitio la notificacion administrativa del pago de eRúbrica {SolicitudId} porque no hay destinatarios configurados.",
+                solicitudId);
+            return;
+        }
+
+        var solicitanteSeguro = WebUtility.HtmlEncode(
+            string.IsNullOrWhiteSpace(nombreSolicitante) ? "Solicitante sin nombre" : nombreSolicitante.Trim());
+        var identificacionSegura = WebUtility.HtmlEncode(
+            string.IsNullOrWhiteSpace(identificacion) ? "No registrada" : identificacion.Trim());
+        var correoSeguro = WebUtility.HtmlEncode(
+            string.IsNullOrWhiteSpace(correoSolicitante) ? "No registrado" : correoSolicitante.Trim());
+        var tipoFirmaSeguro = WebUtility.HtmlEncode(
+            string.IsNullOrWhiteSpace(tipoFirma) ? "No especificado" : tipoFirma.Trim());
+        var vigenciaSegura = WebUtility.HtmlEncode(ESignPricing.ObtenerEtiquetaVigencia(vigencia));
+        var referenciaSegura = WebUtility.HtmlEncode(
+            string.IsNullOrWhiteSpace(reference) ? "Pendiente de referencia" : reference.Trim());
+        var autorizacionSegura = WebUtility.HtmlEncode(
+            string.IsNullOrWhiteSpace(authorizationCode) ? "Pendiente de autorizacion" : authorizationCode.Trim());
+        var totalTexto = montoTotal.ToString("N2", CultureInfo.GetCultureInfo("es-EC"));
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+
+        foreach (var destinatario in destinatarios)
+            mensaje.To.Add(MailboxAddress.Parse(destinatario));
+
+        mensaje.Subject = $"Notificacion de pago aprobado de eRúbrica | Solicitud #{solicitudId}";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = $@"
+<table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;background:#eef4fb;margin:0;padding:24px 0;font-family:Segoe UI,Arial,sans-serif;color:#16324f;'>
+  <tr>
+    <td align='center'>
+      <table role='presentation' width='640' cellpadding='0' cellspacing='0' border='0' style='width:640px;max-width:640px;background:#ffffff;border:1px solid #dce8f6;border-collapse:separate;'>
+        <tr>
+          <td style='padding:28px 30px;background:#0b5ed7;color:#ffffff;'>
+            <div style='font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;'>Registro contable</div>
+            <div style='font-size:30px;font-weight:800;line-height:1.1;margin-top:10px;'>Pago aprobado de eRúbrica</div>
+            <div style='font-size:14px;line-height:1.6;margin-top:10px;color:#dcecff;'>
+              Se aprobo un pago de solicitud de eRúbrica y se envia este aviso para control administrativo.
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style='padding:28px 30px 32px 30px;'>
+            <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border:1px solid #e6edf5;font-size:14px;line-height:1.8;'>
+              <tr><td style='padding:16px 18px 0 18px;'><b>Solicitud:</b> #{solicitudId}</td></tr>
+              <tr><td style='padding:0 18px;'><b>Solicitante:</b> {solicitanteSeguro}</td></tr>
+              <tr><td style='padding:0 18px;'><b>Identificacion:</b> {identificacionSegura}</td></tr>
+              <tr><td style='padding:0 18px;'><b>Correo:</b> {correoSeguro}</td></tr>
+              <tr><td style='padding:0 18px;'><b>Tipo de firma:</b> {tipoFirmaSeguro}</td></tr>
+              <tr><td style='padding:0 18px;'><b>Vigencia:</b> {vigenciaSegura}</td></tr>
+              <tr><td style='padding:0 18px;'><b>Monto pagado:</b> ${totalTexto}</td></tr>
+              <tr><td style='padding:0 18px;'><b>Referencia:</b> {referenciaSegura}</td></tr>
+              <tr><td style='padding:0 18px 16px 18px;'><b>Autorizacion:</b> {autorizacionSegura}</td></tr>
+            </table>
+            <p style='margin:18px 0 0 0;font-size:13px;line-height:1.7;color:#5e738a;'>
+              Numerica Software | numericasoftware.com | +593 98 413 0238
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>"
+        };
+
+        mensaje.Body = bodyBuilder.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarSolicitudFirmaProcesadaAsync(
+        string emailDestino,
+        string? nombreCliente,
+        int solicitudId)
+    {
+        if (string.IsNullOrWhiteSpace(emailDestino))
+            throw new ArgumentException("La solicitud procesada no tiene un correo de destino.", nameof(emailDestino));
+
+        var destinatario = MailboxAddress.Parse(emailDestino.Trim());
+        var clienteSeguro = WebUtility.HtmlEncode(
+            string.IsNullOrWhiteSpace(nombreCliente) ? "Estimado cliente" : nombreCliente.Trim());
+        var urlFirmaSegura = WebUtility.HtmlEncode(_urlConfiguracionFirma);
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(destinatario);
+        mensaje.Subject = $"Tu solicitud #{solicitudId} fue procesada | E-Rubrica";
+        mensaje.Body = new BodyBuilder
+        {
+            HtmlBody = $@"
+<!doctype html>
+<html lang='es'>
+<body style='margin:0;padding:0;background:#f1f7f2;font-family:Segoe UI,Arial,sans-serif;color:#173524;'>
+  <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;background:#f1f7f2;'>
+    <tr><td align='center' style='padding:28px 12px;'>
+      <table role='presentation' width='620' cellpadding='0' cellspacing='0' border='0' style='width:100%;max-width:620px;background:#ffffff;border:1px solid #cfe4d2;'>
+        <tr><td style='padding:28px 32px;background:#237a35;color:#ffffff;'>
+          <div style='font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;'>Numerica E-Rubrica</div>
+          <div style='margin-top:8px;font-size:26px;font-weight:850;'>Tu solicitud fue procesada</div>
+        </td></tr>
+        <tr><td style='padding:30px 32px;font-size:15px;line-height:1.7;color:#405748;'>
+          <p style='margin:0 0 16px;'>Hola <strong>{clienteSeguro}</strong>, la solicitud <strong>#{solicitudId}</strong> ya se encuentra procesada.</p>
+          <p style='margin:0 0 20px;'>Ingresa a E-Rubrica para revisarla. No olvides cargar tu archivo de firma <strong>.p12</strong> y su clave en <strong>Configurar firma</strong>; este paso es necesario para firmar tus documentos PDF.</p>
+          <table role='presentation' cellpadding='0' cellspacing='0' border='0'><tr><td bgcolor='#237a35' style='border-radius:7px;'>
+            <a href='{urlFirmaSegura}' target='_blank' style='display:inline-block;padding:13px 22px;color:#ffffff;text-decoration:none;font-weight:800;'>Revisar y cargar mi firma</a>
+          </td></tr></table>
+          <p style='margin:22px 0 0;font-size:13px;color:#64766a;'>Por seguridad, no compartas la clave de tu certificado con otras personas.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"
+        }.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarSolicitudFirmaRechazadaAsync(
+        string emailDestino,
+        string? nombreCliente,
+        int solicitudId,
+        string? motivo)
+    {
+        if (string.IsNullOrWhiteSpace(emailDestino))
+            throw new ArgumentException("La solicitud rechazada no tiene un correo de destino.", nameof(emailDestino));
+
+        var destinatario = MailboxAddress.Parse(emailDestino.Trim());
+        var clienteSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(nombreCliente) ? "Estimado cliente" : nombreCliente.Trim());
+        var motivoSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(motivo) ? "Revisa los datos y documentos enviados." : motivo.Trim());
+        var urlRevisionSegura = WebUtility.HtmlEncode(_urlSolicitudesFirma);
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(destinatario);
+        mensaje.Subject = $"Tu solicitud #{solicitudId} fue rechazada | E-Rubrica";
+        mensaje.Body = new BodyBuilder
+        {
+            HtmlBody = $@"
+<!doctype html><html lang='es'><body style='margin:0;padding:0;background:#f1f7f2;font-family:Segoe UI,Arial,sans-serif;color:#173524;'>
+<table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='background:#f1f7f2;'><tr><td align='center' style='padding:28px 12px;'>
+<table role='presentation' width='620' cellpadding='0' cellspacing='0' style='width:100%;max-width:620px;background:#fff;border:1px solid #ead0d0;'>
+<tr><td style='padding:28px 32px;background:#a52a2a;color:#fff;'><div style='font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;'>Numerica E-Rubrica</div><div style='margin-top:8px;font-size:26px;font-weight:850;'>Solicitud rechazada</div></td></tr>
+<tr><td style='padding:30px 32px;font-size:15px;line-height:1.7;color:#405748;'><p style='margin:0 0 16px;'>Hola <strong>{clienteSeguro}</strong>, tu solicitud <strong>#{solicitudId}</strong> fue rechazada y requiere revisión.</p><p style='margin:0 0 20px;'><strong>Detalle:</strong> {motivoSeguro}</p><table role='presentation' cellpadding='0' cellspacing='0'><tr><td bgcolor='#a52a2a' style='border-radius:7px;'><a href='{urlRevisionSegura}' target='_blank' style='display:inline-block;padding:13px 22px;color:#fff;text-decoration:none;font-weight:800;'>Revisar y editar mi solicitud</a></td></tr></table><p style='margin:22px 0 0;font-size:13px;color:#64766a;'>Podrás corregir únicamente los datos o archivos necesarios y volver a enviar la solicitud.</p></td></tr>
+</table></td></tr></table></body></html>"
+        }.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    public async Task EnviarAvisoRenovacionFirmaAsync(
+        string emailDestino,
+        string? nombreCliente,
+        string? ruc,
+        DateTime fechaExpiracion,
+        int diasRestantes)
+    {
+        if (string.IsNullOrWhiteSpace(emailDestino))
+            return;
+
+        var destinatario = MailboxAddress.Parse(emailDestino.Trim());
+        var clienteSeguro = WebUtility.HtmlEncode(
+            string.IsNullOrWhiteSpace(nombreCliente) ? "Estimado cliente" : nombreCliente.Trim());
+        var rucSeguro = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(ruc) ? "No registrado" : ruc.Trim());
+        var asesoraSegura = WebUtility.HtmlEncode(_asesoraComercial);
+        var estado = diasRestantes < 0
+            ? $"venció hace {Math.Abs(diasRestantes)} día(s)"
+            : diasRestantes == 0
+                ? "vence hoy"
+                : $"vence en {diasRestantes} día(s)";
+        var enlaceContacto = string.IsNullOrWhiteSpace(_telefonoAsesoraComercial)
+            ? _urlSoportePlataforma
+            : $"https://wa.me/{_telefonoAsesoraComercial}";
+
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(destinatario);
+        mensaje.Subject = $"Tu firma electrónica {estado} | E-FACT";
+        mensaje.Body = new BodyBuilder
+        {
+            HtmlBody = BuildOutlookEmailShell(
+                $"Tu firma electrónica {estado}.",
+                "Numerica e-fact",
+                "Es momento de renovar tu firma electrónica",
+                $"Hola <strong>{clienteSeguro}</strong>. El certificado asociado al RUC <strong>{rucSeguro}</strong> {WebUtility.HtmlEncode(estado)}.",
+                $@"
+                <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='border:1px solid #dce8f6;background:#f8fbff;'>
+                  <tr><td style='padding:18px 20px;font-size:14px;line-height:1.8;color:#334155;'>
+                    <strong>Fecha de expiración:</strong> {fechaExpiracion:dd/MM/yyyy}<br>
+                    Para gestionar la renovación, comunícate con <strong>{asesoraSegura}</strong>, nuestra asesora comercial.
+                  </td></tr>
+                </table>
+                {BuildOutlookButton(enlaceContacto, $"Contactar a {asesoraSegura}")}")
+        }.ToMessageBody();
+
+        await SendMessageAsync(mensaje);
+    }
+
+    private string? AddEfactLogoResource(BodyBuilder bodyBuilder)
+    {
+        var logoPath = Path.Combine(_webRootPath, "images", "logo.png");
+        if (!File.Exists(logoPath))
+            return null;
+
+        try
+        {
+            var logo = bodyBuilder.LinkedResources.Add(logoPath);
+            logo.ContentId = MimeUtils.GenerateMessageId();
+            return $"cid:{logo.ContentId}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo incrustar el logo e-fact en el correo.");
+            return null;
+        }
+    }
+
+    private static string BuildEfactLogoHtml(string? linkUrl, int width = 220, string? logoSrc = null)
+    {
+        if (!string.IsNullOrWhiteSpace(logoSrc))
+        {
+            var logoSrcSeguro = WebUtility.HtmlEncode(logoSrc);
+            var logoWidth = width <= 150 ? 132 : 220;
+            var logoHtmlImagen = $@"
+  <img src='{logoSrcSeguro}' width='{logoWidth}' alt='Numerica e-fact' style='display:block;width:{logoWidth}px;max-width:{logoWidth}px;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;'>";
+
+            if (string.IsNullOrWhiteSpace(linkUrl))
+                return logoHtmlImagen;
+
+            return $@"
+<a href='{linkUrl}' target='_blank' style='display:inline-block;text-decoration:none;'>
+{logoHtmlImagen}
+</a>";
+        }
+
+        var brandFontSize = width <= 150 ? 24 : 34;
+        var subtitleFontSize = width <= 150 ? 7 : 9;
+        var iconSize = width <= 150 ? 36 : 46;
+        var iconFontSize = width <= 150 ? 22 : 28;
+        var logoHtml = $@"
+  <table role='presentation' cellpadding='0' cellspacing='0' border='0' align='center' style='border-collapse:collapse;margin:0 auto;'>
+    <tr>
+      <td align='center' valign='middle' bgcolor='#0aa6d9' style='width:{iconSize}px;height:{iconSize}px;border-radius:12px;background:#0aa6d9;color:#ffffff;font-family:Segoe UI,Arial,sans-serif;font-size:{iconFontSize}px;line-height:{iconSize}px;font-weight:900;'>N</td>
+      <td valign='middle' style='padding-left:10px;font-family:Segoe UI,Arial,sans-serif;text-align:left;'>
+        <div style='font-size:13px;line-height:14px;font-weight:900;color:#2f55d4;'>Num&eacute;rica</div>
+        <div style='font-size:{brandFontSize}px;line-height:{brandFontSize}px;font-weight:900;color:#2f55d4;letter-spacing:0;'>e-fact</div>
+        <div style='font-size:{subtitleFontSize}px;line-height:10px;font-weight:800;color:#6b7280;letter-spacing:.18em;text-transform:uppercase;'>Facturaci&oacute;n electr&oacute;nica</div>
+      </td>
+    </tr>
+  </table>";
+
+        if (string.IsNullOrWhiteSpace(linkUrl))
+            return logoHtml;
+
+        return $@"
+<a href='{linkUrl}' target='_blank' style='display:inline-block;text-decoration:none;'>
+{logoHtml}
+</a>";
+    }
+
+    private static string BuildEmailReceiptIcon()
+        => @"
+              <div style='padding:14px 0 10px 0;'>
+                <table role='presentation' cellpadding='0' cellspacing='0' border='0' align='center' style='border-collapse:collapse;'>
+                  <tr>
+                    <td align='center' valign='middle' style='width:58px;height:46px;border:2px solid #2f74c0;color:#2f74c0;font-family:Segoe UI,Arial,sans-serif;font-size:26px;line-height:42px;font-weight:700;'>&#9993;</td>
+                    <td align='center' valign='middle' bgcolor='#2f74c0' style='width:26px;height:26px;border-radius:13px;background-color:#2f74c0;color:#ffffff;font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:26px;font-weight:800;'>&#10003;</td>
+                  </tr>
+                </table>
+              </div>";
+
+    private static string BuildOutlookEmailShell(
+        string preheader,
+        string brand,
+        string title,
+        string introHtml,
+        string contentHtml,
+        bool enlazarLogo = true,
+        bool mostrarLinkFooter = true,
+        string? logoSrc = null)
+    {
+        var preheaderSeguro = WebUtility.HtmlEncode(preheader);
+        var titleSeguro = title;
+        var websiteSafe = WebUtility.HtmlEncode(EfactInfoUrl);
+        var websiteDisplaySafe = WebUtility.HtmlEncode(EfactInfoDisplayUrl);
+        var phoneSafe = WebUtility.HtmlEncode(EfactContactPhone);
+        var logoLink = enlazarLogo ? websiteSafe : null;
+        var footerContactoHtml = mostrarLinkFooter
+            ? $@"
+              <a href='{websiteSafe}' target='_blank' style='font-size:12px;line-height:18px;color:#006bb5;text-decoration:none;font-weight:800;'>{websiteDisplaySafe}</a>
+              <span style='display:inline-block;color:#9aa8b6;padding:0 12px;'>|</span>
+              <span style='font-size:12px;line-height:18px;color:#334155;font-weight:800;'>{phoneSafe}</span>"
+            : $@"
+              <span style='font-size:12px;line-height:18px;color:#334155;font-weight:800;'>{phoneSafe}</span>";
+
+        return $@"
+<!doctype html>
+<html lang='es'>
+<head>
+  <meta http-equiv='Content-Type' content='text/html; charset=utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <meta name='x-apple-disable-message-reformatting'>
+</head>
+<body style='margin:0;padding:0;background-color:#f2f6f9;'>
+  <div style='display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;color:#f2f6f9;'>
+    {preheaderSeguro}
+  </div>
+  <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' bgcolor='#f2f6f9' style='width:100%;background-color:#f2f6f9;border-collapse:collapse;'>
+    <tr>
+      <td align='center' style='padding:24px 12px;'>
+        <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;max-width:640px;border-collapse:collapse;background-color:#ffffff;border:1px solid #d8e3ec;'>
+          <tr>
+            <td align='center' style='padding:22px 24px 14px 24px;background-color:#ffffff;border-bottom:2px solid #86b7e4;font-family:Segoe UI,Arial,sans-serif;'>
+              {BuildEfactLogoHtml(logoLink, logoSrc: logoSrc)}
+            </td>
+          </tr>
+          <tr>
+            <td align='center' style='padding:18px 30px 22px 30px;background-color:#ffffff;font-family:Segoe UI,Arial,sans-serif;'>
+              <h1 style='margin:0;font-size:18px;line-height:25px;color:#14213d;font-weight:850;'>{titleSeguro}</h1>
+              {BuildEmailReceiptIcon()}
+              <p style='margin:0;font-size:15px;line-height:24px;color:#5f718c;'>{introHtml}</p>
+            </td>
+          </tr>
+          <tr>
+            <td bgcolor='#ffffff' style='background-color:#ffffff;padding:0 30px 30px 30px;font-family:Segoe UI,Arial,sans-serif;color:#111827;'>
+              {contentHtml}
+            </td>
+          </tr>
+          <tr>
+            <td align='center' style='padding:20px 28px;background-color:#e8f1f2;font-family:Segoe UI,Arial,sans-serif;color:#4b5563;'>
+              <div style='font-size:12px;line-height:18px;color:#4b5563;margin:0 0 4px 0;'>Emitido mediante</div>
+              {BuildEfactLogoHtml(logoLink, 140, logoSrc)}
+              <div style='line-height:8px;height:8px;font-size:8px;'>&nbsp;</div>
+              {footerContactoHtml}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>";
+    }
+
+    private static string BuildOutlookStepsTable(IEnumerable<string> steps)
+    {
+        var rows = string.Join(
+            string.Empty,
+            steps.Select((step, index) => $@"
+              <tr>
+                <td width='34' valign='top' style='width:34px;padding:10px 0 0 0;font-family:Segoe UI,Arial,sans-serif;'>
+                  <table role='presentation' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;'>
+                    <tr>
+                      <td align='center' valign='middle' bgcolor='#111827' style='width:24px;height:24px;background-color:#111827;color:#ffffff;font-size:13px;line-height:24px;font-weight:800;'>{index + 1}</td>
+                    </tr>
+                  </table>
+                </td>
+                <td valign='top' style='padding:10px 0 0 0;font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:22px;color:#374151;'>{step}</td>
+              </tr>"));
+
+        return $@"
+        <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border:1px solid #e5e7eb;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;Margin:18px 0;'>
+          <tr>
+            <td bgcolor='#111827' style='background-color:#111827;padding:12px 16px;font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:20px;color:#ffffff;font-weight:800;'>Pasos para ingresar</td>
+          </tr>
+          <tr>
+            <td bgcolor='#ffffff' style='background-color:#ffffff;padding:6px 16px 16px 16px;'>
+              <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;'>
+                {rows}
+              </table>
+            </td>
+          </tr>
+        </table>";
+    }
+
+    private static string BuildOutlookCredentialBox(IEnumerable<(string? Label, string? Value)> rows)
+    {
+        var validRows = rows
+            .Where(row => !string.IsNullOrWhiteSpace(row.Label) && !string.IsNullOrWhiteSpace(row.Value))
+            .Select(row => $@"
+              <tr>
+                <td style='padding:6px 0;font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:22px;color:#374151;'>
+                  <strong style='color:#111827;'>{row.Label}:</strong> {row.Value}
+                </td>
+              </tr>");
+
+        return $@"
+        <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' bgcolor='#f9fafb' style='width:100%;background-color:#f9fafb;border:1px solid #e5e7eb;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;Margin:18px 0;'>
+          <tr>
+            <td style='padding:14px 18px;'>
+              <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;'>
+                {string.Join(string.Empty, validRows)}
+              </table>
+            </td>
+          </tr>
+        </table>";
+    }
+
+    private static string BuildOutlookCodeBox(string value)
+    {
+        return $@"
+        <table role='presentation' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;Margin-top:8px;'>
+          <tr>
+            <td bgcolor='#111827' style='background-color:#111827;color:#ffffff;font-family:Segoe UI,Arial,sans-serif;font-size:22px;line-height:26px;font-weight:900;letter-spacing:4px;padding:12px 18px;'>{value}</td>
+          </tr>
+        </table>";
+    }
+
+    private static string BuildOutlookButton(string url, string text)
+    {
+        return $@"
+        <table role='presentation' cellpadding='0' cellspacing='0' border='0' style='border-collapse:collapse;Margin-top:4px;'>
+          <tr>
+            <td bgcolor='#111827' style='background-color:#111827;padding:0;'>
+              <a href='{url}' target='_blank' style='display:inline-block;font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:18px;font-weight:800;color:#ffffff;text-decoration:none;padding:13px 20px;border:1px solid #111827;mso-padding-alt:0;'>
+                <!--[if mso]><i style='letter-spacing:20px;mso-font-width:-100%;mso-text-raise:13pt'>&nbsp;</i><![endif]-->
+                <span style='mso-text-raise:7pt;color:#ffffff;'>{text}</span>
+                <!--[if mso]><i style='letter-spacing:20px;mso-font-width:-100%'>&nbsp;</i><![endif]-->
+              </a>
+            </td>
+          </tr>
+        </table>";
+    }
+
+    public async Task EnviarInvitacionEContaxAsync(string emailDestino, string empresa, string sucursal, string rol, string url)
+    {
+        var mensaje = new MimeMessage();
+        mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
+        mensaje.To.Add(MailboxAddress.Parse(NormalizarEmail(emailDestino)));
+        mensaje.Subject = $"Invitación a {empresa} en E-Contax";
+        mensaje.Body = new BodyBuilder
+        {
+            HtmlBody = $"<p>Te invitaron a unirte a <strong>{WebUtility.HtmlEncode(empresa)}</strong> en E-Contax.</p>" +
+                $"<p>A partir de ahora tendrás acceso a la información de esta empresa dentro de E-Contax, limitado a la sucursal <strong>{WebUtility.HtmlEncode(sucursal)}</strong> y al rol <strong>{WebUtility.HtmlEncode(rol)}</strong>.</p>" +
+                $"<p><a href='{WebUtility.HtmlEncode(url)}'>Ver invitación y aceptar acceso</a></p>" +
+                "<p>Usa la cuenta de E-Fact asociada a este correo. La invitación vence en 48 horas y se utiliza una sola vez.</p>",
+            TextBody = $"Te invitaron a unirte a {empresa} en E-Contax. Tendrás acceso a la información de la empresa en la sucursal {sucursal}, con el rol {rol}. Abre este enlace para aceptar: {url}. Vence en 48 horas."
+        }.ToMessageBody();
+        await SendMessageAsync(mensaje);
+    }
+
+    private async Task SendMessageAsync(MimeMessage mensaje)
+    {
+        if (string.IsNullOrWhiteSpace(_host))
+            throw new InvalidOperationException("No se configuro el host SMTP para el envio de correos.");
+
+        if (string.IsNullOrWhiteSpace(_usuario) || string.IsNullOrWhiteSpace(_pass))
+            throw new InvalidOperationException("No se configuraron las credenciales SMTP para el envio de correos.");
+
+        AplicarRemitenteFijo(mensaje);
+
+        using var client = new SmtpClient();
+        client.Timeout = _timeoutMs;
+
+        Exception? ultimoErrorConexion = null;
+
+        try
+        {
+            foreach (var socketOption in ObtenerOpcionesSeguridad())
+            {
+                try
+                {
+                    Debug.WriteLine($"[SMTP] Intentando conectar a {_host}:{_puerto} con {socketOption}");
+                    await client.ConnectAsync(_host, _puerto, socketOption);
+                    Debug.WriteLine($"[SMTP] Conectado. Autenticando {_usuario}");
+                    await client.AuthenticateAsync(_usuario, _pass);
+                    Debug.WriteLine($"[SMTP] Autenticacion OK con {_host}:{_puerto} usando {socketOption}");
+                    ultimoErrorConexion = null;
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[SMTP][ERROR] {_host}:{_puerto} usando {socketOption}: {ex}");
+                    ultimoErrorConexion = ex;
+
+                    _logger.LogWarning(
+                        ex,
+                        "Fallo al conectar o autenticar SMTP con {Host}:{Puerto} usando {SocketOption}.",
+                        _host,
+                        _puerto,
+                        socketOption);
+
+                    if (client.IsConnected)
+                    {
+                        await client.DisconnectAsync(true);
+                    }
+                }
+            }
+
+            if (ultimoErrorConexion != null || !client.IsAuthenticated)
+            {
+                throw new InvalidOperationException(
+                    $"No fue posible establecer conexion con el servidor SMTP {_host}:{_puerto}.",
+                    ultimoErrorConexion);
+            }
+
+            Debug.WriteLine($"[SMTP] From: {string.Join(", ", mensaje.From.Select(x => x.ToString()))}");
+            Debug.WriteLine($"[SMTP] Sender: {mensaje.Sender}");
+            Debug.WriteLine($"[SMTP] ReplyTo: {string.Join(", ", mensaje.ReplyTo.Select(x => x.ToString()))}");
+            Debug.WriteLine($"[SMTP] Enviando mensaje a: {string.Join(", ", mensaje.To.Select(x => x.ToString()))}");
+            _logger.LogInformation(
+                "SMTP envio - from:{From} - sender:{Sender} - replyTo:{ReplyTo} - to:{To}",
+                string.Join(", ", mensaje.From.Select(x => x.ToString())),
+                mensaje.Sender?.ToString() ?? "(vacio)",
+                string.Join(", ", mensaje.ReplyTo.Select(x => x.ToString())),
+                string.Join(", ", mensaje.To.Select(x => x.ToString())));
+            await client.SendAsync(mensaje);
+            Debug.WriteLine("[SMTP] Mensaje enviado correctamente.");
+        }
+        finally
+        {
+            if (client.IsConnected)
+                await client.DisconnectAsync(true);
+        }
+    }
+
+    private void AplicarRemitenteFijo(MimeMessage mensaje)
+    {
+        var remitente = new MailboxAddress(_nombreRemitente, _usuario);
+
+        mensaje.From.Clear();
+        mensaje.From.Add(remitente);
+        mensaje.Sender = remitente;
+        mensaje.ReplyTo.Clear();
+        mensaje.ReplyTo.Add(remitente);
+    }
+
+    private IEnumerable<SecureSocketOptions> ObtenerOpcionesSeguridad()
+    {
+        var opciones = new[]
+        {
+            _seguridadPreferida,
+            SecureSocketOptions.Auto,
+            SecureSocketOptions.StartTlsWhenAvailable,
+            SecureSocketOptions.StartTls,
+            SecureSocketOptions.SslOnConnect
+        };
+
+        var vistos = new HashSet<SecureSocketOptions>();
+        foreach (var opcion in opciones)
+        {
+            if (vistos.Add(opcion))
+            {
+                yield return opcion;
+            }
+        }
+    }
+
+    private static SecureSocketOptions ParseSecureSocketOption(string? valor)
+    {
+        return valor?.Trim().ToLowerInvariant() switch
+        {
+            "none" => SecureSocketOptions.None,
+            "aut" => SecureSocketOptions.Auto,
+            "auto" => SecureSocketOptions.Auto,
+            "starttls" => SecureSocketOptions.StartTls,
+            "starttlswhenavailable" => SecureSocketOptions.StartTlsWhenAvailable,
+            "ssl" => SecureSocketOptions.SslOnConnect,
+            "sslonconnect" => SecureSocketOptions.SslOnConnect,
+            _ => SecureSocketOptions.Auto
+        };
+    }
+
+    private static string? GetConfigValue(IConfiguration configuration, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = configuration[key];
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static int? GetConfigInt(IConfiguration configuration, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = configuration[key];
+            if (!string.IsNullOrWhiteSpace(value) && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
+            {
+                return number;
+            }
+        }
+
+        return null;
+    }
+
+    private static string NormalizarEmail(string email)
+    {
+        var emailNormalizado = (email ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(emailNormalizado))
+            throw new InvalidOperationException("El correo del destinatario no esta registrado.");
+
+        try
+        {
+            _ = MailboxAddress.Parse(emailNormalizado);
+        }
+        catch (Exception ex) when (ex is ParseException || ex is FormatException || ex is ArgumentException)
+        {
+            throw new InvalidOperationException($"El correo '{email}' no es valido. Corrige el correo del cliente antes de enviar el aviso.", ex);
+        }
+
+        return emailNormalizado;
+    }
+
+    private List<string> ObtenerDestinatariosNotificacionPagos(params string?[] excluirCorreos)
+    {
+        if (!_notificacionPagosDestinatarios.Any())
+            return new List<string>();
+
+        var excluidos = new HashSet<string>(
+            NormalizarListaCorreos(excluirCorreos),
+            StringComparer.OrdinalIgnoreCase);
+
+        return _notificacionPagosDestinatarios
+            .Where(correo => !excluidos.Contains(correo))
+            .ToList();
+    }
+
+    private async Task<List<string>> ObtenerDestinatariosNotificacionPagosAsync(params string?[] excluirCorreos)
+    {
+        var destinatarios = ObtenerDestinatariosNotificacionPagos(excluirCorreos);
+
+        try
+        {
+            var correosBackOffice = await _db.Usuarios
+                .AsNoTracking()
+                .Where(u =>
+                    u.Estado == true &&
+                    !string.IsNullOrWhiteSpace(u.Email) &&
+                    (u.IdTipoUsuario == BackOfficePermissionHelper.SuperAdministradorRoleId ||
+                     (u.IdTipoUsuario == BackOfficePermissionHelper.BackOfficeRoleId &&
+                        (u.TipoCliente == BackOfficePermissionHelper.AdministradorBackOfficeTipoCliente ||
+                         u.TipoCliente == BackOfficePermissionHelper.CobranzasBackOfficeTipoCliente))))
+                .Select(u => u.Email)
+                .ToListAsync();
+
+            destinatarios = NormalizarListaCorreos(destinatarios.Concat(correosBackOffice));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudieron cargar destinatarios BackOffice para notificacion de cobro pendiente.");
+        }
+
+        var excluidos = new HashSet<string>(
+            NormalizarListaCorreos(excluirCorreos),
+            StringComparer.OrdinalIgnoreCase);
+
+        return destinatarios
+            .Where(correo => !excluidos.Contains(correo))
+            .ToList();
+    }
+
+    private static IEnumerable<string> ParseCorreosConfigurados(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+            return Array.Empty<string>();
+
+        return valor
+            .Split(new[] { ';', ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private static List<string> NormalizarListaCorreos(IEnumerable<string?>? correos)
+    {
+        if (correos == null)
+            return new List<string>();
+
+        var normalizados = new List<string>();
+        var vistos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var correo in correos)
+        {
+            if (string.IsNullOrWhiteSpace(correo))
+                continue;
+
+            try
+            {
+                var email = NormalizarEmail(correo);
+                if (vistos.Add(email))
+                    normalizados.Add(email);
+            }
+            catch
+            {
+                // Ignora correos inválidos de configuración para no bloquear el arranque.
+            }
+        }
+
+        return normalizados;
+    }
+
+    private static string PrepararCodigoRecuperacionParaCorreo(string codigo)
+    {
+        var codigoNormalizado = (codigo ?? string.Empty).Trim();
+        if (RecoveryCodeHelper.EsCodigoValido(codigoNormalizado))
+        {
+            return codigoNormalizado;
+        }
+
+        return RecoveryCodeHelper.GenerarCodigoNumerico();
+    }
+
+    private static string EnmascararEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains("@")) return "***";
+        var parts = email.Split('@');
+        var user = parts[0];
+        var dom = parts[1];
+        var visible = user.Length <= 2 ? user : user.Substring(0, 2);
+        return $"{visible}***@{dom}";
+    }
+
+    private static string BuildTransactionalEmailLayout(
+        string previewText,
+        string eyebrow,
+        string title,
+        string subtitle,
+        string bodyHtml,
+        string? footerText = null)
+    {
+        var previewSafe = WebUtility.HtmlEncode(previewText);
+        var subtitleSafe = subtitle;
+        var efactInfoUrlSafe = WebUtility.HtmlEncode(EfactInfoUrl);
+        var efactInfoDisplayUrlSafe = WebUtility.HtmlEncode(EfactInfoDisplayUrl);
+        var efactContactPhoneSafe = WebUtility.HtmlEncode(EfactContactPhone);
+        var footerSafe = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(footerText)
+            ? "Numerica Software"
+            : footerText.Trim());
+
+        return $@"
+<!DOCTYPE html>
+<html lang='es'>
+  <head>
+    <meta http-equiv='Content-Type' content='text/html; charset=utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <meta name='x-apple-disable-message-reformatting'>
+  </head>
+  <body style='margin:0;padding:0;background-color:#f2f6f9;'>
+    <div style='display:none;font-size:1px;color:#f2f6f9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;'>
+      {previewSafe}
+    </div>
+    <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;background-color:#f2f6f9;margin:0;padding:0;'>
+      <tr>
+        <td align='center' style='padding:24px 12px;'>
+          <!--[if mso]>
+          <table role='presentation' width='640' cellpadding='0' cellspacing='0' border='0'><tr><td>
+          <![endif]-->
+          <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;max-width:640px;border-collapse:collapse;background-color:#ffffff;border:1px solid #d8e3ec;'>
+            <tr>
+              <td style='padding:0;background-color:#ffffff;'>
+                <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;'>
+                  <tr>
+                    <td align='center' style='padding:22px 24px 14px 24px;background-color:#ffffff;border-bottom:2px solid #86b7e4;'>
+                      {BuildEfactLogoHtml(efactInfoUrlSafe)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align='center' style='padding:18px 28px 22px 28px;background-color:#ffffff;'>
+                      <div style='font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:20px;font-weight:850;color:#14213d;margin:0;'>
+                        Has recibido un comprobante electr&oacute;nico
+                      </div>
+                      {BuildEmailReceiptIcon()}
+                      <div style='font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:24px;color:#6b7280;'>
+                        {subtitleSafe}
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style='padding:0 28px 28px 28px;background-color:#ffffff;'>
+                {bodyHtml}
+              </td>
+            </tr>
+            <tr>
+              <td align='center' style='padding:22px 28px;background-color:#e8f1f2;font-family:Segoe UI,Arial,sans-serif;color:#4b5563;'>
+                <div style='font-size:12px;line-height:18px;color:#4b5563;margin:0 0 4px 0;'>Emitido mediante</div>
+                {BuildEfactLogoHtml(efactInfoUrlSafe, 140)}
+                <div style='font-size:12px;line-height:18px;margin:8px 0 12px 0;'>{footerSafe}</div>
+                <a href='{efactInfoUrlSafe}' target='_blank' style='font-size:12px;line-height:18px;color:#006bb5;text-decoration:none;font-weight:800;'>{efactInfoDisplayUrlSafe}</a>
+                <span style='display:inline-block;color:#9aa8b6;padding:0 12px;'>|</span>
+                <span style='font-size:12px;line-height:18px;color:#334155;font-weight:800;'>{efactContactPhoneSafe}</span>
+              </td>
+            </tr>
+          </table>
+          <!--[if mso]>
+          </td></tr></table>
+          <![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>";
+    }
+
+    private static string BuildBodyParagraph(string htmlText)
+        => $"<p style='margin:0 0 16px 0;font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:24px;color:#334155;'>{htmlText}</p>";
+
+    private static string BuildNoticeBox(string htmlText)
+        => $@"
+<table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;background-color:#f8fbfe;border:1px solid #dbe7f1;'>
+  <tr>
+    <td style='padding:16px 18px;font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:22px;color:#475569;'>
+      {htmlText}
+    </td>
+  </tr>
+</table>";
+
+    private static string BuildInfoTable(params (string Label, string Value)[] rows)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.Append("<table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:separate;border-spacing:0;border:1px solid #dbe5ef;background-color:#ffffff;margin:0 0 18px 0;border-radius:12px;overflow:hidden;'>");
+
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var (label, value) = rows[i];
+            var borderStyle = i == rows.Length - 1 ? string.Empty : "border-bottom:1px solid #e5edf5;";
+            var icon = GetEmailRowIcon(label);
+            builder.Append($@"
+<tr>
+  <td width='44' align='center' valign='middle' style='width:44px;padding:11px 8px;{borderStyle}font-family:Segoe UI,Arial,sans-serif;font-size:17px;line-height:20px;font-weight:800;color:#174ea6;background-color:#f5f9ff;'>
+    {icon}
+  </td>
+  <td style='width:34%;padding:12px 14px;{borderStyle}font-family:Segoe UI,Arial,sans-serif;font-size:13px;line-height:20px;font-weight:800;color:#1e3a5f;background-color:#f5f9ff;vertical-align:middle;'>
+    {WebUtility.HtmlEncode(label)}
+  </td>
+  <td style='padding:12px 16px;{borderStyle}font-family:Segoe UI,Arial,sans-serif;font-size:13px;line-height:20px;color:#334155;vertical-align:middle;'>
+    {value}
+  </td>
+</tr>");
+        }
+
+        builder.Append("</table>");
+        return builder.ToString();
+    }
+
+    private static string GetEmailRowIcon(string label)
+    {
+        var texto = label.ToLowerInvariant();
+        if (texto.Contains("fecha"))
+            return "&#128197;";
+        if (texto.Contains("cliente") || texto.Contains("proveedor") || texto.Contains("destinatario"))
+            return "&#128100;";
+        if (texto.Contains("total") || texto.Contains("monto") || texto.Contains("retenido"))
+            return "&#36;";
+        if (texto.Contains("archivo"))
+            return "&#128206;";
+        if (texto.Contains("documento") || texto.Contains("factura") || texto.Contains("nota") || texto.Contains("guia") || texto.Contains("liquidacion") || texto.Contains("retencion"))
+            return "&#128196;";
+
+        return "&#8226;";
+    }
+}

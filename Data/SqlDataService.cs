@@ -73,6 +73,35 @@ public class SqlDataService : ISqlDataService
                     )
                     BEGIN
                         ALTER TABLE qvt_productosUtilizados ALTER COLUMN cantprod decimal(18,2) NULL;
+                    END;
+
+                    IF OBJECT_ID(N'dbo.vt_autorizaciones', N'U') IS NOT NULL
+                    BEGIN
+                        IF COL_LENGTH(N'dbo.vt_autorizaciones', N'autorizacion_archivo_url') IS NULL
+                            ALTER TABLE dbo.vt_autorizaciones
+                                ADD autorizacion_archivo_url nvarchar(1000) NULL;
+
+                        IF COL_LENGTH(N'dbo.vt_autorizaciones', N'autorizacion_archivo_nombre') IS NULL
+                            ALTER TABLE dbo.vt_autorizaciones
+                                ADD autorizacion_archivo_nombre nvarchar(260) NULL;
+
+                        IF NOT EXISTS (
+                            SELECT 1 FROM sys.indexes
+                            WHERE object_id = OBJECT_ID(N'dbo.vt_autorizaciones')
+                              AND name = N'IX_vt_autorizaciones_nhcl_fecha')
+                            CREATE INDEX IX_vt_autorizaciones_nhcl_fecha
+                                ON dbo.vt_autorizaciones (autorizacion_nhcl, autorizacion_fecha DESC);
+                    END;
+
+                    IF OBJECT_ID(N'dbo.vt_formatos', N'U') IS NOT NULL
+                    BEGIN
+                        IF COL_LENGTH(N'dbo.vt_formatos', N'form_es_sistema') IS NULL
+                            ALTER TABLE dbo.vt_formatos
+                                ADD form_es_sistema bit NULL;
+
+                        UPDATE dbo.vt_formatos
+                        SET form_es_sistema = CASE WHEN form_id <= 8 THEN 1 ELSE 0 END
+                        WHERE form_es_sistema IS NULL;
                     END;";
                 cmd.ExecuteNonQuery();
                 _schemaVerified = true;

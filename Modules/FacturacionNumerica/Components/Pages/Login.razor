@@ -1,0 +1,2213 @@
+﻿@page "/"
+@page "/login"
+@attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Authorization
+@using Simetric.Data
+@using Microsoft.EntityFrameworkCore
+@using Simetric.Extensions
+@using Simetric.Models
+@using Simetric.Services
+@using Simetric.Auth
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
+@using System.ComponentModel.DataAnnotations
+
+@layout Simetric.Components.Layout.EmptyLayout
+@rendermode InteractiveServer
+
+@inject NavigationManager NavManager
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject SecurityService Security
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
+@inject EmisorOnboardingService EmisorOnboardingService
+@inject PendingLoginFlowService PendingLoginFlow
+@inject LoginDestinationService LoginDestination
+
+<PageTitle>Iniciar Sesion | Numérica software</PageTitle>
+
+<style>
+    @FontFaceCss
+
+    :root {
+        --n-blue: #006bb5;
+        --n-blue-dark: #004a7c;
+        --n-blue-light: #e6f0f8;
+        --n-dark: #2c3e50;
+        --white: #ffffff;
+        --bg-color: #f4f7f6;
+    }
+
+    body {
+        font-family: 'Montserrat', sans-serif;
+        background-color: var(--bg-color);
+        margin: 0;
+        min-height: 100dvh;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+    .main-viewport {
+        display: flex;
+        min-height: max(100vh, 100dvh);
+        height: auto;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+        overflow-y: visible;
+    }
+
+    /* ── Panel Izquierdo ── */
+    .brand-side {
+        flex: 1 1 56%;
+        background: linear-gradient(135deg, var(--n-blue) 0%, var(--n-blue-dark) 100%);
+        color: white;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: clamp(2.5rem, 4vw, 5rem);
+        position: relative;
+        overflow: hidden;
+        min-width: 0;
+        min-height: 0;
+    }
+
+        /* Círculos decorativos originales — detrás del canvas */
+        .brand-side::before, .brand-side::after {
+            content: "";
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.04);
+            z-index: 0;
+        }
+
+        .brand-side::before {
+            width: 400px;
+            height: 400px;
+            top: -100px;
+            left: -100px;
+        }
+
+        .brand-side::after {
+            width: 600px;
+            height: 600px;
+            bottom: -200px;
+            right: -150px;
+        }
+
+    .numeric-digits-layer {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    /* Canvas PS3 — capa 1, llena todo el panel */
+    .numerica-digit {
+        position: absolute;
+        z-index: 1;
+        color: rgba(255, 255, 255, 0.5);
+        line-height: 1;
+        user-select: none;
+        mix-blend-mode: screen;
+        text-shadow: 0 0 20px rgba(255, 255, 255, 0.34), 0 0 42px rgba(255, 255, 255, 0.22), 0 0 64px rgba(184, 220, 255, 0.1);
+        font-variant-numeric: tabular-nums;
+        will-change: transform, opacity;
+    }
+
+    /* Glass card — capa 2, encima de las ondas */
+    @KeyframesDigitFloatCss
+
+    .numeric-digits-layer::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        background: radial-gradient(circle at 18% 24%, rgba(255, 255, 255, 0.14), transparent 34%), radial-gradient(circle at 74% 72%, rgba(255, 255, 255, 0.11), transparent 30%);
+        opacity: 0.78;
+    }
+
+    .glass-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 24px;
+        padding: clamp(2.15rem, 3vw, 3.25rem);
+        width: min(100%, 38rem);
+        max-width: 38rem;
+        min-height: clamp(23rem, 50vh, 27rem);
+        position: relative;
+        z-index: 2;
+        box-shadow: 0 25px 50px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: clamp(1.35rem, 2vw, 1.9rem);
+        text-align: center;
+    }
+
+    .brand-logo-shell {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        max-width: 100%;
+        padding: 0.8rem 1.1rem;
+        border-radius: 18px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+        border: 1px solid rgba(255, 255, 255, 0.26);
+        box-shadow: 0 16px 30px rgba(2, 35, 66, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        backdrop-filter: blur(10px);
+    }
+
+    .brand-lockup {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: clamp(0.95rem, 1.4vw, 1.25rem);
+        max-width: 100%;
+    }
+
+    .brand-logo {
+        width: clamp(4.6rem, 8vw, 5.75rem);
+        height: clamp(4.6rem, 8vw, 5.75rem);
+        max-width: 100%;
+        display: block;
+        object-fit: contain;
+        filter: drop-shadow(0 8px 18px rgba(1, 21, 40, 0.24)) saturate(1.04) contrast(1.04);
+    }
+
+    .login-brand-heading {
+        font-family: "Conthrax SemiBold", "Conthrax", sans-serif;
+        font-weight: 600;
+        font-size: clamp(2rem, 3.2vw, 2.85rem);
+        letter-spacing: 0;
+        line-height: 0.96;
+        display: flex;
+        flex-direction: column;
+        margin: 0;
+        text-align: left;
+    }
+
+    .brand-tagline {
+        margin: 0;
+        max-width: 28rem;
+        color: rgba(255, 255, 255, 0.78);
+        font-size: clamp(1.08rem, 1.55vw, 1.35rem);
+        font-weight: 400;
+        line-height: 1.55;
+    }
+
+    .brand-version-row {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+    }
+
+    .brand-mobile-lockup {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+    }
+
+    .brand-mobile-logo {
+        width: 58px;
+        height: 58px;
+        display: inline-block;
+        object-fit: contain;
+        filter: drop-shadow(0 10px 18px rgba(37, 76, 205, 0.2));
+    }
+
+    .brand-mobile-name {
+        font-family: "Conthrax SemiBold", "Conthrax", sans-serif;
+        font-size: 1.15rem;
+        font-weight: 600;
+        line-height: 0.98;
+        color: var(--n-dark);
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+    }
+
+    /* ── Panel Derecho ── */
+    .form-side {
+        flex: 1 1 44%;
+        background: var(--white);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: clamp(1rem, 2vw, 2rem);
+        min-width: 0;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    .login-container-pro {
+        width: 100%;
+        max-width: 440px;
+        animation: slideUp 0.6s ease-out forwards;
+        background: white;
+        padding: clamp(1.75rem, 2.4vw, 3rem) clamp(1.4rem, 2vw, 2rem);
+        border-radius: 24px;
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.04);
+        border: 1px solid rgba(0,0,0,0.02);
+        max-height: none;
+        overflow: visible;
+    }
+
+    .login-container-pro .mb-5 {
+        margin-bottom: 2rem !important;
+    }
+
+    .login-container-pro .mb-4 {
+        margin-bottom: 1rem !important;
+    }
+
+    .form-label-n {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--n-dark);
+        margin-bottom: 8px;
+        display: block;
+        letter-spacing: 0.5px;
+    }
+
+    .input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .input-n-premium {
+        width: 100%;
+        padding: 14px 45px 14px 45px;
+        border: 2px solid #edf2f7;
+        border-radius: 12px;
+        background: #f8fafc;
+        font-size: 0.95rem;
+        color: var(--n-dark);
+        transition: all 0.3s ease;
+    }
+
+        .input-n-premium:focus {
+            border-color: var(--n-blue);
+            background: white;
+            box-shadow: 0 0 0 4px rgba(0, 107, 181, 0.1);
+            outline: none;
+        }
+
+    .input-icon-n {
+        position: absolute;
+        left: 16px;
+        color: #a0aec0;
+        font-size: 1.2rem;
+        transition: color 0.3s ease;
+    }
+
+    .btn-eye-n {
+        position: absolute;
+        right: 16px;
+        background: transparent;
+        border: none;
+        color: #a0aec0;
+        font-size: 1.2rem;
+        cursor: pointer;
+        transition: color 0.3s ease;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-eye-n:hover {
+            color: var(--n-blue);
+        }
+
+    .btn-n-login {
+        background: linear-gradient(135deg, var(--n-blue) 0%, var(--n-blue-dark) 100%);
+        color: white;
+        padding: 16px;
+        border-radius: 12px;
+        width: 100%;
+        border: none;
+        font-weight: 600;
+        font-size: 1rem;
+        letter-spacing: 0.5px;
+        box-shadow: 0 8px 20px rgba(0, 107, 181, 0.25);
+        transition: all 0.3s ease;
+        margin-top: 1rem;
+    }
+
+        .btn-n-login:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 25px rgba(0, 107, 181, 0.35);
+        }
+
+    .modal-backdrop-custom {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(8px);
+        z-index: 1040;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    @SlideUpAndMediaCss
+
+    /* ESTILOS DE PLATAFORMAS EN LOGIN/REGISTRO (DISEÑO PREMIUM MODERNO) */
+    .platforms-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        width: 100%;
+        margin: 0.5rem 0;
+    }
+
+    .platform-card {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-start;
+        padding: 1.15rem;
+        border-radius: 16px;
+        position: relative;
+        cursor: pointer;
+        transition: transform 0.28s ease, box-shadow 0.28s ease;
+        min-height: 130px;
+        width: 100%;
+        backdrop-filter: blur(8px);
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        overflow: hidden;
+    }
+
+    /* CARD-SPECIFIC THEMES */
+    .platform-card.card-efact,
+    .platform-card.card-esign {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.13)) !important;
+        background-image: none !important;
+        border: 1px solid rgba(255, 255, 255, 0.34) !important;
+        box-shadow: 0 14px 34px rgba(2, 35, 66, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
+        backdrop-filter: blur(10px) !important;
+        -webkit-backdrop-filter: blur(10px) !important;
+        opacity: 1 !important;
+    }
+
+    .card-econtax {
+        background: rgba(10, 70, 65, 0.4);
+        border: 1px solid rgba(15, 133, 119, 0.2);
+    }
+
+    .card-edeclara {
+        background: rgba(43, 38, 97, 0.4);
+        border: 1px solid rgba(83, 75, 184, 0.2);
+    }
+
+    .card-epeople {
+        background: rgba(90, 40, 5, 0.4);
+        border: 1px solid rgba(211, 84, 0, 0.2);
+    }
+    .platform-card.card-efact:hover,
+    .platform-card.card-esign:hover {
+        transform: translateY(-6px);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.29), rgba(255, 255, 255, 0.17)) !important;
+        box-shadow: 0 18px 38px rgba(2, 35, 66, 0.2);
+    }
+
+    .card-econtax:hover {
+        transform: translateY(-4px);
+        background: rgba(10, 70, 65, 0.65);
+        border-color: rgba(15, 133, 119, 0.6);
+        box-shadow: 0 12px 30px rgba(15, 133, 119, 0.35);
+    }
+
+    .card-edeclara:hover {
+        transform: translateY(-4px);
+        background: rgba(43, 38, 97, 0.65);
+        border-color: rgba(83, 75, 184, 0.6);
+        box-shadow: 0 12px 30px rgba(83, 75, 184, 0.35);
+    }
+
+    .card-epeople:hover {
+        transform: translateY(-4px);
+        background: rgba(90, 40, 5, 0.65);
+        border-color: rgba(211, 84, 0, 0.6);
+        box-shadow: 0 12px 30px rgba(211, 84, 0, 0.35);
+    }
+
+    /* CARD HEADER & LOGO IMAGES */
+    .platform-card-header {
+        display: flex;
+        align-items: center;
+        height: 60px;
+        width: 100%;
+    }
+
+    .logo-efact-card {
+        max-height: 2.3rem;
+        max-width: 9.6rem;
+        width: auto;
+        object-fit: contain;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+    }
+
+    .logo-esign-card {
+        max-height: 7rem;
+        width: 11.6rem;
+        object-fit: contain;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+        margin-left: 10px;
+        transform: scale(1.12);
+    }
+
+    .card-epeople {
+        grid-column: span 2;
+    }
+
+    /* DESCRIPTION */
+    .platform-card-desc {
+        font-size: 0.78rem;
+        line-height: 1.35;
+        color: rgba(255, 255, 255, 0.92) !important;
+        margin: 0.8rem 0 0 0;
+        text-align: left;
+        font-weight: 500; 
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    /* ACTION ICON BUTTON (LARGER, WHITISH BACKGROUND) */
+    .platform-action-icon-btn {
+        position: absolute;
+        bottom: 1rem;
+        right: 1rem;
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        background: rgba(255, 255, 255, 0.28);
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .efact-arrow-bg,
+    .esign-arrow-bg {
+        background: rgba(255, 255, 255, 0.28);
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .econtax-arrow-bg {
+        background: rgba(15, 133, 119, 0.25);
+        color: #4dbdb1;
+    }
+
+    .edeclara-arrow-bg {
+        background: rgba(83, 75, 184, 0.25);
+        color: #9c97eb;
+    }
+
+    .epeople-arrow-bg {
+        background: rgba(211, 84, 0, 0.25);
+        color: #ff9f5a;
+    }
+
+    /* Hover action interaction: whiter, less neon */
+    .platform-card:hover .platform-action-icon-btn {
+        transform: translateY(-4px);
+        background: rgba(255, 255, 255, 0.50); /* Subimos a 0.50 para que se ilumine al pasar el mouse */
+        border-color: rgba(255, 255, 255, 0.70);
+        box-shadow: 0 12px 30px rgba(255, 255, 255, 0.15);
+    }
+
+    .platform-card.card-econtax:hover .platform-action-icon-btn {
+        background: #4dbdb1;
+        color: #062b27;
+        box-shadow: 0 0 12px rgba(77, 189, 177, 0.5);
+    }
+
+    .platform-card.card-edeclara:hover .platform-action-icon-btn {
+        background: #9c97eb;
+        color: #121029;
+        box-shadow: 0 0 12px rgba(156, 151, 235, 0.5);
+    }
+
+    .platform-card.card-epeople:hover .platform-action-icon-btn {
+        background: #ff9f5a;
+        color: #381600;
+        box-shadow: 0 0 12px rgba(255, 159, 90, 0.5);
+    }
+
+    /* BRAND LOGO ABOVE WELCOME */
+    .form-brand-logo {
+        max-height: 52px;
+        width: auto;
+        margin-bottom: 0.85rem;
+        display: inline-block;
+        filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.06));
+    }
+
+    .main-viewport {
+        background: #f6faff;
+    }
+
+    .brand-side {
+        flex: 1 1 58%;
+        justify-content: space-between;
+        padding: clamp(1.6rem, 3vw, 3.5rem) clamp(2rem, 4.4vw, 5.25rem);
+        background:
+            radial-gradient(circle at 9% 20%, rgba(17, 183, 255, 0.24), transparent 19rem),
+            radial-gradient(circle at 54% 70%, rgba(43, 173, 255, 0.34), transparent 19rem),
+            radial-gradient(circle at 100% 47%, rgba(13, 121, 215, 0.44), transparent 24rem),
+            linear-gradient(138deg, #05256f 0%, var(--n-blue) 54%, #03215d 100%);
+        color: #fff;
+        gap: clamp(1rem, 2vh, 2rem);
+    }
+
+    .brand-side::before {
+        width: clamp(30rem, 48vw, 56rem);
+        height: clamp(30rem, 48vw, 56rem);
+        left: -20rem;
+        bottom: -27rem;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(42, 177, 255, 0.42) 0%, rgba(8, 111, 194, 0.24) 44%, transparent 70%);
+        opacity: 1;
+    }
+
+    .brand-side::after {
+        width: clamp(24rem, 36vw, 44rem);
+        height: clamp(24rem, 36vw, 44rem);
+        right: -19rem;
+        top: 6rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.09), transparent 67%);
+    }
+
+    .numeric-digits-layer {
+        opacity: 0.08;
+        mix-blend-mode: screen;
+    }
+
+    .login-hero {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        gap: clamp(1rem, 1.8vw, 1.75rem);
+        width: min(100%, 50rem);
+        padding-left: clamp(0.25rem, 0.8vw, 0.85rem);
+    }
+
+    .login-hero-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.9rem;
+        width: fit-content;
+        color: #fff;
+        text-decoration: none;
+    }
+
+    .login-hero-brand img {
+        width: clamp(3.5rem, 4.8vw, 4.75rem);
+        height: clamp(3.5rem, 4.8vw, 4.75rem);
+        object-fit: contain;
+        filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.18));
+    }
+
+    .login-hero-brand span {
+        font-family: "Conthrax SemiBold", "Conthrax", sans-serif;
+        font-size: clamp(1.45rem, 2.25vw, 2.1rem);
+        line-height: 0.98;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .login-hero-copy {
+        max-width: 52rem;
+    }
+
+    .login-hero-title {
+        margin: 0;
+        color: #fff;
+        font-size: clamp(2.45rem, 3.65vw, 3.7rem);
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: 0;
+        text-shadow: 0 16px 28px rgba(0, 18, 65, 0.22);
+        white-space: nowrap;
+    }
+
+    .login-hero-title span {
+        color: #20c7ff;
+        display: inline;
+    }
+
+    .login-hero-subtitle {
+        margin: 0.75rem 0 0;
+        color: #fff;
+        font-size: clamp(1.25rem, 1.7vw, 1.65rem);
+        font-weight: 800;
+    }
+
+    .login-hero-text {
+        margin: 0.65rem 0 0;
+        max-width: 37rem;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: clamp(1rem, 1.25vw, 1.15rem);
+        line-height: 1.45;
+        font-weight: 500;
+    }
+
+    .ecosystem-stage {
+        position: relative;
+        min-height: clamp(26rem, 48vh, 32rem);
+        margin-top: 0.25rem;
+    }
+
+    .ecosystem-stage::before {
+        content: "";
+        position: absolute;
+        z-index: 1;
+        left: 5%;
+        right: 5%;
+        top: 7%;
+        height: 82%;
+        border: 1px dashed rgba(255, 255, 255, 0.58);
+        border-radius: 50%;
+        box-shadow:
+            inset 0 0 0 5.5rem rgba(255, 255, 255, 0.018),
+            inset 0 0 0 10rem rgba(255, 255, 255, 0.028);
+    }
+
+    .ecosystem-stage::after {
+        content: "";
+        position: absolute;
+        z-index: 1;
+        left: 23%;
+        right: 17%;
+        bottom: 0.85rem;
+        height: 7.5rem;
+        border-radius: 50%;
+        background: radial-gradient(ellipse, rgba(30, 190, 255, 0.42), rgba(29, 128, 218, 0.22) 44%, transparent 72%);
+        filter: blur(2px);
+    }
+
+    .orbit-card {
+        position: absolute;
+        z-index: 4;
+        left: var(--orbit-x);
+        top: var(--orbit-y);
+        transform: translate(-50%, -50%);
+        width: 8.45rem;
+        height: 5.75rem;
+        padding: 0.46rem 0.55rem 0.42rem;
+        border-radius: 15px;
+        background: rgba(255, 255, 255, 0.94);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        box-shadow: 0 22px 40px rgba(0, 20, 73, 0.26);
+        text-align: center;
+        color: inherit;
+        text-decoration: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.12rem;
+        overflow: hidden;
+    }
+
+    a.orbit-card {
+        cursor: pointer;
+        transition: transform 0.22s ease, box-shadow 0.22s ease;
+    }
+
+    a.orbit-card:hover {
+        transform: translate(-50%, calc(-50% - 0.25rem));
+        box-shadow: 0 26px 44px rgba(0, 20, 73, 0.32);
+    }
+
+    .orbit-service-icon {
+        display: block;
+        width: 6.65rem;
+        height: 1.72rem;
+        flex: 0 0 1.72rem;
+        margin: 0 auto 0.28rem;
+        border-radius: 10px;
+        object-fit: contain;
+        object-position: center;
+        background: #fff;
+        padding: 0.1rem 0.25rem;
+        box-shadow: 0 8px 18px rgba(0, 34, 91, 0.12);
+    }
+
+    .orbit-card strong {
+        display: block;
+        color: var(--n-blue);
+        font-size: 0.82rem;
+        line-height: 1.05;
+        min-height: auto;
+    }
+
+    .orbit-card span {
+        display: block;
+        color: #2c4665;
+        font-size: 0.58rem;
+        line-height: 1.15;
+        margin-top: 0;
+        font-weight: 600;
+        min-height: 1.25rem;
+    }
+
+    .orbit-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 100%;
+        margin-top: 0;
+        padding: 0.14rem 0.48rem;
+        min-height: 0.84rem;
+        border-radius: 999px;
+        background: rgba(0, 107, 181, 0.12);
+        color: #006bb5;
+        font-size: 0.46rem;
+        line-height: 1.1;
+        font-weight: 800;
+        font-style: normal;
+        text-transform: uppercase;
+    }
+
+    .orbit-coming .orbit-badge {
+        background: rgba(244, 63, 94, 0.14);
+        color: #d61f46;
+    }
+
+    .orbit-efact { --orbit-x: 40%; --orbit-y: 9%; }
+    .orbit-esign { --orbit-x: 64%; --orbit-y: 9%; }
+    .orbit-edeclara { --orbit-x: 16%; --orbit-y: 37%; }
+    .orbit-econtax { --orbit-x: 88%; --orbit-y: 37%; }
+    .orbit-epeople { --orbit-x: 18%; --orbit-y: 77%; }
+    .orbit-econnect { --orbit-x: 82%; --orbit-y: 77%; }
+
+    .benefit-strip {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+        width: min(100%, 45rem);
+        padding: 0.65rem;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 20px 46px rgba(0, 18, 65, 0.22);
+        backdrop-filter: blur(12px);
+    }
+
+    .benefit-item {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.65rem;
+        align-items: center;
+        min-width: 0;
+        padding: 0.45rem;
+    }
+
+    .benefit-item i {
+        color: #fff;
+        font-size: 1.7rem;
+    }
+
+    .benefit-item strong {
+        display: block;
+        color: #fff;
+        font-size: 0.85rem;
+        line-height: 1.1;
+    }
+
+    .benefit-item span {
+        display: block;
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 0.72rem;
+        line-height: 1.25;
+        margin-top: 0.15rem;
+    }
+
+    .form-side {
+        flex: 1 1 42%;
+        background: #f9fbfe;
+        padding: clamp(1.25rem, 2.4vw, 2.75rem);
+    }
+
+    .login-container-pro {
+        max-width: 540px;
+        border-radius: 28px;
+        padding: clamp(1.8rem, 2.6vw, 2.85rem);
+        border: 1px solid rgba(0, 107, 181, 0.08);
+        box-shadow: 0 24px 60px rgba(13, 42, 76, 0.1);
+    }
+
+    .landing-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        margin-top: 0.8rem;
+        color: var(--n-blue);
+        font-size: 0.82rem;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .login-safe-note {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        margin-top: 1.25rem;
+        padding: 0.85rem 1rem;
+        border-radius: 14px;
+        background: #f7fbff;
+        color: #52667e;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+
+    .login-safe-note i {
+        color: #18b784;
+        font-size: 1.35rem;
+    }
+
+    @@media (max-width: 1200px) {
+        .orbit-card {
+            width: 6.9rem;
+        }
+
+    }
+
+    @@media (min-width: 993px) {
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .main-viewport {
+            min-height: 0;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+        }
+
+        .brand-side,
+        .form-side {
+            height: 100%;
+            max-height: none;
+            overflow: hidden;
+        }
+    }
+
+    @@media (min-width: 993px) and (max-height: 820px) {
+        .brand-side {
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+
+        .login-hero {
+            gap: 0.6rem;
+        }
+
+        .login-hero-brand img {
+            width: 3.45rem;
+            height: 3.45rem;
+        }
+
+        .login-hero-brand span {
+            font-size: 1.5rem;
+        }
+
+        .login-hero-title {
+            font-size: clamp(2.15rem, 3.2vw, 3.05rem);
+            line-height: 1;
+        }
+
+        .login-hero-subtitle {
+            margin-top: 0.55rem;
+            font-size: clamp(1.05rem, 1.45vw, 1.35rem);
+        }
+
+        .login-hero-text {
+            margin-top: 0.45rem;
+            font-size: 0.98rem;
+            line-height: 1.35;
+        }
+
+        .ecosystem-stage {
+            min-height: clamp(22rem, 40vh, 24.5rem);
+        }
+
+        .orbit-card {
+            width: 7.25rem;
+            height: 5.3rem;
+            padding: 0.36rem 0.42rem;
+            border-radius: 14px;
+        }
+
+        .orbit-service-icon {
+            width: 5.85rem;
+            height: 1.5rem;
+            flex-basis: 1.5rem;
+            margin-bottom: 0.22rem;
+        }
+
+        .orbit-card strong {
+            font-size: 0.76rem;
+        }
+
+        .orbit-card span {
+            font-size: 0.54rem;
+            line-height: 1.12;
+            min-height: 1.18rem;
+        }
+
+        .orbit-badge {
+            font-size: 0.42rem;
+            padding: 0.12rem 0.34rem;
+            min-height: 0.78rem;
+        }
+
+        .orbit-efact { --orbit-x: 40%; --orbit-y: 9%; }
+        .orbit-esign { --orbit-x: 64%; --orbit-y: 9%; }
+        .orbit-edeclara { --orbit-x: 16%; --orbit-y: 37%; }
+        .orbit-econtax { --orbit-x: 88%; --orbit-y: 37%; }
+        .orbit-epeople { --orbit-x: 18%; --orbit-y: 77%; }
+        .orbit-econnect { --orbit-x: 82%; --orbit-y: 77%; }
+
+        .benefit-strip {
+            padding: 0.45rem;
+        }
+
+        .benefit-item {
+            gap: 0.45rem;
+            padding: 0.3rem;
+        }
+
+        .benefit-item i {
+            font-size: 1.35rem;
+        }
+
+        .benefit-item strong {
+            font-size: 0.78rem;
+        }
+
+        .benefit-item span {
+            font-size: 0.66rem;
+        }
+
+        .login-container-pro {
+            padding: clamp(1rem, 2vh, 1.35rem) clamp(1.35rem, 2.2vw, 2.2rem);
+            border-radius: 22px;
+        }
+
+        .form-brand-logo {
+            max-height: 36px;
+            margin-bottom: 0.35rem;
+        }
+
+        .login-container-pro > .text-center {
+            margin-bottom: 0.75rem !important;
+        }
+
+        .login-container-pro h2 {
+            font-size: clamp(1.45rem, 2vw, 2rem);
+            line-height: 1.15;
+        }
+
+        .login-container-pro > .text-center > p {
+            margin: 0.25rem 0 0;
+        }
+
+        .landing-link {
+            margin-top: 0.45rem;
+        }
+
+        .login-container-pro .mb-4 {
+            margin-bottom: 0.7rem !important;
+        }
+
+        .form-label-n {
+            margin-bottom: 5px;
+        }
+
+        .input-n-premium {
+            padding-top: 11px;
+            padding-bottom: 11px;
+        }
+
+        .login-container-pro .form-check.mb-3 {
+            margin-bottom: 0.45rem !important;
+        }
+
+        .login-container-pro .d-flex.mb-4 {
+            margin-top: 0.25rem !important;
+            margin-bottom: 0.6rem !important;
+        }
+
+        .btn-n-login {
+            margin-top: 0.35rem;
+            padding: 12px;
+        }
+
+        .login-container-pro .btn-outline-primary {
+            margin-top: 0.55rem !important;
+        }
+
+        .login-container-pro .text-center.mt-4 {
+            margin-top: 0.75rem !important;
+        }
+
+        .login-safe-note {
+            margin-top: 0.65rem;
+            padding: 0.55rem 0.8rem;
+        }
+    }
+
+    @@media (min-width: 1400px) {
+        .brand-side {
+            flex-basis: 59%;
+            padding: clamp(1.8rem, 3vh, 3rem) clamp(3.4rem, 5vw, 6rem);
+        }
+
+        .login-hero {
+            gap: clamp(1rem, 1.9vh, 1.65rem);
+            width: min(100%, 58rem);
+        }
+
+        .login-hero-brand img {
+            width: clamp(3.9rem, 3.2vw, 4.6rem);
+            height: clamp(3.9rem, 3.2vw, 4.6rem);
+        }
+
+        .login-hero-brand span {
+            font-size: clamp(1.75rem, 1.7vw, 2.2rem);
+        }
+
+        .login-hero-title {
+            font-size: clamp(3rem, 3.55vw, 4.15rem);
+        }
+
+        .login-hero-subtitle {
+            font-size: clamp(1.28rem, 1.55vw, 1.75rem);
+        }
+
+        .login-hero-text {
+            max-width: 46rem;
+            font-size: clamp(1.05rem, 1vw, 1.18rem);
+        }
+
+        .ecosystem-stage {
+            min-height: clamp(32rem, 55vh, 39rem);
+        }
+
+        .orbit-card {
+            width: 9.25rem;
+            height: 6.2rem;
+            padding: 0.5rem 0.58rem 0.46rem;
+            border-radius: 16px;
+        }
+
+        .orbit-service-icon {
+            width: 7rem;
+            height: 1.82rem;
+            flex-basis: 1.82rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .orbit-card strong {
+            font-size: 0.86rem;
+        }
+
+        .orbit-card span {
+            font-size: 0.61rem;
+        }
+
+        .orbit-badge {
+            font-size: 0.47rem;
+        }
+
+        .benefit-strip {
+            width: min(100%, 53rem);
+            padding: 0.7rem;
+        }
+
+        .benefit-item strong {
+            font-size: 0.9rem;
+        }
+
+        .benefit-item span {
+            font-size: 0.75rem;
+        }
+
+        .login-container-pro {
+            max-width: 620px;
+            padding: clamp(2rem, 3vh, 3rem) clamp(2.4rem, 3vw, 3.35rem);
+        }
+
+        .form-brand-logo {
+            max-height: 50px;
+        }
+    }
+
+    @@media (min-width: 1400px) and (max-height: 820px) {
+        .brand-side {
+            padding-top: 1.15rem;
+            padding-bottom: 1.15rem;
+        }
+
+        .login-hero {
+            gap: 0.75rem;
+        }
+
+        .login-hero-brand img {
+            width: 3.55rem;
+            height: 3.55rem;
+        }
+
+        .login-hero-brand span {
+            font-size: 1.55rem;
+        }
+
+        .login-hero-title {
+            font-size: clamp(2.6rem, 3.2vw, 3.45rem);
+        }
+
+        .login-hero-subtitle {
+            margin-top: 0.5rem;
+            font-size: clamp(1.08rem, 1.3vw, 1.3rem);
+        }
+
+        .login-hero-text {
+            margin-top: 0.4rem;
+            font-size: 0.98rem;
+            line-height: 1.32;
+        }
+
+        .ecosystem-stage {
+            min-height: clamp(26rem, 47vh, 29rem);
+        }
+
+        .orbit-card {
+            width: 8rem;
+            height: 5.55rem;
+            padding: 0.4rem 0.46rem;
+        }
+
+        .orbit-service-icon {
+            width: 5.85rem;
+            height: 1.5rem;
+            flex-basis: 1.5rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .orbit-card strong {
+            font-size: 0.76rem;
+        }
+
+        .orbit-card span {
+            font-size: 0.54rem;
+            min-height: 1.15rem;
+        }
+
+        .orbit-badge {
+            font-size: 0.42rem;
+            min-height: 0.78rem;
+        }
+
+        .login-container-pro {
+            max-width: 580px;
+            padding: clamp(1.35rem, 2.2vh, 1.85rem) clamp(1.8rem, 2.4vw, 2.55rem);
+        }
+    }
+
+    @@media (min-width: 1700px) and (min-height: 850px) {
+        .brand-side {
+            flex-basis: 60%;
+            padding-left: clamp(4rem, 5.2vw, 6.6rem);
+            padding-right: clamp(4rem, 5.2vw, 6.6rem);
+        }
+
+        .login-hero {
+            width: min(100%, 62rem);
+        }
+
+        .ecosystem-stage {
+            min-height: clamp(36rem, 59vh, 42rem);
+        }
+
+        .orbit-card {
+            width: 9.9rem;
+            height: 6.55rem;
+        }
+
+        .orbit-service-icon {
+            width: 7.45rem;
+            height: 1.95rem;
+            flex-basis: 1.95rem;
+        }
+
+        .login-container-pro {
+            max-width: 650px;
+        }
+    }
+
+    @@media (min-width: 993px) and (max-height: 700px) {
+        .login-safe-note {
+            display: none;
+        }
+
+        .benefit-item span {
+            display: none;
+        }
+    }
+</style>
+<PantallaCarga IsVisible="@isProcessing"
+               Titulo="@loadingTitle"
+               Mensaje="@loadingMessage" />
+<div class="main-viewport notranslate" translate="no" style="transition: opacity 0.35s ease; @(isProcessing ? "opacity: 0; pointer-events: none;" : "opacity: 1;")">
+
+    <!-- PANEL IZQUIERDO ─────────────────────────────────────── -->
+    <AuthBrandPanel DigitLayerId="numericaDigitsLayer" />
+
+    <!-- PANEL DERECHO ───────────────────────────────────────── -->
+    <div class="form-side">
+        <div class="login-container-pro">
+            <div class="text-center mb-4">
+                <img src="/images/company-logo.png" class="form-brand-logo" alt="Numérica software" onerror="this.style.display='none'" />
+                <h2 class="fw-bold text-dark mb-1">Inicia sesión en tu cuenta</h2>
+                <p class="text-muted small">Accede a todo el ecosistema de Numérica</p>
+                <a class="landing-link" href="https://numericasoftware.com/" target="_blank" rel="noopener noreferrer">
+                    Ir a Numérica Software <i class="ri-arrow-right-up-line"></i>
+                </a>
+            </div>
+
+            <EditForm Model="@loginUser" OnValidSubmit="HandleLoginValidated" FormName="login-form">
+                <DataAnnotationsValidator />
+
+                <div class="mb-4">
+                    <label class="form-label-n">Usuario / Correo</label>
+                    <div class="input-wrapper">
+                        <input class="input-n-premium notranslate"
+                               id="loginUsernameInput"
+                               name="username"
+                               placeholder="usuario@empresa.com"
+                               autocomplete="username"
+                               translate="no"
+                               @bind="loginUser.Username"
+                               @bind:event="oninput"
+                               @bind:after="HandleUsernameChangedAsync"
+                               @onblur="HandleUsernameBlurAsync" />
+                        <i class="bi bi-person input-icon-n"></i>
+                    </div>
+                    <ValidationMessage For="@(() => loginUser.Username)" class="text-danger small mt-1 d-block" />
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label-n">Contraseña</label>
+                    <div class="input-wrapper">
+                        <InputText @bind-Value="loginUser.Password" type="@(showPassword ? "text" : "password")" class="input-n-premium notranslate" placeholder="••••••••" autocomplete="current-password" @attributes="PasswordInputAttributes" />
+                        <i class="bi bi-lock input-icon-n"></i>
+                        <button type="button" class="btn-eye-n" @onclick="TogglePasswordVisibility" tabindex="-1">
+                            <i class="bi @(showPassword ? "bi-eye-slash" : "bi-eye")"></i>
+                        </button>
+                    </div>
+                    <ValidationMessage For="@(() => loginUser.Password)" class="text-danger small mt-1 d-block" />
+                </div>
+
+                <div class="form-check m-0 mb-3">
+                    <InputCheckbox @bind-Value="loginUser.Recordarme" class="form-check-input shadow-sm" id="rememberMeCheck" />
+                    <label class="form-check-label small text-muted" for="rememberMeCheck">
+                        Recordarme
+                    </label>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-4 mt-2">
+                    @if (showTermsCheckbox)
+                    {
+                        <div class="form-check m-0">
+                            <InputCheckbox @bind-Value="loginUser.AcceptTerms" class="form-check-input shadow-sm" id="termsCheck" />
+                            <label class="form-check-label small text-muted" for="termsCheck">
+                                Acepto la <a href="/politica-privacidad" target="_blank" class="fw-bold text-primary text-decoration-none">Política de privacidad</a>
+                            </label>
+                        </div>
+                    }
+                    else
+                    {
+                        <div></div>
+                    }
+                    <a href="/recover-password" class="small fw-bold text-primary text-decoration-none">¿Olvidaste tu clave?</a>
+                </div>
+
+                <button type="submit" class="btn-n-login">INGRESAR AHORA</button>
+
+                <button type="button"
+                        class="btn btn-outline-primary w-100 mt-3 rounded-3 fw-semibold"
+                        @onclick="EntrarComoInvitadoAsync">
+                    Entrar como invitado
+                </button>
+
+                <div class="text-center mt-4">
+                    <span class="text-muted small">¿No tienes cuenta?</span>
+                    <a href="/register" class="text-primary fw-bold text-decoration-none ms-1 small">Solicitar Registro</a>
+                </div>
+
+                <div class="login-safe-note">
+                    <i class="ri-lock-2-line"></i>
+                    <span>Tus datos están protegidos con altos estándares de seguridad y privacidad.</span>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal-backdrop-custom">
+        <div class="modal-dialog modal-dialog-centered m-3" style="max-width: 550px; width: 100%;">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 20px; background: white; overflow: hidden;">
+                <div class="modal-header text-white p-4" style="background: var(--n-blue);">
+                    <h5 class="mb-0 fw-bold">Términos y condiciones</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseTerms"></button>
+                </div>
+                
+                <div class="modal-body p-4 text-muted" style="font-size: 0.8rem; line-height: 1.5; max-height: 60vh; overflow-y: auto;">
+                    
+                    <h6 class="fw-bold text-dark text-center mb-3">TERMINOS Y CONDICIONES DE USO<br>PLATAFORMA NUMÉRICA SOFTWARE S.A.S.</h6>
+                    
+                    <p>
+                        <strong>1. INTRODUCCIÓN</strong><br>
+                        Los presentes Terminos y Condiciones regulan el acceso, uso y funcionamiento de la plataforma Numérica software, desarrollada y operada por Numérica Software S.A.S. (en adelante, "Numérica"). El uso de la plataforma implica la aceptacion expresa de estos Terminos.
+                    </p>
+
+                    <p>
+                        <strong>2. OBJETO DEL SERVICIO</strong><br>
+                        Numérica software es una plataforma tecnologica que permite a los usuarios:
+                    </p>
+                    <ul class="mb-2">
+                        <li>Emitir comprobantes electrónicos</li>
+                        <li>Gestionar información de facturación</li>
+                        <li>Integrarse con sistemas de la administración tributaria (SRI)</li>
+                        <li>Utilizar mecanismos de firma electrónica mediante terceros</li>
+                    </ul>
+                    <p>Numérica actúa como proveedor tecnológico, no como asesor tributario.</p>
+
+                    <p>
+                        <strong>3. REGISTRO Y CUENTA DE USUARIO</strong><br>
+                        Para utilizar Numérica software, el usuario debera:
+                    </p>
+                    <ul class="mb-2">
+                        <li>Crear una cuenta</li>
+                        <li>Proporcionar información veraz y actualizada</li>
+                        <li>Mantener la confidencialidad de sus credenciales</li>
+                    </ul>
+                    <p>El usuario será responsable por toda actividad realizada desde su cuenta.</p>
+
+                    <p>
+                        <strong>4. RESPONSABILIDAD DEL USUARIO</strong><br>
+                        El usuario es el único responsable de:
+                    </p>
+                    <ul class="mb-2">
+                        <li>La veracidad de la información ingresada</li>
+                        <li>La correcta emisión de comprobantes electrónicos</li>
+                        <li>El cumplimiento de sus obligaciones tributarias</li>
+                        <li>El uso adecuado del sistema</li>
+                    </ul>
+                    <p>Numérica no valida el contenido tributario ingresado por el usuario.</p>
+
+                    <p>
+                        <strong>5. FIRMA ELECTRÓNICA (UANATACA)</strong><br>
+                        La plataforma puede integrar servicios de firma electrónica provistos por terceros, como Uanataca.<br>
+                        El usuario acepta que:
+                    </p>
+                    <ul class="mb-2">
+                        <li>La firma electrónica es emitida y gestionada por un tercero</li>
+                        <li>Numérica no actúa como entidad certificadora</li>
+                        <li>Numérica no es responsable por la emisión, vigencia, revocación o funcionamiento del certificado</li>
+                    </ul>
+                    <p>El usuario es responsable de:</p>
+                    <ul class="mb-2">
+                        <li>Mantener vigente su firma electrónica</li>
+                        <li>Custodiar su certificado digital</li>
+                        <li>Cumplir las condiciones del proveedor externo</li>
+                    </ul>
+                    <br> 
+                    <p>
+                        <strong>6. RELACIÓN CON LA ADMINISTRACIÓN TRIBUTARIA (SRI)</strong><br>
+                        Numérica software facilita la generacion y transmision de comprobantes electronicos. Sin embargo:
+                    </p>
+                    <ul class="mb-2">
+                        <li>Numérica no garantiza la aceptación de documentos por el SRI</li>
+                        <li>No es responsable por rechazos, observaciones o sanciones</li>
+                        <li>El usuario es responsable del cumplimiento de la normativa tributaria</li>
+                    </ul>
+
+                    <p>
+                        <strong>7. DISPONIBILIDAD DEL SERVICIO</strong><br>
+                        Numérica no garantiza disponibilidad continua e ininterrumpida de la plataforma. El servicio puede verse afectado por:
+                    </p>
+                    <ul class="mb-2">
+                        <li>Mantenimiento</li>
+                        <li>Fallas técnicas</li>
+                        <li>Servicios de terceros</li>
+                    </ul>
+                    <br> 
+                    <p>
+                        <strong>8. PAGOS Y MODELO DE USO</strong><br>
+                        El uso de Numérica software puede estar sujeto a:
+                    </p>
+                    <ul class="mb-2">
+                        <li>Planes de suscripción</li>
+                        <li>Recargas por uso</li>
+                        <li>Servicios adicionales</li>
+                    </ul>
+                    <p>Salvo disposición expresa:</p>
+                    <ul class="mb-2">
+                        <li>Los pagos no son reembolsables</li>
+                        <li>El acceso puede suspenderse por falta de pago</li>
+                    </ul>
+                    <br> 
+                    <p>
+                        <strong>9. SUSPENSIÓN O CANCELACIÓN DEL SERVICIO</strong><br>
+                        Numérica podrá suspender o cancelar el acceso cuando:
+                    </p>
+                    <ul class="mb-2">
+                        <li>Exista incumplimiento de estos términos</li>
+                        <li>Se detecte uso indebido o fraudulento</li>
+                        <li>Sea requerido por autoridad competente</li>
+                    </ul>
+                    <br> 
+                    <p>
+                        <strong>10. PROPIEDAD INTELECTUAL</strong><br>
+                        La plataforma Numérica software, su software, diseno y funcionalidades son propiedad de Numérica. El usuario no adquiere derechos sobre el software, solo una licencia de uso limitada.
+                    </p>
+
+                    <p>
+                        <strong>11. PROTECCIÓN DE DATOS PERSONALES</strong><br>
+                        El tratamiento de datos personales se rige por la Política de Privacidad de Numérica.
+                    </p>
+
+                    <p>
+                        <strong>12. LIMITACIÓN DE RESPONSABILIDAD</strong><br>
+                        Numérica no será responsable por:
+                    </p>
+                    <ul class="mb-2">
+                        <li>Errores en la información ingresada por el usuario</li>
+                        <li>Uso indebido del sistema</li>
+                        <li>Sanciones tributarias</li>
+                        <li>Fallas de terceros (incluyendo proveedores de firma electrónica)</li>
+                        <li>Pérdidas económicas derivadas del uso del sistema</li>
+                    </ul>
+                    <br> 
+                    <p>
+                        <strong>13. MODIFICACIONES</strong><br>
+                        Numérica podrá modificar estos Términos en cualquier momento. El uso continuo de la plataforma implica aceptación de las modificaciones.
+                    </p>
+
+                    <p class="mb-0">
+                        <strong>14. LEGISLACIÓN APLICABLE Y JURISDICCIÓN</strong><br>
+                        Estos Términos se rigen por la legislación ecuatoriana. Cualquier controversia será resuelta mediante arbitraje ante el Centro de Arbitraje y Mediación de la Cámara de Comercio de Quito.
+                    </p>
+                </div>
+                
+                <div class="modal-footer border-0 p-4 pt-0 d-flex justify-content-end gap-2">
+                    <button type="button" class="secondary-btn secondary-btn-quiet" @onclick="CloseTerms">Cerrar</button>
+                    <button type="button" class="primary-btn" @onclick="AcceptFromModal">Aceptar y Continuar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly MarkupString FontFaceCss = (MarkupString)@"
+    @font-face {
+        font-family: ""Conthrax SemiBold"";
+        src: url(""/fonts/Conthrax-SemiBold.otf"") format(""opentype"");
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+    }
+    ";
+
+    private static readonly MarkupString KeyframesDigitFloatCss = (MarkupString)@"
+    @keyframes numericaDigitFloat {
+        0% {
+            opacity: 0;
+            transform: translate3d(0, 18px, 0) scale(0.88) rotate(var(--rotate, 0deg));
+        }
+
+        18% {
+            opacity: var(--peak-opacity, 0.42);
+        }
+
+        72% {
+            opacity: calc(var(--peak-opacity, 0.42) * 0.7);
+        }
+
+        100% {
+            opacity: 0;
+            transform: translate3d(var(--drift-x, 0px), var(--drift-y, -38px), 0) scale(1.05) rotate(calc(var(--rotate, 0deg) + 6deg));
+        }
+    }
+    ";
+
+    private static readonly MarkupString SlideUpAndMediaCss = (MarkupString)@"
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    @media (max-height: 860px) {
+        .main-viewport {
+            height: auto;
+        }
+
+        .brand-side {
+            padding: 2.5rem;
+        }
+
+        .glass-card {
+            padding: 1.85rem;
+            min-height: 25.75rem;
+            gap: 1rem;
+        }
+
+        .brand-side,
+        .form-side {
+            padding-top: 1.25rem;
+            padding-bottom: 1.25rem;
+        }
+
+        .login-container-pro {
+            padding: 1.6rem 1.35rem;
+        }
+    }
+
+    @media (max-width: 992px) {
+        .main-viewport {
+            flex-direction: column;
+            height: auto;
+            min-height: max(100vh, 100dvh);
+            overflow: visible;
+        }
+
+        .form-side {
+            min-height: 100dvh;
+            padding: 0.9rem;
+            background: var(--bg-color);
+            overflow: visible;
+        }
+
+        .login-container-pro {
+            padding: 1.75rem 1.25rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.088);
+        }
+    }
+    ";
+
+    private const string TermsStoragePrefix = "numerica:privacy-accepted:";
+    private const string PolicyAcceptanceAction = "Aceptación de Políticas de Privacidad";
+    private static readonly IReadOnlyDictionary<string, object> PasswordInputAttributes = new Dictionary<string, object>
+    {
+        ["translate"] = "no"
+    };
+    [SupplyParameterFromForm] private LoginModel loginUser { get; set; } = new();
+    
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "ReturnUrl")]
+    public string? ReturnUrl { get; set; }
+    private bool isProcessing;
+    private string loadingTitle = "Verificando Sesión";
+    private string loadingMessage = "Iniciando entorno seguro de Numérica...";
+    private bool showModal = false;
+    private bool showPassword = false;
+    private string? lastTermsLookupKey;
+    private bool authRedirectTriggered;
+    private bool showTermsCheckbox = true;
+    private const string LoginUsernameInputId = "loginUsernameInput";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var claimValue = user.FindFirst("IdUsuario")?.Value 
+                    ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+                if (int.TryParse(claimValue, out int idUsuario))
+                {
+                    var tipoUsuarioClaim = user.FindFirst("IdTipoUsuario")?.Value;
+                    int? idTipoUsuario = int.TryParse(tipoUsuarioClaim, out var t) ? t : null;
+                    var destination = await LoginDestination.PrepareDestinationAsync(idUsuario, idTipoUsuario, ReturnUrl);
+                    authRedirectTriggered = true;
+                    NavManager.NavigateToIfNeeded(destination, forceLoad: true);
+                }
+                else
+                {
+                    authRedirectTriggered = true;
+                    NavManager.NavigateToIfNeeded("/dashboard", forceLoad: true);
+                }
+
+            }
+        }
+        catch (Exception ex) when (ex is not Microsoft.AspNetCore.Components.NavigationException)
+        {
+            /* fail silent */
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (authRedirectTriggered)
+            {
+                return;
+            }
+
+            // ── Verificar sesión activa via cookie HTTP ──────────────
+            try
+            {
+                var authCheck = await JS.InvokeAsync<AuthCheckResponse>("authInterop.check");
+
+                if (authCheck.Authenticated)
+                {
+                    var userSessionJson = await JS.InvokeAsync<string?>("localStorage.getItem", "userSession");
+                    if (string.IsNullOrWhiteSpace(userSessionJson))
+                    {
+                        await JS.InvokeAsync<object?>("authInterop.logout");
+                        return;
+                    }
+
+                    authRedirectTriggered = true;
+                    string destination;
+                    try
+                    {
+                        destination = await LoginDestination.PrepareDestinationAsync(authCheck.IdUsuario, null, ReturnUrl);
+                    }
+                    catch
+                    {
+                        destination = "/dashboard";
+                    }
+
+                    NavManager.NavigateToIfNeeded(destination, forceLoad: true);
+                    return;
+                }
+            }
+            catch (JSDisconnectedException)
+            {
+                return;
+            }
+            catch (Exception ex) when (ex is not Microsoft.AspNetCore.Components.NavigationException)
+            {
+                /* continúa al login normal */
+            }
+
+            await DetectAutofilledUsernameAsync();
+
+            
+
+            // ── Inicializar animación ────────────────────────────────
+            try
+            {
+                isProcessing = false;
+                await InvokeAsync(StateHasChanged);
+                await JS.InvokeVoidAsync("NumericaDigits.init", "numericaDigitsLayer");
+            }
+            catch (JSDisconnectedException)
+            {
+                return;
+            }
+            catch
+            {
+                
+            }
+            
+
+            // ── Auto-fill credenciales guardadas ─────────────────────
+            try
+            {
+                var savedCredentials = await JS.InvokeAsync<Dictionary<string, string?>>(
+                    "numericaUi.getLocalStorageItems",
+                    new[] { "numerica:saved-remember", "numerica:saved-username", "numerica:saved-password" });
+
+                savedCredentials.TryGetValue("numerica:saved-remember", out var savedRemember);
+
+                if (savedRemember == "true")
+                {
+                    savedCredentials.TryGetValue("numerica:saved-username", out var savedUsername);
+                    savedCredentials.TryGetValue("numerica:saved-password", out var savedPassword);
+
+                    if (!string.IsNullOrWhiteSpace(savedUsername) &&
+                        !string.IsNullOrWhiteSpace(savedPassword))
+                    {
+                        loginUser.Username = savedUsername;
+                        loginUser.Password = savedPassword;
+                        loginUser.Recordarme = true;
+                        await HandleUsernameChangedAsync();
+                        StateHasChanged();
+                    }
+                }
+            }
+            catch (JSDisconnectedException)
+            {
+                return;
+            }
+            catch
+            {
+                /* continua al login normal */
+            }
+        }
+    }
+    // ── Helpers UI ────────────────────────────────────────────────
+
+    private void TogglePasswordVisibility() => showPassword = !showPassword;
+    private void ShowTerms() => showModal = true;
+    private void CloseTerms() => showModal = false;
+    private async Task AcceptFromModal()
+    {
+        loginUser.AcceptTerms = true;
+        showModal = false;
+        showTermsCheckbox = false;
+        lastTermsLookupKey = BuildTermsStorageKey(loginUser.Username);
+        // ── Persistir o limpiar credenciales según "Recordarme" ──
+        if (loginUser.Recordarme)
+        {
+            await JS.InvokeVoidAsync("numericaUi.setLocalStorageItems", new Dictionary<string, string?>
+            {
+                ["numerica:saved-username"] = loginUser.Username.Trim(),
+                ["numerica:saved-password"] = loginUser.Password,
+                ["numerica:saved-remember"] = "true"
+            });
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("numericaUi.removeStorageItems", "local", new[]
+            {
+                "numerica:saved-username",
+                "numerica:saved-password",
+                "numerica:saved-remember"
+            });
+        }
+        await PersistTermsAcceptanceAsync(username: loginUser.Username);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleUsernameChangedAsync()
+    {
+        var storageKey = BuildTermsStorageKey(loginUser.Username);
+
+        if (string.Equals(storageKey, lastTermsLookupKey, StringComparison.Ordinal))
+            return;
+
+        lastTermsLookupKey = storageKey;
+
+        if (string.IsNullOrWhiteSpace(storageKey))
+        {
+            loginUser.AcceptTerms = false;
+            showTermsCheckbox = true;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        // 1. Check local storage first
+        var storedValues = await JS.InvokeAsync<Dictionary<string, string?>>(
+            "numericaUi.getLocalStorageItems",
+            new[] { storageKey });
+        storedValues.TryGetValue(storageKey, out var storedValue);
+        var accepted = string.Equals(storedValue, "true", StringComparison.OrdinalIgnoreCase);
+
+        if (accepted)
+        {
+            loginUser.AcceptTerms = true;
+            showTermsCheckbox = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        // 2. If not accepted in local storage, check DB
+        bool acceptedInDb = false;
+        try
+        {
+            using var context = await DbFactory.CreateDbContextAsync();
+            var cleanUsername = loginUser.Username.Trim();
+            var normalizedUsername = cleanUsername.ToLower();
+
+            var userInDb = await context.Usuarios
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u =>
+                    (!string.IsNullOrWhiteSpace(u.Email) && u.Email.ToLower() == normalizedUsername) ||
+                    (!string.IsNullOrWhiteSpace(u.Nombres) && u.Nombres.ToLower() == normalizedUsername));
+
+            if (userInDb != null)
+            {
+                acceptedInDb = await context.Auditorias
+                    .AsNoTracking()
+                    .AnyAsync(a => a.IdUsuario == userInDb.IdUsuario && a.Accion == PolicyAcceptanceAction);
+            }
+        }
+        catch (Exception)
+        {
+            // Ignore database check failure in background
+        }
+
+        if (acceptedInDb)
+        {
+            loginUser.AcceptTerms = true;
+            showTermsCheckbox = false;
+            await PersistTermsAcceptanceAsync(username: loginUser.Username);
+        }
+        else
+        {
+            loginUser.AcceptTerms = false;
+            showTermsCheckbox = true;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleUsernameBlurAsync(FocusEventArgs _)
+    {
+        await HandleUsernameChangedAsync();
+    }
+
+    private async Task DetectAutofilledUsernameAsync()
+    {
+        var delays = new[] { 80, 220 };
+
+        foreach (var delay in delays)
+        {
+            try
+            {
+                await Task.Delay(delay);
+                var domUsername = await JS.InvokeAsync<string>("numericaUi.readInputValue", LoginUsernameInputId);
+                var normalizedDom = (domUsername ?? string.Empty).Trim();
+                var normalizedModel = (loginUser.Username ?? string.Empty).Trim();
+
+                if (string.IsNullOrWhiteSpace(normalizedDom) ||
+                    string.Equals(normalizedDom, normalizedModel, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                loginUser.Username = normalizedDom;
+                await HandleUsernameChangedAsync();
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            catch
+            {
+                // El autollenado del navegador no siempre dispara eventos; ignoramos fallos de lectura.
+            }
+        }
+    }
+
+    private async Task PersistTermsAcceptanceAsync(int? userId = null, string? username = null)
+    {
+        if (!loginUser.AcceptTerms)
+            return;
+
+        foreach (var storageKey in BuildTermsStorageKeys(username ?? loginUser.Username, userId))
+        {
+            await JS.InvokeVoidAsync("numericaUi.setLocalStorageItems", new Dictionary<string, string?>
+            {
+                [storageKey] = "true"
+            });
+            lastTermsLookupKey ??= storageKey;
+        }
+    }
+
+    private async Task EntrarComoInvitadoAsync()
+    {
+        loadingTitle = "Cargando Demo";
+        loadingMessage = "Iniciando entorno de demostración...";
+        isProcessing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await JS.InvokeVoidAsync("authInterop.logout");
+            await JS.InvokeVoidAsync("numericaUi.removeStorageItems", "local", new[]
+            {
+                "userSession",
+                "numerica:current-service",
+                "selectedAppService"
+            });
+            await JS.InvokeVoidAsync("numericaUi.removeStorageItems", "session", new[]
+            {
+                "numerica:session-expired"
+            });
+        }
+        catch
+        {
+            // Si el circuito se esta cerrando, igual navegamos al demo.
+        }
+
+        NavManager.NavigateToIfNeeded("/demo/dashboard", forceLoad: true);
+    }
+
+    private static string? BuildTermsStorageKey(string? username)
+    {
+        var normalized = username?.Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(normalized)
+            ? null
+            : $"{TermsStoragePrefix}{normalized}";
+    }
+
+    private static IEnumerable<string> BuildTermsStorageKeys(string? username, int? userId)
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var usernameKey = BuildTermsStorageKey(username);
+        if (!string.IsNullOrWhiteSpace(usernameKey))
+            keys.Add(usernameKey);
+
+        if (userId is > 0)
+            keys.Add($"{TermsStoragePrefix}{userId.Value}");
+
+        return keys;
+    }
+
+    // ── Lógica de autenticación (sin cambios) ─────────────────────
+
+    private async Task HandleLoginValidated()
+    {
+        loadingTitle = "Validando Credenciales";
+        loadingMessage = "Iniciando entorno seguro de Numérica...";
+        isProcessing = true;
+        bool keepProcessing = false;
+        int? idUsuarioParaLog = null;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(loginUser.Username) || string.IsNullOrWhiteSpace(loginUser.Password))
+            {
+                await ShowAlert("warning", "Campos vacios", "Ingresa tu usuario y contrasena.");
+                return;
+            }
+
+            var apiUsername = loginUser.Username.Trim();
+            var apiResponse = await JS.InvokeAsync<AuthCookieResponse>("authInterop.login", new
+            {
+                Username = apiUsername,
+                Password = loginUser.Password,
+                Recordarme = loginUser.Recordarme
+            });
+
+            if (!string.IsNullOrWhiteSpace(apiResponse.Message))
+            {
+                await Security.RegistrarLogInicioSesionAsync(apiResponse.IdUsuario > 0 ? apiResponse.IdUsuario : null, false, apiResponse.Message);
+                await ShowAlert("warning", "Acceso", apiResponse.Message);
+                return;
+            }
+
+            if (apiResponse.RequierePoliticas)
+            {
+                var loginToken = PendingLoginFlow.Create(
+                    apiResponse.IdUsuario,
+                    apiUsername,
+                    loginUser.Password,
+                    loginUser.Recordarme);
+
+                loginUser.AcceptTerms = false;
+                isProcessing = false;
+                await ShowPrivacyRedirectAlert();
+                NavManager.NavigateTo($"/politica-privacidad/{apiResponse.IdUsuario}?loginToken={Uri.EscapeDataString(loginToken)}", replace: true);
+                return;
+            }
+
+            if (apiResponse.RequiereCambioClave)
+            {
+                var cambioClaveToken = PendingLoginFlow.Create(
+                    apiResponse.IdUsuario,
+                    apiUsername,
+                    loginUser.Password,
+                    loginUser.Recordarme);
+
+                keepProcessing = true;
+                NavManager.NavigateTo($"/cambiar-clave/{apiResponse.IdUsuario}?loginToken={Uri.EscapeDataString(cambioClaveToken)}", replace: true);
+                return;
+            }
+
+            if (apiResponse.Success && apiResponse.IdUsuario > 0)
+            {
+                idUsuarioParaLog = apiResponse.IdUsuario;
+                loginUser.AcceptTerms = true;
+                await PersistTermsAcceptanceAsync(apiResponse.IdUsuario, apiUsername);
+
+                var apiAuthProvider = (CustomAuthStateProvider)AuthStateProvider;
+                await apiAuthProvider.UpdateAuthenticationState(apiResponse.ToUsuario());
+                await Security.RegistrarLogInicioSesionAsync(apiResponse.IdUsuario, true, "Exito");
+
+                if (loginUser.Recordarme)
+                {
+                    await JS.InvokeVoidAsync("numericaUi.setLocalStorageItems", new Dictionary<string, string?>
+                    {
+                        ["numerica:saved-username"] = apiUsername,
+                        ["numerica:saved-password"] = loginUser.Password,
+                        ["numerica:saved-remember"] = "true"
+                    });
+                }
+                else
+                {
+                    await JS.InvokeVoidAsync("numericaUi.removeStorageItems", "local", new[]
+                    {
+                        "numerica:saved-username",
+                        "numerica:saved-password",
+                        "numerica:saved-remember"
+                    });
+                }
+
+                var apiDestination = await LoginDestination.PrepareDestinationAsync(apiResponse.IdUsuario, apiResponse.IdTipoUsuario, ReturnUrl);
+                keepProcessing = true;
+                NavManager.NavigateToIfNeeded(apiDestination, forceLoad: true);
+                return;
+            }
+
+            await ShowAlert("warning", "Acceso", "No se pudo iniciar sesion.");
+            return;
+        }
+        catch (Exception ex) when (ex is not Microsoft.AspNetCore.Components.NavigationException)
+        {
+            await Security.RegistrarLogInicioSesionAsync(idUsuarioParaLog, false, $"Error: {ex.Message}");
+            var detalle = string.IsNullOrWhiteSpace(ex.Message)
+                ? "No se pudo completar el inicio de sesion."
+                : ex.Message;
+            await ShowAlert("error", "Error", detalle);
+        }
+        finally
+        {
+            if (!keepProcessing)
+            {
+                isProcessing = false;
+            }
+        }
+    }
+
+    private async Task ShowAlert(string icon, string title, string text)
+    {
+        isProcessing = false;
+        StateHasChanged();
+        await JS.InvokeVoidAsync("Swal.fire", new
+        {
+            icon = icon,
+            title = title,
+            text = text,
+            confirmButtonColor = "#006bb5",
+            timer = 5000,
+            backdrop = true
+        });
+    }
+
+    private async Task ShowPrivacyRedirectAlert()
+    {
+        StateHasChanged();
+        await JS.InvokeVoidAsync("Swal.fire", new
+        {
+            icon = "info",
+            title = "Politica pendiente",
+            text = "Redirigiendo a la politica de privacidad...",
+            confirmButtonColor = "#006bb5",
+            timer = 1500,
+            timerProgressBar = true,
+            showConfirmButton = false,
+            showCloseButton = false,
+            allowEscapeKey = false,
+            allowOutsideClick = false,
+            backdrop = true
+        });
+    }
+
+    public class LoginModel
+    {
+        [Required(ErrorMessage = "El usuario es requerido.")]
+        public string Username { get; set; } = "";
+
+        [Required(ErrorMessage = "La contraseña es requerida.")]
+        public string Password { get; set; } = "";
+
+        public bool Recordarme { get; set; }
+        public bool AcceptTerms { get; set; }
+    }
+
+    private sealed class AuthCookieResponse
+    {
+        public bool Success { get; set; }
+        public bool RequiereCambioClave { get; set; }
+        public bool RequierePoliticas { get; set; }
+        public int IdUsuario { get; set; }
+        public int? IdTipoUsuario { get; set; }
+        public string? Nombres { get; set; }
+        public string? Apellidos { get; set; }
+        public string? Email { get; set; }
+        public string? AvatarUrl { get; set; }
+        public int? TipoCliente { get; set; }
+        public int? IdJefe { get; set; }
+        public bool? EstadoAsociado { get; set; }
+        public string? Message { get; set; }
+
+        public Usuario ToUsuario()
+        {
+            return new Usuario
+            {
+                IdUsuario = IdUsuario,
+                IdTipoUsuario = IdTipoUsuario,
+                Nombres = Nombres ?? "Usuario",
+                Apellidos = Apellidos ?? string.Empty,
+                Email = Email ?? string.Empty,
+                AvatarUrl = AvatarUrl,
+                TipoCliente = TipoCliente,
+                idJefe = IdJefe,
+                estadoAsociado = EstadoAsociado
+            };
+        }
+    }
+    private sealed class AuthCheckResponse
+    {
+        public bool Authenticated { get; set; }
+        public int IdUsuario { get; set; }
+    }
+}

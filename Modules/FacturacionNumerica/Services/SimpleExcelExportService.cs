@@ -1,0 +1,338 @@
+using System.IO.Compression;
+using System.Security;
+using System.Text;
+using Simetric.DTOs;
+
+namespace Simetric.Services;
+
+public interface ISimpleExcelExportService
+{
+    ReporteArchivoDescargaDto Create(string fileName, params ExcelSheetData[] sheets);
+}
+
+public sealed record ExcelSheetData(
+    string Name,
+    IReadOnlyList<string> Headers,
+    IReadOnlyList<IReadOnlyList<string>> Rows,
+    IReadOnlyList<ExcelRowData>? CustomRows = null,
+    IReadOnlyList<double>? ColumnWidths = null);
+
+public sealed record ExcelRowData(IReadOnlyList<ExcelCellData> Cells);
+
+public enum ExcelCellType
+{
+    Text = 0,
+    Number = 1
+}
+
+public sealed record ExcelCellData(
+    string Value,
+    int StyleIndex = 0,
+    ExcelCellType CellType = ExcelCellType.Text,
+    int MergeAcross = 0);
+
+public sealed class SimpleExcelExportService : ISimpleExcelExportService
+{
+    private const string XlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    public ReporteArchivoDescargaDto Create(string fileName, params ExcelSheetData[] sheets)
+    {
+        if (sheets.Length == 0)
+        {
+            throw new InvalidOperationException("No hay hojas para exportar.");
+        }
+
+        var content = BuildWorkbook(sheets);
+
+        return new ReporteArchivoDescargaDto
+        {
+            FileName = fileName,
+            ContentType = XlsxContentType,
+            Content = content
+        };
+    }
+
+    private static byte[] BuildWorkbook(IReadOnlyList<ExcelSheetData> sheets)
+    {
+        var sharedStrings = BuildSharedStrings(sheets);
+
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            AddEntry(archive, "[Content_Types].xml", BuildContentTypes(sheets.Count));
+            AddEntry(archive, "_rels/.rels", BuildRootRels());
+            AddEntry(archive, "xl/workbook.xml", BuildWorkbookXml(sheets));
+            AddEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRels(sheets.Count));
+            AddEntry(archive, "xl/styles.xml", BuildStyles());
+            AddEntry(archive, "xl/sharedStrings.xml", BuildSharedStringsXml(sharedStrings));
+
+            for (var i = 0; i < sheets.Count; i++)
+            {
+                AddEntry(
+                    archive,
+                    $"xl/worksheets/sheet{i + 1}.xml",
+                    BuildSheetXml(sheets[i], sharedStrings));
+            }
+        }
+
+        return stream.ToArray();
+    }
+
+    private static Dictionary<string, int> BuildSharedStrings(IReadOnlyList<ExcelSheetData> sheets)
+    {
+        var lookup = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var sheet in sheets)
+        {
+            if (sheet.CustomRows is { Count: > 0 })
+            {
+                foreach (var row in sheet.CustomRows)
+                {
+                    foreach (var cell in row.Cells)
+                    {
+                        if (cell.CellType == ExcelCellType.Text)
+                        {
+                            AddSharedString(lookup, cell.Value);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                foreach (var header in sheet.Headers)
+                {
+                    AddSharedString(lookup, header);
+                }
+
+                foreach (var row in sheet.Rows)
+                {
+                    foreach (var cell in row)
+                    {
+                        AddSharedString(lookup, cell);
+                    }
+                }
+            }
+        }
+
+        return lookup;
+    }
+
+    private static void AddSharedString(Dictionary<string, int> lookup, string? value)
+    {
+        var safeValue = value ?? string.Empty;
+        if (!lookup.ContainsKey(safeValue))
+        {
+            lookup[safeValue] = lookup.Count;
+        }
+    }
+
+    private static string BuildSheetXml(ExcelSheetData sheet, Dictionary<string, int> sharedStrings)
+    {
+        var merges = new List<string>();
+        var sb = new StringBuilder();
+        sb.Append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">""");
+
+        if (sheet.ColumnWidths is { Count: > 0 })
+        {
+            sb.Append("<cols>");
+            for (var i = 0; i < sheet.ColumnWidths.Count; i++)
+            {
+                var width = Math.Max(sheet.ColumnWidths[i], 8d).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                sb.Append($"""<col min="{i + 1}" max="{i + 1}" width="{width}" customWidth="1"/>""");
+            }
+            sb.Append("</cols>");
+        }
+
+        sb.Append("<sheetData>");
+
+        var rowIndex = 1;
+        if (sheet.CustomRows is { Count: > 0 })
+        {
+            foreach (var row in sheet.CustomRows)
+            {
+                sb.Append($"""<row r="{rowIndex}">""");
+                for (var colIndex = 0; colIndex < row.Cells.Count; colIndex++)
+                {
+                    var cell = row.Cells[colIndex];
+                    AppendCell(sb, rowIndex, colIndex + 1, cell, sharedStrings);
+
+                    if (cell.MergeAcross > 0)
+                    {
+                        merges.Add($"{GetColumnName(colIndex + 1)}{rowIndex}:{GetColumnName(colIndex + 1 + cell.MergeAcross)}{rowIndex}");
+                    }
+                }
+                sb.Append("</row>");
+                rowIndex++;
+            }
+        }
+        else
+        {
+            sb.Append($"""<row r="{rowIndex}">""");
+            for (var colIndex = 0; colIndex < sheet.Headers.Count; colIndex++)
+            {
+                AppendCell(
+                    sb,
+                    rowIndex,
+                    colIndex + 1,
+                    new ExcelCellData(sheet.Headers[colIndex], 1),
+                    sharedStrings);
+            }
+            sb.Append("</row>");
+
+            foreach (var row in sheet.Rows)
+            {
+                rowIndex++;
+                sb.Append($"""<row r="{rowIndex}">""");
+                for (var colIndex = 0; colIndex < row.Count; colIndex++)
+                {
+                    AppendCell(
+                        sb,
+                        rowIndex,
+                        colIndex + 1,
+                        new ExcelCellData(row[colIndex], 0),
+                        sharedStrings);
+                }
+                sb.Append("</row>");
+            }
+        }
+
+        sb.Append("</sheetData>");
+
+        if (merges.Count > 0)
+        {
+            sb.Append($"""<mergeCells count="{merges.Count}">""");
+            foreach (var merge in merges)
+            {
+                sb.Append($"""<mergeCell ref="{merge}"/>""");
+            }
+            sb.Append("</mergeCells>");
+        }
+
+        sb.Append("</worksheet>");
+        return sb.ToString();
+    }
+
+    private static void AppendCell(
+        StringBuilder sb,
+        int rowIndex,
+        int columnIndex,
+        ExcelCellData cell,
+        Dictionary<string, int> sharedStrings,
+        int? styleIndexOverride = null)
+    {
+        var reference = $"{GetColumnName(columnIndex)}{rowIndex}";
+        var styleIndex = styleIndexOverride ?? cell.StyleIndex;
+
+        if (cell.CellType == ExcelCellType.Number)
+        {
+            if (decimal.TryParse(cell.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var numberInvariant) ||
+                decimal.TryParse(cell.Value, System.Globalization.NumberStyles.Any, new System.Globalization.CultureInfo("es-EC"), out numberInvariant))
+            {
+                sb.Append($"""<c r="{reference}" s="{styleIndex}"><v>{numberInvariant.ToString(System.Globalization.CultureInfo.InvariantCulture)}</v></c>""");
+                return;
+            }
+        }
+
+        var key = cell.Value ?? string.Empty;
+        sb.Append($"""<c r="{reference}" t="s" s="{styleIndex}"><v>{sharedStrings[key]}</v></c>""");
+    }
+
+    private static string BuildSharedStringsXml(Dictionary<string, int> sharedStrings)
+    {
+        var ordered = sharedStrings.OrderBy(x => x.Value).Select(x => x.Key).ToList();
+        var sb = new StringBuilder();
+        sb.Append($"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="{ordered.Count}" uniqueCount="{ordered.Count}">""");
+        foreach (var value in ordered)
+        {
+            sb.Append($"""<si><t xml:space="preserve">{Escape(value)}</t></si>""");
+        }
+        sb.Append("</sst>");
+        return sb.ToString();
+    }
+
+    private static string BuildContentTypes(int sheetCount)
+    {
+        var sb = new StringBuilder();
+        sb.Append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">""");
+        sb.Append("""<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>""");
+        sb.Append("""<Default Extension="xml" ContentType="application/xml"/>""");
+        sb.Append("""<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>""");
+        sb.Append("""<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>""");
+        sb.Append("""<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>""");
+        for (var i = 1; i <= sheetCount; i++)
+        {
+            sb.Append($"""<Override PartName="/xl/worksheets/sheet{i}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>""");
+        }
+        sb.Append("</Types>");
+        return sb.ToString();
+    }
+
+    private static string BuildRootRels() =>
+        """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>""";
+
+    private static string BuildWorkbookXml(IReadOnlyList<ExcelSheetData> sheets)
+    {
+        var sb = new StringBuilder();
+        sb.Append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>""");
+        for (var i = 0; i < sheets.Count; i++)
+        {
+            sb.Append($"""<sheet name="{EscapeAttribute(NormalizeSheetName(sheets[i].Name))}" sheetId="{i + 1}" r:id="rId{i + 1}"/>""");
+        }
+        sb.Append("</sheets></workbook>");
+        return sb.ToString();
+    }
+
+    private static string BuildWorkbookRels(int sheetCount)
+    {
+        var sb = new StringBuilder();
+        sb.Append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">""");
+        for (var i = 1; i <= sheetCount; i++)
+        {
+            sb.Append($"""<Relationship Id="rId{i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i}.xml"/>""");
+        }
+        sb.Append($"""<Relationship Id="rId{sheetCount + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>""");
+        sb.Append($"""<Relationship Id="rId{sheetCount + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>""");
+        sb.Append("</Relationships>");
+        return sb.ToString();
+    }
+
+    private static string BuildStyles() =>
+        """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts><fonts count="4"><font><sz val="10"/><name val="Segoe UI"/><color rgb="FF17324A"/></font><font><b/><sz val="10"/><name val="Segoe UI"/><color rgb="FFFFFFFF"/></font><font><b/><sz val="11"/><name val="Segoe UI"/><color rgb="FF17324A"/></font><font><b/><sz val="10"/><name val="Segoe UI"/><color rgb="FF0B5B97"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0B5B97"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF3FB"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF7FBFF"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD7E3F0"/></left><right style="thin"><color rgb="FFD7E3F0"/></right><top style="thin"><color rgb="FFD7E3F0"/></top><bottom style="thin"><color rgb="FFD7E3F0"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="2" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyNumberFormat="1"/><xf numFmtId="164" fontId="2" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1"/></cellXfs></styleSheet>""";
+
+    private static void AddEntry(ZipArchive archive, string path, string content)
+    {
+        var entry = archive.CreateEntry(path, CompressionLevel.Fastest);
+        using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
+        writer.Write(content);
+    }
+
+    private static string GetColumnName(int index)
+    {
+        var name = string.Empty;
+        while (index > 0)
+        {
+            index--;
+            name = (char)('A' + (index % 26)) + name;
+            index /= 26;
+        }
+
+        return name;
+    }
+
+    private static string NormalizeSheetName(string name)
+    {
+        var invalidChars = new[] { '\\', '/', '?', '*', '[', ']', ':' };
+        var safe = string.IsNullOrWhiteSpace(name) ? "Reporte" : name.Trim();
+        foreach (var invalidChar in invalidChars)
+        {
+            safe = safe.Replace(invalidChar, '-');
+        }
+
+        return safe.Length > 31 ? safe[..31] : safe;
+    }
+
+    private static string Escape(string value) => SecurityElement.Escape(value) ?? string.Empty;
+
+    private static string EscapeAttribute(string value) =>
+        (SecurityElement.Escape(value) ?? string.Empty).Replace("\"", "&quot;", StringComparison.Ordinal);
+}

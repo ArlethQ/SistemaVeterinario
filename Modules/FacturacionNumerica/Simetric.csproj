@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+    <AssemblyName>Simetric</AssemblyName>
+    <RootNamespace>Simetric</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**;build-validation\**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- El sistema veterinario aporta su propio shell y navegación. -->
+    <Content Remove="Components\Layout\MainLayout.razor;Components\Layout\NavMenu.razor;Components\Layout\MainLayout.razor.css;Components\Layout\NavMenu.razor.css" />
+    <ScopedCssInput Remove="Components\Layout\MainLayout.razor.css;Components\Layout\NavMenu.razor.css" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="artifacts\**;build-validation\**" />
+    <Content Remove="artifacts\**;build-validation\**" />
+    <EmbeddedResource Remove="artifacts\**;build-validation\**" />
+    <None Remove="artifacts\**;build-validation\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="BarcodeLib" Version="3.1.5" />
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="GoogleAuthenticator" Version="3.2.0" />
+    <PackageReference Include="MailKit" Version="4.16.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.12">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.12">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="MiniExcel" Version="1.44.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="OpenAI" Version="2.10.0" />
+    <PackageReference Include="Otp.NET" Version="1.4.1" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
+    <PackageReference Include="QRCoder" Version="1.7.0" />
+    <PackageReference Include="QuestPDF" Version="2026.2.4" />
+    <PackageReference Include="System.Linq" Version="4.3.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="wwwroot\images\logo.png" />
+  </ItemGroup>
+</Project>

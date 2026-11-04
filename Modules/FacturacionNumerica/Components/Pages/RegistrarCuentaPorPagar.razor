@@ -1,0 +1,120 @@
+@page "/cuentas-por-pagar/registrar"
+@page "/e-contax/cuentas-por-pagar/registrar"
+@using System.Globalization
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Simetric.Services
+@using Simetric.Services.EContax
+@using Simetric.ViewModels
+@attribute [AllowAnonymous]
+@inject CuentasPagarService CuentasPagarService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject SweetAlertService AlertService
+
+<link rel="stylesheet" href="/css/cuentas-por-pagar.css?v=20261023-cxp-flow" />
+<PageTitle>Registrar pago a proveedor | Numerica e-fact</PageTitle>
+
+<div class="payable-shell">
+    <section class="payable-hero">
+        <div class="payable-hero-copy">
+            <span class="payable-kicker">Cuentas por pagar</span>
+            <h1>Registrar pago a proveedor</h1>
+            <p>Selecciona las facturas, define el monto y confirma el abono en un solo flujo.</p>
+            <div class="payable-hero-actions"><a class="payable-secondary-btn" href="@RutaCuentasPorPagar("/cuentas-por-pagar", EContaxRoutes.CuentasPorPagar)"><i class="ri-arrow-left-line"></i>Volver a cuentas por pagar</a></div>
+        </div>
+        <div class="payable-hero-mark" aria-hidden="true"><i class="ri-hand-coin-line"></i></div>
+    </section>
+
+    @if (cargando)
+    {
+        <section class="payable-state">Cargando cuentas pendientes...</section>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger border-0 rounded-3">@error</div>
+    }
+    else if (!cuentas.Any())
+    {
+        <section class="payable-state"><i class="ri-checkbox-circle-line"></i><strong>No hay cuentas por pagar pendientes.</strong></section>
+    }
+    else
+    {
+        <section class="payable-flow"><div class="payable-flow-step is-active"><span>1</span><div><strong>Selecciona cuentas</strong><small>Busca y asigna el monto</small></div></div><i class="ri-arrow-right-line"></i><div class="payable-flow-step"><span>2</span><div><strong>Completa el pago</strong><small>Forma y referencia</small></div></div><i class="ri-arrow-right-line"></i><div class="payable-flow-step"><span>3</span><div><strong>Confirma</strong><small>Registra el abono</small></div></div></section>
+        <div class="payable-payment-grid">
+            <section class="payable-board"><div class="payable-board-head"><div><span class="payable-section-kicker">Paso 1</span><h2>Facturas pendientes</h2></div><span class="payable-payment-total">Total: $@pagos.Sum(x => x.Value).ToString("N2")</span></div><div class="payable-filters"><label class="payable-search"><i class="ri-search-line"></i><input @bind="busqueda" @bind:event="oninput" placeholder="Buscar proveedor, RUC o documento..." /></label></div><div class="payable-table-wrap"><table class="payable-table payable-payment-table"><thead><tr><th>Documento</th><th>Proveedor</th><th class="text-end">Saldo</th><th class="text-end">Monto a pagar</th></tr></thead><tbody>@foreach (var cuenta in CuentasFiltradas) { <tr @key="cuenta.IdFactura"><td><strong>@cuenta.NumeroDocumento</strong><small>Vence @cuenta.FechaVencimiento?.ToString("dd/MM/yyyy")</small></td><td><strong>@cuenta.Proveedor</strong><small>@cuenta.IdentificacionProveedor</small></td><td class="text-end payable-balance">$@cuenta.SaldoPendiente.ToString("N2")</td><td><input class="payable-amount-input" type="number" min="0" max="@cuenta.SaldoPendiente" step="0.01" value="@Monto(cuenta)" @oninput="e => CambiarMonto(cuenta, e.Value?.ToString())" /></td></tr> }</tbody></table></div></section>
+            <section class="payable-payment-card"><div class="payable-board-head"><div><span class="payable-section-kicker">Paso 2</span><h2>Detalle del pago</h2></div><i class="ri-bank-card-line payable-payment-icon"></i></div><div class="payable-payment-fields"><label>Forma de pago<select @bind="formaPago"><option>Transferencia</option><option>Cheque</option><option>Efectivo</option><option>Tarjeta</option><option>Otro</option></select></label><label>Referencia<input @bind="referencia" maxlength="100" placeholder="Transferencia, cheque..." /></label><label>Observación<textarea @bind="observacion" maxlength="500" rows="3"></textarea></label></div><div class="payable-payment-summary"><span>Total a registrar</span><strong>$@pagos.Sum(x => x.Value).ToString("N2")</strong></div><button type="button" class="payable-primary-btn payable-submit-btn" @onclick="GuardarAsync" disabled="@guardando"><i class="ri-check-double-line"></i>@(guardando ? "Guardando..." : "Registrar pago")</button></section>
+        </div>
+    }
+</div>
+
+@code {
+    private List<CuentaPorPagarVM> cuentas = new();
+    private readonly Dictionary<int, decimal> pagos = new();
+    private int currentUserId;
+    private bool cargando = true;
+    private bool guardando;
+    private string busqueda = "";
+    private string formaPago = "Transferencia";
+    private string referencia = "";
+    private string observacion = "";
+    private string error = "";
+
+    private bool EsEContaxContext => Navigation.ToBaseRelativePath(Navigation.Uri)
+        .StartsWith("e-contax/", StringComparison.OrdinalIgnoreCase);
+
+    private string RutaCuentasPorPagar(string efact, string econtax) => EsEContaxContext ? econtax : efact;
+
+    private IEnumerable<CuentaPorPagarVM> CuentasFiltradas => cuentas.Where(x => string.IsNullOrWhiteSpace(busqueda) || x.Proveedor.Contains(busqueda, StringComparison.OrdinalIgnoreCase) || x.IdentificacionProveedor.Contains(busqueda, StringComparison.OrdinalIgnoreCase) || x.NumeroDocumento.Contains(busqueda, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0) { Navigation.NavigateTo("/login", true); return; }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        cargando = true;
+        error = "";
+        try
+        {
+            cuentas = await CuentasPagarService.ListarAsync(currentUserId);
+            pagos.Clear();
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudieron cargar las cuentas pendientes: {ex.Message}";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private string Monto(CuentaPorPagarVM cuenta) => pagos.TryGetValue(cuenta.IdFactura, out var monto) ? monto.ToString("0.00", CultureInfo.InvariantCulture) : "0.00";
+
+    private void CambiarMonto(CuentaPorPagarVM cuenta, string? valor)
+    {
+        if (decimal.TryParse(valor, NumberStyles.Any, CultureInfo.InvariantCulture, out var monto) || decimal.TryParse(valor, NumberStyles.Any, CultureInfo.CurrentCulture, out monto))
+            pagos[cuenta.IdFactura] = Math.Min(Math.Max(monto, 0m), cuenta.SaldoPendiente);
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (pagos.Values.Sum() <= 0m) { await AlertService.ShowWarningAsync("Ingresa al menos un monto para registrar."); return; }
+        guardando = true;
+        try
+        {
+            if (await CuentasPagarService.RegistrarPagoAsync(currentUserId, pagos, formaPago, referencia, observacion))
+            {
+                await AlertService.ShowSuccessAsync("Pago registrado correctamente.");
+                await CargarAsync();
+            }
+        }
+        catch (InvalidOperationException ex) { await AlertService.ShowErrorAsync(ex.Message); }
+        finally { guardando = false; }
+    }
+}

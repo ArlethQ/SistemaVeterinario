@@ -260,12 +260,83 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
     {
         if (string.IsNullOrWhiteSpace(x.Localidad) || string.IsNullOrWhiteSpace(x.Direccion) || x.IdProvincia <= 0 || x.IdCiudad <= 0)
             return (false, "Localidad, dirección, provincia y ciudad son obligatorias.");
-        const string insertar = @"INSERT INTO vt_localidades (loc_descripcion,loc_direccion,loc_telefono,loc_ruc,loc_administrador,loc_estado,loc_nom_empresa,loc_prefijo,loc_region,idCiudad,prov_id) VALUES (@Localidad,@Direccion,@Telefono,@Ruc,@Administrador,@Estado,@Empresa,@Prefijo,@Region,@IdCiudad,@IdProvincia)";
+        const string insertar = @"INSERT INTO vt_localidades (loc_descripcion,loc_direccion,loc_telefono,loc_ruc,loc_administrador,loc_estado,loc_nom_empresa,loc_prefijo,loc_region,idCiudad,prov_id) VALUES (@Localidad,@Direccion,@Telefono,@Ruc,@Administrador,@Estado,@Empresa,@Prefijo,@Region,@IdCiudad,@IdProvincia); SELECT CONVERT(INT, SCOPE_IDENTITY());";
         const string actualizar = @"UPDATE vt_localidades SET loc_descripcion=@Localidad,loc_direccion=@Direccion,loc_telefono=@Telefono,loc_ruc=@Ruc,loc_administrador=@Administrador,loc_estado=@Estado,loc_nom_empresa=@Empresa,loc_prefijo=@Prefijo,loc_region=@Region,idCiudad=@IdCiudad,prov_id=@IdProvincia WHERE loc_id=@Id";
-        int filas = await _db.ExecuteAsync(x.Id > 0 ? actualizar : insertar, x);
-        if (filas <= 0) return (false, "No se pudo guardar la localidad.");
-        await _db.RegistrarBitacoraAsync($"{(x.Id > 0 ? "Actualización" : "Creación")} de localidad: {x.Localidad}", idUsuario);
-        return (true, "Localidad guardada correctamente.");
+        var esNueva = x.Id <= 0;
+        if (esNueva)
+            x.Id = await _db.ExecuteScalarAsync<int>(insertar, x);
+        else if (await _db.ExecuteAsync(actualizar, x) <= 0)
+            return (false, "No se pudo guardar la localidad.");
+
+        if (x.Id <= 0) return (false, "No se pudo obtener el identificador de la veterinaria.");
+
+        // Cada localidad es un tenant fiscal independiente. El usuario técnico
+        // nunca inicia sesión: Numerica lo usa para aislar productos, clientes,
+        // documentos, caja y contabilidad de cada veterinaria.
+        const string prepararTenant = """
+            SET XACT_ABORT ON;
+            DECLARE @IdFiscal INT = 1000000 + @Id;
+
+            IF @EsNueva = 1 AND NOT EXISTS
+                (SELECT 1 FROM dbo.vt_usuarioLocalidades WHERE ul_idUsuario=@IdUsuario AND ul_idLocalidad=@Id)
+                INSERT INTO dbo.vt_usuarioLocalidades (ul_idUsuario,ul_idLocalidad,ul_estado)
+                VALUES (@IdUsuario,@Id,'A');
+
+            IF OBJECT_ID('dbo.Usuarios','U') IS NOT NULL
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM dbo.Usuarios WHERE IdUsuario=@IdFiscal)
+                BEGIN
+                    SET IDENTITY_INSERT dbo.Usuarios ON;
+                    BEGIN TRY
+                        INSERT INTO dbo.Usuarios
+                            (IdUsuario,Nombres,Apellidos,NombreEmpresa,Email,PasswordHash,
+                             CuentaBloqueada,FechaCreacion,Estado,ClaveTemporal,Identificacion,SaldoDocumentos)
+                        VALUES
+                            (@IdFiscal,@Localidad,N'',COALESCE(NULLIF(@Empresa,N''),@Localidad),
+                             CONCAT('facturacion-localidad-',@Id,'@local.invalid'),
+                             CONVERT(NVARCHAR(128),HASHBYTES('SHA2_512',CONVERT(NVARCHAR(36),NEWID())),2),
+                             1,GETDATE(),CASE WHEN @Estado='A' THEN 1 ELSE 0 END,1,NULLIF(@Ruc,N''),0);
+                        SET IDENTITY_INSERT dbo.Usuarios OFF;
+                    END TRY
+                    BEGIN CATCH
+                        SET IDENTITY_INSERT dbo.Usuarios OFF;
+                        THROW;
+                    END CATCH;
+                END
+                ELSE
+                    UPDATE dbo.Usuarios
+                    SET Nombres=@Localidad,
+                        NombreEmpresa=COALESCE(NULLIF(@Empresa,N''),@Localidad),
+                        Identificacion=NULLIF(@Ruc,N''),
+                        Estado=CASE WHEN @Estado='A' THEN 1 ELSE 0 END
+                    WHERE IdUsuario=@IdFiscal;
+            END;
+
+            IF OBJECT_ID('dbo.VeterinariaFacturacionTenant','U') IS NOT NULL
+            BEGIN
+                UPDATE dbo.VeterinariaFacturacionTenant
+                SET IdUsuarioFacturacion=@IdFiscal,
+                    Estado=CASE WHEN @Estado='A' THEN 1 ELSE 0 END
+                WHERE IdLocalidad=@Id;
+                IF @@ROWCOUNT=0
+                    INSERT INTO dbo.VeterinariaFacturacionTenant(IdLocalidad,IdUsuarioFacturacion,Estado)
+                    VALUES(@Id,@IdFiscal,CASE WHEN @Estado='A' THEN 1 ELSE 0 END);
+            END;
+            """;
+        await _db.ExecuteAsync(prepararTenant, new
+        {
+            x.Id,
+            IdUsuario = idUsuario,
+            EsNueva = esNueva,
+            x.Localidad,
+            x.Empresa,
+            x.Ruc,
+            x.Estado
+        });
+        await _db.RegistrarBitacoraAsync($"{(esNueva ? "Creación" : "Actualización")} de localidad: {x.Localidad}", idUsuario);
+        return (true, esNueva
+            ? "Veterinaria creada y asignada a su administrador. Ya puede seleccionarla y configurar emisor, firma y caja."
+            : "Veterinaria actualizada correctamente.");
     }
 
     public async Task<List<EspecialidadLocalidadDto>> ObtenerEspecialidadesLocalidadAsync()

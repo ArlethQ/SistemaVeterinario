@@ -36,9 +36,8 @@ public class InventarioService : IInventarioService
 
         string terminoNorm = NormalizarTexto(filtro.Trim());
 
-        // El catálogo oficial de E-FACT (configurado en "Productos e insumos") es la fuente exclusiva.
-        // No se usan datos quemados ni registros históricos de tablas antiguas para garantizar
-        // que solo se muestren los productos e insumos vigentes configurados en el sistema.
+        // El catálogo migrado de PRODUCTO es la fuente exclusiva. Los registros
+        // se consultan directamente en VeterinariaFacturacion por localidad activa.
         try
         {
             var productosEFact = await ObtenerCatalogoEFactCacheAsync();
@@ -58,12 +57,12 @@ public class InventarioService : IInventarioService
                     Available = 0,
                     UnitPrice = x.Precio ?? 0,
                     BaseUnitOfMeasureCode = "UND",
-                    Location = "E-FACT"
+                    Location = "VETERINARIA"
                 }));
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo consultar el catálogo E-FACT de productos e insumos.");
+            _logger.LogWarning(ex, "No se pudo consultar el catálogo local de productos e insumos.");
         }
 
         return resultados;

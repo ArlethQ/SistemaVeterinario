@@ -1,0 +1,65 @@
+namespace Simetric.DTOs;
+
+public class FacturaListDto
+{
+    public int Codfactura { get; set; }
+    public string? Numfactura { get; set; }
+    public string? Serie { get; set; }
+    public int? IdEmpresa { get; set; }
+    public int? IdSucursal { get; set; }
+    public string? NombreSucursal { get; set; }
+    public DateTime? FechaEmision { get; set; }
+    public DateTime? FechaEmisionSri { get; set; }
+    public DateTime? FechaSolicitud { get; set; }
+    public string? EstadoSri { get; set; }
+    public bool? Autorizado { get; set; }
+    public string? NumeroAutorizacion { get; set; }
+    public string? MensajeSri { get; set; }
+    public DateTime? FechaAutorizacion { get; set; }
+    public decimal? Total { get; set; }
+    public decimal? Subtotal { get; set; }
+    public decimal? SubtotalIva { get; set; }
+    public decimal? SubtotalCero { get; set; }
+    public decimal? SubtotalNoObjeto { get; set; }
+    public decimal? SubtotalExento { get; set; }
+    public decimal? Descuentos { get; set; }
+    public decimal? Iva { get; set; }
+    public decimal? Ice { get; set; }
+    public decimal TotalAbonado { get; set; }
+    public string? Tipopago { get; set; }
+    public string? EstadoPago { get; set; }
+    public string? Cliente { get; set; }
+    public string? Servicio { get; set; }
+    public string? Detalle { get; set; }
+    public decimal? DescuentoGlobalPct { get; set; }
+    public decimal? DescuentoGlobalValor { get; set; }
+    public string? IdentificacionCliente { get; set; }
+    public bool EsFacturaEmitidaANumeros { get; set; }
+    public bool? Estado { get; set; }
+
+    public decimal SaldoPendiente => Math.Max((Total ?? 0m) - TotalAbonado, 0m);
+    public bool EstaEnCuentasPorCobrar =>
+        SaldoPendiente > 0m &&
+        (string.Equals(Tipopago?.Trim(), "19", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(EstadoPago?.Trim(), "PENDIENTE", StringComparison.OrdinalIgnoreCase));
+
+    public string NumeroCompleto
+    {
+        get
+        {
+            var serieLimpia = (Serie ?? string.Empty).Replace("-", string.Empty).Trim();
+            var numeroLimpio = (Numfactura ?? string.Empty).Trim();
+
+            if (string.IsNullOrWhiteSpace(serieLimpia))
+                return string.IsNullOrWhiteSpace(numeroLimpio) ? "-" : numeroLimpio;
+
+            if (serieLimpia.Length == 6)
+                serieLimpia = $"{serieLimpia[..3]}-{serieLimpia.Substring(3, 3)}";
+
+            if (string.IsNullOrWhiteSpace(numeroLimpio))
+                return serieLimpia;
+
+            return $"{serieLimpia}-{numeroLimpio.PadLeft(9, '0')}";
+        }
+    }
+}

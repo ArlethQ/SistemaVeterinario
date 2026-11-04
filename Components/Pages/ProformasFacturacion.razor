@@ -2,6 +2,7 @@
 @using HosvetKardex.Web.Models
 @using HosvetKardex.Web.Services
 @inject IAdmisionFacturacionService AdmisionService
+@inject IFacturacionIntegradaService FacturacionIntegrada
 @inject IEFactCatalogService EFactCatalog
 @inject IReportExportService ReportService
 @inject SessionStateService SessionState
@@ -39,6 +40,22 @@
         <div class="alert @(_notificacionError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2" role="alert">
             <i class="bi bi-check-circle-fill me-2"></i>@_mensajeNotificacion
             <button type="button" class="btn-close" @onclick="() => _mensajeNotificacion = string.Empty"></button>
+        </div>
+    }
+
+    @if (_estadoIntegracion != null)
+    {
+        <div class="alert @(_estadoIntegracion.ListaParaConfigurarFacturas ? "alert-success" : "alert-warning") py-2 small" role="status">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <span>
+                    <i class="bi @(_estadoIntegracion.ListaParaConfigurarFacturas ? "bi-database-check" : "bi-database-exclamation") me-1"></i>
+                    @_estadoIntegracion.Mensaje
+                </span>
+                <span>
+                    Usuarios: @_estadoIntegracion.UsuariosFacturacion/@_estadoIntegracion.UsuariosVeterinarios ·
+                    Propietarios sincronizados: @_estadoIntegracion.ClientesSincronizados
+                </span>
+            </div>
         </div>
     }
 
@@ -138,6 +155,11 @@
                                 </button>
                                 <button class="btn btn-outline-success btn-sm" @onclick="ExportarProformaExcelAsync">
                                     <i class="bi bi-file-earmark-excel-fill me-1"></i>Excel
+                                </button>
+                                <button class="btn btn-outline-primary btn-sm"
+                                        disabled="@(_sincronizandoCliente || _estadoIntegracion?.EsquemaDisponible != true)"
+                                        @onclick="PrepararPropietarioAsync">
+                                    <i class="bi bi-person-check-fill me-1"></i>Preparar propietario
                                 </button>
                                 <button class="btn btn-primary btn-sm fw-bold" @onclick="EmitirProformaAsync">
                                     <i class="bi bi-check-circle-fill me-1"></i>Emitir proforma
@@ -324,6 +346,8 @@
     private bool _cargandoInicial = true;
     private string _mensajeNotificacion = string.Empty;
     private bool _notificacionError;
+    private bool _sincronizandoCliente;
+    private EstadoFacturacionIntegradaDto? _estadoIntegracion;
 
     private List<OrdenProformaResumenDto> _ordenesProforma = new();
     private OrdenProformaResumenDto? _proformaActual;
@@ -352,6 +376,7 @@
             _catalogoEFact = prods.Where(p => p.Estado == "A").ToList();
         }
         catch { }
+        _estadoIntegracion = await FacturacionIntegrada.ObtenerEstadoAsync();
         var tProf = CargarProformasAsync();
         var tUsr = AdmisionService.ObtenerUsuariosAsync();
         var tBit = AdmisionService.ObtenerBitacoraAsync(DateTime.Today.AddDays(-30), DateTime.Today);
@@ -359,6 +384,7 @@
 
         _usuarios = await tUsr;
         _bitacora = await tBit;
+        await PrepararPropietarioAsync(false);
         _cargandoInicial = false;
     }
 
@@ -385,9 +411,10 @@
         }
     }
 
-    private void SeleccionarOrdenProforma(OrdenProformaResumenDto orden)
+    private async Task SeleccionarOrdenProforma(OrdenProformaResumenDto orden)
     {
         _proformaActual = orden;
+        await PrepararPropietarioAsync(false);
     }
 
     private void OnDescripcionProformaChanged()
@@ -427,6 +454,7 @@
     private async Task EmitirProformaAsync()
     {
         if (_proformaActual == null) return;
+        await PrepararPropietarioAsync(false);
         int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
         var res = await AdmisionService.EmitirProformaAsync(_proformaActual.IdOrden, _proformaActual.Items, idUser);
         _notificacionError = !res.Exito;
@@ -436,6 +464,31 @@
             _proformaActual.NumeroFacturaBc = res.NumeroProforma;
         }
         _mensajeNotificacion = res.Mensaje;
+    }
+
+    private Task PrepararPropietarioAsync() => PrepararPropietarioAsync(true);
+
+    private async Task PrepararPropietarioAsync(bool mostrarMensaje)
+    {
+        if (_proformaActual == null || _proformaActual.IdCliente <= 0) return;
+
+        _sincronizandoCliente = true;
+        try
+        {
+            var resultado = await FacturacionIntegrada.SincronizarClienteAsync(
+                _proformaActual.IdCliente,
+                1_000_000 + SessionState.Localidad);
+            if (mostrarMensaje || !resultado.Exito)
+            {
+                _notificacionError = !resultado.Exito;
+                _mensajeNotificacion = resultado.Mensaje;
+            }
+            _estadoIntegracion = await FacturacionIntegrada.ObtenerEstadoAsync();
+        }
+        finally
+        {
+            _sincronizandoCliente = false;
+        }
     }
 
     private async Task ExportarProformaPdfAsync()

@@ -1,0 +1,28 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace Simetric.Models;
+
+[Table("ALIADO_LIQUIDACION")]
+public sealed class AliadoLiquidacion
+{
+    [Key]
+    public int IdLiquidacion { get; set; }
+    public int IdVendedor { get; set; }
+    public int? IdCliente { get; set; }
+    [Required, MaxLength(20)] public string Periodo { get; set; } = string.Empty;
+    public decimal Total { get; set; }
+    public DateTime Fecha { get; set; }
+    [Required, MaxLength(30)] public string Estado { get; set; } = "Pendiente";
+    [MaxLength(100)] public string? ReferenciaPago { get; set; }
+    [MaxLength(500)] public string? ObservacionPago { get; set; }
+    [MaxLength(300)] public string? ComprobantePagoUrl { get; set; }
+    public int? CodLiquidacionCompra { get; set; }
+    [MaxLength(30)] public string EstadoSri { get; set; } = "Pendiente";
+    [MaxLength(1000)] public string? ErrorSri { get; set; }
+    public DateTime? FechaPago { get; set; }
+    public int? IdUsuarioPago { get; set; }
+    public bool PagoConfirmadoCliente { get; set; }
+    public DateTime? FechaConfirmacionCliente { get; set; }
+    public int? IdUsuarioConfirmacionCliente { get; set; }
+}
