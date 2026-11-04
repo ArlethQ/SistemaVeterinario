@@ -182,11 +182,11 @@ else
                     }
 
                     <!-- Polilíneas de FC, PAS, PAD, SpO2, EtCO2 -->
-                    <polyline fill="none" stroke="#dc2626" stroke-width="2.2" points="@ConstruirPuntosSvg(s => s.FrecuenciaCardiaca)" />
+                        <polyline fill="none" stroke="#dc2626" stroke-width="2.2"  points="@ConstruirPuntosSvg(s => s.FrecuenciaCardiaca)" />
                     <polyline fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="4,2" points="@ConstruirPuntosSvg(s => s.PresionSistolica)" />
                     <polyline fill="none" stroke="#0284c7" stroke-width="2" stroke-dasharray="2,2" points="@ConstruirPuntosSvg(s => s.PresionDiastolica)" />
-                    <polyline fill="none" stroke="#16a34a" stroke-width="1.8" points="@ConstruirPuntosSvg(s => s.O2L)" />
-                    <polyline fill="none" stroke="#ca8a04" stroke-width="1.8" points="@ConstruirPuntosSvg(s => s.EtCO2)" />
+                    <polyline fill="none" stroke="#16a34a" stroke-width="1.8" " points="@ConstruirPuntosSvg(s => s.O2L)" />
+                        <polyline fill="none" stroke="#ca8a04" stroke-width="1.8"  points="@ConstruirPuntosSvg(s => s.EtCO2)" />
 
                     @for (int i = 0; i < 16; i++)
                     {
@@ -206,6 +206,16 @@ else
                         {
                             double y = 185 - (Math.Clamp(s.PresionDiastolica.Value, 0, 220) / 220.0 * 165);
                             <circle cx="@x.ToString("F1", CultureInfo.InvariantCulture)" cy="@y.ToString("F1", CultureInfo.InvariantCulture)" r="3.2" fill="#0284c7" />
+                            }
+                            if (s.O2L.HasValue)
+                            {
+                                double y = 185 - (Math.Clamp(s.O2L.Value, 0, 220) / 220.0 * 165);
+                                <circle cx="@x.ToString("F1", CultureInfo.InvariantCulture)" cy="@y.ToString("F1", CultureInfo.InvariantCulture)" r="3.2" fill="#16a34a" />
+                        }
+                            if (s.EtCO2.HasValue)
+                        {
+                                double y = 185 - (Math.Clamp(s.EtCO2.Value, 0, 220) / 220.0 * 165);
+                                <circle cx="@x.ToString("F1", CultureInfo.InvariantCulture)" cy="@y.ToString("F1", CultureInfo.InvariantCulture)" r="3.2" fill="#ca8a04" />
                         }
                     }
                 </svg>
