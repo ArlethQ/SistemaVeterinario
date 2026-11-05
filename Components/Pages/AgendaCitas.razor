@@ -147,7 +147,22 @@
                                 <td><strong>@cita.NombreMedico</strong><small>@cita.Especialidad</small></td>
                                 <td><strong>@TextoTipoConsulta(cita.CiTipoConsulta)</strong><small>@cita.CiObservacion</small></td>
                                 <td><span class="table-status @ClaseEstadoCita(cita.CiEstadoCita)">@TextoEstadoCita(cita.CiEstadoCita)</span></td>
-                                <td class="text-end"><button class="btn btn-info btn-sm" @onclick="() => VerDetalleCita(cita)">Ver</button> <button class="btn btn-outline-primary btn-sm" @onclick="() => AbrirReagendar(cita)">Reagendar</button> <button class="btn btn-success btn-sm" title="Confirmar" @onclick='() => CambiarEstadoCitaAsync(cita.CiId, "C")'>Confirmar</button> <button class="btn btn-danger btn-sm" title="Cancelar" @onclick="() => AbrirCancelar(cita)">Cancelar</button></td>
+                                <td class="text-end">
+                                    <button class="btn btn-info btn-sm" @onclick="() => VerDetalleCita(cita)">Ver</button>
+                                    @if (cita.CiEstadoCita != "X")
+                                    {
+                                        <button class="btn btn-outline-primary btn-sm" @onclick="() => AbrirReagendar(cita)">Reagendar</button>
+                                        @if (cita.CiEstadoCita != "C")
+                                        {
+                                            <button class="btn btn-success btn-sm" title="Confirmar asistencia" @onclick='() => CambiarEstadoCitaAsync(cita.CiId, "C")'>Confirmar</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-outline-warning btn-sm" title="Marcar como por confirmar" @onclick='() => CambiarEstadoCitaAsync(cita.CiId, "N")'>Por confirmar</button>
+                                        }
+                                        <button class="btn btn-danger btn-sm" title="Cancelar cita" @onclick="() => AbrirCancelar(cita)">Cancelar</button>
+                                    }
+                                </td>
                             </tr>
                         }
                         @if (_citas.Count == 0)
@@ -261,10 +276,28 @@
     {
         <div class="appointment-detail-backdrop" @onclick="CerrarDetalleCita"></div>
         <section class="appointment-detail" role="dialog" aria-modal="true" aria-label="Detalle de la cita">
-            <header><div><small>DETALLE DE CITA #@_citaDetalle.CiId</small><h5>@_citaDetalle.CiNombreMas</h5></div><button @onclick="CerrarDetalleCita">×</button></header>
+            <header>
+                <div>
+                    <small>DETALLE DE CITA #@_citaDetalle.CiId</small>
+                    <h5>@_citaDetalle.CiNombreMas</h5>
+                </div>
+                <button type="button" @onclick="CerrarDetalleCita">×</button>
+            </header>
             <div class="detail-patient">
-                <span class="detail-photo">@if(!string.IsNullOrEmpty(ObtenerFotoPaciente(_citaDetalle.CiNhcl))){<img src="@ObtenerFotoPaciente(_citaDetalle.CiNhcl)" alt="Foto de @_citaDetalle.CiNombreMas"/>}else{<b>@Iniciales(_citaDetalle.CiNombreMas)</b>}</span>
-                <div><strong>@_citaDetalle.CiNombreMas @if(_citaDetalle.CiNhcl > 0){<small>(NHCL #@_citaDetalle.CiNhcl)</small>}</strong><span>Propietario: @_citaDetalle.CiNombre</span></div>
+                <span class="detail-photo">
+                    @if(!string.IsNullOrEmpty(ObtenerFotoPaciente(_citaDetalle.CiNhcl)))
+                    {
+                        <img src="@ObtenerFotoPaciente(_citaDetalle.CiNhcl)" alt="Foto de @_citaDetalle.CiNombreMas"/>
+                    }
+                    else
+                    {
+                        <b>@Iniciales(_citaDetalle.CiNombreMas)</b>
+                    }
+                </span>
+                <div>
+                    <strong>@_citaDetalle.CiNombreMas @if(_citaDetalle.CiNhcl > 0){<small>(NHCL #@_citaDetalle.CiNhcl)</small>}</strong>
+                    <span>Propietario: @_citaDetalle.CiNombre</span>
+                </div>
                 <em class="@ClaseEstadoCita(_citaDetalle.CiEstadoCita)">@TextoEstadoCita(_citaDetalle.CiEstadoCita)</em>
             </div>
             <div class="detail-grid">
@@ -276,17 +309,118 @@
                 <div><small>Correo electrónico</small><strong>@(string.IsNullOrWhiteSpace(_citaDetalle.CiEmail) ? "No registrado" : _citaDetalle.CiEmail)</strong></div>
                 <div class="detail-observation"><small>Motivo / Observaciones</small><strong>@(string.IsNullOrWhiteSpace(_citaDetalle.CiObservacion) ? "Sin observaciones" : _citaDetalle.CiObservacion)</strong></div>
             </div>
-            <footer><button class="btn btn-secondary" @onclick="CerrarDetalleCita">Cerrar</button></footer>
+            <footer>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarDetalleCita">Cerrar</button>
+                </div>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    @if (_citaDetalle.CiEstadoCita != "X")
+                    {
+                        <button type="button" class="btn btn-outline-danger" @onclick="() => AbrirCancelarDesdeDetalle(_citaDetalle)">
+                            <i class="bi bi-x-circle me-1"></i>Cancelar cita
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" @onclick="() => AbrirReagendarDesdeDetalle(_citaDetalle)">
+                            <i class="bi bi-calendar2-range me-1"></i>Reagendar
+                        </button>
+                    }
+                    @if (_citaDetalle.CiEstadoCita != "C" && _citaDetalle.CiEstadoCita != "X")
+                    {
+                        <button type="button" class="btn btn-success fw-semibold" @onclick="() => ConfirmarCitaDetalleAsync(_citaDetalle.CiId)">
+                            <i class="bi bi-check2-circle me-1"></i>Confirmar cita
+                        </button>
+                    }
+                    else if (_citaDetalle.CiEstadoCita == "C")
+                    {
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-semibold">
+                            <i class="bi bi-check-circle-fill me-1"></i>Confirmada
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline-warning" title="Volver a marcar como por confirmar" @onclick='() => CambiarEstadoCitaAsync(_citaDetalle.CiId, "N")'>
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Por confirmar
+                        </button>
+                    }
+                </div>
+            </footer>
         </section>
     }
 
     @if (_citaReagendar is not null)
     {
-        <div class="appointment-detail-backdrop"></div><section class="appointment-detail"><header><h5>Reagendar cita #@_citaReagendar.CiId</h5><button @onclick="()=>_citaReagendar=null">×</button></header><div class="detail-grid p-3"><div><small>Fecha</small><InputDate class="form-control" @bind-Value="_reagendaFecha" /></div><div><small>Hora</small><input class="form-control" @bind="_reagendaHora" /></div><div><small>Médico</small><select class="form-select" @bind="_reagendaMedico">@foreach(var m in _medicos){<option value="@m.Id">@m.Descripcion</option>}</select></div></div><footer><button class="btn btn-secondary" @onclick="()=>_citaReagendar=null">Cerrar</button><button class="btn btn-primary" @onclick="ReagendarAsync">Guardar</button></footer></section>
+        <div class="appointment-detail-backdrop" @onclick="() => _citaReagendar = null"></div>
+        <section class="appointment-detail" role="dialog" aria-modal="true" aria-label="Reagendar Cita">
+            <header>
+                <div>
+                    <small class="text-primary fw-bold">REAGENDAR CITA</small>
+                    <h5 class="mb-0">Reagendar cita #@_citaReagendar.CiId — @_citaReagendar.CiNombreMas</h5>
+                </div>
+                <button type="button" @onclick="() => _citaReagendar = null">×</button>
+            </header>
+            <div class="detail-grid p-3">
+                <div>
+                    <label class="small text-muted fw-bold mb-1">Nueva Fecha</label>
+                    <InputDate class="form-control" @bind-Value="_reagendaFecha" />
+                </div>
+                <div>
+                    <label class="small text-muted fw-bold mb-1">Nueva Hora</label>
+                    <input class="form-control" @bind="_reagendaHora" placeholder="08:00" />
+                </div>
+                <div class="detail-observation">
+                    <label class="small text-muted fw-bold mb-1">Médico Veterinario</label>
+                    <select class="form-select" @bind="_reagendaMedico">
+                        @foreach (var m in _medicos)
+                        {
+                            <option value="@m.Id">@m.Descripcion</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <footer>
+                <button type="button" class="btn btn-secondary" @onclick="() => _citaReagendar = null">Cerrar</button>
+                <button type="button" class="btn btn-primary" @onclick="ReagendarAsync">
+                    <i class="bi bi-calendar-check me-1"></i>Guardar reagendamiento
+                </button>
+            </footer>
+        </section>
     }
     @if (_citaCancelar is not null)
     {
-        <div class="appointment-detail-backdrop"></div><section class="appointment-detail"><header><h5>Cancelar cita #@_citaCancelar.CiId</h5><button @onclick="()=>_citaCancelar=null">×</button></header><div class="p-3"><label>Motivo obligatorio</label><textarea class="form-control" @bind="_motivoCancelacion"></textarea></div><footer><button class="btn btn-secondary" @onclick="()=>_citaCancelar=null">Volver</button><button class="btn btn-danger" disabled="@string.IsNullOrWhiteSpace(_motivoCancelacion)" @onclick="CancelarCitaAsync">Confirmar cancelación</button></footer></section>
+        <div class="appointment-detail-backdrop" @onclick="() => _citaCancelar = null"></div>
+        <section class="appointment-detail" role="dialog" aria-modal="true" aria-label="Cancelar Cita">
+            <header>
+                <div>
+                    <small class="text-danger fw-bold">CANCELACIÓN DE CITA</small>
+                    <h5 class="mb-0">Cancelar cita #@_citaCancelar.CiId</h5>
+                </div>
+                <button type="button" @onclick="() => _citaCancelar = null">×</button>
+            </header>
+            <div class="p-3">
+                <div class="alert alert-warning py-2 small mb-3">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    Está a punto de cancelar la cita de <strong>@_citaCancelar.CiNombreMas</strong> (@_citaCancelar.CiNombre) programada para el <strong>@_citaCancelar.CiFecha.ToString("dd/MM/yyyy") a las @_citaCancelar.CiHora</strong>.
+                </div>
+                <label class="form-label small fw-bold mb-1">Motivo de cancelación *</label>
+                <div class="d-flex flex-wrap gap-1 mb-2">
+                    <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2 small" @onclick='() => _motivoCancelacion = "Cancelado por el tutor / cliente"'>
+                        Cancelado por el cliente
+                    </button>
+                    <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2 small" @onclick='() => _motivoCancelacion = "Imposibilidad de asistir del paciente"'>
+                        No puede asistir
+                    </button>
+                    <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2 small" @onclick='() => _motivoCancelacion = "Reprogramación de turno"'>
+                        Reprogramación
+                    </button>
+                    <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2 small" @onclick='() => _motivoCancelacion = "Cita duplicada o registrada por error"'>
+                        Duplicada / Error
+                    </button>
+                </div>
+                <textarea class="form-control" rows="3" placeholder="Escriba o seleccione un motivo..." @bind="_motivoCancelacion" @bind:event="oninput"></textarea>
+            </div>
+            <footer>
+                <button type="button" class="btn btn-secondary" @onclick="() => _citaCancelar = null">Volver</button>
+                <button type="button" class="btn btn-danger" disabled="@string.IsNullOrWhiteSpace(_motivoCancelacion)" @onclick="CancelarCitaAsync">
+                    <i class="bi bi-x-circle-fill me-1"></i>Confirmar cancelación
+                </button>
+            </footer>
+        </section>
     }
 
     <div class="row g-3 d-none">
@@ -657,6 +791,24 @@
     private void CerrarFormularioCita() => _mostrarFormularioCita = false;
     private void VerDetalleCita(CitaMedicaDto cita) => _citaDetalle = cita;
     private void CerrarDetalleCita() => _citaDetalle = null;
+    private void AbrirCancelarDesdeDetalle(CitaMedicaDto cita)
+    {
+        _citaDetalle = null;
+        AbrirCancelar(cita);
+    }
+    private void AbrirReagendarDesdeDetalle(CitaMedicaDto cita)
+    {
+        _citaDetalle = null;
+        AbrirReagendar(cita);
+    }
+    private async Task ConfirmarCitaDetalleAsync(int idCita)
+    {
+        await CambiarEstadoCitaAsync(idCita, "C");
+        if (_citaDetalle != null && _citaDetalle.CiId == idCita)
+        {
+            _citaDetalle.CiEstadoCita = "C";
+        }
+    }
     private async Task AbrirHistorialAsync(){_vistaAgenda="historial";if(_historial.Count==0)await CargarHistorialAsync();}
     private async Task CargarHistorialAsync(){if(_historialHasta<_historialDesde){_mensaje="El rango de historial no es válido.";return;}_historial=await AdmisionService.ObtenerCitasPorFechaAsync(_historialDesde,_historialHasta,0);}
     private void AbrirReagendar(CitaMedicaDto c){_citaReagendar=c;_reagendaFecha=c.CiFecha;_reagendaHora=c.CiHora;_reagendaMedico=c.CiUsuario;}
@@ -666,8 +818,9 @@
         if (_citaReagendar is null) return;
         try
         {
+            int idUser = SessionState.IdUser > 0 ? SessionState.IdUser : (SessionState.UsuarioActual?.IdUsuario ?? 1);
             int localidad = _citaReagendar.CiLocalidad > 0 ? _citaReagendar.CiLocalidad : SessionState.Localidad;
-            var ok = await AdmisionService.ReagendarCitaAsync(_citaReagendar.CiId, _reagendaFecha, _reagendaHora, _reagendaMedico, localidad, SessionState.IdUser);
+            var ok = await AdmisionService.ReagendarCitaAsync(_citaReagendar.CiId, _reagendaFecha, _reagendaHora, _reagendaMedico, localidad, idUser);
             _mensajeEsError = !ok;
             _mensaje = ok ? "Cita reagendada y verificada." : "No se guardó el reagendamiento. El horario puede estar ocupado o la cita ya no esté activa.";
             if (!ok) return;
@@ -675,6 +828,7 @@
             _fechaAgenda = _reagendaFecha;
             _idMedicoFiltro = _reagendaMedico;
             _citaReagendar = null;
+            _citaDetalle = null;
             await CargarAgendaAsync();
             await CargarHistorialAsync();
         }
@@ -684,7 +838,30 @@
             _mensaje = $"No se pudo reagendar la cita: {ex.Message}";
         }
     }
-    private async Task CancelarCitaAsync(){if(_citaCancelar is null)return;var ok=await AdmisionService.CancelarCitaAsync(_citaCancelar.CiId,_motivoCancelacion,SessionState.IdUser);_mensaje=ok?"Cita cancelada.":"No se pudo cancelar la cita.";if(ok)_citaCancelar=null;await CargarAgendaAsync();await CargarHistorialAsync();}
+    private async Task CancelarCitaAsync()
+    {
+        if (_citaCancelar is null) return;
+        try
+        {
+            int idCita = _citaCancelar.CiId;
+            int idUser = SessionState.IdUser > 0 ? SessionState.IdUser : (SessionState.UsuarioActual?.IdUsuario ?? 1);
+            var ok = await AdmisionService.CancelarCitaAsync(idCita, _motivoCancelacion, idUser);
+            _mensajeEsError = !ok;
+            _mensaje = ok ? $"Cita #{idCita} cancelada exitosamente." : "No se pudo cancelar la cita.";
+            if (ok)
+            {
+                _citaCancelar = null;
+                _citaDetalle = null;
+            }
+            await CargarAgendaAsync();
+            await CargarHistorialAsync();
+        }
+        catch (Exception ex)
+        {
+            _mensajeEsError = true;
+            _mensaje = $"Error al cancelar la cita: {ex.Message}";
+        }
+    }
     private async Task DiaAnterior() { _fechaAgenda = _fechaAgenda.AddDays(-1); await CargarAgendaAsync(); }
     private async Task DiaSiguiente() { _fechaAgenda = _fechaAgenda.AddDays(1); await CargarAgendaAsync(); }
     private async Task IrHoy() { _fechaAgenda = DateTime.Today; await CargarAgendaAsync(); }
@@ -808,8 +985,36 @@
 
     private async Task CambiarEstadoCitaAsync(int idCita, string nuevoEstado)
     {
-        await AdmisionService.ActualizarEstadoCitaAsync(idCita, nuevoEstado);
-        await CargarAgendaAsync();
+        try
+        {
+            var ok = await AdmisionService.ActualizarEstadoCitaAsync(idCita, nuevoEstado);
+            if (ok)
+            {
+                _mensajeEsError = false;
+                _mensaje = nuevoEstado switch
+                {
+                    "C" => $"Cita #{idCita} confirmada exitosamente.",
+                    "X" => $"Cita #{idCita} cancelada.",
+                    "N" => $"Cita #{idCita} marcada como por confirmar.",
+                    _ => $"Estado de la cita #{idCita} actualizado."
+                };
+            }
+            else
+            {
+                _mensajeEsError = true;
+                _mensaje = $"No se pudo actualizar el estado de la cita #{idCita}.";
+            }
+            await CargarAgendaAsync();
+            if (_citaDetalle != null && _citaDetalle.CiId == idCita)
+            {
+                _citaDetalle.CiEstadoCita = nuevoEstado;
+            }
+        }
+        catch (Exception ex)
+        {
+            _mensajeEsError = true;
+            _mensaje = $"Error al cambiar estado de la cita: {ex.Message}";
+        }
     }
 
     private async Task ExportarPdfAgendaAsync()

@@ -124,6 +124,7 @@ public class CatalogoItemGenericoDto
     public int Id { get; set; }
     public string Descripcion { get; set; } = string.Empty;
     public int? IdPadre { get; set; }
+    public bool RequiereTriaje { get; set; }
 }
 
 // =========================================================================

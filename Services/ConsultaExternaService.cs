@@ -180,21 +180,30 @@ public class ConsultaExternaService : IConsultaExternaService
             if (dto.MedNhcl > 0 && (dto.MedCliente <= 0 || string.IsNullOrEmpty(dto.MedEspecie)))
             {
                 var pacInfo = await _db.QueryFirstOrDefaultAsync<dynamic>(@"
-                    SELECT p.mas_cli_id, p.mas_especie, p.mas_anios, p.mas_meses
+                    SELECT p.mas_idcliente, e.especie_descripcion AS mas_especie, p.masyear, p.masmeses
                     FROM vt_pacientes p
+                    LEFT JOIN vt_especie e ON e.especie_id = p.mas_especie
                     WHERE p.mas_nhcl = @Nhcl", new { Nhcl = dto.MedNhcl });
 
                 if (pacInfo != null)
                 {
-                    if (dto.MedCliente <= 0 && pacInfo.mas_cli_id != null)
-                        dto.MedCliente = (int)pacInfo.mas_cli_id;
+                    if (dto.MedCliente <= 0 && pacInfo.mas_idcliente != null)
+                        dto.MedCliente = Convert.ToInt32(pacInfo.mas_idcliente);
                     if (string.IsNullOrEmpty(dto.MedEspecie) && pacInfo.mas_especie != null)
                         dto.MedEspecie = pacInfo.mas_especie.ToString();
-                    if (dto.MedEdadAnios <= 0 && pacInfo.mas_anios != null)
-                        dto.MedEdadAnios = (int)pacInfo.mas_anios;
-                    if (dto.MedEdadMeses <= 0 && pacInfo.mas_meses != null)
-                        dto.MedEdadMeses = (int)pacInfo.mas_meses;
+                    string? strYear = pacInfo.masyear?.ToString();
+                    if (dto.MedEdadAnios <= 0 && int.TryParse(strYear, out int anios))
+                        dto.MedEdadAnios = anios;
+
+                    string? strMeses = pacInfo.masmeses?.ToString();
+                    if (dto.MedEdadMeses <= 0 && int.TryParse(strMeses, out int meses))
+                        dto.MedEdadMeses = meses;
                 }
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.MedMotivo))
+            {
+                dto.MedMotivo = "Triaje y signos vitales";
             }
 
             var existeSec = await _db.ExecuteScalarAsync<int?>(

@@ -3,30 +3,373 @@
 @inject SessionStateService Session
 @inject IAdministracionClinicaService AdminService
 @inject NavigationManager Nav
-<PageTitle>Localidades | e-ForVets</PageTitle>
+<PageTitle>Localidades y especialidades | e-ForVets</PageTitle>
 
 @if (_autorizado)
 {
-<div class="catalog-page"><SecurityNav /><header><div><span>Administración</span><h1>Localidades y especialidades</h1><p>Administra sedes y los servicios disponibles en cada una.</p></div><button @onclick="Nuevo">+ Nuevo</button></header>
-@if (!string.IsNullOrWhiteSpace(_mensaje)) { <div class="message @(_error ? "error" : "success")">@_mensaje</div> }
-<div class="btn-group mb-3"><button class="btn @(_tab == "localidades" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarTab("localidades")'>Localidades</button><button class="btn @(_tab == "asignaciones" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarTab("asignaciones")'>Especialidades por localidad</button></div>
-@if (_tab == "localidades")
-{<div class="catalog-layout"><section><h2>Localidades</h2>@foreach (var x in _localidades) { <button class="catalog-row @(x.Id == _localidad.Id ? "active" : "")" @onclick="() => Editar(x)"><span><strong>@x.Localidad</strong><small>@x.Ciudad, @x.Provincia · @(x.Estado == "A" ? "Activa" : "Inactiva")</small></span><i>Editar</i></button> }</section><aside><h2>@(_localidad.Id > 0 ? "Editar localidad" : "Nueva localidad")</h2><div class="form-grid"><label>Nombre<input @bind="_localidad.Localidad" /></label><label>Empresa<input @bind="_localidad.Empresa" /></label><label>RUC<input @bind="_localidad.Ruc" /></label><label>Teléfono<input @bind="_localidad.Telefono" /></label><label>Administrador<input @bind="_localidad.Administrador" /></label><label>Provincia<select @bind="_localidad.IdProvincia" @bind:after="CargarCiudades"><option value="0">Seleccione</option>@foreach (var x in _provincias) { <option value="@x.Id">@x.Descripcion</option> }</select></label><label>Ciudad<select @bind="_localidad.IdCiudad"><option value="0">Seleccione</option>@foreach (var x in _ciudades) { <option value="@x.Id">@x.Descripcion</option> }</select></label><label>Prefijo<input maxlength="2" @bind="_localidad.Prefijo" /></label></div><label>Dirección<input @bind="_localidad.Direccion" /></label><label class="check"><input type="checkbox" checked="@(_localidad.Estado == "A")" @onchange="CambiarEstadoLocalidad" /> Activa</label><button class="save" @onclick="GuardarLocalidad">Guardar</button></aside></div>}
-else
-{<div class="catalog-layout"><section><h2>Asignaciones</h2>@foreach (var x in _asignaciones) { <button class="catalog-row @(x.Id == _asignacion.Id ? "active" : "")" @onclick="() => Editar(x)"><span><strong>@x.Especialidad</strong><small>@x.Localidad · @(x.Estado == "A" ? "Activa" : "Inactiva")</small></span><i>Editar</i></button> }</section><aside><h2>@(_asignacion.Id > 0 ? "Editar asignación" : "Nueva asignación")</h2><label>Especialidad<select @bind="_asignacion.IdEspecialidad"><option value="0">Seleccione</option>@foreach (var x in _especialidades.Where(x => x.Estado == "A")) { <option value="@x.Id">@x.Descripcion</option> }</select></label><label>Localidad<select @bind="_asignacion.IdLocalidad"><option value="0">Seleccione</option>@foreach (var x in _localidades.Where(x => x.Estado == "A")) { <option value="@x.Id">@x.Localidad</option> }</select></label><label class="check"><input type="checkbox" checked="@(_asignacion.Estado == "A")" @onchange="CambiarEstadoAsignacion" /> Activa</label><button class="save" @onclick="GuardarAsignacion">Guardar</button></aside></div>}</div>
+    <div class="catalog-page">
+        <SecurityNav />
+        <header>
+            <div>
+                <span>Administración</span>
+                <h1>Localidades y especialidades</h1>
+                <p>Administra sedes, especialidades médicas (con requerimiento de triaje) y los servicios asignados a cada sede.</p>
+            </div>
+            <button @onclick="Nuevo">+ Nuevo</button>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_mensaje))
+        {
+            <div class="message @(_error ? "error" : "success")">@_mensaje</div>
+        }
+
+        <div class="btn-group mb-3">
+            <button class="btn @(_tab == "localidades" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarTab("localidades")'>
+                <i class="bi bi-geo-alt me-1"></i>Localidades
+            </button>
+            <button class="btn @(_tab == "especialidades" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarTab("especialidades")'>
+                <i class="bi bi-heart-pulse me-1"></i>Especialidades (@_especialidadesAdmin.Count)
+            </button>
+            <button class="btn @(_tab == "asignaciones" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarTab("asignaciones")'>
+                <i class="bi bi-diagram-3 me-1"></i>Especialidades por localidad
+            </button>
+        </div>
+
+        @if (_tab == "localidades")
+        {
+            <div class="catalog-layout">
+                <section>
+                    <h2>Localidades</h2>
+                    @foreach (var x in _localidades)
+                    {
+                        <button class="catalog-row @(x.Id == _localidad.Id ? "active" : "")" @onclick="() => Editar(x)">
+                            <span>
+                                <strong>@x.Localidad</strong>
+                                <small>@x.Ciudad, @x.Provincia · @(x.Estado == "A" ? "Activa" : "Inactiva")</small>
+                            </span>
+                            <i>Editar</i>
+                        </button>
+                    }
+                </section>
+                <aside>
+                    <h2>@(_localidad.Id > 0 ? "Editar localidad" : "Nueva localidad")</h2>
+                    <div class="form-grid">
+                        <label>Nombre<input @bind="_localidad.Localidad" /></label>
+                        <label>Empresa<input @bind="_localidad.Empresa" /></label>
+                        <label>RUC<input @bind="_localidad.Ruc" /></label>
+                        <label>Teléfono<input @bind="_localidad.Telefono" /></label>
+                        <label>Administrador<input @bind="_localidad.Administrador" /></label>
+                        <label>
+                            Provincia
+                            <select @bind="_localidad.IdProvincia" @bind:after="CargarCiudades">
+                                <option value="0">Seleccione</option>
+                                @foreach (var x in _provincias)
+                                {
+                                    <option value="@x.Id">@x.Descripcion</option>
+                                }
+                            </select>
+                        </label>
+                        <label>
+                            Ciudad
+                            <select @bind="_localidad.IdCiudad">
+                                <option value="0">Seleccione</option>
+                                @foreach (var x in _ciudades)
+                                {
+                                    <option value="@x.Id">@x.Descripcion</option>
+                                }
+                            </select>
+                        </label>
+                        <label>Prefijo<input maxlength="2" @bind="_localidad.Prefijo" /></label>
+                    </div>
+                    <label>Dirección<input @bind="_localidad.Direccion" /></label>
+                    <label class="check">
+                        <input type="checkbox" checked="@(_localidad.Estado == "A")" @onchange="CambiarEstadoLocalidad" /> Activa
+                    </label>
+                    <button class="save" @onclick="GuardarLocalidad">Guardar</button>
+                </aside>
+            </div>
+        }
+        else if (_tab == "especialidades")
+        {
+            <div class="catalog-layout">
+                <section>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h2>Catálogo de Especialidades</h2>
+                        <span class="badge bg-light text-dark border">
+                            @_especialidadesAdmin.Count(e => e.Estado == "A") activas · @_especialidadesAdmin.Count(e => e.Estado != "A") inactivas
+                        </span>
+                    </div>
+                    <div class="mb-2">
+                        <input type="search" class="form-control form-control-sm" placeholder="Buscar especialidad..." @bind="_filtroEsp" @bind:event="oninput" />
+                    </div>
+                    <div style="max-height: 520px; overflow-y: auto;">
+                        @if (EspecialidadesFiltradas.Count == 0)
+                        {
+                            <div class="text-muted p-3 text-center">No se encontraron especialidades.</div>
+                        }
+                        else
+                        {
+                            @foreach (var esp in EspecialidadesFiltradas)
+                            {
+                                <div class="catalog-row @(esp.Id == _espEdit.Id ? "active" : "") d-flex align-items-center justify-content-between p-2 mb-2">
+                                    <button type="button" class="btn text-start p-0 flex-grow-1 border-0 bg-transparent" @onclick="() => EditarEspecialidad(esp)">
+                                        <strong>@esp.Descripcion</strong>
+                                        <small class="d-flex gap-2 align-items-center mt-1">
+                                            <span class="badge @(esp.Estado == "A" ? "bg-success" : "bg-secondary")">
+                                                @(esp.Estado == "A" ? "Activa" : "Inactiva")
+                                            </span>
+                                            @if (esp.RequiereTriaje)
+                                            {
+                                                <span class="badge bg-warning text-dark">
+                                                    <i class="bi bi-shield-fill-exclamation me-1"></i>Requiere triaje
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-light text-muted border">Sin triaje</span>
+                                            }
+                                        </small>
+                                    </button>
+                                    <div class="btn-group btn-group-sm ms-2">
+                                        <button type="button" class="btn btn-outline-primary" title="Editar" @onclick="() => EditarEspecialidad(esp)">
+                                            Editar
+                                        </button>
+                                        <button type="button" class="btn @(esp.Estado == "A" ? "btn-outline-danger" : "btn-outline-success")"
+                                                title="@(esp.Estado == "A" ? "Quitar / Desactivar de las opciones activas" : "Reactivar especialidad")"
+                                                @onclick="() => AlternarEstadoEspecialidadAsync(esp)">
+                                            @(esp.Estado == "A" ? "Quitar" : "Activar")
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </section>
+                <aside>
+                    <h2>@(_espEdit.Id > 0 ? $"Editar especialidad #{_espEdit.Id}" : "Nueva especialidad")</h2>
+                    <label>
+                        Nombre de la especialidad *
+                        <input maxlength="150" @bind="_espEdit.Descripcion" placeholder="Ej: DERMATOLOGIA, CARDIOLOGIA..." />
+                    </label>
+                    <label class="check mt-2">
+                        <input type="checkbox" checked="@(_espEdit.Estado == "A")" @onchange="CambiarEstadoEsp" />
+                        Especialidad activa (disponible para citas y asignaciones)
+                    </label>
+                    <label class="check mt-2">
+                        <input type="checkbox" @bind="_espEdit.RequiereTriaje" />
+                        Requiere triaje (solicitar semáforo de triaje al generar orden en Recepción)
+                    </label>
+                    <small class="text-muted d-block mb-3" style="font-size:0.75rem;">
+                        Si está marcado, en <strong>Recepción y triaje</strong> se solicitará obligatoriamente el semáforo de triaje al registrar una orden con esta especialidad. Si se desmarca, el triaje no será requerido.
+                    </small>
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="save flex-grow-1" @onclick="GuardarEspecialidadAsync" disabled="@_guardandoEsp">
+                            @(_guardandoEsp ? "Guardando..." : "Guardar especialidad")
+                        </button>
+                        @if (_espEdit.Id > 0)
+                        {
+                            <button type="button" class="btn btn-outline-secondary" @onclick="NuevaEspecialidad">
+                                Cancelar
+                            </button>
+                        }
+                    </div>
+                </aside>
+            </div>
+        }
+        else
+        {
+            <div class="catalog-layout">
+                <section>
+                    <h2>Asignaciones</h2>
+                    @foreach (var x in _asignaciones)
+                    {
+                        <button class="catalog-row @(x.Id == _asignacion.Id ? "active" : "")" @onclick="() => Editar(x)">
+                            <span>
+                                <strong>@x.Especialidad</strong>
+                                <small>@x.Localidad · @(x.Estado == "A" ? "Activa" : "Inactiva")</small>
+                            </span>
+                            <i>Editar</i>
+                        </button>
+                    }
+                </section>
+                <aside>
+                    <h2>@(_asignacion.Id > 0 ? "Editar asignación" : "Nueva asignación")</h2>
+                    <label>
+                        Especialidad
+                        <select @bind="_asignacion.IdEspecialidad">
+                            <option value="0">Seleccione</option>
+                            @foreach (var x in _especialidades.Where(x => x.Estado == "A"))
+                            {
+                                <option value="@x.Id">@x.Descripcion</option>
+                            }
+                        </select>
+                    </label>
+                    <label>
+                        Localidad
+                        <select @bind="_asignacion.IdLocalidad">
+                            <option value="0">Seleccione</option>
+                            @foreach (var x in _localidades.Where(x => x.Estado == "A"))
+                            {
+                                <option value="@x.Id">@x.Localidad</option>
+                            }
+                        </select>
+                    </label>
+                    <label class="check">
+                        <input type="checkbox" checked="@(_asignacion.Estado == "A")" @onchange="CambiarEstadoAsignacion" /> Activa
+                    </label>
+                    <button class="save" @onclick="GuardarAsignacion">Guardar</button>
+                </aside>
+            </div>
+        }
+    </div>
 }
 
 @code {
-private bool _autorizado,_error; private string _tab="localidades",_mensaje="";
-private List<LocalidadAdministrativaDto> _localidades=[]; private List<EspecialidadLocalidadDto> _asignaciones=[]; private List<CatalogoItemGenericoDto> _provincias=[],_ciudades=[]; private List<CatalogoAdministrativoDto> _especialidades=[];
-private LocalidadAdministrativaDto _localidad=new(); private EspecialidadLocalidadDto _asignacion=new();
-protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated||Session.TipoUser!=1){Nav.NavigateTo("/dashboard");return;}_autorizado=true;await Cargar();}
-private async Task Cargar(){var a=AdminService.ObtenerLocalidadesAsync();var b=AdminService.ObtenerEspecialidadesLocalidadAsync();var c=AdminService.ObtenerProvinciasAsync();var d=AdminService.ObtenerCatalogoAsync("especialidades");await Task.WhenAll(a,b,c,d);_localidades=a.Result;_asignaciones=b.Result;_provincias=c.Result;_especialidades=d.Result;}
-private void CambiarTab(string tab){_tab=tab;Nuevo();} private void Nuevo(){_localidad=new(){Estado="A"};_asignacion=new(){Estado="A"};_ciudades=[];_mensaje="";}
-private async Task Editar(LocalidadAdministrativaDto x){_localidad=new(){Id=x.Id,Localidad=x.Localidad,Direccion=x.Direccion,Telefono=x.Telefono,Ruc=x.Ruc,Administrador=x.Administrador,Estado=x.Estado,Empresa=x.Empresa,Prefijo=x.Prefijo,Region=x.Region,IdCiudad=x.IdCiudad,IdProvincia=x.IdProvincia};await CargarCiudades();}
-private void Editar(EspecialidadLocalidadDto x)=>_asignacion=new(){Id=x.Id,IdEspecialidad=x.IdEspecialidad,IdLocalidad=x.IdLocalidad,Estado=x.Estado};
-private async Task CargarCiudades()=>_ciudades=_localidad.IdProvincia>0?await AdminService.ObtenerCiudadesAsync(_localidad.IdProvincia):[];
-private void CambiarEstadoLocalidad(ChangeEventArgs e)=>_localidad.Estado=e.Value is true?"A":"I"; private void CambiarEstadoAsignacion(ChangeEventArgs e)=>_asignacion.Estado=e.Value is true?"A":"I";
-private async Task GuardarLocalidad(){var r=await AdminService.GuardarLocalidadAsync(_localidad,Session.IdUser);_error=!r.Exito;_mensaje=r.Mensaje;if(r.Exito){Nuevo();await Cargar();}}
-private async Task GuardarAsignacion(){var r=await AdminService.GuardarEspecialidadLocalidadAsync(_asignacion,Session.IdUser);_error=!r.Exito;_mensaje=r.Mensaje;if(r.Exito){Nuevo();await Cargar();}}
+    private bool _autorizado, _error, _guardandoEsp;
+    private string _tab = "localidades", _mensaje = "", _filtroEsp = "";
+    private List<LocalidadAdministrativaDto> _localidades = [];
+    private List<EspecialidadLocalidadDto> _asignaciones = [];
+    private List<CatalogoItemGenericoDto> _provincias = [], _ciudades = [];
+    private List<CatalogoAdministrativoDto> _especialidades = [];
+    private List<EspecialidadAdministrativaDto> _especialidadesAdmin = [];
+
+    private LocalidadAdministrativaDto _localidad = new();
+    private EspecialidadLocalidadDto _asignacion = new();
+    private EspecialidadAdministrativaDto _espEdit = new() { Estado = "A", RequiereTriaje = true };
+
+    private List<EspecialidadAdministrativaDto> EspecialidadesFiltradas =>
+        string.IsNullOrWhiteSpace(_filtroEsp)
+            ? _especialidadesAdmin
+            : _especialidadesAdmin.Where(e => e.Descripcion.Contains(_filtroEsp, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated || Session.TipoUser != 1)
+        {
+            Nav.NavigateTo("/dashboard");
+            return;
+        }
+        _autorizado = true;
+        await Cargar();
+    }
+
+    private async Task Cargar()
+    {
+        var a = AdminService.ObtenerLocalidadesAsync();
+        var b = AdminService.ObtenerEspecialidadesLocalidadAsync();
+        var c = AdminService.ObtenerProvinciasAsync();
+        var d = AdminService.ObtenerCatalogoAsync("especialidades");
+        var e = AdminService.ObtenerEspecialidadesAdminAsync();
+        await Task.WhenAll(a, b, c, d, e);
+        _localidades = a.Result;
+        _asignaciones = b.Result;
+        _provincias = c.Result;
+        _especialidades = d.Result;
+        _especialidadesAdmin = e.Result;
+    }
+
+    private void CambiarTab(string tab)
+    {
+        _tab = tab;
+        Nuevo();
+    }
+
+    private void Nuevo()
+    {
+        _localidad = new() { Estado = "A" };
+        _asignacion = new() { Estado = "A" };
+        NuevaEspecialidad();
+        _ciudades = [];
+        _mensaje = "";
+    }
+
+    private void NuevaEspecialidad()
+    {
+        _espEdit = new() { Estado = "A", RequiereTriaje = true };
+    }
+
+    private void EditarEspecialidad(EspecialidadAdministrativaDto esp)
+    {
+        _espEdit = new()
+        {
+            Id = esp.Id,
+            Descripcion = esp.Descripcion,
+            Estado = esp.Estado,
+            RequiereTriaje = esp.RequiereTriaje
+        };
+        _mensaje = "";
+    }
+
+    private void CambiarEstadoEsp(ChangeEventArgs e) => _espEdit.Estado = e.Value is true ? "A" : "I";
+
+    private async Task GuardarEspecialidadAsync()
+    {
+        _guardandoEsp = true;
+        var r = await AdminService.GuardarEspecialidadAsync(_espEdit, Session.IdUser);
+        _guardandoEsp = false;
+        _error = !r.Exito;
+        _mensaje = r.Mensaje;
+        if (r.Exito)
+        {
+            NuevaEspecialidad();
+            await Cargar();
+        }
+    }
+
+    private async Task AlternarEstadoEspecialidadAsync(EspecialidadAdministrativaDto esp)
+    {
+        string nuevoEstado = esp.Estado == "A" ? "I" : "A";
+        var r = await AdminService.CambiarEstadoEspecialidadAsync(esp.Id, nuevoEstado, Session.IdUser);
+        _error = !r.Exito;
+        _mensaje = r.Mensaje;
+        if (r.Exito)
+        {
+            await Cargar();
+        }
+    }
+
+    private async Task Editar(LocalidadAdministrativaDto x)
+    {
+        _localidad = new()
+        {
+            Id = x.Id,
+            Localidad = x.Localidad,
+            Direccion = x.Direccion,
+            Telefono = x.Telefono,
+            Ruc = x.Ruc,
+            Administrador = x.Administrador,
+            Estado = x.Estado,
+            Empresa = x.Empresa,
+            Prefijo = x.Prefijo,
+            Region = x.Region,
+            IdCiudad = x.IdCiudad,
+            IdProvincia = x.IdProvincia
+        };
+        await CargarCiudades();
+    }
+
+    private void Editar(EspecialidadLocalidadDto x) =>
+        _asignacion = new() { Id = x.Id, IdEspecialidad = x.IdEspecialidad, IdLocalidad = x.IdLocalidad, Estado = x.Estado };
+
+    private async Task CargarCiudades() =>
+        _ciudades = _localidad.IdProvincia > 0 ? await AdminService.ObtenerCiudadesAsync(_localidad.IdProvincia) : [];
+
+    private void CambiarEstadoLocalidad(ChangeEventArgs e) => _localidad.Estado = e.Value is true ? "A" : "I";
+    private void CambiarEstadoAsignacion(ChangeEventArgs e) => _asignacion.Estado = e.Value is true ? "A" : "I";
+
+    private async Task GuardarLocalidad()
+    {
+        var r = await AdminService.GuardarLocalidadAsync(_localidad, Session.IdUser);
+        _error = !r.Exito;
+        _mensaje = r.Mensaje;
+        if (r.Exito) { Nuevo(); await Cargar(); }
+    }
+
+    private async Task GuardarAsignacion()
+    {
+        var r = await AdminService.GuardarEspecialidadLocalidadAsync(_asignacion, Session.IdUser);
+        _error = !r.Exito;
+        _mensaje = r.Mensaje;
+        if (r.Exito) { Nuevo(); await Cargar(); }
+    }
 }

@@ -149,4 +149,11 @@ public sealed class IStatDto
     public string Creatinina { get; set; } = ""; // Crea
 }
 
+public sealed class EspecialidadAdministrativaDto
+{
+    public int Id { get; set; }
+    public string Descripcion { get; set; } = string.Empty;
+    public string Estado { get; set; } = "A";
+    public bool RequiereTriaje { get; set; }
+}
 

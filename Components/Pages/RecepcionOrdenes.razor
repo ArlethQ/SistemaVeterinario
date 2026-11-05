@@ -172,14 +172,25 @@
                                 </select>
                             </div>
 
-                            <div class="col-md-6">
-                                <label class="form-label small fw-bold">5. Semáforo Triaje</label>
-                                <select class="form-select form-select-sm" @bind="_nuevaOrden.ColorTriaje">
-                                    <option value="green">🟢 Verde — Estándar</option>
-                                    <option value="yellow">🟡 Amarillo — Prioritario</option>
-                                    <option value="red">🔴 Rojo — Emergencia</option>
-                                </select>
-                            </div>
+                            @if (EspecialidadRequiereTriaje)
+                            {
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">5. Semáforo Triaje</label>
+                                    <select class="form-select form-select-sm" @bind="_nuevaOrden.ColorTriaje">
+                                        <option value="green">🟢 Verde — Estándar</option>
+                                        <option value="yellow">🟡 Amarillo — Prioritario</option>
+                                        <option value="red">🔴 Rojo — Emergencia</option>
+                                    </select>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="col-md-6 d-flex align-items-center">
+                                    <div class="alert alert-light border small text-muted py-2 px-2 m-0 w-100" style="font-size:0.75rem;">
+                                        <i class="bi bi-info-circle me-1 text-primary"></i>Esta especialidad <strong>no requiere triaje</strong>.
+                                    </div>
+                                </div>
+                            }
 
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Fecha Atención</label>
@@ -285,6 +296,9 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="btn-group btn-group-sm">
+                                                <a href="/admision/triaje/@o.IdOrden/@o.Nhcl" class="btn btn-outline-warning text-dark fw-semibold" title="Triaje y Constantes de Ingreso">
+                                                    Triaje
+                                                </a>
                                                 <a href="/consulta/fichamedica/@o.IdOrden/@o.Nhcl" class="btn btn-outline-primary" title="Ficha Médica SOAP">
                                                     SOAP
                                                 </a>
@@ -483,6 +497,9 @@
         }
     }
 
+    private bool EspecialidadRequiereTriaje =>
+        _especialidades.FirstOrDefault(e => e.Id == _nuevaOrden.IdEspecialidad)?.RequiereTriaje ?? true;
+
     private async Task CrearOrdenAtencionAsync()
     {
         if (_nuevaOrden.Nhcl <= 0)
@@ -490,6 +507,15 @@
             _esError = true;
             _mensajeAlerta = "Seleccione primero un paciente (NHCL) de la lista.";
             return;
+        }
+
+        if (!EspecialidadRequiereTriaje)
+        {
+            _nuevaOrden.ColorTriaje = string.Empty;
+        }
+        else if (string.IsNullOrWhiteSpace(_nuevaOrden.ColorTriaje))
+        {
+            _nuevaOrden.ColorTriaje = "green";
         }
 
         _nuevaOrden.IdLocalidad = SessionState.Localidad;

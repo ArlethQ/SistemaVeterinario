@@ -783,8 +783,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         try
         {
-            return (await _db.QueryAsync<CatalogoItemGenericoDto>(
-                "SELECT es_id AS Id, es_descripcion AS Descripcion FROM vt_especialidades WHERE es_estado = 'A' ORDER BY es_descripcion")).ToList();
+            return (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
+                SELECT 
+                    es_id AS Id, 
+                    RTRIM(es_descripcion) AS Descripcion,
+                    CASE WHEN UPPER(RTRIM(ISNULL(es_servicio, ''))) = 'S' THEN 1 ELSE 0 END AS RequiereTriaje
+                FROM vt_especialidades 
+                WHERE ISNULL(es_estado, 'A') = 'A' 
+                ORDER BY es_descripcion")).ToList();
         }
         catch (Exception ex)
         {
@@ -880,7 +886,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         try
         {
             const string insertSql = @"
-                UPDATE vt_pacientes SET mas_colortriaje = @ColorTriaje WHERE mas_nhcl = @Nhcl;
+                IF @ColorTriaje IS NOT NULL AND RTRIM(@ColorTriaje) <> ''
+                    UPDATE vt_pacientes SET mas_colortriaje = @ColorTriaje WHERE mas_nhcl = @Nhcl;
 
                 INSERT INTO vt_ordenAtencion (
                     ordenAten_nombre, ordenAten_idcliente, ordenAten_nhcl, ordenAten_idMedico,
@@ -1223,17 +1230,31 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         try
         {
+            var columnas = await ObtenerColumnasTablaAsync("vt_citas");
+            var cambios = new List<string> { "ci_estadocita = @Estado" };
+            if (nuevoEstado == "X")
+            {
+                cambios.Add("ci_estado = 'I'");
+            }
+            else if (nuevoEstado == "C" || nuevoEstado == "N" || nuevoEstado == "A")
+            {
+                cambios.Add("ci_estado = 'A'");
+            }
+            if (columnas.Contains("ci_HoraModificacion"))
+            {
+                cambios.Add("ci_HoraModificacion = GETDATE()");
+            }
+
             int rows = await _db.ExecuteAsync(
-                "UPDATE vt_citas SET ci_estadocita = @Estado WHERE ci_id = @IdCita",
+                $"UPDATE vt_citas SET {string.Join(", ", cambios)} WHERE ci_id = @IdCita",
                 new { IdCita = idCita, Estado = nuevoEstado });
-            if (rows > 0) return true;
+            return rows > 0;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error actualizando el estado de la cita en SQL Server");
+            _logger.LogError(ex, "Error actualizando el estado de la cita #{IdCita} a {Estado} en SQL Server", idCita, nuevoEstado);
             throw;
         }
-        throw new InvalidOperationException("SQL Server no confirmó la actualización de la cita.");
     }
 
     public async Task<bool> ReagendarCitaAsync(int idCita, DateTime fecha, string hora, int idMedico, int idLocalidad, int idUsuario)
@@ -1278,15 +1299,35 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<bool> CancelarCitaAsync(int idCita, string motivo, int idUsuario)
     {
-        if (idCita <= 0 || string.IsNullOrWhiteSpace(motivo)) return false;
-        var columnas = await ObtenerColumnasTablaAsync("vt_citas");
-        var cambios = new List<string> { "ci_estado='I'", "ci_estadocita='X'" };
-        if (columnas.Contains("ci_refeliminacion")) cambios.Add("ci_refeliminacion=@Motivo");
-        if (columnas.Contains("ci_delete")) cambios.Add("ci_delete=@IdUsuario");
-        if (columnas.Contains("ci_HoraModificacion")) cambios.Add("ci_HoraModificacion=GETDATE()");
-        int rows = await _db.ExecuteAsync($"UPDATE vt_citas SET {string.Join(',', cambios)} WHERE ci_id=@IdCita", new { IdCita = idCita, Motivo = motivo.Trim(), IdUsuario = idUsuario });
-        if (rows > 0) await _db.RegistrarBitacoraAsync($"Cancelación de cita #{idCita}: {motivo.Trim()}", idUsuario);
-        return rows > 0;
+        if (idCita <= 0) return false;
+        string motivoNormalizado = string.IsNullOrWhiteSpace(motivo) ? "Cancelada por el usuario" : motivo.Trim();
+        int usuarioAuditoria = idUsuario > 0 ? idUsuario : 1;
+        try
+        {
+            var columnas = await ObtenerColumnasTablaAsync("vt_citas");
+            var cambios = new List<string> { "ci_estado='I'", "ci_estadocita='X'" };
+            if (columnas.Contains("ci_refeliminacion")) cambios.Add("ci_refeliminacion=@Motivo");
+            if (columnas.Contains("ci_delete")) cambios.Add("ci_delete=@IdUsuario");
+            if (columnas.Contains("ci_HoraModificacion")) cambios.Add("ci_HoraModificacion=GETDATE()");
+            int rows = await _db.ExecuteAsync($"UPDATE vt_citas SET {string.Join(',', cambios)} WHERE ci_id=@IdCita", new { IdCita = idCita, Motivo = motivoNormalizado, IdUsuario = usuarioAuditoria });
+            if (rows > 0)
+            {
+                try
+                {
+                    await _db.RegistrarBitacoraAsync($"Cancelación de cita #{idCita}: {motivoNormalizado}", usuarioAuditoria);
+                }
+                catch
+                {
+                    // No bloquear la cancelación si falla la bitácora
+                }
+            }
+            return rows > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelando cita #{IdCita} en SQL Server", idCita);
+            throw;
+        }
     }
 
     public async Task<bool> BloquearHorarioMedicoAsync(int idMedico, DateTime fecha, string horaDesde, string horaHasta, int idLocalidad)

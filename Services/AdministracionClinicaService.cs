@@ -20,6 +20,9 @@ public interface IAdministracionClinicaService
     Task<(bool Exito, string Mensaje)> GuardarLocalidadAsync(LocalidadAdministrativaDto localidad, int idUsuario);
     Task<List<EspecialidadLocalidadDto>> ObtenerEspecialidadesLocalidadAsync();
     Task<(bool Exito, string Mensaje)> GuardarEspecialidadLocalidadAsync(EspecialidadLocalidadDto relacion, int idUsuario);
+    Task<List<EspecialidadAdministrativaDto>> ObtenerEspecialidadesAdminAsync();
+    Task<(bool Exito, string Mensaje)> GuardarEspecialidadAsync(EspecialidadAdministrativaDto especialidad, int idUsuario);
+    Task<(bool Exito, string Mensaje)> CambiarEstadoEspecialidadAsync(int idEspecialidad, string nuevoEstado, int idUsuario);
     Task<IngresoCirugiaDto> ObtenerIngresoCirugiaAsync(int idOrden, int nhcl);
     Task<bool> GuardarIngresoCirugiaAsync(IngresoCirugiaDto ingreso, int idUsuario);
     Task<List<DespachoClinicoDto>> ObtenerDespachosAsync(DateTime desde, DateTime hasta, int tipo = 0);
@@ -356,6 +359,94 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
         if (filas <= 0) return (false, "No se pudo guardar la asignación.");
         await _db.RegistrarBitacoraAsync("Asignación de especialidad a localidad", idUsuario);
         return (true, "Asignación guardada correctamente.");
+    }
+
+    public async Task<List<EspecialidadAdministrativaDto>> ObtenerEspecialidadesAdminAsync()
+    {
+        const string sql = @"SELECT 
+            es_id AS Id, 
+            RTRIM(es_descripcion) AS Descripcion, 
+            ISNULL(es_estado, 'A') AS Estado,
+            CASE WHEN UPPER(RTRIM(ISNULL(es_servicio, ''))) = 'S' THEN 1 ELSE 0 END AS RequiereTriaje
+        FROM vt_especialidades 
+        ORDER BY es_descripcion";
+        return (await _db.QueryAsync<EspecialidadAdministrativaDto>(sql)).ToList();
+    }
+
+    public async Task<(bool Exito, string Mensaje)> GuardarEspecialidadAsync(EspecialidadAdministrativaDto especialidad, int idUsuario)
+    {
+        if (string.IsNullOrWhiteSpace(especialidad.Descripcion))
+            return (false, "El nombre de la especialidad es obligatorio.");
+
+        string servicio = especialidad.RequiereTriaje ? "S" : "";
+        string estado = especialidad.Estado == "A" ? "A" : "I";
+        string desc = especialidad.Descripcion.Trim().ToUpperInvariant();
+
+        if (especialidad.Id > 0)
+        {
+            int duplicados = await _db.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM vt_especialidades WHERE UPPER(RTRIM(es_descripcion)) = @Desc AND es_id <> @Id",
+                new { Desc = desc, Id = especialidad.Id });
+            if (duplicados > 0)
+                return (false, "Ya existe otra especialidad con ese nombre.");
+
+            const string updateSql = @"
+                UPDATE vt_especialidades 
+                SET es_descripcion = @Descripcion, 
+                    es_estado = @Estado, 
+                    es_servicio = @Servicio 
+                WHERE es_id = @Id";
+            int filas = await _db.ExecuteAsync(updateSql, new
+            {
+                Descripcion = desc,
+                Estado = estado,
+                Servicio = servicio,
+                Id = especialidad.Id
+            });
+            if (filas > 0)
+            {
+                await _db.RegistrarBitacoraAsync($"Actualización especialidad {desc}", idUsuario);
+                return (true, "Especialidad actualizada correctamente.");
+            }
+            return (false, "No se encontró la especialidad para actualizar.");
+        }
+        else
+        {
+            int duplicados = await _db.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM vt_especialidades WHERE UPPER(RTRIM(es_descripcion)) = @Desc",
+                new { Desc = desc });
+            if (duplicados > 0)
+                return (false, "Ya existe una especialidad con ese nombre.");
+
+            const string insertSql = @"
+                INSERT INTO vt_especialidades (es_descripcion, es_estado, es_servicio) 
+                VALUES (@Descripcion, @Estado, @Servicio)";
+            await _db.ExecuteAsync(insertSql, new
+            {
+                Descripcion = desc,
+                Estado = estado,
+                Servicio = servicio
+            });
+            await _db.RegistrarBitacoraAsync($"Creación de especialidad {desc}", idUsuario);
+            return (true, "Especialidad creada exitosamente.");
+        }
+    }
+
+    public async Task<(bool Exito, string Mensaje)> CambiarEstadoEspecialidadAsync(int idEspecialidad, string nuevoEstado, int idUsuario)
+    {
+        if (idEspecialidad <= 0)
+            return (false, "Identificador de especialidad no válido.");
+
+        string estado = nuevoEstado == "A" ? "A" : "I";
+        const string sql = "UPDATE vt_especialidades SET es_estado = @Estado WHERE es_id = @Id";
+        int filas = await _db.ExecuteAsync(sql, new { Estado = estado, Id = idEspecialidad });
+        if (filas > 0)
+        {
+            string accion = estado == "A" ? "Activación" : "Desactivación / eliminación";
+            await _db.RegistrarBitacoraAsync($"{accion} especialidad ID {idEspecialidad}", idUsuario);
+            return (true, estado == "A" ? "Especialidad activada correctamente." : "Especialidad desactivada / quitada correctamente.");
+        }
+        return (false, "No se pudo cambiar el estado de la especialidad.");
     }
 
     public async Task<IngresoCirugiaDto> ObtenerIngresoCirugiaAsync(int idOrden, int nhcl) =>
