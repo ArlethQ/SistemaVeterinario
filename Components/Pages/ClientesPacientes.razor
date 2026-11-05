@@ -7,6 +7,7 @@
 @inject SessionStateService SessionState
 @inject NavigationManager NavManager
 @inject IWebHostEnvironment Env
+@inject ISqlDataService SqlData
 
 <PageTitle>e-ForVets — Clientes y Pacientes</PageTitle>
 
@@ -307,11 +308,363 @@
                     @switch (_pestanaResumenActiva)
                     {
                         case "resumen":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">📋</span>
-                                <h4>Resumen General</h4>
-                                <p class="text-muted">Resumen clínico integral para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
+                            @if (_mascotaResumen != null)
+                            {
+                                var tutor = _clientes.FirstOrDefault(c => c.PaCodigo == _mascotaResumen.MasIdCliente);
+                                var fotoUrl = ObtenerFotoPaciente(_mascotaResumen.MasNhcl);
+
+                                <div class="resumen-container">
+                                    <!-- BANNER PRINCIPAL DEL PACIENTE -->
+                                    <div class="resumen-pet-banner">
+                                        <div class="resumen-avatar-container">
+                                            @if (!string.IsNullOrEmpty(fotoUrl))
+                                            {
+                                                <img src="@fotoUrl" alt="Foto de @_mascotaResumen.MasNombre" class="resumen-avatar" />
+                                            }
+                                            else
+                                            {
+                                                <div class="resumen-avatar-placeholder">
+                                                    <span>@InicialAnimal(_mascotaResumen)</span>
+                                                </div>
+                                            }
+                                        </div>
+
+                                        <div class="resumen-pet-details">
+                                            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                                                <h3 class="resumen-pet-name mb-0">@_mascotaResumen.MasNombre</h3>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                                    NHCL #@_mascotaResumen.MasNhcl
+                                                </span>
+                                                <span class="pet-kind @(_mascotaResumen.MasOrigen == "T" ? "wild" : "domestic")">
+                                                    @(_mascotaResumen.MasOrigen == "T" ? "Fauna Silvestre (TUERI)" : "Mascota Doméstica (HDEV)")
+                                                </span>
+                                                @if (_mascotaResumen.Fallecido)
+                                                {
+                                                    <span class="badge bg-dark text-white px-2 py-1">
+                                                        <i class="bi bi-heartbreak-fill me-1"></i> Fallecido @(_mascotaResumen.FechaFallecido.HasValue ? $"({_mascotaResumen.FechaFallecido.Value:dd/MM/yyyy})" : "")
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                                        <i class="bi bi-circle-fill me-1" style="font-size: .55rem;"></i> Activo
+                                                    </span>
+                                                }
+                                            </div>
+
+                                            <div class="resumen-pet-subinfo text-secondary mb-2">
+                                                <span><strong>@(string.IsNullOrWhiteSpace(_mascotaResumen.RazaDescripcion) ? _mascotaResumen.EspecieDescripcion : _mascotaResumen.RazaDescripcion)</strong> · @_mascotaResumen.EspecieDescripcion</span>
+                                                <span class="mx-2">•</span>
+                                                <span><i class="bi @(_mascotaResumen.MasSexo == 2 ? "bi-gender-female text-danger" : "bi-gender-male text-primary")"></i> @TextoSexo(_mascotaResumen)</span>
+                                                <span class="mx-2">•</span>
+                                                <span><i class="bi bi-hourglass-split"></i> @_mascotaResumen.EdadCalculada</span>
+                                            </div>
+
+                                            <!-- Píldoras de Triaje / Manejo -->
+                                            <div class="d-flex flex-wrap gap-2 align-items-center">
+                                                <span class="triaje-pill triaje-@(_mascotaResumen.MasColorTriaje ?? "green")">
+                                                    <i class="bi bi-shield-fill-check me-1"></i>
+                                                    @(_mascotaResumen.MasColorTriaje switch {
+                                                        "red" => "Triaje Rojo (Alerta de Manejo / Agresivo)",
+                                                        "yellow" => "Triaje Amarillo (Precaución / Nervioso)",
+                                                        _ => "Triaje Verde (Temperamento Dócil / Normal)"
+                                                    })
+                                                </span>
+
+                                                <span class="pill-info">
+                                                    <i class="bi bi-scissors me-1"></i>
+                                                    @(_mascotaResumen.MasCastrado == "SI" ? "Esterilizado / Castrado" : "Entero (Sin esterilizar)")
+                                                </span>
+
+                                                @if (!string.IsNullOrWhiteSpace(_mascotaResumen.MasMicrochip))
+                                                {
+                                                    <span class="pill-info">
+                                                        <i class="bi bi-upc-scan me-1"></i> Chip: @_mascotaResumen.MasMicrochip
+                                                    </span>
+                                                }
+                                            </div>
+                                        </div>
+
+                                        <!-- Resumen rápido del Propietario en el Banner -->
+                                        <div class="resumen-tutor-banner">
+                                            <small class="text-uppercase fw-bold text-muted d-block mb-1">Tutor Responsable</small>
+                                            <div class="fw-bold text-dark fs-6 text-truncate" title="@(tutor?.NombreCompleto ?? _mascotaResumen.ClienteNombre)">
+                                                <i class="bi bi-person-circle me-1 text-primary"></i>
+                                                @(tutor?.NombreCompleto ?? _mascotaResumen.ClienteNombre)
+                                            </div>
+                                            <div class="small text-muted mb-1">
+                                                <i class="bi bi-card-text me-1"></i> C.I.: @(tutor?.PaCedula ?? _mascotaResumen.ClienteCedula)
+                                            </div>
+                                            <div class="small text-muted">
+                                                <i class="bi bi-telephone-fill me-1 text-success"></i> @(string.IsNullOrWhiteSpace(tutor?.PaMovil) ? (tutor?.PaTelefono ?? _mascotaResumen.ClienteTelefono) : tutor.PaMovil)
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- CUADRÍCULA DE 2 COLUMNAS: INFORMACIÓN GENERAL Y RECORDATORIOS -->
+                                    <div class="row g-3 mt-1">
+                                        <!-- COLUMNA IZQUIERDA: INFORMACIÓN DEMOGRÁFICA Y CARACTERÍSTICAS -->
+                                        <div class="col-lg-6 col-12 d-flex flex-column gap-3">
+                                            <!-- Tarjeta Características Físicas -->
+                                            <div class="resumen-card">
+                                                <div class="resumen-card-header">
+                                                    <span class="card-icon-bubble text-primary bg-primary-subtle">
+                                                        <i class="bi bi-info-circle-fill"></i>
+                                                    </span>
+                                                    <h6 class="mb-0 fw-bold">Ficha de Identificación</h6>
+                                                </div>
+                                                <div class="resumen-card-body">
+                                                    <div class="info-data-grid">
+                                                        <div class="info-item">
+                                                            <span class="info-label">Especie</span>
+                                                            <span class="info-val">@_mascotaResumen.EspecieDescripcion</span>
+                                                        </div>
+                                                        <div class="info-item">
+                                                            <span class="info-label">Raza</span>
+                                                            <span class="info-val">@(string.IsNullOrWhiteSpace(_mascotaResumen.RazaDescripcion) ? "Mestizo / No especificada" : _mascotaResumen.RazaDescripcion)</span>
+                                                        </div>
+                                                        <div class="info-item">
+                                                            <span class="info-label">Sexo</span>
+                                                            <span class="info-val">@TextoSexo(_mascotaResumen)</span>
+                                                        </div>
+                                                        <div class="info-item">
+                                                            <span class="info-label">Estado Reproductivo</span>
+                                                            <span class="info-val">@(_mascotaResumen.MasCastrado == "SI" ? "Esterilizado" : "No esterilizado")</span>
+                                                        </div>
+                                                        <div class="info-item">
+                                                            <span class="info-label">Fecha de Nacimiento</span>
+                                                            <span class="info-val">@_mascotaResumen.MasFechaNace.ToString("dd/MM/yyyy")</span>
+                                                        </div>
+                                                        <div class="info-item">
+                                                            <span class="info-label">Edad Estimada</span>
+                                                            <span class="info-val">@_mascotaResumen.EdadCalculada</span>
+                                                        </div>
+                                                        <div class="info-item">
+                                                            <span class="info-label">Color / Pelaje</span>
+                                                            <span class="info-val">@(string.IsNullOrWhiteSpace(_mascotaResumen.ColorDescripcion) ? "No especificado" : _mascotaResumen.ColorDescripcion)</span>
+                                                        </div>
+                                                        <div class="info-item">
+                                                            <span class="info-label">Microchip</span>
+                                                            <span class="info-val">@(string.IsNullOrWhiteSpace(_mascotaResumen.MasMicrochip) ? "Sin registrar" : _mascotaResumen.MasMicrochip)</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Tarjeta de Observaciones y Señas Particulares -->
+                                            <div class="resumen-card">
+                                                <div class="resumen-card-header">
+                                                    <span class="card-icon-bubble text-secondary bg-secondary-subtle">
+                                                        <i class="bi bi-card-text"></i>
+                                                    </span>
+                                                    <h6 class="mb-0 fw-bold">Señas Particulares y Observaciones</h6>
+                                                </div>
+                                                <div class="resumen-card-body">
+                                                    <div class="mb-3">
+                                                        <small class="text-uppercase fw-bold text-muted d-block mb-1">Señas Particulares / Rasgos Distintivos</small>
+                                                        <p class="mb-0 text-dark small bg-light p-2 rounded-2 border">
+                                                            @(string.IsNullOrWhiteSpace(_mascotaResumen.MasOtros) ? "Sin señas particulares registradas." : _mascotaResumen.MasOtros)
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <small class="text-uppercase fw-bold text-muted d-block mb-1">Notas Generales de Manejo</small>
+                                                        <p class="mb-0 text-dark small bg-light p-2 rounded-2 border">
+                                                            @(string.IsNullOrWhiteSpace(_mascotaResumen.MasObservacion) ? "Sin observaciones de manejo registradas." : _mascotaResumen.MasObservacion)
+                                                        </p>
+                                                    </div>
+
+                                                    @if (_mascotaResumen.MasOrigen == "T")
+                                                    {
+                                                        <div class="mt-3 pt-3 border-top">
+                                                            <small class="text-uppercase fw-bold text-success d-block mb-1">Datos de Fauna Silvestre (TUERI)</small>
+                                                            <div class="info-data-grid">
+                                                                <div class="info-item">
+                                                                    <span class="info-label">Nombre Científico</span>
+                                                                    <span class="info-val">@(string.IsNullOrWhiteSpace(_mascotaResumen.TueCientifico) ? "No registrado" : _mascotaResumen.TueCientifico)</span>
+                                                                </div>
+                                                                <div class="info-item">
+                                                                    <span class="info-label">Peso de Ingreso</span>
+                                                                    <span class="info-val">@(string.IsNullOrWhiteSpace(_mascotaResumen.TuePeso) ? "No registrado" : _mascotaResumen.TuePeso)</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+
+                                            <!-- Tarjeta Tutor Completa -->
+                                            <div class="resumen-card">
+                                                <div class="resumen-card-header">
+                                                    <span class="card-icon-bubble text-info bg-info-subtle">
+                                                        <i class="bi bi-house-door-fill"></i>
+                                                    </span>
+                                                    <h6 class="mb-0 fw-bold">Información del Hogar / Contacto</h6>
+                                                </div>
+                                                <div class="resumen-card-body">
+                                                    <div class="info-data-grid">
+                                                        <div class="info-item">
+                                                            <span class="info-label">Tutor</span>
+                                                            <span class="info-val">@(tutor?.NombreCompleto ?? _mascotaResumen.ClienteNombre)</span>
+                                                        </div>
+                                                        <div class="info-item">
+                                                            <span class="info-label">Teléfono</span>
+                                                            <span class="info-val">@(string.IsNullOrWhiteSpace(tutor?.PaMovil) ? (tutor?.PaTelefono ?? "No registrado") : tutor.PaMovil)</span>
+                                                        </div>
+                                                        <div class="info-item">
+                                                            <span class="info-label">Correo Electrónico</span>
+                                                            <span class="info-val">@(string.IsNullOrWhiteSpace(tutor?.PaEmail) ? "No registrado" : tutor.PaEmail)</span>
+                                                        </div>
+                                                        <div class="info-item">
+                                                            <span class="info-label">Dirección</span>
+                                                            <span class="info-val">@(string.IsNullOrWhiteSpace(tutor?.PaDireccion) ? "No registrada" : tutor.PaDireccion)</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- COLUMNA DERECHA: RECORDATORIOS Y ALERTAS -->
+                                        <div class="col-lg-6 col-12 d-flex flex-column gap-3">
+                                            <!-- Tarjeta Recordatorios de Vacunación -->
+                                            <div class="resumen-card">
+                                                <div class="resumen-card-header d-flex justify-content-between align-items-center">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <span class="card-icon-bubble text-success bg-success-subtle">
+                                                            <i class="bi bi-shield-plus"></i>
+                                                        </span>
+                                                        <h6 class="mb-0 fw-bold">Recordatorios de Vacunación</h6>
+                                                    </div>
+                                                    <span class="badge bg-success-subtle text-success">@_recordatoriosVacunas.Count registrados</span>
+                                                </div>
+                                                <div class="resumen-card-body">
+                                                    @if (_cargandoRecordatorios)
+                                                    {
+                                                        <div class="text-center py-3 text-muted small">
+                                                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                                            Consultando recordatorios de vacunas...
+                                                        </div>
+                                                    }
+                                                    else if (_recordatoriosVacunas.Count > 0)
+                                                    {
+                                                        <div class="reminder-list">
+                                                            @foreach (var vac in _recordatoriosVacunas)
+                                                            {
+                                                                <div class="reminder-item reminder-vaccine">
+                                                                    <div class="reminder-icon text-success">
+                                                                        <i class="bi bi-shield-check"></i>
+                                                                    </div>
+                                                                    <div class="reminder-body">
+                                                                        <div class="d-flex justify-content-between align-items-start">
+                                                                            <strong class="text-dark">@vac.Vacuna</strong>
+                                                                            @if (vac.DiasRestantes < 0)
+                                                                            {
+                                                                                <span class="badge bg-danger-subtle text-danger">Revacunación vencida</span>
+                                                                            }
+                                                                            else if (vac.DiasRestantes == 0)
+                                                                            {
+                                                                                <span class="badge bg-warning-subtle text-warning">¡Toca hoy!</span>
+                                                                            }
+                                                                            else if (vac.DiasRestantes <= 15)
+                                                                            {
+                                                                                <span class="badge bg-warning-subtle text-warning">En @vac.DiasRestantes día(s)</span>
+                                                                            }
+                                                                            else
+                                                                            {
+                                                                                <span class="badge bg-success-subtle text-success">En @vac.DiasRestantes día(s)</span>
+                                                                            }
+                                                                        </div>
+                                                                        <div class="small text-muted mt-1">
+                                                                            <span><i class="bi bi-calendar-event me-1"></i>Próximo refuerzo: <strong>@vac.FechaProxima.ToString("dd/MM/yyyy")</strong></span>
+                                                                            @if (vac.FechaAplicacion.HasValue)
+                                                                            {
+                                                                                <span class="ms-2 text-secondary">· Última dosis: @vac.FechaAplicacion.Value.ToString("dd/MM/yyyy")</span>
+                                                                            }
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <div class="empty-reminder">
+                                                            <i class="bi bi-patch-check-fill text-success fs-3 mb-2"></i>
+                                                            <p class="mb-0 fw-semibold text-dark">Esquema preventivo al día</p>
+                                                            <small class="text-muted">No hay vacunas ni refuerzos pendientes registrados para este paciente.</small>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+
+                                            <!-- Tarjeta Próximas Citas y Controles -->
+                                            <div class="resumen-card">
+                                                <div class="resumen-card-header d-flex justify-content-between align-items-center">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <span class="card-icon-bubble text-primary bg-primary-subtle">
+                                                            <i class="bi bi-calendar2-week-fill"></i>
+                                                        </span>
+                                                        <h6 class="mb-0 fw-bold">Próximas Citas y Controles</h6>
+                                                    </div>
+                                                    <span class="badge bg-primary-subtle text-primary">@_recordatoriosCitas.Count programadas</span>
+                                                </div>
+                                                <div class="resumen-card-body">
+                                                    @if (_cargandoRecordatorios)
+                                                    {
+                                                        <div class="text-center py-3 text-muted small">
+                                                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                                            Consultando citas del paciente...
+                                                        </div>
+                                                    }
+                                                    else if (_recordatoriosCitas.Count > 0)
+                                                    {
+                                                        <div class="reminder-list">
+                                                            @foreach (var cita in _recordatoriosCitas)
+                                                            {
+                                                                <div class="reminder-item reminder-appointment">
+                                                                    <div class="reminder-icon text-primary">
+                                                                        <i class="bi bi-calendar-event"></i>
+                                                                    </div>
+                                                                    <div class="reminder-body">
+                                                                        <div class="d-flex justify-content-between align-items-start">
+                                                                            <strong class="text-dark">@cita.Especialidad</strong>
+                                                                            <span class="badge bg-primary text-white">@cita.Fecha.ToString("dd/MM/yyyy") · @cita.Hora</span>
+                                                                        </div>
+                                                                        <div class="small text-muted mt-1">
+                                                                            <span><i class="bi bi-person-badge me-1"></i>Médico: @cita.Medico</span>
+                                                                        </div>
+                                                                        @if (!string.IsNullOrWhiteSpace(cita.Observacion))
+                                                                        {
+                                                                            <div class="small text-secondary mt-1 bg-light p-1 rounded">
+                                                                                <i class="bi bi-chat-left-text me-1"></i>@cita.Observacion
+                                                                            </div>
+                                                                        }
+                                                                    </div>
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <div class="empty-reminder">
+                                                            <i class="bi bi-calendar-check text-primary fs-3 mb-2"></i>
+                                                            <p class="mb-0 fw-semibold text-dark">Sin citas próximas agendadas</p>
+                                                            <small class="text-muted">No hay citas médicas o revisiones programadas en la agenda para esta mascota.</small>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+
+                                            <!-- Mensaje Recordatorio Preventivo -->
+                                            <div class="alert alert-info border-0 shadow-sm d-flex align-items-center gap-3 p-3 rounded-3 mb-0">
+                                                <i class="bi bi-info-circle-fill fs-3 text-info"></i>
+                                                <div class="small">
+                                                    <strong>Ficha Rápida:</strong> Esta vista consolida los datos generales y recordatorios del animal. Los detalles de atenciones pasadas se gestionan en su respectiva pestaña.
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
                             break;
                         case "kardex":
                             <div class="summary-placeholder">
@@ -1138,11 +1491,88 @@
         ("informes", "Informes", "📑")
     };
 
-    private void AbrirModalResumen(PacienteMascotaDto mas)
+
+    private class RecordatorioCitaItem
+    {
+        public int Id { get; set; }
+        public DateTime Fecha { get; set; }
+        public string Hora { get; set; } = string.Empty;
+        public string Medico { get; set; } = string.Empty;
+        public string Especialidad { get; set; } = string.Empty;
+        public string Observacion { get; set; } = string.Empty;
+    }
+
+    private class RecordatorioVacunaItem
+    {
+        public string Vacuna { get; set; } = string.Empty;
+        public DateTime? FechaAplicacion { get; set; }
+        public DateTime FechaProxima { get; set; }
+        public string Medico { get; set; } = string.Empty;
+        public int DiasRestantes => (FechaProxima.Date - DateTime.Today).Days;
+    }
+
+    private List<RecordatorioCitaItem> _recordatoriosCitas = new();
+    private List<RecordatorioVacunaItem> _recordatoriosVacunas = new();
+    private bool _cargandoRecordatorios;
+
+    private async Task CargarRecordatoriosAsync(int nhcl)
+    {
+        _recordatoriosCitas.Clear();
+        _recordatoriosVacunas.Clear();
+        _cargandoRecordatorios = true;
+        try
+        {
+            var citas = await SqlData.QueryAsync<RecordatorioCitaItem>(@"
+                SELECT c.ci_id AS Id, c.ci_fecha AS Fecha, ISNULL(c.ci_hora, '08:00') AS Hora,
+                       ISNULL(u.user_nombre, 'Médico veterinario') AS Medico,
+                       ISNULL(e.es_descripcion, 'Consulta') AS Especialidad,
+                       ISNULL(c.ci_observacion, '') AS Observacion
+                FROM vt_citas c
+                LEFT JOIN vt_usuarios u ON c.ci_usuario = u.user_numero
+                LEFT JOIN vt_especialidades e ON u.user_esp_numero = e.es_id
+                WHERE c.ci_nhcl = @Nhcl AND ISNULL(c.ci_estado, 'A') = 'A' AND ISNULL(c.ci_estadoCita, 'N') != 'X'
+                  AND c.ci_fecha >= CAST(GETDATE() AS DATE)
+                ORDER BY c.ci_fecha, c.ci_hora", new { Nhcl = nhcl });
+            _recordatoriosCitas = citas.ToList();
+        }
+        catch
+        {
+            _recordatoriosCitas = new();
+        }
+
+        try
+        {
+            var vacunas = await SqlData.QueryAsync<RecordatorioVacunaItem>(@"
+                SELECT ISNULL(p.prod_descripcion, ISNULL(v.vacuna_tipo, 'Vacuna')) AS Vacuna,
+                       v.vacuna_fecha AS FechaAplicacion,
+                       v.vacuna_revacunacion AS FechaProxima,
+                       ISNULL(u.user_nombre, 'Médico') AS Medico
+                FROM vt_vacunas v
+                LEFT JOIN vt_productos p ON v.vacuna_idprod = p.prod_id
+                LEFT JOIN vt_usuarios u ON v.vacuna_iduser = u.user_numero
+                WHERE v.vacuna_nhcl = @Nhcl AND ISNULL(v.vacuna_estado, 'A') = 'A'
+                  AND v.vacuna_revacunacion IS NOT NULL
+                  AND v.vacuna_revacunacion >= DATEADD(month, -1, CAST(GETDATE() AS DATE))
+                ORDER BY v.vacuna_revacunacion ASC", new { Nhcl = nhcl });
+            _recordatoriosVacunas = vacunas.ToList();
+        }
+        catch
+        {
+            _recordatoriosVacunas = new();
+        }
+        finally
+        {
+            _cargandoRecordatorios = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AbrirModalResumen(PacienteMascotaDto mas)
     {
         _mascotaResumen = mas;
         _pestanaResumenActiva = "resumen";
         _modalResumenAbierto = true;
+        await CargarRecordatoriosAsync(mas.MasNhcl);
     }
 
     private void CerrarModalResumen()
