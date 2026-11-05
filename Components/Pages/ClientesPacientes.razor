@@ -285,6 +285,70 @@
                     <small>NHCL #@_mascotaResumen.MasNhcl · @(string.IsNullOrWhiteSpace(_mascotaResumen.RazaDescripcion) ? _mascotaResumen.EspecieDescripcion : _mascotaResumen.RazaDescripcion)</small>
                     <h5 class="mb-0">Resumen del paciente: @_mascotaResumen.MasNombre</h5>
                 </div>
+
+                @if (_pestanaResumenActiva != "resumen")
+                {
+                    <div class="summary-order-filter ms-auto me-3 position-relative">
+                        <button type="button"
+                                class="summary-order-selector-btn"
+                                @onclick="ToggleDropdownOrdenes"
+                                title="Seleccionar orden para esta mascota">
+                            <span class="order-label text-primary fw-bold">
+                                <i class="bi bi-file-earmark-medical me-1"></i> Orden:
+                            </span>
+                            <span class="order-value @(_ordenIdSeleccionada.HasValue ? "fw-bold text-dark" : "text-muted fst-italic")">
+                                @_ordenSeleccionadaTexto
+                            </span>
+                            <i class="bi bi-chevron-down text-muted ms-2" style="font-size: .75rem;"></i>
+                        </button>
+
+                        @if (_mostrarDropdownOrdenes)
+                        {
+                            <div class="dropdown-backdrop-transparent" @onclick="() => _mostrarDropdownOrdenes = false"></div>
+                            <div class="summary-orders-dropdown shadow">
+                                @if (_cargandoOrdenesPaciente)
+                                {
+                                    <div class="dropdown-item text-muted small py-2 text-center">
+                                        <span class="spinner-border spinner-border-sm me-1"></span> Cargando órdenes...
+                                    </div>
+                                }
+                                else if (_ordenesPaciente.Count > 0)
+                                {
+                                    <div class="dropdown-header small text-uppercase fw-bold text-secondary py-1 px-3 border-bottom d-flex justify-content-between align-items-center">
+                                        <span>Órdenes de @_mascotaResumen.MasNombre</span>
+                                        <span class="badge bg-light text-secondary border">@_ordenesPaciente.Count</span>
+                                    </div>
+                                    <div class="dropdown-scrollable">
+                                        @foreach (var ord in _ordenesPaciente)
+                                        {
+                                            <button type="button"
+                                                    class="dropdown-item py-2 px-3 @(ord.IdOrden == _ordenIdSeleccionada ? "active-order" : "")"
+                                                    @onclick="() => SeleccionarOrden(ord)">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <strong class="text-primary">Orden #@ord.IdOrden</strong>
+                                                    <span class="badge @(ord.Estado == "A" ? "bg-success-subtle text-success" : "bg-secondary-subtle text-secondary") border">
+                                                        @(ord.Estado == "A" ? "Activa" : (ord.Estado == "T" ? "Terminada" : ord.Estado))
+                                                    </span>
+                                                </div>
+                                                <div class="small text-muted d-flex justify-content-between">
+                                                    <span><i class="bi bi-calendar3 me-1"></i>@ord.Fecha.ToString("dd/MM/yyyy") @ord.Hora</span>
+                                                    <span class="text-truncate ms-2" style="max-width: 150px;">@ord.Especialidad</span>
+                                                </div>
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="dropdown-item text-muted small py-3 text-center">
+                                        <span>No hay órdenes registradas para esta mascota.</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
                 <button type="button" class="modal-close" title="Cerrar" @onclick="CerrarModalResumen">×</button>
             </header>
 
@@ -1569,12 +1633,88 @@
         }
     }
 
+    private class OrdenPacienteResumenDto
+    {
+        public int IdOrden { get; set; }
+        public DateTime Fecha { get; set; }
+        public string Hora { get; set; } = string.Empty;
+        public string Especialidad { get; set; } = string.Empty;
+        public string Medico { get; set; } = string.Empty;
+        public string Estado { get; set; } = string.Empty;
+    }
+
+    private List<OrdenPacienteResumenDto> _ordenesPaciente = new();
+    private bool _cargandoOrdenesPaciente;
+    private bool _mostrarDropdownOrdenes;
+    private int? _ordenIdSeleccionada;
+
+    private string _ordenSeleccionadaTexto
+    {
+        get
+        {
+            if (!_ordenIdSeleccionada.HasValue)
+                return "Seleccione la orden...";
+
+            var ord = _ordenesPaciente.FirstOrDefault(o => o.IdOrden == _ordenIdSeleccionada.Value);
+            if (ord != null)
+                return $"#{ord.IdOrden} ({ord.Fecha:dd/MM/yyyy})";
+
+            return $"#{_ordenIdSeleccionada.Value}";
+        }
+    }
+
+    private async Task CargarOrdenesPacienteAsync(int nhcl)
+    {
+        _ordenesPaciente.Clear();
+        _ordenIdSeleccionada = null; // Default: Seleccione la orden...
+        _mostrarDropdownOrdenes = false;
+        _cargandoOrdenesPaciente = true;
+        try
+        {
+            var ordenes = await SqlData.QueryAsync<OrdenPacienteResumenDto>(@"
+                SELECT o.ordenAten_id AS IdOrden,
+                       ISNULL(o.ordenAten_fecha, GETDATE()) AS Fecha,
+                       ISNULL(o.ordenAten_hora, '') AS Hora,
+                       ISNULL(esp.es_descripcion, 'Consulta General') AS Especialidad,
+                       ISNULL(u.user_nombre, 'Médico') AS Medico,
+                       ISNULL(o.ordenAten_estado, 'A') AS Estado
+                FROM vt_ordenAtencion o
+                LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
+                LEFT JOIN vt_especialidades esp ON o.ordenAten_esp_numero = esp.es_id
+                WHERE o.ordenAten_nhcl = @Nhcl
+                ORDER BY o.ordenAten_id DESC", new { Nhcl = nhcl });
+            _ordenesPaciente = ordenes.ToList();
+        }
+        catch
+        {
+            _ordenesPaciente = new();
+        }
+        finally
+        {
+            _cargandoOrdenesPaciente = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleDropdownOrdenes()
+    {
+        _mostrarDropdownOrdenes = !_mostrarDropdownOrdenes;
+    }
+
+    private void SeleccionarOrden(OrdenPacienteResumenDto ord)
+    {
+        _ordenIdSeleccionada = ord.IdOrden;
+        _mostrarDropdownOrdenes = false;
+    }
+
     private async Task AbrirModalResumen(PacienteMascotaDto mas)
     {
         _mascotaResumen = mas;
         _pestanaResumenActiva = "resumen";
         _modalResumenAbierto = true;
+        _mostrarDropdownOrdenes = false;
         await CargarRecordatoriosAsync(mas.MasNhcl);
+        await CargarOrdenesPacienteAsync(mas.MasNhcl);
     }
 
     private void CerrarModalResumen()
