@@ -286,9 +286,139 @@
                 </div>
                 <button type="button" class="modal-close" title="Cerrar" @onclick="CerrarModalResumen">×</button>
             </header>
+
+            <div class="summary-tabs-bar">
+                <ul class="nav nav-tabs flex-nowrap">
+                    @foreach (var tab in _pestanasResumen)
+                    {
+                        <li class="nav-item">
+                            <button type="button"
+                                    class="nav-link @(_pestanaResumenActiva == tab.Id ? "active fw-bold text-dark" : "text-primary")"
+                                    @onclick="() => _pestanaResumenActiva = tab.Id">
+                                <span class="me-1">@tab.Icono</span> @tab.Titulo
+                            </button>
+                        </li>
+                    }
+                </ul>
+            </div>
+
             <div class="summary-modal-body">
-                <div class="p-3 text-muted">
-                    <p class="mb-0">Resumen clínico del paciente <strong>@_mascotaResumen.MasNombre</strong>.</p>
+                <div class="summary-tab-content">
+                    @switch (_pestanaResumenActiva)
+                    {
+                        case "resumen":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">📋</span>
+                                <h4>Resumen General</h4>
+                                <p class="text-muted">Resumen clínico integral para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "kardex":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">📁</span>
+                                <h4>Kardex</h4>
+                                <p class="text-muted">Contenido de Kardex para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "signos":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">📈</span>
+                                <h4>Signos</h4>
+                                <p class="text-muted">Contenido de Signos para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "ficha24h":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">📄</span>
+                                <h4>Ficha 24h</h4>
+                                <p class="text-muted">Contenido de Ficha 24h para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "monitoreo":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">🩺</span>
+                                <h4>Monitoreo</h4>
+                                <p class="text-muted">Contenido de Monitoreo para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "preanestesia":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">🧪</span>
+                                <h4>Pre-Anestesia</h4>
+                                <p class="text-muted">Contenido de Pre-Anestesia para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "anestesia":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">🫁</span>
+                                <h4>Anestesia</h4>
+                                <p class="text-muted">Contenido de Anestesia para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "quirofano":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">🔪</span>
+                                <h4>Protocolo Quirúrgico</h4>
+                                <p class="text-muted">Contenido de Protocolo Quirúrgico para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "recuperacion":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">🛏️</span>
+                                <h4>Recuperación</h4>
+                                <p class="text-muted">Contenido de Recuperación para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "soap":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">📋</span>
+                                <h4>Historia Clínica SOAP</h4>
+                                <p class="text-muted">Contenido de Historia Clínica SOAP para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "evolucion":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">📝</span>
+                                <h4>Evolución Médica</h4>
+                                <p class="text-muted">Contenido de Evolución Médica para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "recetario":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">💊</span>
+                                <h4>Recetario</h4>
+                                <p class="text-muted">Contenido de Recetario para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "consentimientos":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">📄</span>
+                                <h4>Consentimientos y Alta</h4>
+                                <p class="text-muted">Contenido de Consentimientos y Alta para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "laboratorio":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">🔬</span>
+                                <h4>Laboratorio</h4>
+                                <p class="text-muted">Contenido de Laboratorio para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "rx":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">☢️</span>
+                                <h4>RX / Ecografía</h4>
+                                <p class="text-muted">Contenido de RX / Ecografía para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                        case "informes":
+                            <div class="summary-placeholder">
+                                <span class="placeholder-icon">📑</span>
+                                <h4>Informes</h4>
+                                <p class="text-muted">Contenido de Informes para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            </div>
+                            break;
+                    }
                 </div>
             </div>
         </section>
@@ -986,10 +1116,32 @@
 
     private bool _modalResumenAbierto;
     private PacienteMascotaDto? _mascotaResumen;
+    private string _pestanaResumenActiva = "resumen";
+
+    private readonly (string Id, string Titulo, string Icono)[] _pestanasResumen = new[]
+    {
+        ("resumen", "Resumen", "📋"),
+        ("kardex", "Kardex", "📁"),
+        ("signos", "Signos", "📈"),
+        ("ficha24h", "Ficha 24h", "📄"),
+        ("monitoreo", "Monitoreo", "🩺"),
+        ("preanestesia", "Pre-Anestesia", "🧪"),
+        ("anestesia", "Anestesia", "🫁"),
+        ("quirofano", "Protocolo Quirúrgico", "🔪"),
+        ("recuperacion", "Recuperación", "🛏️"),
+        ("soap", "Historia Clínica SOAP", "📋"),
+        ("evolucion", "Evolución Médica", "📝"),
+        ("recetario", "Recetario", "💊"),
+        ("consentimientos", "Consentimientos y Alta", "📄"),
+        ("laboratorio", "Laboratorio", "🔬"),
+        ("rx", "RX / Ecografía", "☢️"),
+        ("informes", "Informes", "📑")
+    };
 
     private void AbrirModalResumen(PacienteMascotaDto mas)
     {
         _mascotaResumen = mas;
+        _pestanaResumenActiva = "resumen";
         _modalResumenAbierto = true;
     }
 
