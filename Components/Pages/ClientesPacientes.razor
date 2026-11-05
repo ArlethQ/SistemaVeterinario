@@ -225,6 +225,7 @@
                                     <button class="btn btn-sm action-record" @onclick="() => EditarMascotaAsync(mas)">Ver y editar ficha</button>
                                     <button class="btn btn-sm action-history" @onclick='() => NavManager.NavigateTo($"/consulta/historial/{mas.MasNhcl}")'>Historia</button>
                                     <button class="btn btn-sm action-order" @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>Orden</button>
+                                    <button class="btn btn-sm action-summary" @onclick="() => AbrirModalResumen(mas)">Resumen</button>
                                 </div>
                             </article>
                         }
@@ -271,6 +272,25 @@
                 <button type="button" class="modal-close" title="Cerrar" @onclick="CancelarEdicionMascota">×</button>
             </header>
             <div class="patient-modal-body">@FormularioMascota</div>
+        </section>
+    }
+
+    @if (_modalResumenAbierto && _mascotaResumen != null)
+    {
+        <div class="patient-modal-backdrop" @onclick="CerrarModalResumen"></div>
+        <section class="summary-modal" role="dialog" aria-modal="true" aria-label="Resumen del paciente">
+            <header class="summary-modal-header">
+                <div>
+                    <small>NHCL #@_mascotaResumen.MasNhcl · @(string.IsNullOrWhiteSpace(_mascotaResumen.RazaDescripcion) ? _mascotaResumen.EspecieDescripcion : _mascotaResumen.RazaDescripcion)</small>
+                    <h5 class="mb-0">Resumen del paciente: @_mascotaResumen.MasNombre</h5>
+                </div>
+                <button type="button" class="modal-close" title="Cerrar" @onclick="CerrarModalResumen">×</button>
+            </header>
+            <div class="summary-modal-body">
+                <div class="p-3 text-muted">
+                    <p class="mb-0">Resumen clínico del paciente <strong>@_mascotaResumen.MasNombre</strong>.</p>
+                </div>
+            </div>
         </section>
     }
 
@@ -962,6 +982,21 @@
         _viendoMascotaNhcl = null;
         await CargarDatosMascotaAsync(mas);
         _editandoMascotaNhcl = mas.MasNhcl;
+    }
+
+    private bool _modalResumenAbierto;
+    private PacienteMascotaDto? _mascotaResumen;
+
+    private void AbrirModalResumen(PacienteMascotaDto mas)
+    {
+        _mascotaResumen = mas;
+        _modalResumenAbierto = true;
+    }
+
+    private void CerrarModalResumen()
+    {
+        _modalResumenAbierto = false;
+        _mascotaResumen = null;
     }
 
     private void CancelarEdicionMascota()
