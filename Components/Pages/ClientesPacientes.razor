@@ -733,15 +733,14 @@
                             break;
                         case "triaje":
                             <div class="triaje-modal-tab-container py-1" style="max-width: 820px; margin: 0 auto;">
-                                @if (!string.IsNullOrEmpty(_mensajeAlertaTriaje))
+                                @if (_ordenIdSeleccionada.HasValue && _ordenIdSeleccionada.Value > 0)
                                 {
-                                    <div class="alert @(_esErrorTriaje ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small shadow-sm mb-3" role="alert">
-                                        <i class="bi @(_esErrorTriaje ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@_mensajeAlertaTriaje
-                                        <button type="button" class="btn-close py-2" @onclick="() => _mensajeAlertaTriaje = null"></button>
-                                    </div>
+                                    <TriajeIngreso IdOrden="@_ordenIdSeleccionada.Value"
+                                                   Nhcl="@_mascotaResumen.MasNhcl"
+                                                   ModoModal="true"
+                                                   OnGuardado="ActualizarMascotaTrasTriaje" />
                                 }
-
-                                @if (!_ordenIdSeleccionada.HasValue || _ordenIdSeleccionada.Value <= 0)
+                                else
                                 {
                                     <div class="card shadow-sm border-0 py-4 text-center text-muted">
                                         <div class="card-body">
@@ -767,134 +766,6 @@
                                                     Este paciente aún no tiene órdenes de atención registradas.
                                                 </span>
                                             }
-                                        </div>
-                                    </div>
-                                }
-                                else if (_cargandoTriaje)
-                                {
-                                    <div class="d-flex align-items-center justify-content-center gap-2 text-primary py-5">
-                                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                                        <span class="fw-semibold small">Cargando constantes de la Orden #@_ordenIdSeleccionada...</span>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="card shadow-sm border-0">
-                                        <div class="card-header bg-white fw-bold py-2 d-flex flex-wrap justify-content-between align-items-center border-bottom gap-2">
-                                            <div class="d-flex align-items-center gap-2">
-                                                <span class="text-primary fs-5">🌡️</span>
-                                                <span class="text-primary fw-bold fs-6">Constantes Fisiológicas y Triaje de Temperamento</span>
-                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle small">
-                                                    Orden #@_fichaTriaje.MedOrden
-                                                </span>
-                                            </div>
-                                            <span class="badge bg-light text-dark border small">Compartido con SOAP y Triaje</span>
-                                        </div>
-                                        <div class="card-body p-3">
-                                            <!-- Fila 1: Tipo de Consulta, Esterilizado, Sede / Tipo -->
-                                            <div class="row g-2 mb-3">
-                                                <div class="col-md-5">
-                                                    <label class="form-label small fw-semibold">Tipo de Consulta</label>
-                                                    <select class="form-select form-select-sm" @bind="_fichaTriaje.MedTipoConsulta">
-                                                        <option value="Consulta Externa">Consulta Externa</option>
-                                                        <option value="Emergencia">Emergencia</option>
-                                                        <option value="Control Médico">Control Médico</option>
-                                                        <option value="Especialidad">Especialidad</option>
-                                                        <option value="Chequeo Preventivo">Chequeo Preventivo</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-3">
-                                                    <label class="form-label small fw-semibold">Esterilizado</label>
-                                                    <select class="form-select form-select-sm" @bind="_fichaTriaje.Esterilizado">
-                                                        <option value="S">SÍ</option>
-                                                        <option value="N">NO</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label small fw-semibold">Sede / Tipo</label>
-                                                    <select class="form-select form-select-sm" @bind="_fichaTriaje.MedTipo">
-                                                        <option value="HDEV">Doméstico (Mascotas)</option>
-                                                        <option value="TUERI">Silvestre (Fauna)</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-
-                                            <!-- Fila 2: Semáforo de Temperamento del Paciente -->
-                                            <label class="form-label small fw-semibold d-block">Semáforo de Temperamento del Paciente</label>
-                                            <div class="btn-group w-100 mb-3" role="group">
-                                                <button type="button" class="btn btn-sm @(_fichaTriaje.Temperamento == "TRANQUILO" ? "btn-dark shadow-sm fw-bold" : "btn-outline-secondary")"
-                                                        @onclick='() => SeleccionarTemperamentoResumen("TRANQUILO", "imagenes/temperamento/blanco.png")'>
-                                                    ⚪ Tranquilo
-                                                </button>
-                                                <button type="button" class="btn btn-sm @(_fichaTriaje.Temperamento == "NERVIOSO" ? "btn-success shadow-sm fw-bold" : "btn-outline-success")"
-                                                        @onclick='() => SeleccionarTemperamentoResumen("NERVIOSO", "imagenes/temperamento/verde.png")'>
-                                                    🟢 Nervioso
-                                                </button>
-                                                <button type="button" class="btn btn-sm @(_fichaTriaje.Temperamento == "A LA DEFENSIVA" ? "btn-warning text-dark shadow-sm fw-bold" : "btn-outline-warning text-dark")"
-                                                        @onclick='() => SeleccionarTemperamentoResumen("A LA DEFENSIVA", "imagenes/temperamento/amarillo.png")'>
-                                                    🟡 Defensivo
-                                                </button>
-                                                <button type="button" class="btn btn-sm @(_fichaTriaje.Temperamento == "AGRESIVO" ? "btn-danger shadow-sm fw-bold" : "btn-outline-danger")"
-                                                        @onclick='() => SeleccionarTemperamentoResumen("AGRESIVO", "imagenes/temperamento/rojo.png")'>
-                                                    🔴 Agresivo
-                                                </button>
-                                            </div>
-
-                                            <!-- Fila 3 y 4: Constantes Fisiológicas -->
-                                            <div class="row g-2">
-                                                <div class="col-4">
-                                                    <label class="form-label small fw-semibold">Peso (kg)</label>
-                                                    <input type="number" step="0.01" min="0" class="form-control form-control-sm fw-bold text-primary" @bind="_fichaTriaje.Peso" />
-                                                </div>
-                                                <div class="col-4">
-                                                    <label class="form-label small fw-semibold">Temp (°C)</label>
-                                                    <input type="number" step="0.1" min="0" class="form-control form-control-sm" @bind="_fichaTriaje.Temperatura" />
-                                                </div>
-                                                <div class="col-4">
-                                                    <label class="form-label small fw-semibold">FC (lpm)</label>
-                                                    <input type="number" min="0" class="form-control form-control-sm" @bind="_fichaTriaje.FrecuenciaCardiaca" />
-                                                </div>
-                                                <div class="col-4">
-                                                    <label class="form-label small fw-semibold">FR (rpm)</label>
-                                                    <input type="number" min="0" class="form-control form-control-sm" @bind="_fichaTriaje.FrecuenciaRespiratoria" />
-                                                </div>
-                                                <div class="col-4">
-                                                    <label class="form-label small fw-semibold">TLLC (seg)</label>
-                                                    <input type="number" min="0" class="form-control form-control-sm" @bind="_fichaTriaje.TiempoLlenadoCapilar" />
-                                                </div>
-                                                <div class="col-4">
-                                                    <label class="form-label small fw-semibold">Deshidratación (%)</label>
-                                                    <input type="number" min="0" max="100" class="form-control form-control-sm" @bind="_fichaTriaje.Deshidratacion" />
-                                                </div>
-                                                <div class="col-6">
-                                                    <label class="form-label small fw-semibold">Condición Corporal (ICC 1-9)</label>
-                                                    <input type="range" class="form-range" min="1" max="9" @bind="_fichaTriaje.IndiceCondicionCorporal" />
-                                                    <div class="text-center small fw-bold text-primary">ICC: @_fichaTriaje.IndiceCondicionCorporal / 9</div>
-                                                </div>
-                                                <div class="col-6">
-                                                    <label class="form-label small fw-semibold">Pulso / CP</label>
-                                                    <input type="text" class="form-control form-control-sm" @bind="_fichaTriaje.Cp" placeholder="Normal" />
-                                                </div>
-                                                <div class="col-12 mt-1">
-                                                    <label class="form-label small fw-semibold">Observaciones triaje <small class="text-muted fw-normal">(opcional)</small></label>
-                                                    <textarea class="form-control form-control-sm" rows="2" placeholder="Observaciones o notas de triaje..." @bind="_fichaTriaje.MedApuntes"></textarea>
-                                                </div>
-                                            </div>
-
-                                            <!-- Botones de Acción -->
-                                            <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 pt-2 border-top gap-2">
-                                                <div class="d-flex gap-2">
-                                                    <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" @onclick="IrASoapDesdeResumen" title="Abrir Historia Clínica SOAP de esta orden">
-                                                        <i class="bi bi-file-medical me-1"></i>Ver en SOAP
-                                                    </button>
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold" @onclick="IrATriajeDesdeResumen" title="Abrir página de Triaje de Ingreso de esta orden">
-                                                        <i class="bi bi-thermometer-half me-1"></i>Página Triaje
-                                                    </button>
-                                                </div>
-                                                <button type="button" class="btn btn-success fw-bold px-4 btn-sm" @onclick="GuardarTriajeResumenAsync" disabled="@_guardandoTriaje">
-                                                    <i class="bi bi-floppy-fill me-1"></i>@(_guardandoTriaje ? "Guardando..." : "Guardar Constantes")
-                                                </button>
-                                            </div>
                                         </div>
                                     </div>
                                 }
@@ -1872,168 +1743,53 @@
         _mostrarDropdownOrdenes = !_mostrarDropdownOrdenes;
     }
 
-    private FichaMedicaCompletaDto _fichaTriaje = new();
-    private bool _cargandoTriaje;
-    private bool _guardandoTriaje;
-    private string? _mensajeAlertaTriaje;
-    private bool _esErrorTriaje;
-
-    private async Task SeleccionarOrden(OrdenPacienteResumenDto ord)
+    private void SeleccionarOrden(OrdenPacienteResumenDto ord)
     {
         _ordenIdSeleccionada = ord.IdOrden;
         _mostrarDropdownOrdenes = false;
         if (_mascotaResumen != null)
         {
             SessionState.SeleccionarOrden(ord.IdOrden, _mascotaResumen.MasNhcl, _mascotaResumen.MasNombre);
-            await CargarTriajeOrdenAsync(ord.IdOrden, _mascotaResumen.MasNhcl);
         }
     }
 
-    private async Task CambiarPestanaResumenAsync(string tabId)
+    private void CambiarPestanaResumenAsync(string tabId)
     {
         _pestanaResumenActiva = tabId;
         _mostrarDropdownOrdenes = false;
         if (tabId == "triaje" && _mascotaResumen != null)
         {
-            if (_ordenIdSeleccionada.HasValue && _ordenIdSeleccionada.Value > 0)
-            {
-                await CargarTriajeOrdenAsync(_ordenIdSeleccionada.Value, _mascotaResumen.MasNhcl);
-            }
-            else if (_ordenesPaciente.Count > 0)
+            if (!_ordenIdSeleccionada.HasValue && _ordenesPaciente.Count > 0)
             {
                 var primera = _ordenesPaciente[0];
-                await SeleccionarOrden(primera);
+                SeleccionarOrden(primera);
             }
         }
     }
 
-    private async Task CargarTriajeOrdenAsync(int idOrden, int nhcl)
+    private void ActualizarMascotaTrasTriaje(FichaMedicaCompletaDto ficha)
     {
-        _cargandoTriaje = true;
-        _mensajeAlertaTriaje = null;
-        _esErrorTriaje = false;
-        try
+        if (_mascotaResumen != null)
         {
-            _fichaTriaje = await ConsultaService.ObtenerFichaMedicaAsync(idOrden, nhcl);
-            _fichaTriaje.MedOrden = idOrden;
-            _fichaTriaje.MedNhcl = nhcl;
-            if (string.IsNullOrWhiteSpace(_fichaTriaje.MedTipoConsulta))
-                _fichaTriaje.MedTipoConsulta = "Consulta Externa";
-            if (string.IsNullOrWhiteSpace(_fichaTriaje.Temperamento))
-                _fichaTriaje.Temperamento = "TRANQUILO";
-        }
-        catch (Exception ex)
-        {
-            _esErrorTriaje = true;
-            _mensajeAlertaTriaje = $"Error al cargar triaje: {ex.Message}";
-        }
-        finally
-        {
-            _cargandoTriaje = false;
-            StateHasChanged();
-        }
-    }
-
-    private void SeleccionarTemperamentoResumen(string temperamento, string rutaImagen)
-    {
-        _fichaTriaje.Temperamento = temperamento;
-        _fichaTriaje.ColorTriaje = temperamento switch
-        {
-            "AGRESIVO" => "red",
-            "A LA DEFENSIVA" => "yellow",
-            _ => "green"
-        };
-    }
-
-    private async Task GuardarTriajeResumenAsync()
-    {
-        if (_mascotaResumen == null || !_ordenIdSeleccionada.HasValue || _ordenIdSeleccionada.Value <= 0)
-        {
-            _esErrorTriaje = true;
-            _mensajeAlertaTriaje = "Debe seleccionar una orden de atención para guardar el triaje.";
-            return;
-        }
-
-        _guardandoTriaje = true;
-        _mensajeAlertaTriaje = null;
-
-        try
-        {
-            _fichaTriaje.MedOrden = _ordenIdSeleccionada.Value;
-            _fichaTriaje.MedNhcl = _mascotaResumen.MasNhcl;
-            if (_fichaTriaje.MedCliente <= 0) _fichaTriaje.MedCliente = _mascotaResumen.MasIdCliente;
-            if (string.IsNullOrEmpty(_fichaTriaje.MedEspecie)) _fichaTriaje.MedEspecie = _mascotaResumen.EspecieDescripcion ?? "";
-
-            int idUsuario = SessionState.UsuarioActual?.IdUsuario ?? SessionState.IdUser;
-            if (idUsuario <= 0) idUsuario = 1;
-
-            bool exito = await ConsultaService.GuardarFichaMedicaAsync(_fichaTriaje, idUsuario);
-
-            _esErrorTriaje = !exito;
-            _mensajeAlertaTriaje = exito
-                ? "Constantes de triaje guardadas exitosamente y sincronizadas con SOAP y Triaje de Ingreso."
-                : "No fue posible guardar las constantes de triaje.";
-
-            if (exito)
+            string colorNormalizado = ficha.Temperamento switch
             {
-                // Sincronizar Session para que cuando el usuario vaya a SOAP o a Triaje se abra ESTA MISMA ORDEN
-                SessionState.SeleccionarOrden(_ordenIdSeleccionada.Value, _mascotaResumen.MasNhcl, _mascotaResumen.MasNombre);
+                "AGRESIVO" => "red",
+                "A LA DEFENSIVA" => "yellow",
+                _ => "green"
+            };
+            _mascotaResumen.MasColorTriaje = colorNormalizado;
+            _mascotaResumen.MasCastrado = ficha.Esterilizado == "S" ? "SI" : "NO";
 
-                string colorNormalizado = _fichaTriaje.Temperamento switch
+            foreach (var lista in _mascotasPorCliente.Values)
+            {
+                var m = lista.FirstOrDefault(x => x.MasNhcl == _mascotaResumen.MasNhcl);
+                if (m != null)
                 {
-                    "AGRESIVO" => "red",
-                    "A LA DEFENSIVA" => "yellow",
-                    _ => "green"
-                };
-                _mascotaResumen.MasColorTriaje = colorNormalizado;
-                _mascotaResumen.MasCastrado = _fichaTriaje.Esterilizado == "S" ? "SI" : "NO";
-
-                foreach (var lista in _mascotasPorCliente.Values)
-                {
-                    var m = lista.FirstOrDefault(x => x.MasNhcl == _mascotaResumen.MasNhcl);
-                    if (m != null)
-                    {
-                        m.MasColorTriaje = colorNormalizado;
-                        m.MasCastrado = _mascotaResumen.MasCastrado;
-                    }
+                    m.MasColorTriaje = colorNormalizado;
+                    m.MasCastrado = _mascotaResumen.MasCastrado;
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            _esErrorTriaje = true;
-            _mensajeAlertaTriaje = $"Error al guardar constantes: {ex.Message}";
-        }
-        finally
-        {
-            _guardandoTriaje = false;
             StateHasChanged();
-        }
-    }
-
-    private void IrASoapDesdeResumen()
-    {
-        if (_ordenIdSeleccionada.HasValue && _mascotaResumen != null)
-        {
-            SessionState.SeleccionarOrden(_ordenIdSeleccionada.Value, _mascotaResumen.MasNhcl, _mascotaResumen.MasNombre);
-            NavManager.NavigateTo($"/consulta/fichamedica/{_ordenIdSeleccionada.Value}/{_mascotaResumen.MasNhcl}");
-        }
-        else if (_mascotaResumen != null)
-        {
-            NavManager.NavigateTo("/consulta/fichamedica");
-        }
-    }
-
-    private void IrATriajeDesdeResumen()
-    {
-        if (_ordenIdSeleccionada.HasValue && _mascotaResumen != null)
-        {
-            SessionState.SeleccionarOrden(_ordenIdSeleccionada.Value, _mascotaResumen.MasNhcl, _mascotaResumen.MasNombre);
-            NavManager.NavigateTo($"/admision/triaje/{_ordenIdSeleccionada.Value}/{_mascotaResumen.MasNhcl}");
-        }
-        else if (_mascotaResumen != null)
-        {
-            NavManager.NavigateTo("/admision/triaje");
         }
     }
 
@@ -2043,8 +1799,6 @@
         _pestanaResumenActiva = "resumen";
         _modalResumenAbierto = true;
         _mostrarDropdownOrdenes = false;
-        _mensajeAlertaTriaje = null;
-        _esErrorTriaje = false;
         await CargarRecordatoriosAsync(mas.MasNhcl);
         await CargarOrdenesPacienteAsync(mas.MasNhcl);
 
@@ -2052,12 +1806,10 @@
         {
             _ordenIdSeleccionada = _ordenesPaciente[0].IdOrden;
             SessionState.SeleccionarOrden(_ordenIdSeleccionada.Value, mas.MasNhcl, mas.MasNombre);
-            await CargarTriajeOrdenAsync(_ordenIdSeleccionada.Value, mas.MasNhcl);
         }
         else
         {
             _ordenIdSeleccionada = null;
-            _fichaTriaje = new() { MedNhcl = mas.MasNhcl, MedCliente = mas.MasIdCliente };
         }
     }
 

@@ -6,217 +6,268 @@
 @inject SessionStateService Session
 @inject NavigationManager Nav
 
-<PageTitle>Triaje de Ingreso y Constantes Fisiológicas — e-ForVets</PageTitle>
+@if (!ModoModal)
+{
+    <PageTitle>Triaje de Ingreso y Constantes Fisiológicas — e-ForVets</PageTitle>
 
-<div class="container-fluid py-3">
-    <!-- BARRA SUPERIOR DE SELECCIÓN Y ACCIONES -->
-    <div class="card shadow-sm border-0 mb-3 bg-white" style="max-width: 760px; margin: 0 auto;">
-        <div class="card-body py-2 px-3">
-            <div class="row g-2 align-items-center">
-                <div class="col-md-5">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="fs-4 text-warning">🌡️</span>
-                        <div>
-                            <h6 class="mb-0 fw-bold text-dark">Triaje de Ingreso</h6>
-                            <small class="text-muted" style="font-size: 0.72rem;">Constantes fisiológicas sincronizadas con SOAP</small>
+    <div class="container-fluid py-3">
+        <!-- BARRA SUPERIOR DE SELECCIÓN Y ACCIONES -->
+        <div class="card shadow-sm border-0 mb-3 bg-white" style="max-width: 760px; margin: 0 auto;">
+            <div class="card-body py-2 px-3">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-5">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fs-4 text-warning">🌡️</span>
+                            <div>
+                                <h6 class="mb-0 fw-bold text-dark">Triaje de Ingreso</h6>
+                                <small class="text-muted" style="font-size: 0.72rem;">Constantes fisiológicas sincronizadas con SOAP</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selector de Órdenes Activas de la Clínica -->
+                    <div class="col-md-7">
+                        <select class="form-select form-select-sm" value="@(IdOrden ?? 0)" @onchange="OnOrdenSelectChangedAsync">
+                            <option value="0">-- Seleccionar Orden de Atención Activa --</option>
+                            @foreach (var ord in _ordenesActivas)
+                            {
+                                <option value="@ord.IdOrdenAtencion">
+                                    #@ord.IdOrdenAtencion | NHCL:@ord.Nhcl — @ord.Paciente (@ord.Cliente)
+                                </option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mensajes de feedback -->
+        @if (!string.IsNullOrEmpty(_mensajeAlerta))
+        {
+            <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small shadow-sm" role="alert" style="max-width: 760px; margin: 0 auto 1rem auto;">
+                <i class="bi @(_esError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@_mensajeAlerta
+                <button type="button" class="btn-close py-2" @onclick="() => _mensajeAlerta = null"></button>
+            </div>
+        }
+
+        @if (_cargando)
+        {
+            <div class="d-flex align-items-center justify-content-center gap-2 text-primary py-4 px-2">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <span class="fw-semibold small">Cargando constantes del paciente...</span>
+            </div>
+        }
+        else if (_paciente is null)
+        {
+            <div class="card shadow-sm border-0 py-5 text-center text-muted" style="max-width: 760px; margin: 0 auto;">
+                <div class="card-body">
+                    <span class="fs-1 d-block mb-2 text-secondary">🐾</span>
+                    <h5>Ningún paciente seleccionado para triaje</h5>
+                    <p class="small text-muted mb-3">
+                        Selecciona una orden activa del menú superior para cargar o ingresar sus constantes vitales.
+                    </p>
+                    @if (_ordenesActivas.Count > 0)
+                    {
+                        <div class="d-inline-flex flex-wrap gap-2 justify-content-center" style="max-width: 600px;">
+                            @foreach (var o in _ordenesActivas.Take(5))
+                            {
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => SeleccionarOrdenDirecta(o.IdOrdenAtencion, o.Nhcl)">
+                                    Orden #@o.IdOrdenAtencion — @o.Paciente
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div style="max-width: 760px; margin: 0 auto;">
+                <!-- BANNER DEL PACIENTE SELECCIONADO (modo página completa) -->
+                <div class="card shadow-sm border-0 mb-3 bg-primary bg-opacity-10">
+                    <div class="card-body py-2 px-3">
+                        <div class="row align-items-center g-2 small">
+                            <div class="col-sm-6">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">PACIENTE / NHCL</span>
+                                <strong class="fs-6 text-primary">@_paciente.PacienteNombre</strong>
+                                <span class="badge bg-dark ms-1">NHCL #@_paciente.Nhcl</span>
+                                <span class="badge bg-secondary ms-1">Orden #@_ficha.MedOrden</span>
+                            </div>
+                            <div class="col-sm-6 text-sm-end">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">ESPECIE / RAZA / SEXO / EDAD</span>
+                                <strong>@_paciente.Especie — @_paciente.Raza (@_paciente.Sexo) | @_paciente.EdadTexto</strong>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Selector de Órdenes Activas de la Clínica -->
-                <div class="col-md-7">
-                    <select class="form-select form-select-sm" value="@(IdOrden ?? 0)" @onchange="OnOrdenSelectChangedAsync">
-                        <option value="0">-- Seleccionar Orden de Atención Activa --</option>
-                        @foreach (var ord in _ordenesActivas)
-                        {
-                            <option value="@ord.IdOrdenAtencion">
-                                #@ord.IdOrdenAtencion | NHCL:@ord.Nhcl — @ord.Paciente (@ord.Cliente)
-                            </option>
-                        }
+                @RenderTarjetaTriaje()
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="triaje-modal-embedded" style="max-width: 760px; margin: 0 auto;">
+        <!-- Mensajes de feedback -->
+        @if (!string.IsNullOrEmpty(_mensajeAlerta))
+        {
+            <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small shadow-sm mb-3" role="alert">
+                <i class="bi @(_esError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@_mensajeAlerta
+                <button type="button" class="btn-close py-2" @onclick="() => _mensajeAlerta = null"></button>
+            </div>
+        }
+
+        @if (_cargando)
+        {
+            <div class="d-flex align-items-center justify-content-center gap-2 text-primary py-5">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <span class="fw-semibold small">Cargando constantes de la Orden #@(IdOrden ?? _ficha.MedOrden)...</span>
+            </div>
+        }
+        else if (_paciente is null && (!IdOrden.HasValue || IdOrden.Value <= 0))
+        {
+            <div class="card shadow-sm border-0 py-4 text-center text-muted">
+                <div class="card-body">
+                    <span class="fs-1 d-block mb-2 text-warning">🌡️</span>
+                    <h5>Selecciona una orden para ver o registrar el triaje</h5>
+                    <p class="small text-muted mb-0">
+                        Las constantes fisiológicas y el temperamento están enlazados a la orden de atención.
+                    </p>
+                </div>
+            </div>
+        }
+        else
+        {
+            @RenderTarjetaTriaje()
+        }
+    </div>
+}
+
+@{
+    RenderFragment RenderTarjetaTriaje() => @<div class="card shadow-sm border-0">
+        <div class="card-header bg-white fw-bold py-2 d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-1">
+                <span class="text-primary fs-5">🌡️</span>
+                <span class="text-primary fw-bold fs-6">Constantes Fisiológicas y Triaje de Temperamento</span>
+                @if (ModoModal && _ficha.MedOrden > 0)
+                {
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle small ms-2">
+                        Orden #@_ficha.MedOrden
+                    </span>
+                }
+            </div>
+            <span class="badge bg-light text-dark border small">Compartido con SOAP</span>
+        </div>
+        <div class="card-body p-3">
+            <!-- Fila 1: Tipo de Consulta, Esterilizado, Sede / Tipo -->
+            <div class="row g-2 mb-3">
+                <div class="col-md-5">
+                    <label class="form-label small fw-semibold">Tipo de Consulta</label>
+                    <select class="form-select form-select-sm" @bind="_ficha.MedTipoConsulta">
+                        <option value="Consulta Externa">Consulta Externa</option>
+                        <option value="Emergencia">Emergencia</option>
+                        <option value="Control Médico">Control Médico</option>
+                        <option value="Especialidad">Especialidad</option>
+                        <option value="Chequeo Preventivo">Chequeo Preventivo</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Esterilizado</label>
+                    <select class="form-select form-select-sm" @bind="_ficha.Esterilizado">
+                        <option value="S">SÍ</option>
+                        <option value="N">NO</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Sede / Tipo</label>
+                    <select class="form-select form-select-sm" @bind="_ficha.MedTipo">
+                        <option value="HDEV">Doméstico (Mascotas)</option>
+                        <option value="TUERI">Silvestre (Fauna)</option>
                     </select>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Mensajes de feedback -->
-    @if (!string.IsNullOrEmpty(_mensajeAlerta))
-    {
-        <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small shadow-sm" role="alert" style="max-width: 760px; margin: 0 auto 1rem auto;">
-            <i class="bi @(_esError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@_mensajeAlerta
-            <button type="button" class="btn-close py-2" @onclick="() => _mensajeAlerta = null"></button>
-        </div>
-    }
-
-    @if (_cargando)
-    {
-        <div class="d-flex align-items-center justify-content-center gap-2 text-primary py-4 px-2">
-            <div class="spinner-border spinner-border-sm" role="status"></div>
-            <span class="fw-semibold small">Cargando constantes del paciente...</span>
-        </div>
-    }
-    else if (_paciente is null)
-    {
-        <div class="card shadow-sm border-0 py-5 text-center text-muted" style="max-width: 760px; margin: 0 auto;">
-            <div class="card-body">
-                <span class="fs-1 d-block mb-2 text-secondary">🐾</span>
-                <h5>Ningún paciente seleccionado para triaje</h5>
-                <p class="small text-muted mb-3">
-                    Selecciona una orden activa del menú superior para cargar o ingresar sus constantes vitales.
-                </p>
-                @if (_ordenesActivas.Count > 0)
-                {
-                    <div class="d-inline-flex flex-wrap gap-2 justify-content-center" style="max-width: 600px;">
-                        @foreach (var o in _ordenesActivas.Take(5))
-                        {
-                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => SeleccionarOrdenDirecta(o.IdOrdenAtencion, o.Nhcl)">
-                                Orden #@o.IdOrdenAtencion — @o.Paciente
-                            </button>
-                        }
-                    </div>
-                }
+            <!-- Fila 2: Semáforo de Temperamento del Paciente -->
+            <label class="form-label small fw-semibold d-block">Semáforo de Temperamento del Paciente</label>
+            <div class="btn-group w-100 mb-3" role="group">
+                <button type="button" class="btn btn-sm @(_ficha.Temperamento == "TRANQUILO" ? "btn-dark shadow-sm fw-bold" : "btn-outline-secondary")"
+                        @onclick='() => SeleccionarTemperamento("TRANQUILO", "imagenes/temperamento/blanco.png", "green")'>
+                    ⚪ Tranquilo
+                </button>
+                <button type="button" class="btn btn-sm @(_ficha.Temperamento == "NERVIOSO" ? "btn-success shadow-sm fw-bold" : "btn-outline-success")"
+                        @onclick='() => SeleccionarTemperamento("NERVIOSO", "imagenes/temperamento/verde.png", "green")'>
+                    🟢 Nervioso
+                </button>
+                <button type="button" class="btn btn-sm @(_ficha.Temperamento == "A LA DEFENSIVA" ? "btn-warning text-dark shadow-sm fw-bold" : "btn-outline-warning text-dark")"
+                        @onclick='() => SeleccionarTemperamento("A LA DEFENSIVA", "imagenes/temperamento/amarillo.png", "yellow")'>
+                    🟡 Defensivo
+                </button>
+                <button type="button" class="btn btn-sm @(_ficha.Temperamento == "AGRESIVO" ? "btn-danger shadow-sm fw-bold" : "btn-outline-danger")"
+                        @onclick='() => SeleccionarTemperamento("AGRESIVO", "imagenes/temperamento/rojo.png", "red")'>
+                    🔴 Agresivo
+                </button>
             </div>
-        </div>
-    }
-    else
-    {
-        <div style="max-width: 760px; margin: 0 auto;">
-            <!-- BANNER DEL PACIENTE SELECCIONADO -->
-            <div class="card shadow-sm border-0 mb-3 bg-primary bg-opacity-10">
-                <div class="card-body py-2 px-3">
-                    <div class="row align-items-center g-2 small">
-                        <div class="col-sm-6">
-                            <span class="text-muted d-block" style="font-size: 0.72rem;">PACIENTE / NHCL</span>
-                            <strong class="fs-6 text-primary">@_paciente.PacienteNombre</strong>
-                            <span class="badge bg-dark ms-1">NHCL #@_paciente.Nhcl</span>
-                            <span class="badge bg-secondary ms-1">Orden #@_ficha.MedOrden</span>
-                        </div>
-                        <div class="col-sm-6 text-sm-end">
-                            <span class="text-muted d-block" style="font-size: 0.72rem;">ESPECIE / RAZA / SEXO / EDAD</span>
-                            <strong>@_paciente.Especie — @_paciente.Raza (@_paciente.Sexo) | @_paciente.EdadTexto</strong>
-                        </div>
-                    </div>
+
+            <!-- Fila 3 y 4: Constantes Fisiológicas -->
+            <div class="row g-2">
+                <div class="col-4">
+                    <label class="form-label small fw-semibold">Peso (kg)</label>
+                    <input type="number" step="0.01" min="0" class="form-control form-control-sm fw-bold text-primary" @bind="_ficha.Peso" />
+                </div>
+                <div class="col-4">
+                    <label class="form-label small fw-semibold">Temp (°C)</label>
+                    <input type="number" step="0.1" min="0" class="form-control form-control-sm" @bind="_ficha.Temperatura" />
+                </div>
+                <div class="col-4">
+                    <label class="form-label small fw-semibold">FC (lpm)</label>
+                    <input type="number" min="0" class="form-control form-control-sm" @bind="_ficha.FrecuenciaCardiaca" />
+                </div>
+                <div class="col-4">
+                    <label class="form-label small fw-semibold">FR (rpm)</label>
+                    <input type="number" min="0" class="form-control form-control-sm" @bind="_ficha.FrecuenciaRespiratoria" />
+                </div>
+                <div class="col-4">
+                    <label class="form-label small fw-semibold">TLLC (seg)</label>
+                    <input type="number" min="0" class="form-control form-control-sm" @bind="_ficha.TiempoLlenadoCapilar" />
+                </div>
+                <div class="col-4">
+                    <label class="form-label small fw-semibold">Deshidratación (%)</label>
+                    <input type="number" min="0" max="100" class="form-control form-control-sm" @bind="_ficha.Deshidratacion" />
+                </div>
+                <div class="col-6">
+                    <label class="form-label small fw-semibold">Condición Corporal (ICC 1-9)</label>
+                    <input type="range" class="form-range" min="1" max="9" @bind="_ficha.IndiceCondicionCorporal" />
+                    <div class="text-center small fw-bold text-primary">ICC: @_ficha.IndiceCondicionCorporal / 9</div>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small fw-semibold">Pulso / CP</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_ficha.Cp" placeholder="Normal" />
+                </div>
+                <div class="col-12 mt-1">
+                    <label class="form-label small fw-semibold">Observaciones triaje <small class="text-muted fw-normal">(opcional)</small></label>
+                    <textarea class="form-control form-control-sm" rows="2" placeholder="Observaciones o notas de triaje..." @bind="_ficha.MedApuntes"></textarea>
                 </div>
             </div>
 
-            <!-- TARJETA ÚNICA DE CONSTANTES FISIOLÓGICAS Y TRIAJE DE TEMPERAMENTO -->
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-white fw-bold py-2 d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center gap-1">
-                        <span class="text-primary fs-5">🌡️</span>
-                        <span class="text-primary fw-bold fs-6">Constantes Fisiológicas y Triaje de Temperamento</span>
-                    </div>
-                    <span class="badge bg-light text-dark border small">Compartido con SOAP</span>
-                </div>
-                <div class="card-body p-3">
-                    <!-- Fila 1: Tipo de Consulta, Esterilizado, Sede / Tipo -->
-                    <div class="row g-2 mb-3">
-                        <div class="col-md-5">
-                            <label class="form-label small fw-semibold">Tipo de Consulta</label>
-                            <select class="form-select form-select-sm" @bind="_ficha.MedTipoConsulta">
-                                <option value="Consulta Externa">Consulta Externa</option>
-                                <option value="Emergencia">Emergencia</option>
-                                <option value="Control Médico">Control Médico</option>
-                                <option value="Especialidad">Especialidad</option>
-                                <option value="Chequeo Preventivo">Chequeo Preventivo</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label small fw-semibold">Esterilizado</label>
-                            <select class="form-select form-select-sm" @bind="_ficha.Esterilizado">
-                                <option value="S">SÍ</option>
-                                <option value="N">NO</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label small fw-semibold">Sede / Tipo</label>
-                            <select class="form-select form-select-sm" @bind="_ficha.MedTipo">
-                                <option value="HDEV">Doméstico (Mascotas)</option>
-                                <option value="TUERI">Silvestre (Fauna)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Fila 2: Semáforo de Temperamento del Paciente -->
-                    <label class="form-label small fw-semibold d-block">Semáforo de Temperamento del Paciente</label>
-                    <div class="btn-group w-100 mb-3" role="group">
-                        <button type="button" class="btn btn-sm @(_ficha.Temperamento == "TRANQUILO" ? "btn-dark shadow-sm fw-bold" : "btn-outline-secondary")"
-                                @onclick='() => SeleccionarTemperamento("TRANQUILO", "imagenes/temperamento/blanco.png", "green")'>
-                            ⚪ Tranquilo
-                        </button>
-                        <button type="button" class="btn btn-sm @(_ficha.Temperamento == "NERVIOSO" ? "btn-success shadow-sm fw-bold" : "btn-outline-success")"
-                                @onclick='() => SeleccionarTemperamento("NERVIOSO", "imagenes/temperamento/verde.png", "green")'>
-                            🟢 Nervioso
-                        </button>
-                        <button type="button" class="btn btn-sm @(_ficha.Temperamento == "A LA DEFENSIVA" ? "btn-warning text-dark shadow-sm fw-bold" : "btn-outline-warning text-dark")"
-                                @onclick='() => SeleccionarTemperamento("A LA DEFENSIVA", "imagenes/temperamento/amarillo.png", "yellow")'>
-                            🟡 Defensivo
-                        </button>
-                        <button type="button" class="btn btn-sm @(_ficha.Temperamento == "AGRESIVO" ? "btn-danger shadow-sm fw-bold" : "btn-outline-danger")"
-                                @onclick='() => SeleccionarTemperamento("AGRESIVO", "imagenes/temperamento/rojo.png", "red")'>
-                            🔴 Agresivo
-                        </button>
-                    </div>
-
-                    <!-- Fila 3 y 4: Constantes Fisiológicas -->
-                    <div class="row g-2">
-                        <div class="col-4">
-                            <label class="form-label small fw-semibold">Peso (kg)</label>
-                            <input type="number" step="0.01" min="0" class="form-control form-control-sm fw-bold text-primary" @bind="_ficha.Peso" />
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label small fw-semibold">Temp (°C)</label>
-                            <input type="number" step="0.1" min="0" class="form-control form-control-sm" @bind="_ficha.Temperatura" />
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label small fw-semibold">FC (lpm)</label>
-                            <input type="number" min="0" class="form-control form-control-sm" @bind="_ficha.FrecuenciaCardiaca" />
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label small fw-semibold">FR (rpm)</label>
-                            <input type="number" min="0" class="form-control form-control-sm" @bind="_ficha.FrecuenciaRespiratoria" />
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label small fw-semibold">TLLC (seg)</label>
-                            <input type="number" min="0" class="form-control form-control-sm" @bind="_ficha.TiempoLlenadoCapilar" />
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label small fw-semibold">Deshidratación (%)</label>
-                            <input type="number" min="0" max="100" class="form-control form-control-sm" @bind="_ficha.Deshidratacion" />
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small fw-semibold">Condición Corporal (ICC 1-9)</label>
-                            <input type="range" class="form-range" min="1" max="9" @bind="_ficha.IndiceCondicionCorporal" />
-                            <div class="text-center small fw-bold text-primary">ICC: @_ficha.IndiceCondicionCorporal / 9</div>
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small fw-semibold">Pulso / CP</label>
-                            <input type="text" class="form-control form-control-sm" @bind="_ficha.Cp" placeholder="Normal" />
-                        </div>
-                        <div class="col-12 mt-1">
-                            <label class="form-label small fw-semibold">Observaciones triaje <small class="text-muted fw-normal">(opcional)</small></label>
-                            <textarea class="form-control form-control-sm" rows="2" placeholder="Observaciones o notas de triaje..." @bind="_ficha.MedApuntes"></textarea>
-                        </div>
-                    </div>
-
-                    <!-- Botones de Acción -->
-                    <div class="d-flex justify-content-between align-items-center mt-4 pt-2 border-top">
-                        <a href="/consulta/fichamedica/@_ficha.MedOrden/@_ficha.MedNhcl" class="btn btn-sm btn-outline-primary fw-semibold">
-                            <i class="bi bi-file-medical me-1"></i>Ver en SOAP
-                        </a>
-                        <button type="button" class="btn btn-success fw-bold px-4" @onclick="GuardarTriajeAsync" disabled="@_guardando">
-                            <i class="bi bi-floppy-fill me-1"></i>@(_guardando ? "Guardando..." : "Guardar Constantes")
-                        </button>
-                    </div>
-                </div>
+            <!-- Botones de Acción -->
+            <div class="d-flex justify-content-between align-items-center mt-4 pt-2 border-top">
+                <a href="/consulta/fichamedica/@_ficha.MedOrden/@_ficha.MedNhcl" class="btn btn-sm btn-outline-primary fw-semibold">
+                    <i class="bi bi-file-medical me-1"></i>Ver en SOAP
+                </a>
+                <button type="button" class="btn btn-success fw-bold px-4" @onclick="GuardarTriajeAsync" disabled="@_guardando">
+                    <i class="bi bi-floppy-fill me-1"></i>@(_guardando ? "Guardando..." : "Guardar Constantes")
+                </button>
             </div>
         </div>
-    }
-</div>
+    </div>;
+}
 
 @code {
     [Parameter] public int? IdOrden { get; set; }
     [Parameter] public int? Nhcl { get; set; }
+    [Parameter] public bool ModoModal { get; set; }
+    [Parameter] public EventCallback<FichaMedicaCompletaDto> OnGuardado { get; set; }
 
     private bool _cargando = true;
     private bool _guardando;
@@ -232,29 +283,39 @@
         _cargando = true;
         await Task.Yield();
 
-        try
+        if (!ModoModal)
         {
-            _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(top: 50);
-        }
-        catch
-        {
-            _ordenesActivas = [];
-        }
+            try
+            {
+                _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(top: 50);
+            }
+            catch
+            {
+                _ordenesActivas = [];
+            }
 
-        int ordTarget = IdOrden ?? Session.OrdenActiva ?? 0;
-        int nhclTarget = Nhcl ?? Session.NhclActivo ?? 0;
+            int ordTarget = IdOrden ?? Session.OrdenActiva ?? 0;
+            int nhclTarget = Nhcl ?? Session.NhclActivo ?? 0;
 
-        if (ordTarget <= 0 && _ordenesActivas.Count > 0)
-        {
-            ordTarget = _ordenesActivas[0].IdOrdenAtencion;
-            nhclTarget = _ordenesActivas[0].Nhcl;
+            if (ordTarget <= 0 && _ordenesActivas.Count > 0)
+            {
+                ordTarget = _ordenesActivas[0].IdOrdenAtencion;
+                nhclTarget = _ordenesActivas[0].Nhcl;
+            }
+
+            if (ordTarget > 0 || nhclTarget > 0)
+            {
+                IdOrden = ordTarget;
+                Nhcl = nhclTarget;
+                await CargarDatosAsync();
+            }
         }
-
-        if (ordTarget > 0 || nhclTarget > 0)
+        else
         {
-            IdOrden = ordTarget;
-            Nhcl = nhclTarget;
-            await CargarDatosAsync();
+            if ((IdOrden ?? 0) > 0 || (Nhcl ?? 0) > 0)
+            {
+                await CargarDatosAsync();
+            }
         }
 
         _cargando = false;
@@ -262,7 +323,10 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (IdOrden.HasValue && IdOrden.Value > 0 && IdOrden.Value != _ficha.MedOrden)
+        int ord = IdOrden ?? 0;
+        int nh = Nhcl ?? 0;
+
+        if (ord > 0 && (ord != _ficha.MedOrden || (nh > 0 && nh != _ficha.MedNhcl)))
         {
             _cargando = true;
             await CargarDatosAsync();
@@ -282,7 +346,10 @@
             await Task.Yield();
             await CargarDatosAsync();
             _cargando = false;
-            Nav.NavigateTo($"/admision/triaje/{IdOrden}/{Nhcl}", replace: true);
+            if (!ModoModal)
+            {
+                Nav.NavigateTo($"/admision/triaje/{IdOrden}/{Nhcl}", replace: true);
+            }
         }
     }
 
@@ -295,7 +362,10 @@
         await Task.Yield();
         await CargarDatosAsync();
         _cargando = false;
-        Nav.NavigateTo($"/admision/triaje/{IdOrden}/{Nhcl}", replace: true);
+        if (!ModoModal)
+        {
+            Nav.NavigateTo($"/admision/triaje/{IdOrden}/{Nhcl}", replace: true);
+        }
     }
 
     private async Task CargarDatosAsync()
@@ -312,9 +382,12 @@
             Nhcl = _paciente.Nhcl;
         }
 
-        Session.SeleccionarOrden(ord, Nhcl ?? 0, _paciente?.PacienteNombre);
+        if (ord > 0)
+        {
+            Session.SeleccionarOrden(ord, Nhcl ?? (_paciente?.Nhcl ?? 0), _paciente?.PacienteNombre);
+        }
 
-        _ficha = await ConsultaService.ObtenerFichaMedicaAsync(ord, Nhcl ?? 0);
+        _ficha = await ConsultaService.ObtenerFichaMedicaAsync(ord, Nhcl ?? (_paciente?.Nhcl ?? 0));
         if (string.IsNullOrWhiteSpace(_ficha.MedTipoConsulta))
         {
             _ficha.MedTipoConsulta = "Consulta Externa";
@@ -325,7 +398,7 @@
         }
     }
 
-    private void SeleccionarTemperamento(string temperamento, string rutaImagen, string? colorSemafoto = null)
+    private void SeleccionarTemperamento(string temperamento, string rutaImagen, string? colorSemaforo = null)
     {
         _ficha.Temperamento = temperamento;
         _ficha.ColorTriaje = rutaImagen;
@@ -333,7 +406,8 @@
 
     private async Task GuardarTriajeAsync()
     {
-        if (_paciente is null || (IdOrden ?? 0) <= 0)
+        int ord = IdOrden ?? _ficha.MedOrden;
+        if (ord <= 0)
         {
             _esError = true;
             _mensajeAlerta = "Debe seleccionar un paciente con orden activa para guardar el triaje.";
@@ -345,8 +419,8 @@
 
         try
         {
-            if (_ficha.MedOrden <= 0) _ficha.MedOrden = IdOrden ?? 0;
-            if (_ficha.MedNhcl <= 0) _ficha.MedNhcl = Nhcl ?? _paciente.Nhcl;
+            if (_ficha.MedOrden <= 0) _ficha.MedOrden = ord;
+            if (_ficha.MedNhcl <= 0) _ficha.MedNhcl = Nhcl ?? (_paciente?.Nhcl ?? 0);
             if (_ficha.MedCliente <= 0 && _paciente != null) _ficha.MedCliente = _paciente.ClienteCodigo;
             if (string.IsNullOrEmpty(_ficha.MedEspecie) && _paciente != null) _ficha.MedEspecie = _paciente.Especie;
 
@@ -363,6 +437,10 @@
             if (exito)
             {
                 Session.SeleccionarOrden(_ficha.MedOrden, _ficha.MedNhcl, _paciente?.PacienteNombre);
+                if (OnGuardado.HasDelegate)
+                {
+                    await OnGuardado.InvokeAsync(_ficha);
+                }
             }
         }
         catch (Exception ex)
