@@ -69,6 +69,7 @@ builder.Services.AddScoped<IAuthService, HosvetKardex.Web.Services.AuthService>(
 builder.Services.AddScoped<IInventarioService, InventarioService>();
 builder.Services.AddScoped<IKardexService, KardexService>();
 builder.Services.AddScoped<IHospitalizacionService, HospitalizacionService>();
+builder.Services.AddScoped<IFichasClinicasComplementariasService, FichasClinicasComplementariasService>();
 builder.Services.AddScoped<IQuirofanoService, QuirofanoService>();
 builder.Services.AddScoped<IConsultaExternaService, ConsultaExternaService>();
 builder.Services.AddScoped<ILaboratorioImagenService, LaboratorioImagenService>();

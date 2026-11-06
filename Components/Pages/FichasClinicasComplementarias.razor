@@ -1,0 +1,172 @@
+@page "/hospitalizacion/fichas-complementarias"
+@page "/hospitalizacion/fichas-complementarias/{IdOrden:int}/{Nhcl:int}"
+@inject IKardexService KardexService
+@inject IFichasClinicasComplementariasService FichasService
+@inject SessionStateService Session
+
+<PageTitle>Fichas clínicas complementarias — e-ForVets</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Buscar paciente hospitalizado</label>
+                    <div class="input-group input-group-sm">
+                        <input class="form-control" @bind="_filtro" @bind:event="oninput" placeholder="Paciente, tutor o NHCL" />
+                        <button class="btn btn-outline-primary" @onclick="BuscarAsync">Buscar</button>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold">Orden activa</label>
+                    <select class="form-select form-select-sm" value="@IdOrden" @onchange="CambiarOrdenAsync">
+                        <option value="0">-- Seleccione --</option>
+                        @foreach (var o in _ordenes)
+                        {
+                            <option value="@o.IdOrdenAtencion">#@o.IdOrdenAtencion | NHCL @o.Nhcl — @o.Paciente (@o.Cliente)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2 text-end">
+                    @if (_paciente is not null)
+                    {
+                        <span class="badge text-bg-primary">@_paciente.PacienteNombre</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_mensaje))
+    {
+        <div class="alert @(_error ? "alert-danger" : "alert-success") py-2">@_mensaje</div>
+    }
+
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item"><button class="nav-link @ClaseTab("turno")" @onclick='() => _tab="turno"'>Paso de turno</button></li>
+        <li class="nav-item"><button class="nav-link @ClaseTab("examenes")" @onclick='() => _tab="examenes"'>Exámenes e interconsultas</button></li>
+        <li class="nav-item"><button class="nav-link @ClaseTab("transfusion")" @onclick='() => _tab="transfusion"'>Transfusión sanguínea</button></li>
+    </ul>
+
+    <fieldset disabled="@(_paciente is null)">
+    @if (_tab == "turno")
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-primary text-white fw-bold">Entrega clínica estructurada por turno</div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-md-3"><label class="form-label">Fecha y hora</label><InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_turno.Fecha" /></div>
+                    <div class="col-md-3"><label class="form-label">Turno</label><InputSelect class="form-select" @bind-Value="_turno.Turno"><option>Matutino</option><option>Vespertino</option><option>Nocturno</option></InputSelect></div>
+                    <div class="col-md-3"><label class="form-label">Entrega *</label><InputText class="form-control" @bind-Value="_turno.Entrega" /></div>
+                    <div class="col-md-3"><label class="form-label">Recibe *</label><InputText class="form-control" @bind-Value="_turno.Recibe" /></div>
+                    <div class="col-md-6"><label class="form-label">S — Subjetivo</label><InputTextArea class="form-control" rows="3" @bind-Value="_turno.Subjetivo" /></div>
+                    <div class="col-md-6"><label class="form-label">O — Objetivo</label><InputTextArea class="form-control" rows="3" @bind-Value="_turno.Objetivo" /></div>
+                    <div class="col-md-6"><label class="form-label">A — Análisis/evolución</label><InputTextArea class="form-control" rows="3" @bind-Value="_turno.Analisis" /></div>
+                    <div class="col-md-6"><label class="form-label">P — Plan del siguiente turno</label><InputTextArea class="form-control" rows="3" @bind-Value="_turno.Plan" /></div>
+                    <div class="col-md-4"><label class="form-label">Exámenes realizados</label><InputTextArea class="form-control" rows="2" @bind-Value="_turno.ExamenesRealizados" /></div>
+                    <div class="col-md-4"><label class="form-label">Pendientes</label><InputTextArea class="form-control" rows="2" @bind-Value="_turno.Pendientes" /></div>
+                    <div class="col-md-4"><label class="form-label text-danger fw-bold">Alertas y criterios para llamar</label><InputTextArea class="form-control" rows="2" @bind-Value="_turno.Alertas" /></div>
+                </div>
+                <div class="mt-3 d-flex gap-2"><button class="btn btn-primary" @onclick="GuardarTurnoAsync">Guardar paso de turno</button><button class="btn btn-outline-secondary" @onclick="NuevoTurno">Limpiar</button></div>
+            </div>
+        </div>
+        <div class="table-responsive mt-3"><table class="table table-sm table-hover"><thead><tr><th>Fecha</th><th>Turno</th><th>Entrega → recibe</th><th>Pendientes/alertas</th><th></th></tr></thead><tbody>
+        @foreach (var x in _turnos) { <tr><td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Turno</td><td>@x.Entrega → @x.Recibe</td><td>@x.Pendientes @x.Alertas</td><td class="text-end"><button class="btn btn-xs btn-outline-primary" @onclick="() => EditarTurno(x)">Editar</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarTurnoAsync(x.Id)">Eliminar</button></td></tr> }
+        </tbody></table></div>
+    }
+    else if (_tab == "examenes")
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-info fw-bold">Exámenes pendientes e interconsultas</div>
+            <div class="card-body"><div class="row g-2">
+                <div class="col-md-2"><label class="form-label">Tipo</label><InputSelect class="form-select" @bind-Value="_inter.Tipo"><option>Examen</option><option>Interconsulta</option><option>Laboratorio</option><option>Imagenología</option></InputSelect></div>
+                <div class="col-md-4"><label class="form-label">Detalle *</label><InputText class="form-control" @bind-Value="_inter.Detalle" /></div>
+                <div class="col-md-3"><label class="form-label">Fecha agendada</label><InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_inter.FechaAgendada" /></div>
+                <div class="col-md-3"><label class="form-label">Estado</label><InputSelect class="form-select" @bind-Value="_inter.Estado"><option>Pendiente</option><option>Agendado</option><option>Realizado</option><option>Resultado pendiente</option><option>Revisado</option><option>Cancelado</option></InputSelect></div>
+                <div class="col-md-4"><label class="form-label">Equipo/laboratorio</label><InputText class="form-control" @bind-Value="_inter.EquipoLaboratorio" /></div>
+                <div class="col-md-4"><label class="form-label">Especialista</label><InputText class="form-control" @bind-Value="_inter.Especialista" /></div>
+                <div class="col-md-4"><label class="form-label">Médico solicitante</label><InputText class="form-control" @bind-Value="_inter.MedicoSolicitante" /></div>
+                <div class="col-md-9"><label class="form-label">Resumen del resultado</label><InputTextArea class="form-control" rows="2" @bind-Value="_inter.ResultadoResumen" /></div>
+                <div class="col-md-3 d-flex align-items-end"><div class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_inter.RegistradoHistoria" /><label class="form-check-label">Registrado en historia</label></div></div>
+            </div><div class="mt-3 d-flex gap-2"><button class="btn btn-primary" @onclick="GuardarInterAsync">Guardar</button><button class="btn btn-outline-secondary" @onclick="NuevaInter">Limpiar</button></div></div>
+        </div>
+        <div class="table-responsive mt-3"><table class="table table-sm table-hover"><thead><tr><th>Solicitud</th><th>Tipo/detalle</th><th>Agenda</th><th>Estado</th><th>Resultado</th><th></th></tr></thead><tbody>
+        @foreach (var x in _interconsultas) { <tr><td>@x.FechaSolicitud.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Tipo: @x.Detalle</td><td>@x.FechaAgendada?.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Estado</td><td>@x.ResultadoResumen</td><td class="text-end"><button class="btn btn-xs btn-outline-primary" @onclick="() => EditarInter(x)">Editar</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarInterAsync(x.Id)">Eliminar</button></td></tr> }
+        </tbody></table></div>
+    }
+    else
+    {
+        <div class="alert alert-warning small"><strong>Seguridad:</strong> verifique identidad del paciente, unidad, vencimiento, consentimiento, tipificación y compatibilidad conforme al protocolo institucional antes de iniciar.</div>
+        <div class="card border-0 shadow-sm"><div class="card-header bg-danger text-white fw-bold">Ficha de transfusión de hemoderivados</div><div class="card-body"><div class="row g-2">
+            <div class="col-md-3"><label class="form-label">Producto *</label><InputSelect class="form-select" @bind-Value="_trans.Producto"><option>Sangre entera</option><option>Concentrado eritrocitario</option><option>Plasma fresco congelado</option><option>Plasma</option><option>Albúmina</option><option>Otro</option></InputSelect></div>
+            <div class="col-md-3"><label class="form-label">Identificador de unidad *</label><InputText class="form-control" @bind-Value="_trans.IdentificadorUnidad" /></div>
+            <div class="col-md-3"><label class="form-label">Vencimiento</label><InputDate class="form-control" @bind-Value="_trans.FechaVencimiento" /></div>
+            <div class="col-md-3"><label class="form-label">Estado</label><InputSelect class="form-select" @bind-Value="_trans.Estado"><option>En preparación</option><option>En curso</option><option>Completada</option><option>Suspendida</option><option>Reacción adversa</option></InputSelect></div>
+            <div class="col-md-3"><label class="form-label">Grupo receptor</label><InputText class="form-control" @bind-Value="_trans.GrupoReceptor" /></div>
+            <div class="col-md-3"><label class="form-label">Grupo donante</label><InputText class="form-control" @bind-Value="_trans.GrupoDonante" /></div>
+            <div class="col-md-2"><label class="form-label">Vol. prescrito (ml)</label><InputNumber class="form-control" @bind-Value="_trans.VolumenPrescritoMl" /></div>
+            <div class="col-md-2"><label class="form-label">Administrado (ml)</label><InputNumber class="form-control" @bind-Value="_trans.VolumenAdministradoMl" /></div>
+            <div class="col-md-2"><label class="form-label">Velocidad (ml/h)</label><InputNumber class="form-control" @bind-Value="_trans.VelocidadMlHora" /></div>
+            <div class="col-md-3"><label class="form-label">Inicio</label><InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_trans.HoraInicio" /></div>
+            <div class="col-md-3"><label class="form-label">Fin</label><InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_trans.HoraFin" /></div>
+            <div class="col-md-6"><label class="form-label">Diagnóstico/indicación</label><InputTextArea class="form-control" rows="2" @bind-Value="_trans.DiagnosticoIndicacion" /></div>
+            <div class="col-md-3"><label class="form-label">Médico responsable</label><InputText class="form-control" @bind-Value="_trans.MedicoResponsable" /></div>
+            <div class="col-md-3"><label class="form-label">Doble verificación (dos responsables)</label><InputText class="form-control" @bind-Value="_trans.DobleVerificacion" /></div>
+            <div class="col-md-12 d-flex flex-wrap gap-4"><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.ConsentimientoConfirmado" />Consentimiento confirmado *</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.TipificacionVerificada" />Tipificación verificada *</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.CrossmatchMayor" />Crossmatch mayor</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.CrossmatchMenor" />Crossmatch menor</label></div>
+            <div class="col-12"><label class="form-label">Observaciones</label><InputTextArea class="form-control" rows="2" @bind-Value="_trans.Observaciones" /></div>
+        </div><div class="mt-3 d-flex gap-2"><button class="btn btn-danger" @onclick="GuardarTransAsync">Guardar transfusión</button><button class="btn btn-outline-secondary" @onclick="NuevaTrans">Nueva</button></div></div></div>
+
+        @if (_trans.Id > 0)
+        {
+            <div class="card border-0 shadow-sm mt-3"><div class="card-header fw-bold">Monitoreo del receptor</div><div class="card-body"><div class="row g-2">
+                <div class="col-md-2"><label class="form-label">Momento</label><InputText class="form-control" @bind-Value="_mon.Momento" placeholder="T0, 15 min..." /></div>
+                <div class="col-md-2"><label class="form-label">Temperatura °C</label><InputNumber class="form-control" @bind-Value="_mon.Temperatura" /></div>
+                <div class="col-md-2"><label class="form-label">FC lpm</label><InputNumber class="form-control" @bind-Value="_mon.FrecuenciaCardiaca" /></div>
+                <div class="col-md-2"><label class="form-label">FR rpm</label><InputNumber class="form-control" @bind-Value="_mon.FrecuenciaRespiratoria" /></div>
+                <div class="col-md-1"><label class="form-label">PAS</label><InputNumber class="form-control" @bind-Value="_mon.Pas" /></div>
+                <div class="col-md-1"><label class="form-label">PAD</label><InputNumber class="form-control" @bind-Value="_mon.Pad" /></div>
+                <div class="col-md-1"><label class="form-label">PAM</label><InputNumber class="form-control" @bind-Value="_mon.Pam" /></div>
+                <div class="col-md-3"><label class="form-label">Mucosas</label><InputText class="form-control" @bind-Value="_mon.Mucosas" /></div>
+                <div class="col-md-3"><label class="form-label">Conciencia</label><InputText class="form-control" @bind-Value="_mon.EstadoConciencia" /></div>
+                <div class="col-md-3"><label class="form-label text-danger">Reacciones adversas</label><InputText class="form-control" @bind-Value="_mon.ReaccionesAdversas" /></div>
+                <div class="col-md-3"><label class="form-label">Acción tomada</label><InputText class="form-control" @bind-Value="_mon.AccionTomada" /></div>
+                <div class="col-md-3"><label class="form-label">Responsable</label><InputText class="form-control" @bind-Value="_mon.Responsable" /></div>
+            </div><button class="btn btn-primary mt-3" @onclick="AgregarMonAsync">Agregar control</button></div></div>
+        }
+        <div class="table-responsive mt-3"><table class="table table-sm table-hover"><thead><tr><th>Fecha</th><th>Producto/unidad</th><th>Compatibilidad</th><th>Volumen</th><th>Estado</th><th>Controles</th><th></th></tr></thead><tbody>
+        @foreach (var x in _transfusiones) { <tr><td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Producto / @x.IdentificadorUnidad</td><td>@x.GrupoReceptor → @x.GrupoDonante</td><td>@x.VolumenAdministradoMl / @x.VolumenPrescritoMl ml</td><td>@x.Estado</td><td>@x.Monitoreos.Count</td><td class="text-end"><button class="btn btn-xs btn-outline-primary" @onclick="() => EditarTrans(x)">Abrir</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarTransAsync(x.Id)">Eliminar</button></td></tr> }
+        </tbody></table></div>
+    }
+    </fieldset>
+</div>
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+    private string _tab="turno", _filtro="", _mensaje=""; private bool _error;
+    private List<OrdenActivaResumenDto> _ordenes=[]; private PacienteHeaderDto? _paciente;
+    private List<PasoTurnoDto> _turnos=[]; private List<InterconsultaHospitalariaDto> _interconsultas=[]; private List<TransfusionDto> _transfusiones=[];
+    private PasoTurnoDto _turno=new(); private InterconsultaHospitalariaDto _inter=new(); private TransfusionDto _trans=new(); private TransfusionMonitoreoDto _mon=new();
+
+    protected override async Task OnInitializedAsync(){ try { _ordenes=await KardexService.ObtenerOrdenesActivasAsync(); if(IdOrden>0) await CargarAsync(); } catch(Exception ex){ Error(ex); } }
+    private string ClaseTab(string t)=>_tab==t?"active":"";
+    private async Task BuscarAsync()=>_ordenes=await KardexService.ObtenerOrdenesActivasAsync(_filtro.Trim());
+    private async Task CambiarOrdenAsync(ChangeEventArgs e){ if(int.TryParse(e.Value?.ToString(),out var id)&&id>0){var o=_ordenes.First(x=>x.IdOrdenAtencion==id);IdOrden=id;Nhcl=o.Nhcl;await CargarAsync();} }
+    private async Task CargarAsync(){ _paciente=await KardexService.ObtenerCabeceraPacienteAsync(IdOrden,Nhcl); if(_paciente is null) return; Nhcl=_paciente.Nhcl; Session.SeleccionarOrden(IdOrden,Nhcl,_paciente.PacienteNombre); await RecargarAsync(); NuevoTurno();NuevaInter();NuevaTrans(); }
+    private async Task RecargarAsync(){ var a=FichasService.ObtenerPasosTurnoAsync(IdOrden,Nhcl);var b=FichasService.ObtenerInterconsultasAsync(IdOrden,Nhcl);var c=FichasService.ObtenerTransfusionesAsync(IdOrden,Nhcl);await Task.WhenAll(a,b,c);_turnos=await a;_interconsultas=await b;_transfusiones=await c; }
+    private void NuevoTurno()=>_turno=new(){IdOrden=IdOrden,Nhcl=Nhcl,Fecha=DateTime.Now};
+    private void NuevaInter()=>_inter=new(){IdOrden=IdOrden,Nhcl=Nhcl,FechaSolicitud=DateTime.Now};
+    private void NuevaTrans(){_trans=new(){IdOrden=IdOrden,Nhcl=Nhcl,Fecha=DateTime.Now};_mon=new();}
+    private void EditarTurno(PasoTurnoDto x)=>_turno=x;
+    private void EditarInter(InterconsultaHospitalariaDto x)=>_inter=x;
+    private void EditarTrans(TransfusionDto x){_trans=x;_mon=new(){IdTransfusion=x.Id,FechaHora=DateTime.Now};}
+    private async Task GuardarTurnoAsync()=>await EjecutarAsync(async()=>{await FichasService.GuardarPasoTurnoAsync(_turno,Session.IdUser);await RecargarAsync();NuevoTurno();},"Paso de turno guardado.");
+    private async Task GuardarInterAsync()=>await EjecutarAsync(async()=>{await FichasService.GuardarInterconsultaAsync(_inter,Session.IdUser);await RecargarAsync();NuevaInter();},"Solicitud guardada.");
+    private async Task GuardarTransAsync()=>await EjecutarAsync(async()=>{_trans.Id=await FichasService.GuardarTransfusionAsync(_trans,Session.IdUser);await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Transfusión guardada.");
+    private async Task AgregarMonAsync()=>await EjecutarAsync(async()=>{_mon.IdTransfusion=_trans.Id;await FichasService.AgregarMonitoreoAsync(_mon,IdOrden,Session.IdUser);await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Control agregado.");
+    private async Task EliminarTurnoAsync(int id)=>await EjecutarAsync(async()=>{await FichasService.EliminarPasoTurnoAsync(id,IdOrden);await RecargarAsync();},"Registro eliminado.");
+    private async Task EliminarInterAsync(int id)=>await EjecutarAsync(async()=>{await FichasService.EliminarInterconsultaAsync(id,IdOrden);await RecargarAsync();},"Registro eliminado.");
+    private async Task EliminarTransAsync(int id)=>await EjecutarAsync(async()=>{await FichasService.EliminarTransfusionAsync(id,IdOrden);await RecargarAsync();NuevaTrans();},"Registro eliminado.");
+    private async Task EjecutarAsync(Func<Task> accion,string ok){try{await accion();_error=false;_mensaje=ok;}catch(Exception ex){Error(ex);}}
+    private void Error(Exception ex){_error=true;_mensaje=ex.GetBaseException().Message;}
+}
