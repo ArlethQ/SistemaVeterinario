@@ -1,0 +1,1140 @@
+@using HosvetKardex.Web.Models
+@using HosvetKardex.Web.Services
+@using HosvetKardex.Web.Data
+@inject IAdmisionFacturacionService AdmisionService
+@inject IAdministracionClinicaService AdminService
+@inject SessionStateService SessionState
+@inject IWebHostEnvironment Env
+
+@if (_pasoActual == PasoModal.SeleccionModalidad)
+{
+    <!-- MODAL 1: ELECCIÓN DE MODALIDAD -->
+    <div class="patient-modal-backdrop" @onclick="Cerrar"></div>
+    <section class="patient-modal" style="max-width: 540px;" role="dialog" aria-modal="true" aria-label="Nuevo Paciente">
+        <header class="patient-modal-header">
+            <div>
+                <small class="text-primary fw-bold text-uppercase">Admisión de Pacientes</small>
+                <h5 class="mb-0 fw-bold">Registrar Nuevo Paciente</h5>
+            </div>
+            <button type="button" class="modal-close" title="Cerrar" @onclick="Cerrar">×</button>
+        </header>
+        <div class="patient-modal-body p-4">
+            <p class="text-muted small mb-3">
+                Seleccione la modalidad de registro del paciente:
+            </p>
+            <div class="d-flex flex-column gap-3">
+                <button type="button" class="btn btn-outline-primary p-3 text-start d-flex align-items-center gap-3 rounded-3 border-2" @onclick="ElegirConDueno">
+                    <div class="bg-primary bg-opacity-10 text-primary p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                        <i class="bi bi-person-check-fill fs-4"></i>
+                    </div>
+                    <div>
+                        <strong class="d-block text-dark fs-6">Con dueño registrado</strong>
+                        <small class="text-muted">El tutor o propietario ya existe en el sistema. Se seleccionará su nombre y se agregará la nueva mascota.</small>
+                    </div>
+                </button>
+                <button type="button" class="btn btn-outline-success p-3 text-start d-flex align-items-center gap-3 rounded-3 border-2" @onclick="ElegirSinDueno">
+                    <div class="bg-success bg-opacity-10 text-success p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                        <i class="bi bi-person-plus-fill fs-4"></i>
+                    </div>
+                    <div>
+                        <strong class="d-block text-dark fs-6">Sin dueño registrado</strong>
+                        <small class="text-muted">Es un cliente nuevo. Se registrará primero al tutor y luego a su mascota desde cero.</small>
+                    </div>
+                </button>
+            </div>
+            <div class="d-flex justify-content-end mt-4 pt-2 border-top">
+                <button type="button" class="btn btn-secondary px-4 btn-sm" @onclick="Cerrar">Cancelar</button>
+            </div>
+        </div>
+    </section>
+}
+else if (_pasoActual == PasoModal.FormularioCliente)
+{
+    <!-- MODAL 2: PASO 1 - DATOS DEL PROPIETARIO (SIN DUEÑO) -->
+    <div class="patient-modal-backdrop" @onclick="Cerrar"></div>
+    <section class="patient-modal" role="dialog" aria-modal="true" aria-label="Datos del Propietario">
+        <header class="patient-modal-header">
+            <div>
+                <small>
+                    <span class="badge bg-primary me-1">PASO 1 DE 2</span>
+                    <span>DATOS DEL PROPIETARIO</span>
+                </small>
+                <h5 class="mb-0 fw-bold">Registro integral: Propietario y Paciente</h5>
+            </div>
+            <button type="button" class="modal-close" title="Cerrar" @onclick="Cerrar">×</button>
+        </header>
+        <div class="patient-modal-body">
+            <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3 rounded-3 border-0 bg-info bg-opacity-10">
+                <i class="bi bi-info-circle-fill fs-5 text-primary"></i>
+                <div>
+                    <strong>Registro integral:</strong> Complete los datos del propietario; a continuación registrará los datos del animal para agendar su cita.
+                </div>
+            </div>
+
+            <EditForm Model="_clienteEditando" OnValidSubmit="GuardarClienteAsync">
+                <DataAnnotationsValidator />
+                @if (!string.IsNullOrEmpty(_mensajeAlerta) && _esError)
+                {
+                    <div class="alert alert-danger alert-dismissible fade show py-2 mb-3 shadow-sm" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>@_mensajeAlerta
+                        <button type="button" class="btn-close py-2" @onclick="() => _mensajeAlerta = string.Empty"></button>
+                    </div>
+                }
+                <div class="row g-2">
+                    <div class="col-12 form-section-title">Datos personales</div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Tipo Documento SRI</label>
+                        <select class="form-select form-select-sm" value="@_clienteEditando.PaDocumento" @onchange="OnCambiarTipoDocumento">
+                            <option value="CEDULA">CÉDULA (máx. 10 dígitos)</option>
+                            <option value="RUC">RUC (máx. 13 dígitos)</option>
+                            <option value="PASAPORTE">PASAPORTE (6-15 caracteres)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Número de Documento *</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text"
+                                   class="form-control form-control-sm @(_errorDocumento != null ? (_esDocValido ? "is-valid border-success" : "is-invalid border-danger") : "")"
+                                   value="@_clienteEditando.PaCedula"
+                                   inputmode="@InputModeDocumento"
+                                   data-doc-type="@_clienteEditando.PaDocumento"
+                                   data-numeric="@EsDocumentoNumerico"
+                                   onkeypress="if (this.dataset.docType !== 'PASAPORTE' && (event.which < 48 || event.which > 57)) return false;"
+                                   maxlength="@ObtenerMaximoDocumento()"
+                                   placeholder="@ObtenerPlaceholderDocumento()"
+                                   @oninput="OnInputDocumento" />
+                            @if (_esDocValido)
+                            {
+                                <span class="input-group-text bg-success text-white py-0 px-2" title="Documento válido">
+                                    <i class="bi bi-check-circle-fill"></i>
+                                </span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(_errorDocumento))
+                        {
+                            <div class="@(_esDocValido ? "text-success" : "text-danger") small mt-1 fw-semibold">
+                                <i class="bi @(_esDocValido ? "bi-check-circle-fill" : "bi-exclamation-triangle-fill") me-1"></i>@_errorDocumento
+                            </div>
+                        }
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Apellidos *</label>
+                        <input type="text"
+                               class="form-control form-control-sm @(_errorApellidos != null ? "is-invalid border-danger" : (!string.IsNullOrWhiteSpace(_clienteEditando.PaApellidos) ? "is-valid border-success" : ""))"
+                               value="@_clienteEditando.PaApellidos"
+                               placeholder="Ej: Pérez-Gómez, De la Cruz"
+                               onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚñÑ\s'-]/.test(event.key);"
+                               @oninput="OnInputApellidos"
+                               @onblur="OnBlurApellidos" />
+                        @if (!string.IsNullOrEmpty(_errorApellidos))
+                        {
+                            <div class="text-danger small mt-1 fw-semibold">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorApellidos
+                            </div>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Nombres *</label>
+                        <input type="text"
+                               class="form-control form-control-sm @(_errorNombres != null ? "is-invalid border-danger" : (!string.IsNullOrWhiteSpace(_clienteEditando.PaNombres) ? "is-valid border-success" : ""))"
+                               value="@_clienteEditando.PaNombres"
+                               placeholder="Ej: Juan Carlos, D'Angelo"
+                               onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚñÑ\s'-]/.test(event.key);"
+                               @oninput="OnInputNombres"
+                               @onblur="OnBlurNombres" />
+                        @if (!string.IsNullOrEmpty(_errorNombres))
+                        {
+                            <div class="text-danger small mt-1 fw-semibold">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorNombres
+                            </div>
+                        }
+                    </div>
+
+                    <div class="col-12 form-section-title mt-3">Datos de contacto</div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Teléfono Móvil *</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light text-muted fw-bold border-end-0">+593</span>
+                            <input type="tel"
+                                   class="form-control form-control-sm @(_errorMovil != null ? "is-invalid border-danger" : (_esMovilValido ? "is-valid border-success" : ""))"
+                                   value="@_clienteEditando.PaMovil"
+                                   maxlength="10"
+                                   inputmode="numeric"
+                                   placeholder="09XXXXXXXX (10 dígitos)"
+                                   onkeypress="if (event.which < 48 || event.which > 57) return false;"
+                                   @oninput="OnInputMovil" />
+                            @if (_esMovilValido)
+                            {
+                                <span class="input-group-text bg-success text-white py-0 px-2" title="Móvil válido">
+                                    <i class="bi bi-check-circle-fill"></i>
+                                </span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(_errorMovil))
+                        {
+                            <div class="text-danger small mt-1 fw-semibold">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorMovil
+                            </div>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Teléfono Convencional <small class="text-muted fw-normal">(Opcional)</small></label>
+                        <div class="input-group input-group-sm">
+                            <input type="tel"
+                                   class="form-control form-control-sm @(_errorTelefono != null ? "is-invalid border-danger" : (_esTelefonoValido ? "is-valid border-success" : ""))"
+                                   value="@_clienteEditando.PaTelefono"
+                                   maxlength="7"
+                                   inputmode="numeric"
+                                   placeholder="7 dígitos (no iniciar en 0)"
+                                   onkeypress="if (event.which < 48 || event.which > 57) return false;"
+                                   @oninput="OnInputTelefono" />
+                            @if (_esTelefonoValido)
+                            {
+                                <span class="input-group-text bg-success text-white py-0 px-2" title="Teléfono válido">
+                                    <i class="bi bi-check-circle-fill"></i>
+                                </span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(_errorTelefono))
+                        {
+                            <div class="text-danger small mt-1 fw-semibold">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorTelefono
+                            </div>
+                        }
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold">Correo Electrónico</label>
+                        <input type="text" class="@ClaseEmail" value="@_clienteEditando.PaEmail" @oninput="OnInputEmailAsync" />
+                        @if (!string.IsNullOrEmpty(_errorEmail))
+                        {
+                            <div class="text-danger small mt-1 fw-semibold">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorEmail
+                            </div>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Correo para facturación</label>
+                        <InputText type="email" class="form-control form-control-sm" @bind-Value="_clienteEditando.PaEmailFactura" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">Tipo de persona</label>
+                        <select class="form-select form-select-sm" @bind="_clienteEditando.PaTipoPersona">
+                            <option value="NATURAL">Natural</option>
+                            <option value="JURIDICA">Jurídica</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">Tipo de cliente</label>
+                        <select class="form-select form-select-sm" @bind="_clienteEditando.PaTipoCli">
+                            <option value="R">Regular</option>
+                            <option value="C">Convenio</option>
+                            <option value="E">Empleado</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12 form-section-title mt-3">Dirección</div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold">Dirección Domiciliaria *</label>
+                        <InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaDireccion" placeholder="Calle principal, número y secundaria" />
+                        <ValidationMessage For="() => _clienteEditando.PaDireccion" />
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold">Observaciones</label>
+                        <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_clienteEditando.PaObservaciones" placeholder="Notas adicionales sobre el tutor o domicilio..." />
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _pasoActual = PasoModal.SeleccionModalidad">
+                        <i class="bi bi-arrow-left me-1"></i>Volver
+                    </button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="Cerrar">Cancelar</button>
+                        <button type="submit" class="btn btn-primary btn-sm" disabled="@_guardandoCliente">
+                            @if (_guardandoCliente)
+                            {
+                                <span>Guardando...</span>
+                            }
+                            else
+                            {
+                                <span>Siguiente: Registrar Paciente</span>
+                                <i class="bi bi-arrow-right-circle-fill ms-1"></i>
+                            }
+                        </button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </section>
+}
+else if (_pasoActual == PasoModal.FormularioMascota)
+{
+    <!-- MODAL 3: DATOS DE LA MASCOTA (CON DUEÑO O PASO 2 SIN DUEÑO) -->
+    <div class="patient-modal-backdrop" @onclick="Cerrar"></div>
+    <section class="patient-modal" role="dialog" aria-modal="true" aria-label="Ficha del paciente">
+        <header class="patient-modal-header">
+            <div>
+                <small>
+                    @if (_esConDueno)
+                    {
+                        <span class="badge bg-primary me-1">NUEVO PACIENTE</span>
+                        <span>TUTOR REGISTRADO</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success me-1">PASO 2 DE 2</span>
+                        <span>DATOS DE LA MASCOTA</span>
+                    }
+                </small>
+                <h5 class="mb-0 fw-bold">
+                    @if (_esConDueno)
+                    {
+                        <span>Agregar paciente con dueño existente</span>
+                    }
+                    else
+                    {
+                        <span>Registrar paciente para @_clienteGuardado?.NombreCompleto</span>
+                    }
+                </h5>
+            </div>
+            <button type="button" class="modal-close" title="Cerrar" @onclick="Cerrar">×</button>
+        </header>
+        <div class="patient-modal-body">
+            @if (!_esConDueno && _clienteGuardado != null)
+            {
+                <div class="alert alert-success py-2 px-3 small d-flex align-items-center gap-2 mb-3 rounded-3 border-0 bg-success bg-opacity-10">
+                    <i class="bi bi-check-circle-fill fs-5 text-success"></i>
+                    <div>
+                        <strong>Tutor registrado:</strong> @_clienteGuardado.NombreCompleto (C.I. @_clienteGuardado.PaCedula). A continuación complete la información de su mascota.
+                    </div>
+                </div>
+            }
+
+            <EditForm Model="_mascotaEditando" OnValidSubmit="GuardarMascotaAsync">
+                <DataAnnotationsValidator />
+                @if (!string.IsNullOrEmpty(_mensajeAlerta) && _esError)
+                {
+                    <div class="alert alert-danger alert-dismissible fade show py-2 mb-3 shadow-sm" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>@_mensajeAlerta
+                        <button type="button" class="btn-close py-2" @onclick="() => _mensajeAlerta = string.Empty"></button>
+                    </div>
+                }
+
+                <div class="row g-2">
+                    <!-- SI ES CON DUEÑO REGISTRADO: SELECTOR DE DUEÑO EXISTENTE -->
+                    @if (_esConDueno)
+                    {
+                        <div class="col-12 mb-2 bg-light p-3 rounded-3 border">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label small fw-bold text-primary mb-0">
+                                    <i class="bi bi-person-check-fill me-1"></i>Tutor o Propietario Responsable *
+                                </label>
+                                <small class="text-muted">(@ClientesFiltrados.Count encontrados)</small>
+                            </div>
+                            <div class="row g-2 align-items-center">
+                                <div class="col-md-7">
+                                    <select class="form-select form-select-sm fw-bold @(!string.IsNullOrEmpty(_errorDueno) ? "is-invalid border-danger" : (_mascotaEditando.MasIdCliente > 0 ? "is-valid border-success" : ""))"
+                                            value="@_mascotaEditando.MasIdCliente"
+                                            @onchange="OnCambiarDuenoSeleccionado">
+                                        <option value="0">-- Seleccione el tutor responsable --</option>
+                                        @foreach (var c in ClientesFiltrados)
+                                        {
+                                            <option value="@c.PaCodigo">
+                                                @c.NombreCompleto (C.I. @c.PaCedula) @(!string.IsNullOrWhiteSpace(c.PaMovil) ? $"· Cel: {c.PaMovil}" : "")
+                                            </option>
+                                        }
+                                    </select>
+                                    @if (!string.IsNullOrEmpty(_errorDueno))
+                                    {
+                                        <div class="text-danger small mt-1 fw-semibold">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@_errorDueno
+                                        </div>
+                                    }
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                        <input type="text" class="form-control" placeholder="Buscar por nombre o cédula..."
+                                               value="@_filtroDuenos"
+                                               @oninput="OnFiltroDuenosInput" />
+                                    </div>
+                                </div>
+                            </div>
+                            @if (_clienteSeleccionado != null)
+                            {
+                                <div class="mt-2 pt-2 border-top small text-muted d-flex flex-wrap gap-3 align-items-center">
+                                    <span><i class="bi bi-card-text me-1 text-primary"></i><strong>C.I./RUC:</strong> @_clienteSeleccionado.PaCedula</span>
+                                    <span><i class="bi bi-telephone-fill me-1 text-success"></i><strong>Teléfono:</strong> +593 @(_clienteSeleccionado.PaMovil ?? _clienteSeleccionado.PaTelefono)</span>
+                                    <span><i class="bi bi-geo-alt-fill me-1 text-danger"></i><strong>Dirección:</strong> @(_clienteSeleccionado.PaDireccion ?? "Sin registrar")</span>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <!-- FOTOGRAFÍA DEL PACIENTE -->
+                    <div class="col-12">
+                        <div class="pet-photo-upload">
+                            <div class="pet-photo-preview">
+                                @if (!string.IsNullOrEmpty(_fotoMascotaPreview))
+                                {
+                                    <img src="@_fotoMascotaPreview" alt="Vista previa del paciente" />
+                                }
+                                else
+                                {
+                                    <span>@(string.IsNullOrWhiteSpace(_mascotaEditando.MasNombre) ? "🐾" : _mascotaEditando.MasNombre[..1].ToUpperInvariant())</span>
+                                }
+                            </div>
+                            <div class="flex-grow-1">
+                                <label class="form-label small fw-bold mb-1">Fotografía del paciente</label>
+                                <div class="spanish-file-picker">
+                                    <InputFile id="foto-paciente-cita" OnChange="SeleccionarFotoMascotaAsync" accept="image/jpeg,image/png,image/webp" class="visually-hidden" />
+                                    <label for="foto-paciente-cita">Seleccionar imagen</label>
+                                    <span title="@_fotoMascotaNombre">@_fotoMascotaNombre</span>
+                                </div>
+                                <small class="text-muted">JPG, PNG o WEBP. Tamaño máximo: 5 MB.</small>
+                                @if (!string.IsNullOrEmpty(_errorFotoMascota))
+                                {
+                                    <div class="text-danger small fw-semibold">@_errorFotoMascota</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CAMPOS GENERALES DEL PACIENTE -->
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">Origen Institucional</label>
+                        <select class="form-select form-select-sm fw-bold" @bind="_mascotaEditando.MasOrigen">
+                            <option value="M">Mascota Doméstica</option>
+                            <option value="T">Fauna Silvestre (TUERI)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label small fw-bold">Nombre del Paciente / Ejemplar *</label>
+                        <InputText class="form-control form-control-sm text-uppercase fw-bold" @bind-Value="_mascotaEditando.MasNombre" placeholder="Ej: LUNA, THOR, BOBBY" />
+                        <ValidationMessage For="() => _mascotaEditando.MasNombre" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">Especie</label>
+                        <select class="form-select form-select-sm" value="@_mascotaEditando.MasEspecie" @onchange="CambiarEspecieAsync">
+                            @foreach (var esp in _especies)
+                            {
+                                <option value="@esp.Id">@esp.Descripcion</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">Raza / Familia</label>
+                        <select class="form-select form-select-sm" @bind="_mascotaEditando.MasRaza">
+                            @foreach (var raz in _razas)
+                            {
+                                <option value="@raz.Id">@raz.Descripcion</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">Sexo</label>
+                        <select class="form-select form-select-sm" @bind="_mascotaEditando.MasSexo">
+                            @foreach (var s in _sexos)
+                            {
+                                <option value="@s.Id">@s.Descripcion</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">Esterilizado / Castrado</label>
+                        <select class="form-select form-select-sm" @bind="_mascotaEditando.MasCastrado">
+                            <option value="NO">NO</option>
+                            <option value="SI">SÍ</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">Fecha de Nacimiento Aprox.</label>
+                        <InputDate class="form-control form-control-sm" @bind-Value="_mascotaEditando.MasFechaNace" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold">Microchip / identificación</label>
+                        <InputText class="form-control form-control-sm text-uppercase" @bind-Value="_mascotaEditando.MasMicrochip" placeholder="Número de microchip..." />
+                    </div>
+
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold">Semáforo de Temperamento / Triaje</label>
+                        <select class="form-select form-select-sm" @bind="_mascotaEditando.MasColorTriaje">
+                            <option value="green">🟢 Verde — Dócil / Manejo Estándar</option>
+                            <option value="yellow">🟡 Amarillo — Nervioso / Precaución</option>
+                            <option value="red">🔴 Rojo — Agresivo / Riesgo / Braquicéfalo</option>
+                        </select>
+                    </div>
+
+                    @if (_mascotaEditando.MasOrigen == "T")
+                    {
+                        <div class="col-12 form-section-title mt-2">Información de fauna silvestre (TUERI)</div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Clase</label>
+                            <select class="form-select form-select-sm" value="@_mascotaEditando.TueClase" @onchange="CambiarClaseTueriAsync">
+                                <option value="">Seleccione</option>
+                                @foreach (var x in _clasesTueri)
+                                {
+                                    <option value="@x.Id">@x.Descripcion</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">Nombre científico / común</label>
+                            <select class="form-select form-select-sm" @bind="_mascotaEditando.TueCientifico">
+                                <option value="">Seleccione</option>
+                                @foreach (var x in _nombresCientificos)
+                                {
+                                    <option value="@x.Id">@x.Descripcion</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Peso</label>
+                            <InputText class="form-control form-control-sm" @bind-Value="_mascotaEditando.TuePeso" placeholder="Ej: 1.5 kg" />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">Categoría de ingreso</label>
+                            <select class="form-select form-select-sm" @bind="_mascotaEditando.TueCategoria">
+                                <option value="">Seleccione</option>
+                                @foreach (var x in _categoriasTueri)
+                                {
+                                    <option value="@x.Id">@x.Descripcion</option>
+                                }
+                            </select>
+                        </div>
+                    }
+
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold">Antecedentes / Alergias / Observaciones del Paciente</label>
+                        <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_mascotaEditando.MasObservacion" placeholder="Alergias, condiciones preexistentes o notas importantes..." />
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                    <span class="small text-muted">Edad estimada: <strong>@_mascotaEditando.EdadCalculada</strong></span>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="Cancelar">Cancelar</button>
+                        <button type="submit" class="btn btn-primary btn-sm" disabled="@_guardandoMascota">
+                            <i class="bi bi-save me-1"></i>@(_guardandoMascota ? "Guardando paciente..." : "Guardar Paciente")
+                        </button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public EventCallback<PacienteMascotaDto> OnPacienteCreado { get; set; }
+    [Parameter] public EventCallback OnCerrar { get; set; }
+
+    private enum PasoModal
+    {
+        SeleccionModalidad,
+        FormularioCliente,
+        FormularioMascota
+    }
+
+    private PasoModal _pasoActual = PasoModal.SeleccionModalidad;
+    private bool _esConDueno;
+    private bool _esError;
+    private string? _mensajeAlerta;
+
+    // Catálogos
+    private List<ClienteDto> _clientes = new();
+    private List<CatalogoItemGenericoDto> _especies = new();
+    private List<CatalogoItemGenericoDto> _razas = new();
+    private List<CatalogoItemGenericoDto> _sexos = new();
+    private List<CatalogoItemGenericoDto> _clasesTueri = new();
+    private List<CatalogoItemGenericoDto> _categoriasTueri = new();
+    private List<CatalogoItemGenericoDto> _formasObtencionTueri = new();
+    private List<CatalogoItemGenericoDto> _nombresCientificos = new();
+
+    // Cliente (Paso 1)
+    private ClienteDto _clienteEditando = new() { PaDocumento = "CEDULA" };
+    private ClienteDto? _clienteGuardado;
+    private bool _guardandoCliente;
+    private string? _errorDocumento;
+    private bool _esDocValido;
+    private string? _errorApellidos;
+    private string? _errorNombres;
+    private string? _errorMovil;
+    private bool _esMovilValido;
+
+    // Mascota (Paso 2)
+    private PacienteMascotaDto _mascotaEditando = new();
+    private ClienteDto? _clienteSeleccionado;
+    private string _filtroDuenos = string.Empty;
+    private string? _errorDueno;
+    private bool _guardandoMascota;
+    private IBrowserFile? _fotoMascota;
+    private string? _fotoMascotaPreview;
+    private string _fotoMascotaNombre = "Ningún archivo seleccionado";
+    private string? _errorFotoMascota;
+
+    private List<ClienteDto> ClientesFiltrados =>
+        string.IsNullOrWhiteSpace(_filtroDuenos)
+            ? _clientes.Take(30).ToList()
+            : _clientes.Where(c =>
+                c.NombreCompleto.Contains(_filtroDuenos, StringComparison.OrdinalIgnoreCase) ||
+                (c.PaCedula != null && c.PaCedula.Contains(_filtroDuenos, StringComparison.OrdinalIgnoreCase)) ||
+                (c.PaMovil != null && c.PaMovil.Contains(_filtroDuenos, StringComparison.OrdinalIgnoreCase))).Take(30).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var tEsp = AdmisionService.ObtenerEspeciesAsync();
+            var tSex = AdmisionService.ObtenerSexosAsync();
+            var tCla = AdmisionService.ObtenerClasesTueriAsync();
+            var tCat = AdmisionService.ObtenerCategoriasIngresoTueriAsync();
+            var tObt = AdmisionService.ObtenerFormasObtencionTueriAsync();
+            var tCie = AdmisionService.ObtenerNombresCientificosAsync();
+            var tRaz = AdmisionService.ObtenerRazasPorEspecieAsync(1);
+            var tCli = AdmisionService.BuscarClientesAsync(string.Empty);
+
+            await Task.WhenAll(tEsp, tSex, tCla, tCat, tObt, tCie, tRaz, tCli);
+
+            _especies = await tEsp;
+            _sexos = await tSex;
+            _clasesTueri = await tCla;
+            _categoriasTueri = await tCat;
+            _formasObtencionTueri = await tObt;
+            _nombresCientificos = await tCie;
+            _razas = await tRaz;
+            _clientes = await tCli;
+        }
+        catch (Exception ex)
+        {
+            _mensajeAlerta = $"Error al cargar catálogos: {ex.Message}";
+            _esError = true;
+        }
+    }
+
+    private void ElegirConDueno()
+    {
+        _esConDueno = true;
+        _pasoActual = PasoModal.FormularioMascota;
+        _mascotaEditando = new PacienteMascotaDto
+        {
+            MasIdCliente = 0,
+            MasOrigen = "M",
+            MasEspecie = 1,
+            MasSexo = 1,
+            MasColorTriaje = "green",
+            MasFechaNace = DateTime.Today.AddYears(-1)
+        };
+        _clienteSeleccionado = null;
+        _filtroDuenos = string.Empty;
+        _errorDueno = null;
+        _mensajeAlerta = null;
+    }
+
+    private void ElegirSinDueno()
+    {
+        _esConDueno = false;
+        _pasoActual = PasoModal.FormularioCliente;
+        _clienteEditando = new ClienteDto
+        {
+            PaDocumento = "CEDULA",
+            PaTipoPersona = "NATURAL",
+            PaTipoCli = "R",
+            PaGrupoCliente = "REGULAR",
+            PaTerminosPago = "CONTADO",
+            PaFormaPago = "EFECTIVO",
+            PaEstado = "A",
+            PaGenero = "1",
+            PaEstadoCivil = "1",
+            PaNotas = string.Empty
+        };
+        _errorDocumento = null;
+        _esDocValido = false;
+        _errorApellidos = null;
+        _errorNombres = null;
+        _errorMovil = null;
+        _esMovilValido = false;
+        _mensajeAlerta = null;
+    }
+
+    private void OnFiltroDuenosInput(ChangeEventArgs e)
+    {
+        _filtroDuenos = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private void OnCambiarDuenoSeleccionado(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int id) && id > 0)
+        {
+            _mascotaEditando.MasIdCliente = id;
+            _clienteSeleccionado = _clientes.FirstOrDefault(c => c.PaCodigo == id);
+            _errorDueno = null;
+        }
+        else
+        {
+            _mascotaEditando.MasIdCliente = 0;
+            _clienteSeleccionado = null;
+        }
+    }
+
+    // Validaciones Cliente idénticas a ClientesPacientes
+    private string? _errorEmail;
+    private string? _errorTelefono;
+    private bool _esTelefonoValido;
+    private string ClaseEmail => _errorEmail != null ? "form-control form-control-sm is-invalid border-danger" : "form-control form-control-sm";
+
+    private bool EsDocumentoNumerico => _clienteEditando.PaDocumento != "PASAPORTE";
+    private string InputModeDocumento => EsDocumentoNumerico ? "numeric" : "text";
+
+    private int ObtenerMaximoDocumento() => _clienteEditando.PaDocumento switch
+    {
+        "CEDULA" => 10,
+        "RUC" => 13,
+        _ => 15
+    };
+
+    private string ObtenerPlaceholderDocumento() => _clienteEditando.PaDocumento switch
+    {
+        "CEDULA" => "Máx. 10 dígitos numéricos",
+        "RUC" => "Máx. 13 dígitos numéricos",
+        _ => "6 a 15 caracteres alfanuméricos"
+    };
+
+    private void OnCambiarTipoDocumento(ChangeEventArgs e)
+    {
+        _clienteEditando.PaDocumento = e.Value?.ToString() ?? "CEDULA";
+        if (_clienteEditando.PaDocumento == "PASAPORTE")
+        {
+            _clienteEditando.PaCedula = EcuadorDocumentoValidador.LimpiarPasaporte(_clienteEditando.PaCedula);
+        }
+        else
+        {
+            var digitos = new string((_clienteEditando.PaCedula ?? string.Empty).Where(char.IsDigit).ToArray());
+            int max = ObtenerMaximoDocumento();
+            if (digitos.Length > max) digitos = digitos[..max];
+            _clienteEditando.PaCedula = digitos;
+        }
+        ValidarDocumentoEnVivo(_clienteEditando.PaCedula);
+    }
+
+    private async Task OnInputDocumento(ChangeEventArgs e)
+    {
+        string raw = e.Value?.ToString() ?? string.Empty;
+        if (_clienteEditando.PaDocumento == "PASAPORTE")
+        {
+            raw = EcuadorDocumentoValidador.LimpiarPasaporte(raw);
+            if (raw.Length > 15) raw = raw[..15];
+        }
+        else
+        {
+            raw = new string(raw.Where(char.IsDigit).ToArray());
+            int max = ObtenerMaximoDocumento();
+            if (raw.Length > max) raw = raw[..max];
+        }
+        _clienteEditando.PaCedula = raw;
+        ValidarDocumentoEnVivo(raw);
+        await VerificarDuplicadoDocumentoAsync();
+    }
+
+    private async Task VerificarDuplicadoDocumentoAsync()
+    {
+        if (!_esDocValido) return;
+        int id = await AdmisionService.BuscarDuplicadoClienteAsync("DOCUMENTO", _clienteEditando.PaCedula, _clienteEditando.PaCodigo);
+        if (id > 0)
+        {
+            _errorDocumento = $"El documento {_clienteEditando.PaCedula} ya está registrado en el propietario #{id}.";
+            _esDocValido = false;
+        }
+    }
+
+    private void ValidarDocumentoEnVivo(string valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+        {
+            _errorDocumento = null;
+            _esDocValido = false;
+            return;
+        }
+        var res = EcuadorDocumentoValidador.Validar(_clienteEditando.PaDocumento, valor);
+        _esDocValido = res.EsValido;
+        _errorDocumento = res.Mensaje;
+    }
+
+    private void OnInputApellidos(ChangeEventArgs e)
+    {
+        string val = e.Value?.ToString() ?? string.Empty;
+        _clienteEditando.PaApellidos = val;
+        ValidarApellidosEnVivo(val);
+    }
+
+    private void OnBlurApellidos()
+    {
+        _clienteEditando.PaApellidos = NombreValidador.Sanitizar(_clienteEditando.PaApellidos);
+        ValidarApellidosEnVivo(_clienteEditando.PaApellidos);
+    }
+
+    private void ValidarApellidosEnVivo(string val)
+    {
+        if (string.IsNullOrEmpty(val))
+        {
+            _errorApellidos = null;
+            return;
+        }
+        var res = NombreValidador.Validar(val, "Los apellidos");
+        _errorApellidos = res.MensajeError;
+    }
+
+    private void OnInputNombres(ChangeEventArgs e)
+    {
+        string val = e.Value?.ToString() ?? string.Empty;
+        _clienteEditando.PaNombres = val;
+        ValidarNombresEnVivo(val);
+    }
+
+    private void OnBlurNombres()
+    {
+        _clienteEditando.PaNombres = NombreValidador.Sanitizar(_clienteEditando.PaNombres);
+        ValidarNombresEnVivo(_clienteEditando.PaNombres);
+    }
+
+    private void ValidarNombresEnVivo(string val)
+    {
+        if (string.IsNullOrEmpty(val))
+        {
+            _errorNombres = null;
+            return;
+        }
+        var res = NombreValidador.Validar(val, "Los nombres");
+        _errorNombres = res.MensajeError;
+    }
+
+    private async Task OnInputMovil(ChangeEventArgs e)
+    {
+        string raw = e.Value?.ToString() ?? string.Empty;
+        raw = new string(raw.Where(char.IsDigit).ToArray());
+        if (raw.Length > 10) raw = raw[..10];
+        _clienteEditando.PaMovil = raw;
+        ValidarMovilEnVivo(raw);
+        await VerificarDuplicadoMovilAsync();
+    }
+
+    private void ValidarMovilEnVivo(string val)
+    {
+        if (string.IsNullOrWhiteSpace(val))
+        {
+            _errorMovil = null;
+            _esMovilValido = false;
+            return;
+        }
+
+        if (val.Length != 10 || !val.StartsWith("0"))
+        {
+            _errorMovil = "El número celular debe tener 10 dígitos y empezar con 0";
+            _esMovilValido = false;
+        }
+        else
+        {
+            _errorMovil = null;
+            _esMovilValido = true;
+        }
+    }
+
+    private async Task VerificarDuplicadoMovilAsync()
+    {
+        if (!_esMovilValido) return;
+        int id = await AdmisionService.BuscarDuplicadoClienteAsync("MOVIL", _clienteEditando.PaMovil, _clienteEditando.PaCodigo);
+        if (id > 0)
+        {
+            _errorMovil = $"El número celular {_clienteEditando.PaMovil} ya está registrado en el propietario #{id}.";
+            _esMovilValido = false;
+        }
+    }
+
+    private void OnInputTelefono(ChangeEventArgs e)
+    {
+        string raw = e.Value?.ToString() ?? string.Empty;
+        raw = new string(raw.Where(char.IsDigit).ToArray());
+        if (raw.Length > 7) raw = raw[..7];
+        _clienteEditando.PaTelefono = raw;
+        ValidarTelefonoEnVivo(raw);
+    }
+
+    private void ValidarTelefonoEnVivo(string val)
+    {
+        if (string.IsNullOrWhiteSpace(val))
+        {
+            _errorTelefono = null;
+            _esTelefonoValido = false;
+            return;
+        }
+
+        if (val.Length != 7 || val.StartsWith("0"))
+        {
+            _errorTelefono = "El teléfono convencional debe tener exactamente 7 dígitos y no iniciar en 0";
+            _esTelefonoValido = false;
+        }
+        else
+        {
+            _errorTelefono = null;
+            _esTelefonoValido = true;
+        }
+    }
+
+    private async Task OnInputEmailAsync(ChangeEventArgs e)
+    {
+        _clienteEditando.PaEmail = e.Value?.ToString() ?? string.Empty;
+        string email = _clienteEditando.PaEmail?.Trim() ?? string.Empty;
+        _errorEmail = null;
+        if (email.Length == 0) return;
+        int id = await AdmisionService.BuscarDuplicadoClienteAsync("EMAIL", email, _clienteEditando.PaCodigo);
+        if (id > 0)
+            _errorEmail = $"El correo {email} ya está registrado en el propietario #{id}.";
+    }
+
+    private async Task GuardarClienteAsync()
+    {
+        var resVal = EcuadorDocumentoValidador.Validar(_clienteEditando.PaDocumento, _clienteEditando.PaCedula);
+        if (!resVal.EsValido)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Documento inválido: {resVal.Mensaje}";
+            _errorDocumento = resVal.Mensaje;
+            _esDocValido = false;
+            return;
+        }
+
+        _clienteEditando.PaCedula = resVal.ValorLimpio;
+
+        _clienteEditando.PaApellidos = NombreValidador.Sanitizar(_clienteEditando.PaApellidos);
+        _clienteEditando.PaNombres = NombreValidador.Sanitizar(_clienteEditando.PaNombres);
+
+        var valAp = NombreValidador.Validar(_clienteEditando.PaApellidos, "Los apellidos");
+        if (!valAp.EsValido)
+        {
+            _esError = true;
+            _errorApellidos = valAp.MensajeError;
+            _mensajeAlerta = valAp.MensajeError!;
+            return;
+        }
+
+        var valNom = NombreValidador.Validar(_clienteEditando.PaNombres, "Los nombres");
+        if (!valNom.EsValido)
+        {
+            _esError = true;
+            _errorNombres = valNom.MensajeError;
+            _mensajeAlerta = valNom.MensajeError!;
+            return;
+        }
+
+        // Validar Teléfono Móvil
+        string movil = _clienteEditando.PaMovil?.Trim() ?? string.Empty;
+        if (movil.Length != 10 || !movil.StartsWith("0"))
+        {
+            _esError = true;
+            _errorMovil = "El número celular debe tener 10 dígitos y empezar con 0";
+            _mensajeAlerta = _errorMovil;
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(_errorEmail))
+        {
+            _esError = true;
+            _mensajeAlerta = _errorEmail;
+            return;
+        }
+
+        // Validar Teléfono Convencional (opcional)
+        string tel = _clienteEditando.PaTelefono?.Trim() ?? string.Empty;
+        if (!string.IsNullOrEmpty(tel))
+        {
+            if (tel.Length != 7 || tel.StartsWith("0"))
+            {
+                _esError = true;
+                _errorTelefono = "El teléfono convencional debe tener exactamente 7 dígitos y no iniciar en 0";
+                _mensajeAlerta = _errorTelefono;
+                return;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(_clienteEditando.PaDireccion))
+        {
+            _esError = true;
+            _mensajeAlerta = "La dirección domiciliaria es obligatoria.";
+            return;
+        }
+
+        _guardandoCliente = true;
+        _mensajeAlerta = null;
+        _esError = false;
+
+        try
+        {
+            int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
+            int idGuardado = await AdmisionService.GuardarClienteAsync(_clienteEditando, idUser);
+            _clienteEditando.PaCodigo = idGuardado;
+            _clienteGuardado = _clienteEditando;
+
+            // Recargar lista de clientes
+            _clientes = await AdmisionService.BuscarClientesAsync(string.Empty);
+
+            // Avanzar a Paso 2 (Mascota)
+            _mascotaEditando = new PacienteMascotaDto
+            {
+                MasIdCliente = idGuardado,
+                MasOrigen = "M",
+                MasEspecie = 1,
+                MasSexo = 1,
+                MasColorTriaje = "green",
+                MasFechaNace = DateTime.Today.AddYears(-1)
+            };
+            _pasoActual = PasoModal.FormularioMascota;
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al guardar el propietario: {ex.Message}";
+        }
+        finally
+        {
+            _guardandoCliente = false;
+        }
+    }
+
+    // Mascota
+    private async Task CambiarEspecieAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int idEsp))
+        {
+            _mascotaEditando.MasEspecie = idEsp;
+            _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(idEsp);
+            _mascotaEditando.MasRaza = _razas.FirstOrDefault()?.Id ?? 0;
+        }
+    }
+
+    private async Task CambiarClaseTueriAsync(ChangeEventArgs e)
+    {
+        _mascotaEditando.TueClase = int.TryParse(e.Value?.ToString(), out int id) ? id : null;
+        _nombresCientificos = await AdmisionService.ObtenerNombresCientificosAsync(_mascotaEditando.TueClase);
+        _mascotaEditando.TueCientifico = string.Empty;
+    }
+
+    private async Task SeleccionarFotoMascotaAsync(InputFileChangeEventArgs e)
+    {
+        _errorFotoMascota = null;
+        var file = e.File;
+        if (file is null) return;
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _errorFotoMascota = "El tamaño de la imagen no puede superar 5 MB.";
+            return;
+        }
+        string ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp"))
+        {
+            _errorFotoMascota = "Formato no permitido. Utilice JPG, PNG o WEBP.";
+            return;
+        }
+        _fotoMascota = file;
+        _fotoMascotaNombre = file.Name;
+        try
+        {
+            using var stream = file.OpenReadStream(5 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            string base64 = Convert.ToBase64String(ms.ToArray());
+            _fotoMascotaPreview = $"data:{file.ContentType};base64,{base64}";
+        }
+        catch (Exception ex)
+        {
+            _errorFotoMascota = $"Error al procesar vista previa: {ex.Message}";
+        }
+    }
+
+    private async Task GuardarFotoMascotaAsync(int nhcl)
+    {
+        if (_fotoMascota is null || nhcl <= 0) return;
+        string extension = Path.GetExtension(_fotoMascota.Name).ToLowerInvariant();
+        if (extension is not (".jpg" or ".jpeg" or ".png" or ".webp")) extension = ".jpg";
+        string directorio = Path.Combine(Env.WebRootPath, "PacientesFotos");
+        Directory.CreateDirectory(directorio);
+        foreach (string anterior in Directory.EnumerateFiles(directorio, $"{nhcl}.*")) File.Delete(anterior);
+        await using var entrada = _fotoMascota.OpenReadStream(5 * 1024 * 1024);
+        await using var salida = File.Create(Path.Combine(directorio, $"{nhcl}{extension}"));
+        await entrada.CopyToAsync(salida);
+    }
+
+    private async Task GuardarMascotaAsync()
+    {
+        if (_guardandoMascota) return;
+
+        if (_esConDueno && _mascotaEditando.MasIdCliente <= 0)
+        {
+            _errorDueno = "Debe seleccionar un tutor o propietario registrado.";
+            _esError = true;
+            _mensajeAlerta = "Debe seleccionar un tutor o propietario registrado para la mascota.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_mascotaEditando.MasNombre))
+        {
+            _esError = true;
+            _mensajeAlerta = "El nombre del paciente es obligatorio.";
+            return;
+        }
+
+        _guardandoMascota = true;
+        _mensajeAlerta = null;
+        _esError = false;
+
+        try
+        {
+            int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
+            int nhcl = await AdmisionService.GuardarMascotaAsync(_mascotaEditando, idUser);
+            _mascotaEditando.MasNhcl = nhcl;
+
+            await GuardarFotoMascotaAsync(nhcl);
+
+            // Asociar datos del tutor en el DTO
+            if (_esConDueno && _clienteSeleccionado != null)
+            {
+                _mascotaEditando.ClienteNombre = _clienteSeleccionado.NombreCompleto;
+                _mascotaEditando.ClienteTelefono = _clienteSeleccionado.PaMovil ?? _clienteSeleccionado.PaTelefono ?? "";
+                _mascotaEditando.ClienteCedula = _clienteSeleccionado.PaCedula ?? "";
+            }
+            else if (!_esConDueno && _clienteGuardado != null)
+            {
+                _mascotaEditando.ClienteNombre = _clienteGuardado.NombreCompleto;
+                _mascotaEditando.ClienteTelefono = _clienteGuardado.PaMovil ?? _clienteGuardado.PaTelefono ?? "";
+                _mascotaEditando.ClienteCedula = _clienteGuardado.PaCedula ?? "";
+            }
+
+            if (OnPacienteCreado.HasDelegate)
+            {
+                await OnPacienteCreado.InvokeAsync(_mascotaEditando);
+            }
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al registrar el paciente: {ex.Message}";
+        }
+        finally
+        {
+            _guardandoMascota = false;
+        }
+    }
+
+    private async Task Cerrar()
+    {
+        if (OnCerrar.HasDelegate)
+        {
+            await OnCerrar.InvokeAsync();
+        }
+    }
+
+    private async Task Cancelar()
+    {
+        await Cerrar();
+    }
+}
