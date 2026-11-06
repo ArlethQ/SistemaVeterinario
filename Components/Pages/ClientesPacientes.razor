@@ -74,39 +74,6 @@
         </div>
     </div>
 
-    <!-- Nuevo propietario (formulario desplegable) -->
-    @if (_editandoClienteId == 0)
-    {
-        <div class="owner-editor-backdrop" @onclick="CancelarEdicionCliente"></div>
-        <aside class="owner-editor inline-panel">
-            <div class="owner-editor-title">
-                <span>
-                    @if (_flujoRegistroCompleto)
-                    {
-                        <span class="badge bg-primary me-2">Paso 1 de 2</span>
-                        <span>Datos del Propietario</span>
-                    }
-                    else
-                    {
-                        <span>Nuevo propietario</span>
-                    }
-                </span>
-                <button class="btn-close" @onclick="CancelarEdicionCliente"></button>
-            </div>
-            <div class="owner-editor-summary new-owner-summary">
-                <div class="summary-person-icon"><i class="bi bi-person-plus"></i></div>
-                <div>
-                    <strong>@(_flujoRegistroCompleto ? "Registro integral: Propietario y Paciente" : "Registrar propietario")</strong>
-                    <small>@(_flujoRegistroCompleto ? "Complete los datos del propietario; a continuación registrará los datos del animal" : "Complete la información personal y de contacto")</small>
-                </div>
-            </div>
-            <div class="editor-tabs"><span class="active">Información</span><span>Observaciones</span><span>Historial</span></div>
-            <div class="card-body editor-form">
-                @FormularioCliente
-            </div>
-        </aside>
-    }
-
     <div class="owner-list-head"><span>Propietario</span><span>Contacto</span><span>Pacientes</span><span>Dirección</span><span>Acciones</span></div>
     <!-- Propietarios y pacientes -->
     @foreach (var cli in _clientes)
@@ -193,16 +160,6 @@
                     </div>
                 }
 
-                @if (_editandoClienteId == cli.PaCodigo)
-                {
-                    <div class="owner-editor-backdrop" @onclick="CancelarEdicionCliente"></div>
-                    <aside class="owner-editor inline-panel" @onclick:stopPropagation="true">
-                        <div class="owner-editor-title"><span><i class="bi bi-person-badge me-2"></i>Editar propietario</span><button class="btn-close" @onclick="CancelarEdicionCliente"></button></div>
-                        <div class="owner-editor-summary"><div class="summary-person-icon"><i class="bi bi-person"></i></div><div class="flex-grow-1"><strong>@cli.NombreCompleto</strong><small>C.I. @cli.PaCedula</small></div><span class="count-pill">@TextoContador(pacientes)</span></div>
-                        <div class="editor-tabs"><span class="active">Información</span><span>Observaciones</span><span>Historial</span></div>
-                        <div class="p-3 editor-form">@FormularioCliente</div>
-                    </aside>
-                }
 
                 <div class="pets-expanded border-top">
                     <div class="pets-expanded-head"><strong>Mascotas de este propietario <span>(@pacientes.Count)</span></strong></div>
@@ -241,6 +198,52 @@
                 </div>
             }
         </div>
+    }
+
+    @if (_editandoClienteId.HasValue)
+    {
+        <div class="patient-modal-backdrop" @onclick="CancelarEdicionCliente"></div>
+        <section class="patient-modal" role="dialog" aria-modal="true" aria-label="Ficha del propietario">
+            <header class="patient-modal-header">
+                <div>
+                    <small>
+                        @if (_flujoRegistroCompleto)
+                        {
+                            <span class="badge bg-primary me-1">PASO 1 DE 2</span>
+                            <span>DATOS DEL PROPIETARIO</span>
+                        }
+                        else
+                        {
+                            @(_editandoClienteId == 0 ? "NUEVO PROPIETARIO" : $"PROPIETARIO #{_editandoClienteId}")
+                        }
+                    </small>
+                    <h5 class="mb-0 fw-bold">
+                        @if (_flujoRegistroCompleto)
+                        {
+                            <span>Registro integral: Propietario y Paciente</span>
+                        }
+                        else
+                        {
+                            @(_editandoClienteId == 0 ? "Agregar propietario" : $"Ver y editar: {_clienteEditando.NombreCompleto}")
+                        }
+                    </h5>
+                </div>
+                <button type="button" class="modal-close" title="Cerrar" @onclick="CancelarEdicionCliente">×</button>
+            </header>
+            <div class="patient-modal-body">
+                @if (_flujoRegistroCompleto)
+                {
+                    <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3 rounded-3 border-0 bg-info bg-opacity-10">
+                        <i class="bi bi-person-plus-fill fs-5 text-primary"></i>
+                        <div>
+                            <strong>Registro integral: Propietario y Paciente</strong>
+                            <div class="text-muted" style="font-size: 0.78rem;">Complete los datos del propietario; a continuación registrará los datos del animal.</div>
+                        </div>
+                    </div>
+                }
+                @FormularioCliente
+            </div>
+        </section>
     }
 
     @if (_editandoMascotaNhcl.HasValue)
@@ -772,10 +775,40 @@
                             </div>
                             break;
                         case "kardex":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">📁</span>
-                                <h4>Kardex</h4>
-                                <p class="text-muted">Contenido de Kardex para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
+                            <div class="kardex-modal-tab-container py-1">
+                                @if (_ordenIdSeleccionada.HasValue && _ordenIdSeleccionada.Value > 0)
+                                {
+                                    <KardexEnfermeria IdOrden="@_ordenIdSeleccionada" Nhcl="@_mascotaResumen.MasNhcl" ModoModal="true" />
+                                }
+                                else
+                                {
+                                    <div class="card shadow-sm border-0 py-4 text-center text-muted">
+                                        <div class="card-body">
+                                            <span class="fs-1 d-block mb-2 text-warning">📋</span>
+                                            <h5>Selecciona una orden para ver el Kardex de Enfermería</h5>
+                                            <p class="small text-muted mb-3">
+                                                La administración de medicamentos y la sábana de 5 días están enlazadas a la orden de atención.
+                                            </p>
+                                            @if (_ordenesPaciente.Count > 0)
+                                            {
+                                                <div class="d-inline-flex flex-wrap gap-2 justify-content-center" style="max-width: 600px;">
+                                                    @foreach (var o in _ordenesPaciente.Take(5))
+                                                    {
+                                                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => SeleccionarOrden(o)">
+                                                            <i class="bi bi-file-earmark-medical me-1"></i>Orden #@o.IdOrden (@o.Fecha.ToString("dd/MM/yyyy"))
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary-subtle text-secondary py-2 px-3">
+                                                    Este paciente aún no tiene órdenes de atención registradas.
+                                                </span>
+                                            }
+                                        </div>
+                                    </div>
+                                }
                             </div>
                             break;
                         case "signos":
@@ -889,6 +922,9 @@
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "accion")]
+    public string? AccionParam { get; set; }
+
     private List<ClienteDto> _clientes = new();
     private readonly Dictionary<int, List<PacienteMascotaDto>> _mascotasPorCliente = new();
     private int? _clienteExpandido;
@@ -952,6 +988,16 @@
         var tRaz = AdmisionService.ObtenerRazasPorEspecieAsync(1);
         var tCli = BuscarClientesAsync();
         await Task.WhenAll(tEsp, tSex, tCla, tCat, tObt, tCie, tMot, tPro, tRaz, tCli);
+
+        if (AccionParam == "registro-completo")
+        {
+            IniciarRegistroCompleto();
+        }
+        else if (AccionParam == "con-dueno")
+        {
+            _mensajeAlerta = "Registro de paciente con dueño existente: busque o seleccione al propietario en el listado y presione '+ Registrar' para agregarle su nueva mascota.";
+            _esError = false;
+        }
 
         _especies = await tEsp;
         _sexos = await tSex;
@@ -1757,7 +1803,7 @@
     {
         _pestanaResumenActiva = tabId;
         _mostrarDropdownOrdenes = false;
-        if (tabId == "triaje" && _mascotaResumen != null)
+        if ((tabId == "triaje" || tabId == "kardex") && _mascotaResumen != null)
         {
             if (!_ordenIdSeleccionada.HasValue && _ordenesPaciente.Count > 0)
             {

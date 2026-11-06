@@ -219,7 +219,13 @@
                 }
                 <EditForm Model="_nuevaCita" OnValidSubmit="GuardarCitaAsync">
                     <DataAnnotationsValidator />
-                    <h6>1. Información del paciente</h6>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <h6 class="mb-0">1. Información del paciente</h6>
+                        <button type="button" class="btn btn-outline-primary btn-sm py-1 px-2 fw-semibold d-flex align-items-center gap-1 shadow-sm" style="font-size: 0.8rem;" @onclick="AbrirModalNuevoPaciente">
+                            <i class="bi bi-person-plus-fill"></i>
+                            <span>Nuevo paciente</span>
+                        </button>
+                    </div>
                     <label>Paciente existente</label>
                     <select class="form-select" @onchange="AutocompletarPacienteCita"><option value="0">Buscar por NHCL, nombre o propietario...</option>@foreach(var p in _pacientes){<option value="@p.MasNhcl">#@p.MasNhcl — @p.MasNombre (@p.ClienteNombre)</option>}</select>
                     @if (_nuevaCita.CiNhcl > 0)
@@ -424,6 +430,48 @@
                 <button type="button" class="btn btn-danger" disabled="@string.IsNullOrWhiteSpace(_motivoCancelacion)" @onclick="CancelarCitaAsync">
                     <i class="bi bi-x-circle-fill me-1"></i>Confirmar cancelación
                 </button>
+            </footer>
+        </section>
+    }
+
+    @if (_mostrarModalNuevoPaciente)
+    {
+        <div class="appointment-detail-backdrop" style="z-index: 1060;" @onclick="CerrarModalNuevoPaciente"></div>
+        <section class="appointment-detail" style="z-index: 1065; max-width: 520px;" role="dialog" aria-modal="true" aria-label="Nuevo Paciente">
+            <header>
+                <div>
+                    <small class="text-primary fw-bold text-uppercase">Admisión de Pacientes</small>
+                    <h5 class="mb-0">Registrar Nuevo Paciente</h5>
+                </div>
+                <button type="button" @onclick="CerrarModalNuevoPaciente">×</button>
+            </header>
+            <div class="p-4">
+                <p class="text-muted small mb-3">
+                    Seleccione la modalidad de registro del paciente:
+                </p>
+                <div class="d-flex flex-column gap-3">
+                    <button type="button" class="btn btn-outline-primary p-3 text-start d-flex align-items-center gap-3 rounded-3 border-2" @onclick="RegistrarConDueno">
+                        <div class="bg-primary bg-opacity-10 text-primary p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                            <i class="bi bi-person-check-fill fs-4"></i>
+                        </div>
+                        <div>
+                            <strong class="d-block text-dark fs-6">Con dueño registrado</strong>
+                            <small class="text-muted">El tutor o propietario ya existe en el sistema. Se agregará una nueva mascota a su ficha.</small>
+                        </div>
+                    </button>
+                    <button type="button" class="btn btn-outline-success p-3 text-start d-flex align-items-center gap-3 rounded-3 border-2" @onclick="RegistrarSinDueno">
+                        <div class="bg-success bg-opacity-10 text-success p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                            <i class="bi bi-person-plus-fill fs-4"></i>
+                        </div>
+                        <div>
+                            <strong class="d-block text-dark fs-6">Sin dueño registrado</strong>
+                            <small class="text-muted">Es un cliente nuevo. Se registrará tanto al tutor como a su mascota desde cero.</small>
+                        </div>
+                    </button>
+                </div>
+            </div>
+            <footer>
+                <button type="button" class="btn btn-secondary px-4 ms-auto" @onclick="CerrarModalNuevoPaciente">Cancelar</button>
             </footer>
         </section>
     }
@@ -656,6 +704,7 @@
     private string _mensaje = string.Empty;
     private bool _mensajeEsError;
     private bool _mostrarFormularioCita;
+    private bool _mostrarModalNuevoPaciente;
     private CitaMedicaDto? _citaDetalle;
     private CitaMedicaDto? _citaReagendar, _citaCancelar;
     private List<CitaMedicaDto> _historial = new();
@@ -794,6 +843,22 @@
     }
 
     private void CerrarFormularioCita() => _mostrarFormularioCita = false;
+    private void AbrirModalNuevoPaciente() => _mostrarModalNuevoPaciente = true;
+    private void CerrarModalNuevoPaciente() => _mostrarModalNuevoPaciente = false;
+
+    private void RegistrarConDueno()
+    {
+        _mostrarModalNuevoPaciente = false;
+        _mostrarFormularioCita = false;
+        NavManager.NavigateTo("/admision/clientes-pacientes?accion=con-dueno");
+    }
+
+    private void RegistrarSinDueno()
+    {
+        _mostrarModalNuevoPaciente = false;
+        _mostrarFormularioCita = false;
+        NavManager.NavigateTo("/admision/clientes-pacientes?accion=registro-completo");
+    }
     private void VerDetalleCita(CitaMedicaDto cita) => _citaDetalle = cita;
     private void CerrarDetalleCita() => _citaDetalle = null;
     private void EnviarARecepcionOrdenes(CitaMedicaDto cita)

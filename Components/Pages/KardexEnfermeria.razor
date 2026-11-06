@@ -1,726 +1,774 @@
-@page "/kardex/enfermeria"
-@page "/kardex/enfermeria/{Orden:int}/{Nhcl:int}"
-@inject IKardexService KardexService
-@inject IInventarioService InventarioService
-@inject IReportExportService ReportService
-@inject SessionStateService Session
-@inject NavigationManager Nav
-@inject IJSRuntime JS
-
-<PageTitle>e-ForVets - Kardex de Enfermería (Administración de Medicamentos)</PageTitle>
-
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-    <div>
-        <h4 class="fw-bold text-primary mb-0">KARDEX DE ENFERMERÍA — ADMINISTRACIÓN DE MEDICAMENTOS</h4>
-        <small class="text-muted">Registro de administración de medicamentos, control de stock e impresión de sábana de 5 días.</small>
-    </div>
-    <div class="d-flex gap-2">
-        <button class="btn btn-danger btn-sm fw-semibold" @onclick="DescargarPdfAsync" disabled="@_exportando">
-            📄 Descargar PDF
-        </button>
-        <button class="btn btn-success btn-sm fw-semibold" @onclick="DescargarExcelAsync" disabled="@_exportando">
-            📊 Exportar Excel
-        </button>
-        <button class="btn btn-outline-secondary btn-sm fw-semibold" @onclick="ImprimirVistaAsync">
-            🖨️ Imprimir Sábana
-        </button>
-    </div>
-</div>
-
-<!-- CABECERA DEL PACIENTE Y ORDEN -->
-<div class="card shadow-sm border-primary mb-3">
-    <div class="card-body py-2 px-3 bg-light">
-        <div class="row g-2 align-items-center">
-            <div class="col-md-2">
-                <label class="small text-muted fw-bold d-block">N° Orden:</label>
-                <div class="input-group input-group-sm">
-                    <input type="number" class="form-control fw-bold" @bind="Orden" />
-                    <button class="btn btn-outline-primary" title="Recargar Orden" @onclick="CargarDatosPacienteYKardexAsync">↻</button>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <label class="small text-muted fw-bold d-block">N° Historia (NHCL):</label>
-                <input type="number" class="form-control form-control-sm text-danger fw-bold" @bind="Nhcl" />
-            </div>
-            <div class="col-md-3">
-                <span class="small text-muted fw-bold d-block">Propietario (Cliente):</span>
-                <span class="fw-semibold">@_paciente.ClienteNombre</span>
-            </div>
-            <div class="col-md-3">
-                <span class="small text-muted fw-bold d-block">Paciente / Especie:</span>
-                <span class="fw-bold text-primary">@_paciente.PacienteNombre</span>
-                <span class="badge bg-info text-dark ms-1">@_paciente.Especie</span>
-            </div>
-            <div class="col-md-2">
-                <span class="small text-muted fw-bold d-block">Sexo / Estado:</span>
-                <span class="fw-semibold">@_paciente.Sexo</span>
-                @if (_paciente.Cierre == "S")
-                {
-                    <span class="badge bg-danger ms-1">Ficha Cerrada</span>
-                }
-            </div>
-        </div>
-    </div>
-</div>
-
-@if (!string.IsNullOrWhiteSpace(_alertaMensaje))
-{
-    <div class="alert @(_alertaExito ? "alert-success" : "alert-danger") alert-dismissible fade show py-2 small" role="alert">
-        @_alertaMensaje
-        <button type="button" class="btn-close py-2" @onclick="() => _alertaMensaje = null"></button>
-    </div>
-}
-
-@if (_cargandoInicial)
-{
-    <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
-        <div class="spinner-border spinner-border-sm" role="status"></div>
-        <span class="fw-semibold small">Cargando Kardex de Enfermería y administración de medicamentos...</span>
-    </div>
-}
-
-<!-- PESTAÑAS: 1. INGRESOS Y REGISTRO | 2. SÁBANA DE IMPRESIÓN 5 DÍAS -->
-<ul class="nav nav-tabs mb-3">
-    <li class="nav-item">
-        <button class="nav-link @(_tabActiva == 0 ? "active fw-bold" : "")" @onclick="() => CambiarTabAsync(0)">
-            1. Ingresos y Administración de Medicamentos (@_registros.Count)
-        </button>
-    </li>
-    <li class="nav-item">
-        <button class="nav-link @(_tabActiva == 1 ? "active fw-bold" : "")" @onclick="() => CambiarTabAsync(1)">
-            2. Sábana Kardex 5 Días / Vista de Impresión (@_sabana.Count fármacos)
-        </button>
-    </li>
-</ul>
-
-@if (_tabActiva == 0)
-{
-    <!-- BUSCADOR DE FÁRMACOS / STOCK LOCAL -->
-    <div class="card shadow-sm border-0 mb-3">
-        <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
-            <span class="fw-bold small">BÚSQUEDA DE FÁRMACOS Y CONTROL DE STOCK (BODEGA)</span>
-            @if (!string.IsNullOrWhiteSpace(_formInput.CodigoProd))
-            {
-                <span class="badge bg-warning text-dark">
-                    Seleccionado: @_formInput.CodigoProd | Stock: @_formInput.StockDisponible.ToString("N2") @_formInput.UnidadMedida | Bodega: @_formInput.Bodega
-                </span>
-            }
-        </div>
-        <div class="card-body">
-            <div class="row g-2 align-items-center mb-3">
-                <div class="col-md-6">
-                    <div class="input-group">
-                        <input class="form-control" @bind="_textoBusquedaProd" @bind:event="oninput" @onkeydown="OnBusquedaProdKeyDown"
-                               placeholder="Ingrese descripción del fármaco (mínimo 3 caracteres)..." />
-                        <button class="btn btn-primary fw-semibold" type="button" @onclick="BuscarMedicamentosAsync" disabled="@_buscandoProd">
-                            @(_buscandoProd ? "Buscando..." : "🔍 Buscar Fármaco")
-                        </button>
-                    </div>
-                </div>
-                <div class="col-md-6 text-end small text-muted">
-                    Consulta el inventario disponible en bodega descontando reservas activas.
-                </div>
-            </div>
-
-            <!-- MODAL / PANEL DESPLEGABLE DE RESULTADOS DE FARMACIA -->
-            @if (_mostrarModalProductos)
-            {
-                <div class="border rounded p-2 mb-3 bg-light shadow-sm">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <strong class="text-primary small">Resultados de Catálogo / Bodega (@_productosEncontrados.Count registros)</strong>
-                        <button class="btn btn-sm btn-outline-secondary py-0" @onclick="() => _mostrarModalProductos = false">Cerrar ✕</button>
-                    </div>
-                    <div class="table-responsive" style="max-height: 240px;">
-                        <table class="table table-sm table-hover table-bordered bg-white mb-0 small align-middle">
-                            <thead class="table-secondary">
-                                <tr>
-                                    <th>Acción</th>
-                                    <th>Código</th>
-                                    <th>Fármaco / Descripción</th>
-                                    <th class="text-end">Stock Disp.</th>
-                                    <th class="text-end">Precio</th>
-                                    <th>Medida</th>
-                                    <th>IVA</th>
-                                    <th>Bodega</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var prod in _productosEncontrados)
-                                {
-                                    <tr>
-                                        <td class="text-center">
-                                            <button type="button" class="btn btn-sm @(prod.Inventory <= 0 ? "btn-warning" : "btn-success") py-0 px-2"                                                    disabled="@(prod.Inventory <= 0)"                                                    title="@(prod.Inventory <= 0 ? "Producto sin stock disponible" : "Seleccionar producto")"
-                                                    @onclick="() => SeleccionarProducto(prod)">
-                                                Seleccionar
-                                            </button>
-                                        </td>
-                                        <td class="fw-bold">@prod.Number</td>
-                                        <td>@prod.DisplayName</td>
-                                        <td class="text-end fw-bold @(prod.Inventory > 0 ? "text-danger" : "text-muted")">
-                                            @prod.Inventory.ToString("N2")
-                                        </td>
-                                        <td class="text-end">@prod.UnitPrice.ToString("C2")</td>
-                                        <td>@prod.BaseUnitOfMeasureCode</td>
-                                        <td>@prod.TaxGroupCode</td>
-                                        <td class="text-primary fw-semibold">@prod.Location</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            }
-
-            <!-- FORMULARIO DE REGISTRO DE ADMINISTRACIÓN -->
-            <EditForm Model="_formInput" OnValidSubmit="GuardarAdministracionAsync">
-                <DataAnnotationsValidator />
-
-                <div class="row g-2 align-items-end">
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold mb-1">Producto Seleccionado:</label>
-                        <InputText class="form-control form-control-sm" @bind-Value="_formInput.ProdDescripcion" placeholder="Seleccione o escriba producto" />
-                        <ValidationMessage For="@(() => _formInput.ProdDescripcion)" class="text-danger small" />
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold mb-1">Indicaciones / Dosis / Frecuencia:</label>
-                        <InputText class="form-control form-control-sm" @bind-Value="_formInput.IndicacionesProd" placeholder="Ej: 2 ml c/8h lento" />
-                        <ValidationMessage For="@(() => _formInput.IndicacionesProd)" class="text-danger small" />
-                    </div>
-
-                    <div class="col-md-1">
-                        <label class="form-label small fw-bold mb-1">Cantidad:</label>
-                        <InputNumber class="form-control form-control-sm text-center fw-bold text-danger" @bind-Value="_formInput.CantProd" />
-                        <ValidationMessage For="@(() => _formInput.CantProd)" class="text-danger small" />
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label small fw-bold mb-1">Vía:</label>
-                        <InputSelect class="form-select form-select-sm" @bind-Value="_formInput.Via">
-                            <option value="">-- Seleccione --</option>
-                            @foreach (var v in _vias)
-                            {
-                                <option value="@v.Via">@v.Via</option>
-                            }
-                        </InputSelect>
-                        <ValidationMessage For="@(() => _formInput.Via)" class="text-danger small" />
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label small fw-bold mb-1">Día y Mes:</label>
-                        <InputDate class="form-control form-control-sm" @bind-Value="_formInput.Fecha" />
-                    </div>
-
-                    <div class="col-md-1">
-                        <label class="form-label small fw-bold mb-1">Hora:</label>
-                        <InputDate Type="InputDateType.Time" class="form-control form-control-sm" @bind-Value="_formInput.Hora" />
-                    </div>
-
-                    <div class="col-md-4 mt-2">
-                        <label class="form-label small fw-bold mb-1">Responsable (Iniciales):</label>
-                        <InputSelect class="form-select form-select-sm" @bind-Value="_formInput.FuncionarioId">
-                            <option value="0">-- Seleccione Funcionario --</option>
-                            @foreach (var f in _funcionarios)
-                            {
-                                <option value="@f.UserNumero">@f.UserNombre (@f.UserIniciales)</option>
-                            }
-                        </InputSelect>
-                        <ValidationMessage For="@(() => _formInput.FuncionarioId)" class="text-danger small" />
-                    </div>
-
-                    <div class="col-md-3 mt-2">
-                        <label class="form-label small fw-bold mb-1">Función / Cargo:</label>
-                        <InputSelect class="form-select form-select-sm" @bind-Value="_formInput.Funcion">
-                            <option value="">-- Seleccione --</option>
-                            @foreach (var fn in _funciones)
-                            {
-                                <option value="@fn.TipUserDescripcion">@fn.TipUserDescripcion</option>
-                            }
-                        </InputSelect>
-                        <ValidationMessage For="@(() => _formInput.Funcion)" class="text-danger small" />
-                    </div>
-
-                    <div class="col-md-5 mt-2 d-flex gap-2 justify-content-end">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="LimpiarFormulario">
-                            Limpiar
-                        </button>
-                        <button type="submit" class="btn btn-sm btn-primary fw-bold px-4" disabled="@_guardando">
-                            @(_guardando ? "Guardando..." : "➕ Añadir al Kardex")
-                        </button>
-                    </div>
-                </div>
-            </EditForm>
-        </div>
-    </div>
-
-    <!-- GRILLA REACTIVA DE MEDICAMENTOS APLICADOS (Reemplaza a telerik:RadGrid grdMedicinas) -->
-    <div class="card shadow-sm border-0">
-        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
-            <span class="fw-bold text-secondary small">REGISTROS DE MEDICACIÓN APLICADOS EN LA ORDEN #@Orden</span>
-            <input class="form-control form-control-sm w-25" @bind="_filtroTabla" @bind:event="oninput" placeholder="Filtrar en tabla..." />
-        </div>
-        <div class="table-responsive">
-            <table class="table table-sm table-hover table-bordered align-middle mb-0 small">
-                <thead class="table-primary text-center">
-                    <tr>
-                        <th>ID</th>
-                        <th>Orden</th>
-                        <th>Código</th>
-                        <th>Producto</th>
-                        <th>Cantidad</th>
-                        <th>Indicaciones / Frecuencia</th>
-                        <th>Vía</th>
-                        <th>Fecha</th>
-                        <th>Hora</th>
-                        <th>Ini / Fun</th>
-                        <th>Bodega</th>
-                        <th>Eliminar</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (RegistrosFiltrados.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="12" class="text-center text-muted py-3">
-                                No existen registros de medicación para esta orden.
-                            </td>
-                        </tr>
-                    }
-                    else
-                    {
-                        @foreach (var reg in RegistrosFiltrados)
-                        {
-                            <tr>
-                                <td class="text-center">@reg.Id</td>
-                                <td class="text-center">@reg.Orden</td>
-                                <td class="fw-bold text-center">@reg.Codigo</td>
-                                <td class="fw-semibold">@reg.Producto</td>
-                                <td class="text-center fw-bold">@reg.Cantidad.ToString("N2")</td>
-                                <td>@reg.Indicaciones</td>
-                                <td class="text-center">@reg.Via</td>
-                                <td class="text-center">@reg.Fecha</td>
-                                <td class="text-center fw-bold">@reg.Hora</td>
-                                <td class="text-center">
-                                    <span class="badge bg-secondary">@reg.Iniciales</span>
-                                    <small class="text-muted ms-1">@reg.Funcion</small>
-                                </td>
-                                <td class="text-center">@reg.Bodega</td>
-                                <td class="text-center">
-                                    <button class="btn btn-sm btn-outline-danger py-0 px-2"
-                                            title="Eliminar registro y liberar reserva"
-                                            @onclick="() => EliminarRegistroAsync(reg)">
-                                        🗑️
-                                    </button>
-                                </td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
-}
-else
-{
-    <!-- SÁBANA DE KARDEX DE 5 DÍAS (Reemplaza a GridView1 y GridView2..6 de vt_EnfermeriaKardex.aspx) -->
-    <div class="card shadow-sm border-0" id="sabana-kardex-print">
-        <div class="card-body">
-            <div class="row mb-2 border-bottom pb-2">
-                <div class="col-4"><strong>Orden:</strong> @Orden</div>
-                <div class="col-4"><strong>N° Historia (NHCL):</strong> <span class="text-danger fw-bold">@Nhcl</span></div>
-                <div class="col-4"><strong>Fecha Impresión:</strong> @DateTime.Now.ToString("yyyy-MM-dd HH:mm")</div>
-                <div class="col-4"><strong>Cliente:</strong> @_paciente.ClienteNombre</div>
-                <div class="col-4"><strong>Paciente:</strong> @_paciente.PacienteNombre</div>
-                <div class="col-4"><strong>Sexo:</strong> @_paciente.Sexo</div>
-            </div>
-
-            @{
-                var fechasCabecera = _sabana.FirstOrDefault()?.FechasColumnas
-                                     ?? Enumerable.Range(0, 5).Select(d => DateTime.Today.AddDays(d)).ToList();
-            }
-
-            <div class="table-responsive">
-                <table class="table table-bordered table-sm align-middle mb-0" style="font-size: 11px;">
-                    <thead>
-                        <tr class="text-center" style="background-color: #CCCCFF;">
-                            <th style="width: 26%;">
-                                <div>1.- MEDICAMENTO</div>
-                                <small class="fw-normal">PRESENTACIÓN, VÍA, DOSIS UNITARIA, FRECUENCIA</small>
-                            </th>
-                            @foreach (var fec in fechasCabecera)
-                            {
-                                <th colspan="3" style="background-color: #CCFFCC;">
-                                    DÍA Y MES: @fec.ToString("yyyy-MM-dd")
-                                </th>
-                            }
-                        </tr>
-                        <tr class="text-center" style="background-color: #ffff99; font-size: 10px;">
-                            <th>Descripción del Fármaco</th>
-                            @for (int i = 0; i < 5; i++)
-                            {
-                                <th>HORA</th>
-                                <th>INI</th>
-                                <th>FUN</th>
-                            }
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (_sabana.Count == 0)
-                        {
-                            <tr>
-                                <td colspan="16" class="text-center py-4 text-muted">
-                                    No hay medicamentos registrados en la sábana de 5 días para esta orden.
-                                </td>
-                            </tr>
-                        }
-                        else
-                        {
-                            @foreach (var item in _sabana)
-                            {
-                                <tr>
-                                    <td class="fw-bold align-middle">
-                                        @item.DescripcionCompleta
-                                    </td>
-                                    @for (int d = 0; d < 5; d++)
-                                    {
-                                        var tomas = d < item.AdministracionesPorDia.Count ? item.AdministracionesPorDia[d] : [];
-                                        <td colspan="3" class="p-0 align-top">
-                                            <table class="table table-sm mb-0 border-0" style="font-size: 11px;">
-                                                <tbody>
-                                                    @foreach (var toma in tomas)
-                                                    {
-                                                        var claseColor = toma.EsTurnoNocturno ? "text-danger fw-bold" : "text-primary fw-bold";
-                                                        <tr>
-                                                            <td class="text-center border-end @claseColor" style="width: 40%;">@(string.IsNullOrWhiteSpace(toma.Hora) ? "\u00A0" : toma.Hora)</td>
-                                                            <td class="text-center border-end @claseColor" style="width: 30%;">@(string.IsNullOrWhiteSpace(toma.Iniciales) ? "\u00A0" : toma.Iniciales)</td>
-                                                            <td class="text-center @claseColor" style="width: 30%;">@(string.IsNullOrWhiteSpace(toma.Funcion) ? "\u00A0" : toma.Funcion)</td>
-                                                        </tr>
-                                                    }
-                                                </tbody>
-                                            </table>
-                                        </td>
-                                    }
-                                </tr>
-                            }
-                        }
-                    </tbody>
-                </table>
-            </div>
-            <div class="mt-2 small text-muted">
-                <strong>Simbología:</strong> <span class="text-primary fw-bold">Azul = Turno Diurno (00:00 - 17:59)</span> |
-                <span class="text-danger fw-bold">Rojo = Turno Nocturno (18:00 - 23:59)</span> |
-                <strong>INI:</strong> Iniciales del Responsable | <strong>FUN:</strong> Abreviatura de la Función.
-            </div>
-        </div>
-    </div>
-}
-
-@code {
-    [Parameter]
-    [SupplyParameterFromQuery(Name = "orden")]
-    public int? OrdenParam { get; set; }
-
-    [Parameter]
-    [SupplyParameterFromQuery(Name = "nhcl")]
-    public int? NhclParam { get; set; }
-
-    [Parameter]
-    public int Orden { get; set; }
-
-    [Parameter]
-    public int Nhcl { get; set; }
-
-    private PacienteHeaderDto _paciente = new();
-    private List<ViaAdministracionDto> _vias = [];
-    private List<FuncionarioDto> _funcionarios = [];
-    private List<FuncionEnfermeriaDto> _funciones = [];
-    private List<ProductoUtilizadoDto> _registros = [];
-    private List<KardexSabanaItemDto> _sabana = [];
-    private List<FarmacoStockDto> _productosEncontrados = [];
-
-    private KardexRegistroInputModel _formInput = new();
-    private string _textoBusquedaProd = string.Empty;
-    private string _filtroTabla = string.Empty;
-    private int _tabActiva = 0;
-    private bool _mostrarModalProductos;
-    private bool _buscandoProd;
-    private bool _guardando;
-    private bool _exportando;
-    private bool _cargandoInicial = true;
-    private string? _alertaMensaje;
-    private bool _alertaExito;
-
-    private List<ProductoUtilizadoDto> RegistrosFiltrados =>
-        string.IsNullOrWhiteSpace(_filtroTabla)
-            ? _registros
-            : _registros.Where(r =>
-                r.Producto.Contains(_filtroTabla, StringComparison.OrdinalIgnoreCase) ||
-                r.Codigo.Contains(_filtroTabla, StringComparison.OrdinalIgnoreCase) ||
-                r.Via.Contains(_filtroTabla, StringComparison.OrdinalIgnoreCase) ||
-                r.Iniciales.Contains(_filtroTabla, StringComparison.OrdinalIgnoreCase)).ToList();
-
-    protected override async Task OnParametersSetAsync()
-    {
-        _cargandoInicial = true;
-        await Task.Yield();
-
-        if (OrdenParam.HasValue && OrdenParam.Value > 0)
-            Orden = OrdenParam.Value;
-        if (NhclParam.HasValue && NhclParam.Value > 0)
-            Nhcl = NhclParam.Value;
-
-        var uri = Nav.ToAbsoluteUri(Nav.Uri);
-        if (!string.IsNullOrWhiteSpace(uri.Query))
-        {
-            var queryParams = System.Web.HttpUtility.ParseQueryString(uri.Query);
-            if (int.TryParse(queryParams["orden"], out int qOrden) && qOrden > 0)
-                Orden = qOrden;
-            if (int.TryParse(queryParams["nhcl"], out int qNhcl) && qNhcl > 0)
-                Nhcl = qNhcl;
-        }
-
-        if (Orden <= 0)
-        {
-            var activas = await KardexService.ObtenerOrdenesActivasAsync();
-            if (activas.Count > 0)
-            {
-                Orden = activas[0].OrdenAtencionId;
-                Nhcl = activas[0].Nhcl;
-            }
-            else
-            {
-                Orden = 24001;
-                Nhcl = 5001;
-            }
-        }
-
-        if (_vias.Count == 0)
-        {
-            var tVias = KardexService.ObtenerViasAdministracionAsync();
-            var tFunc = KardexService.ObtenerFuncionariosEnfermeriaAsync();
-            var tFunciones = KardexService.ObtenerFuncionesEnfermeriaAsync();
-            await Task.WhenAll(tVias, tFunc, tFunciones);
-            _vias = await tVias;
-            _funcionarios = await tFunc;
-            _funciones = await tFunciones;
-        }
-
-        await CargarDatosPacienteYKardexAsync();
-        _cargandoInicial = false;
-    }
-
-    private async Task CargarDatosPacienteYKardexAsync()
-    {
-        var tHeader = KardexService.ObtenerCabeceraPacienteAsync(Orden, Nhcl);
-        var tReg = KardexService.ObtenerProductosUtilizadosAsync(Orden);
-        var tSab = KardexService.ConstruirSabanaKardex5DiasAsync(Orden, Nhcl);
-        await Task.WhenAll(tHeader, tReg, tSab);
-
-        var header = await tHeader;
-        if (header != null && header.Nhcl > 0)
-        {
-            Nhcl = header.Nhcl;
-        }
-
-        _paciente = header ?? new PacienteHeaderDto();        if (header is null || header.Nhcl <= 0)            MostrarAlerta("No se encontraron los datos reales del paciente para esta orden.", false);
-
-        _registros = await tReg;
-        _sabana = await tSab;
-
-        if (_formInput.FuncionarioId == 0 && _funcionarios.Count > 0)
-        {
-            _formInput.FuncionarioId = _funcionarios[0].UserNumero;
-        }
-        if (string.IsNullOrWhiteSpace(_formInput.Funcion) && _funciones.Count > 0)
-        {
-            _formInput.Funcion = _funciones[0].TipUserDescripcion;
-        }
-    }
-
-    private async Task CambiarTabAsync(int index)
-    {
-        _tabActiva = index;
-        if (index == 1)
-        {
-            _sabana = await KardexService.ConstruirSabanaKardex5DiasAsync(Orden, Nhcl);
-        }
-    }
-
-    private async Task BuscarMedicamentosAsync()
-    {
+@page "/kardex/enfermeria"
+@page "/kardex/enfermeria/{Orden:int}/{Nhcl:int}"
+@inject IKardexService KardexService
+@inject IInventarioService InventarioService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+@if (!ModoModal)
+{
+<PageTitle>e-ForVets - Kardex de Enfermería (Administración de Medicamentos)</PageTitle>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h4 class="fw-bold text-primary mb-0">KARDEX DE ENFERMERÍA — ADMINISTRACIÓN DE MEDICAMENTOS</h4>
+        <small class="text-muted">Registro de administración de medicamentos, control de stock e impresión de sábana de 5 días.</small>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-danger btn-sm fw-semibold" @onclick="DescargarPdfAsync" disabled="@_exportando">
+            📄 Descargar PDF
+        </button>
+        <button class="btn btn-success btn-sm fw-semibold" @onclick="DescargarExcelAsync" disabled="@_exportando">
+            📊 Exportar Excel
+        </button>
+        <button class="btn btn-outline-secondary btn-sm fw-semibold" @onclick="ImprimirVistaAsync">
+            🖨️ Imprimir Sábana
+        </button>
+    </div>
+</div>
+
+<!-- CABECERA DEL PACIENTE Y ORDEN -->
+<div class="card shadow-sm border-primary mb-3">
+    <div class="card-body py-2 px-3 bg-light">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-2">
+                <label class="small text-muted fw-bold d-block">N° Orden:</label>
+                <div class="input-group input-group-sm">
+                    <input type="number" class="form-control fw-bold" @bind="Orden" />
+                    <button class="btn btn-outline-primary" title="Recargar Orden" @onclick="CargarDatosPacienteYKardexAsync">↻</button>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="small text-muted fw-bold d-block">N° Historia (NHCL):</label>
+                <input type="number" class="form-control form-control-sm text-danger fw-bold" @bind="Nhcl" />
+            </div>
+            <div class="col-md-3">
+                <span class="small text-muted fw-bold d-block">Propietario (Cliente):</span>
+                <span class="fw-semibold">@_paciente.ClienteNombre</span>
+            </div>
+            <div class="col-md-3">
+                <span class="small text-muted fw-bold d-block">Paciente / Especie:</span>
+                <span class="fw-bold text-primary">@_paciente.PacienteNombre</span>
+                <span class="badge bg-info text-dark ms-1">@_paciente.Especie</span>
+            </div>
+            <div class="col-md-2">
+                <span class="small text-muted fw-bold d-block">Sexo / Estado:</span>
+                <span class="fw-semibold">@_paciente.Sexo</span>
+                @if (_paciente.Cierre == "S")
+                {
+                    <span class="badge bg-danger ms-1">Ficha Cerrada</span>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+}
+else
+{
+    <!-- Barra superior compacta en modo modal -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <span class="fs-5 text-primary">📋</span>
+            <div>
+                <h6 class="mb-0 fw-bold text-dark">Kardex de Enfermería — Administración de Medicamentos</h6>
+                <small class="text-muted" style="font-size: 0.75rem;">Orden #@Orden | NHCL #@Nhcl</small>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-danger btn-sm fw-semibold" @onclick="DescargarPdfAsync" disabled="@_exportando" title="Descargar Kardex en PDF">
+                📄 PDF
+            </button>
+            <button class="btn btn-success btn-sm fw-semibold" @onclick="DescargarExcelAsync" disabled="@_exportando" title="Exportar Kardex a Excel">
+                📊 Excel
+            </button>
+            <button class="btn btn-outline-secondary btn-sm fw-semibold" @onclick="ImprimirVistaAsync" title="Imprimir Sábana de 5 Días">
+                🖨️ Imprimir
+            </button>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(_alertaMensaje))
+{
+    <div class="alert @(_alertaExito ? "alert-success" : "alert-danger") alert-dismissible fade show py-2 small" role="alert">
+        @_alertaMensaje
+        <button type="button" class="btn-close py-2" @onclick="() => _alertaMensaje = null"></button>
+    </div>
+}
+
+@if (_cargandoInicial)
+{
+    <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span class="fw-semibold small">Cargando Kardex de Enfermería y administración de medicamentos...</span>
+    </div>
+}
+
+<!-- PESTAÑAS: 1. INGRESOS Y REGISTRO | 2. SÁBANA DE IMPRESIÓN 5 DÍAS -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <button class="nav-link @(_tabActiva == 0 ? "active fw-bold" : "")" @onclick="() => CambiarTabAsync(0)">
+            1. Ingresos y Administración de Medicamentos (@_registros.Count)
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link @(_tabActiva == 1 ? "active fw-bold" : "")" @onclick="() => CambiarTabAsync(1)">
+            2. Sábana Kardex 5 Días / Vista de Impresión (@_sabana.Count fármacos)
+        </button>
+    </li>
+</ul>
+
+@if (_tabActiva == 0)
+{
+    <!-- BUSCADOR DE FÁRMACOS / STOCK LOCAL -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
+            <span class="fw-bold small">BÚSQUEDA DE FÁRMACOS Y CONTROL DE STOCK (BODEGA)</span>
+            @if (!string.IsNullOrWhiteSpace(_formInput.CodigoProd))
+            {
+                <span class="badge bg-warning text-dark">
+                    Seleccionado: @_formInput.CodigoProd | Stock: @_formInput.StockDisponible.ToString("N2") @_formInput.UnidadMedida | Bodega: @_formInput.Bodega
+                </span>
+            }
+        </div>
+        <div class="card-body">
+            <div class="row g-2 align-items-center mb-3">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <input class="form-control" @bind="_textoBusquedaProd" @bind:event="oninput" @onkeydown="OnBusquedaProdKeyDown"
+                               placeholder="Ingrese descripción del fármaco (mínimo 3 caracteres)..." />
+                        <button class="btn btn-primary fw-semibold" type="button" @onclick="BuscarMedicamentosAsync" disabled="@_buscandoProd">
+                            @(_buscandoProd ? "Buscando..." : "🔍 Buscar Fármaco")
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-6 text-end small text-muted">
+                    Consulta el inventario disponible en bodega descontando reservas activas.
+                </div>
+            </div>
+
+            <!-- MODAL / PANEL DESPLEGABLE DE RESULTADOS DE FARMACIA -->
+            @if (_mostrarModalProductos)
+            {
+                <div class="border rounded p-2 mb-3 bg-light shadow-sm">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong class="text-primary small">Resultados de Catálogo / Bodega (@_productosEncontrados.Count registros)</strong>
+                        <button class="btn btn-sm btn-outline-secondary py-0" @onclick="() => _mostrarModalProductos = false">Cerrar ✕</button>
+                    </div>
+                    <div class="table-responsive" style="max-height: 240px;">
+                        <table class="table table-sm table-hover table-bordered bg-white mb-0 small align-middle">
+                            <thead class="table-secondary">
+                                <tr>
+                                    <th>Acción</th>
+                                    <th>Código</th>
+                                    <th>Fármaco / Descripción</th>
+                                    <th class="text-end">Stock Disp.</th>
+                                    <th class="text-end">Precio</th>
+                                    <th>Medida</th>
+                                    <th>IVA</th>
+                                    <th>Bodega</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var prod in _productosEncontrados)
+                                {
+                                    <tr>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-sm @(prod.Inventory <= 0 ? "btn-warning" : "btn-success") py-0 px-2"                                                    disabled="@(prod.Inventory <= 0)"                                                    title="@(prod.Inventory <= 0 ? "Producto sin stock disponible" : "Seleccionar producto")"
+                                                    @onclick="() => SeleccionarProducto(prod)">
+                                                Seleccionar
+                                            </button>
+                                        </td>
+                                        <td class="fw-bold">@prod.Number</td>
+                                        <td>@prod.DisplayName</td>
+                                        <td class="text-end fw-bold @(prod.Inventory > 0 ? "text-danger" : "text-muted")">
+                                            @prod.Inventory.ToString("N2")
+                                        </td>
+                                        <td class="text-end">@prod.UnitPrice.ToString("C2")</td>
+                                        <td>@prod.BaseUnitOfMeasureCode</td>
+                                        <td>@prod.TaxGroupCode</td>
+                                        <td class="text-primary fw-semibold">@prod.Location</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
+            <!-- FORMULARIO DE REGISTRO DE ADMINISTRACIÓN -->
+            <EditForm Model="_formInput" OnValidSubmit="GuardarAdministracionAsync">
+                <DataAnnotationsValidator />
+
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">Producto Seleccionado:</label>
+                        <InputText class="form-control form-control-sm" @bind-Value="_formInput.ProdDescripcion" placeholder="Seleccione o escriba producto" />
+                        <ValidationMessage For="@(() => _formInput.ProdDescripcion)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">Indicaciones / Dosis / Frecuencia:</label>
+                        <InputText class="form-control form-control-sm" @bind-Value="_formInput.IndicacionesProd" placeholder="Ej: 2 ml c/8h lento" />
+                        <ValidationMessage For="@(() => _formInput.IndicacionesProd)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-1">
+                        <label class="form-label small fw-bold mb-1">Cantidad:</label>
+                        <InputNumber class="form-control form-control-sm text-center fw-bold text-danger" @bind-Value="_formInput.CantProd" />
+                        <ValidationMessage For="@(() => _formInput.CantProd)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">Vía:</label>
+                        <InputSelect class="form-select form-select-sm" @bind-Value="_formInput.Via">
+                            <option value="">-- Seleccione --</option>
+                            @foreach (var v in _vias)
+                            {
+                                <option value="@v.Via">@v.Via</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => _formInput.Via)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">Día y Mes:</label>
+                        <InputDate class="form-control form-control-sm" @bind-Value="_formInput.Fecha" />
+                    </div>
+
+                    <div class="col-md-1">
+                        <label class="form-label small fw-bold mb-1">Hora:</label>
+                        <InputDate Type="InputDateType.Time" class="form-control form-control-sm" @bind-Value="_formInput.Hora" />
+                    </div>
+
+                    <div class="col-md-4 mt-2">
+                        <label class="form-label small fw-bold mb-1">Responsable (Iniciales):</label>
+                        <InputSelect class="form-select form-select-sm" @bind-Value="_formInput.FuncionarioId">
+                            <option value="0">-- Seleccione Funcionario --</option>
+                            @foreach (var f in _funcionarios)
+                            {
+                                <option value="@f.UserNumero">@f.UserNombre (@f.UserIniciales)</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => _formInput.FuncionarioId)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-3 mt-2">
+                        <label class="form-label small fw-bold mb-1">Función / Cargo:</label>
+                        <InputSelect class="form-select form-select-sm" @bind-Value="_formInput.Funcion">
+                            <option value="">-- Seleccione --</option>
+                            @foreach (var fn in _funciones)
+                            {
+                                <option value="@fn.TipUserDescripcion">@fn.TipUserDescripcion</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => _formInput.Funcion)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-5 mt-2 d-flex gap-2 justify-content-end">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="LimpiarFormulario">
+                            Limpiar
+                        </button>
+                        <button type="submit" class="btn btn-sm btn-primary fw-bold px-4" disabled="@_guardando">
+                            @(_guardando ? "Guardando..." : "➕ Añadir al Kardex")
+                        </button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+
+    <!-- GRILLA REACTIVA DE MEDICAMENTOS APLICADOS (Reemplaza a telerik:RadGrid grdMedicinas) -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <span class="fw-bold text-secondary small">REGISTROS DE MEDICACIÓN APLICADOS EN LA ORDEN #@Orden</span>
+            <input class="form-control form-control-sm w-25" @bind="_filtroTabla" @bind:event="oninput" placeholder="Filtrar en tabla..." />
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover table-bordered align-middle mb-0 small">
+                <thead class="table-primary text-center">
+                    <tr>
+                        <th>ID</th>
+                        <th>Orden</th>
+                        <th>Código</th>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Indicaciones / Frecuencia</th>
+                        <th>Vía</th>
+                        <th>Fecha</th>
+                        <th>Hora</th>
+                        <th>Ini / Fun</th>
+                        <th>Bodega</th>
+                        <th>Eliminar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (RegistrosFiltrados.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="12" class="text-center text-muted py-3">
+                                No existen registros de medicación para esta orden.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var reg in RegistrosFiltrados)
+                        {
+                            <tr>
+                                <td class="text-center">@reg.Id</td>
+                                <td class="text-center">@reg.Orden</td>
+                                <td class="fw-bold text-center">@reg.Codigo</td>
+                                <td class="fw-semibold">@reg.Producto</td>
+                                <td class="text-center fw-bold">@reg.Cantidad.ToString("N2")</td>
+                                <td>@reg.Indicaciones</td>
+                                <td class="text-center">@reg.Via</td>
+                                <td class="text-center">@reg.Fecha</td>
+                                <td class="text-center fw-bold">@reg.Hora</td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">@reg.Iniciales</span>
+                                    <small class="text-muted ms-1">@reg.Funcion</small>
+                                </td>
+                                <td class="text-center">@reg.Bodega</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                                            title="Eliminar registro y liberar reserva"
+                                            @onclick="() => EliminarRegistroAsync(reg)">
+                                        🗑️
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+else
+{
+    <!-- SÁBANA DE KARDEX DE 5 DÍAS (Reemplaza a GridView1 y GridView2..6 de vt_EnfermeriaKardex.aspx) -->
+    <div class="card shadow-sm border-0" id="sabana-kardex-print">
+        <div class="card-body">
+            <div class="row mb-2 border-bottom pb-2">
+                <div class="col-4"><strong>Orden:</strong> @Orden</div>
+                <div class="col-4"><strong>N° Historia (NHCL):</strong> <span class="text-danger fw-bold">@Nhcl</span></div>
+                <div class="col-4"><strong>Fecha Impresión:</strong> @DateTime.Now.ToString("yyyy-MM-dd HH:mm")</div>
+                <div class="col-4"><strong>Cliente:</strong> @_paciente.ClienteNombre</div>
+                <div class="col-4"><strong>Paciente:</strong> @_paciente.PacienteNombre</div>
+                <div class="col-4"><strong>Sexo:</strong> @_paciente.Sexo</div>
+            </div>
+
+            @{
+                var fechasCabecera = _sabana.FirstOrDefault()?.FechasColumnas
+                                     ?? Enumerable.Range(0, 5).Select(d => DateTime.Today.AddDays(d)).ToList();
+            }
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm align-middle mb-0" style="font-size: 11px;">
+                    <thead>
+                        <tr class="text-center" style="background-color: #CCCCFF;">
+                            <th style="width: 26%;">
+                                <div>1.- MEDICAMENTO</div>
+                                <small class="fw-normal">PRESENTACIÓN, VÍA, DOSIS UNITARIA, FRECUENCIA</small>
+                            </th>
+                            @foreach (var fec in fechasCabecera)
+                            {
+                                <th colspan="3" style="background-color: #CCFFCC;">
+                                    DÍA Y MES: @fec.ToString("yyyy-MM-dd")
+                                </th>
+                            }
+                        </tr>
+                        <tr class="text-center" style="background-color: #ffff99; font-size: 10px;">
+                            <th>Descripción del Fármaco</th>
+                            @for (int i = 0; i < 5; i++)
+                            {
+                                <th>HORA</th>
+                                <th>INI</th>
+                                <th>FUN</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_sabana.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="16" class="text-center py-4 text-muted">
+                                    No hay medicamentos registrados en la sábana de 5 días para esta orden.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var item in _sabana)
+                            {
+                                <tr>
+                                    <td class="fw-bold align-middle">
+                                        @item.DescripcionCompleta
+                                    </td>
+                                    @for (int d = 0; d < 5; d++)
+                                    {
+                                        var tomas = d < item.AdministracionesPorDia.Count ? item.AdministracionesPorDia[d] : [];
+                                        <td colspan="3" class="p-0 align-top">
+                                            <table class="table table-sm mb-0 border-0" style="font-size: 11px;">
+                                                <tbody>
+                                                    @foreach (var toma in tomas)
+                                                    {
+                                                        var claseColor = toma.EsTurnoNocturno ? "text-danger fw-bold" : "text-primary fw-bold";
+                                                        <tr>
+                                                            <td class="text-center border-end @claseColor" style="width: 40%;">@(string.IsNullOrWhiteSpace(toma.Hora) ? "\u00A0" : toma.Hora)</td>
+                                                            <td class="text-center border-end @claseColor" style="width: 30%;">@(string.IsNullOrWhiteSpace(toma.Iniciales) ? "\u00A0" : toma.Iniciales)</td>
+                                                            <td class="text-center @claseColor" style="width: 30%;">@(string.IsNullOrWhiteSpace(toma.Funcion) ? "\u00A0" : toma.Funcion)</td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-2 small text-muted">
+                <strong>Simbología:</strong> <span class="text-primary fw-bold">Azul = Turno Diurno (00:00 - 17:59)</span> |
+                <span class="text-danger fw-bold">Rojo = Turno Nocturno (18:00 - 23:59)</span> |
+                <strong>INI:</strong> Iniciales del Responsable | <strong>FUN:</strong> Abreviatura de la Función.
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "orden")]
+    public int? OrdenParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "nhcl")]
+    public int? NhclParam { get; set; }
+
+    [Parameter]
+    public int? IdOrden { get; set; }
+
+    [Parameter]
+    public bool ModoModal { get; set; }
+
+    [Parameter]
+    public int Orden { get; set; }
+
+    [Parameter]
+    public int Nhcl { get; set; }
+
+    private PacienteHeaderDto _paciente = new();
+    private List<ViaAdministracionDto> _vias = [];
+    private List<FuncionarioDto> _funcionarios = [];
+    private List<FuncionEnfermeriaDto> _funciones = [];
+    private List<ProductoUtilizadoDto> _registros = [];
+    private List<KardexSabanaItemDto> _sabana = [];
+    private List<FarmacoStockDto> _productosEncontrados = [];
+
+    private KardexRegistroInputModel _formInput = new();
+    private string _textoBusquedaProd = string.Empty;
+    private string _filtroTabla = string.Empty;
+    private int _tabActiva = 0;
+    private bool _mostrarModalProductos;
+    private bool _buscandoProd;
+    private bool _guardando;
+    private bool _exportando;
+    private bool _cargandoInicial = true;
+    private string? _alertaMensaje;
+    private bool _alertaExito;
+
+    private List<ProductoUtilizadoDto> RegistrosFiltrados =>
+        string.IsNullOrWhiteSpace(_filtroTabla)
+            ? _registros
+            : _registros.Where(r =>
+                r.Producto.Contains(_filtroTabla, StringComparison.OrdinalIgnoreCase) ||
+                r.Codigo.Contains(_filtroTabla, StringComparison.OrdinalIgnoreCase) ||
+                r.Via.Contains(_filtroTabla, StringComparison.OrdinalIgnoreCase) ||
+                r.Iniciales.Contains(_filtroTabla, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _cargandoInicial = true;
+        await Task.Yield();
+
+        if (ModoModal)
+        {
+            if (IdOrden.HasValue && IdOrden.Value > 0)
+                Orden = IdOrden.Value;
+
+            if (Orden <= 0)
+            {
+                _cargandoInicial = false;
+                return;
+            }
+        }
+        else
+        {
+            if (OrdenParam.HasValue && OrdenParam.Value > 0)
+                Orden = OrdenParam.Value;
+            if (NhclParam.HasValue && NhclParam.Value > 0)
+                Nhcl = NhclParam.Value;
+
+            var uri = Nav.ToAbsoluteUri(Nav.Uri);
+            if (!string.IsNullOrWhiteSpace(uri.Query))
+            {
+                var queryParams = System.Web.HttpUtility.ParseQueryString(uri.Query);
+                if (int.TryParse(queryParams["orden"], out int qOrden) && qOrden > 0)
+                    Orden = qOrden;
+                if (int.TryParse(queryParams["nhcl"], out int qNhcl) && qNhcl > 0)
+                    Nhcl = qNhcl;
+            }
+
+            if (Orden <= 0)
+            {
+                var activas = await KardexService.ObtenerOrdenesActivasAsync();
+                if (activas.Count > 0)
+                {
+                    Orden = activas[0].OrdenAtencionId;
+                    Nhcl = activas[0].Nhcl;
+                }
+                else
+                {
+                    Orden = 24001;
+                    Nhcl = 5001;
+                }
+            }
+        }
+
+        if (_vias.Count == 0)
+        {
+            var tVias = KardexService.ObtenerViasAdministracionAsync();
+            var tFunc = KardexService.ObtenerFuncionariosEnfermeriaAsync();
+            var tFunciones = KardexService.ObtenerFuncionesEnfermeriaAsync();
+            await Task.WhenAll(tVias, tFunc, tFunciones);
+            _vias = await tVias;
+            _funcionarios = await tFunc;
+            _funciones = await tFunciones;
+        }
+
+        await CargarDatosPacienteYKardexAsync();
+        _cargandoInicial = false;
+    }
+
+    private async Task CargarDatosPacienteYKardexAsync()
+    {
+        var tHeader = KardexService.ObtenerCabeceraPacienteAsync(Orden, Nhcl);
+        var tReg = KardexService.ObtenerProductosUtilizadosAsync(Orden);
+        var tSab = KardexService.ConstruirSabanaKardex5DiasAsync(Orden, Nhcl);
+        await Task.WhenAll(tHeader, tReg, tSab);
+
+        var header = await tHeader;
+        if (header != null && header.Nhcl > 0)
+        {
+            Nhcl = header.Nhcl;
+        }
+
+        _paciente = header ?? new PacienteHeaderDto();        if (header is null || header.Nhcl <= 0)            MostrarAlerta("No se encontraron los datos reales del paciente para esta orden.", false);
+
+        _registros = await tReg;
+        _sabana = await tSab;
+
+        if (_formInput.FuncionarioId == 0 && _funcionarios.Count > 0)
+        {
+            _formInput.FuncionarioId = _funcionarios[0].UserNumero;
+        }
+        if (string.IsNullOrWhiteSpace(_formInput.Funcion) && _funciones.Count > 0)
+        {
+            _formInput.Funcion = _funciones[0].TipUserDescripcion;
+        }
+    }
+
+    private async Task CambiarTabAsync(int index)
+    {
+        _tabActiva = index;
+        if (index == 1)
+        {
+            _sabana = await KardexService.ConstruirSabanaKardex5DiasAsync(Orden, Nhcl);
+        }
+    }
+
+    private async Task BuscarMedicamentosAsync()
+    {
         _alertaMensaje = null;
-        if (string.IsNullOrWhiteSpace(_textoBusquedaProd) || _textoBusquedaProd.Trim().Length < 3)
-        {
-            MostrarAlerta("Ingrese la descripción del producto (mínimo 3 caracteres).", false);
-            return;
-        }
-
-        _buscandoProd = true;
-        try
-        {
-            _productosEncontrados = await InventarioService.BuscarMedicamentosConStockAsync(
-                _textoBusquedaProd.Trim(), Session.Localidad, Session.Apostrofe);
+        if (string.IsNullOrWhiteSpace(_textoBusquedaProd) || _textoBusquedaProd.Trim().Length < 3)
+        {
+            MostrarAlerta("Ingrese la descripción del producto (mínimo 3 caracteres).", false);
+            return;
+        }
+
+        _buscandoProd = true;
+        try
+        {
+            _productosEncontrados = await InventarioService.BuscarMedicamentosConStockAsync(
+                _textoBusquedaProd.Trim(), Session.Localidad, Session.Apostrofe);
             _mostrarModalProductos = _productosEncontrados.Count > 0;
             if (_mostrarModalProductos)
             {
                 _alertaMensaje = null;
-            }
-            if (_productosEncontrados.Count == 0)
-            {
-                MostrarAlerta("No se recuperó ningún producto con ese criterio.", false);
-            }
-        }
-        finally
-        {
-            _buscandoProd = false;
-        }
-    }
-
-    private async Task OnBusquedaProdKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await BuscarMedicamentosAsync();
-        }
-    }
-
-    private void SeleccionarProducto(FarmacoStockDto prod)
-    {
+            }
+            if (_productosEncontrados.Count == 0)
+            {
+                MostrarAlerta("No se recuperó ningún producto con ese criterio.", false);
+            }
+        }
+        finally
+        {
+            _buscandoProd = false;
+        }
+    }
+
+    private async Task OnBusquedaProdKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await BuscarMedicamentosAsync();
+        }
+    }
+
+    private void SeleccionarProducto(FarmacoStockDto prod)
+    {
         _alertaMensaje = null;
-        _formInput.CodigoProd = prod.Number;
-        _formInput.ProdDescripcion = prod.DisplayName;
-        _formInput.StockDisponible = prod.Inventory;
-        _formInput.PrecioProd = prod.UnitPrice;
-        _formInput.Iva = prod.TaxGroupCode;
-        _formInput.IdDinamics = prod.Id;
-        _formInput.UnidadMedida = prod.BaseUnitOfMeasureCode;
-        _formInput.Bodega = prod.Location;
-        _formInput.Tipo = "FARMACO";
-        _mostrarModalProductos = false;
-        _textoBusquedaProd = string.Empty;
-    }
-
-    private async Task GuardarAdministracionAsync()
-    {
-        if (_paciente.Nhcl <= 0 || string.IsNullOrWhiteSpace(_formInput.CodigoProd))
-        {
-            MostrarAlerta("Seleccione una orden y un producto reales antes de guardar.", false);
-            return;
-        }
-
-        _guardando = true;
-        try
-        {
-            var res = await KardexService.RegistrarAdministracionMedicamentoAsync(
-                Orden, Nhcl, _formInput, Session.IdUser, Session.Localidad);
-
-            MostrarAlerta(res.Mensaje, res.Exito);
-            if (res.Exito)
-            {
-                LimpiarFormulario();
-                await CargarDatosPacienteYKardexAsync();
-            }
-        }
-        finally
-        {
-            _guardando = false;
-        }
-    }
-
-    private async Task EliminarRegistroAsync(ProductoUtilizadoDto reg)
-    {
-        var res = await KardexService.EliminarAdministracionMedicamentoAsync(reg.Id, reg.Codigo, reg.Orden);
-        MostrarAlerta(res.Mensaje, res.Exito);
-        if (res.Exito)
-        {
-            await CargarDatosPacienteYKardexAsync();
-        }
-    }
-
-    private void LimpiarFormulario()
-    {
-        int funcActual = _formInput.FuncionarioId;
-        string cargoActual = _formInput.Funcion;
-        _formInput = new KardexRegistroInputModel
-        {
-            Fecha = DateTime.Today,
-            Hora = TimeOnly.FromDateTime(DateTime.Now),
-            CantProd = 1,
-            FuncionarioId = funcActual,
-            Funcion = cargoActual
-        };
-    }
-
-    private async Task DescargarPdfAsync()
-    {
-        if (_paciente.Nhcl <= 0)
-        {
-            MostrarAlerta("No se puede exportar sin los datos reales del paciente.", false);
-            return;
-        }
-        _exportando = true;
-        _alertaMensaje = null;
-        try
-        {
-            if (_sabana.Count == 0)
-            {
-                _sabana = await KardexService.ConstruirSabanaKardex5DiasAsync(Orden, Nhcl);
-            }
-            var pdfBytes = ReportService.GenerarKardexPdf(_paciente, _sabana, _registros);
-            var base64 = Convert.ToBase64String(pdfBytes);
-            await JS.InvokeVoidAsync("hosvetDownloadFile", $"Kardex_Orden_{Orden}_NHCL_{Nhcl}.pdf", "application/pdf", base64);
-        }
-        catch (Exception ex)
-        {
-            MostrarAlerta($"Error al generar PDF: {ex.Message}", false);
-        }
-        finally
-        {
-            _exportando = false;
-        }
-    }
-
-    private async Task DescargarExcelAsync()
-    {
-        if (_paciente.Nhcl <= 0)
-        {
-            MostrarAlerta("No se puede exportar sin los datos reales del paciente.", false);
-            return;
-        }
-        _exportando = true;
-        _alertaMensaje = null;
-        try
-        {
-            if (_sabana.Count == 0)
-            {
-                _sabana = await KardexService.ConstruirSabanaKardex5DiasAsync(Orden, Nhcl);
-            }
-            var xlsxBytes = ReportService.GenerarKardexExcel(_paciente, _sabana, _registros);
-            var base64 = Convert.ToBase64String(xlsxBytes);
-            await JS.InvokeVoidAsync("hosvetDownloadFile", $"Kardex_Orden_{Orden}_NHCL_{Nhcl}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", base64);
-        }
-        catch (Exception ex)
-        {
-            MostrarAlerta($"Error al generar Excel: {ex.Message}", false);
-        }
-        finally
-        {
-            _exportando = false;
-        }
-    }
-
-    private async Task ImprimirVistaAsync()
-    {
-        _tabActiva = 1;
-        _sabana = await KardexService.ConstruirSabanaKardex5DiasAsync(Orden, Nhcl);
-        StateHasChanged();
-        await Task.Delay(150);
-        await JS.InvokeVoidAsync("hosvetPrintElement", "sabana-kardex-print");
-    }
-
-    private void MostrarAlerta(string msg, bool exito)
-    {
-        _alertaMensaje = msg;
-        _alertaExito = exito;
-    }
-}
+        _formInput.CodigoProd = prod.Number;
+        _formInput.ProdDescripcion = prod.DisplayName;
+        _formInput.StockDisponible = prod.Inventory;
+        _formInput.PrecioProd = prod.UnitPrice;
+        _formInput.Iva = prod.TaxGroupCode;
+        _formInput.IdDinamics = prod.Id;
+        _formInput.UnidadMedida = prod.BaseUnitOfMeasureCode;
+        _formInput.Bodega = prod.Location;
+        _formInput.Tipo = "FARMACO";
+        _mostrarModalProductos = false;
+        _textoBusquedaProd = string.Empty;
+    }
+
+    private async Task GuardarAdministracionAsync()
+    {
+        int targetNhcl = _paciente.Nhcl > 0 ? _paciente.Nhcl : Nhcl;
+        if (targetNhcl <= 0 || string.IsNullOrWhiteSpace(_formInput.CodigoProd))
+        {
+            MostrarAlerta("Seleccione una orden y un producto reales antes de guardar.", false);
+            return;
+        }
+
+        _guardando = true;
+        try
+        {
+            var res = await KardexService.RegistrarAdministracionMedicamentoAsync(
+                Orden, targetNhcl, _formInput, Session.IdUser, Session.Localidad);
+
+            MostrarAlerta(res.Mensaje, res.Exito);
+            if (res.Exito)
+            {
+                LimpiarFormulario();
+                await CargarDatosPacienteYKardexAsync();
+            }
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private async Task EliminarRegistroAsync(ProductoUtilizadoDto reg)
+    {
+        var res = await KardexService.EliminarAdministracionMedicamentoAsync(reg.Id, reg.Codigo, reg.Orden);
+        MostrarAlerta(res.Mensaje, res.Exito);
+        if (res.Exito)
+        {
+            await CargarDatosPacienteYKardexAsync();
+        }
+    }
+
+    private void LimpiarFormulario()
+    {
+        int funcActual = _formInput.FuncionarioId;
+        string cargoActual = _formInput.Funcion;
+        _formInput = new KardexRegistroInputModel
+        {
+            Fecha = DateTime.Today,
+            Hora = TimeOnly.FromDateTime(DateTime.Now),
+            CantProd = 1,
+            FuncionarioId = funcActual,
+            Funcion = cargoActual
+        };
+    }
+
+    private async Task DescargarPdfAsync()
+    {
+        if (_paciente.Nhcl <= 0)
+        {
+            MostrarAlerta("No se puede exportar sin los datos reales del paciente.", false);
+            return;
+        }
+        _exportando = true;
+        _alertaMensaje = null;
+        try
+        {
+            if (_sabana.Count == 0)
+            {
+                _sabana = await KardexService.ConstruirSabanaKardex5DiasAsync(Orden, Nhcl);
+            }
+            var pdfBytes = ReportService.GenerarKardexPdf(_paciente, _sabana, _registros);
+            var base64 = Convert.ToBase64String(pdfBytes);
+            await JS.InvokeVoidAsync("hosvetDownloadFile", $"Kardex_Orden_{Orden}_NHCL_{Nhcl}.pdf", "application/pdf", base64);
+        }
+        catch (Exception ex)
+        {
+            MostrarAlerta($"Error al generar PDF: {ex.Message}", false);
+        }
+        finally
+        {
+            _exportando = false;
+        }
+    }
+
+    private async Task DescargarExcelAsync()
+    {
+        if (_paciente.Nhcl <= 0)
+        {
+            MostrarAlerta("No se puede exportar sin los datos reales del paciente.", false);
+            return;
+        }
+        _exportando = true;
+        _alertaMensaje = null;
+        try
+        {
+            if (_sabana.Count == 0)
+            {
+                _sabana = await KardexService.ConstruirSabanaKardex5DiasAsync(Orden, Nhcl);
+            }
+            var xlsxBytes = ReportService.GenerarKardexExcel(_paciente, _sabana, _registros);
+            var base64 = Convert.ToBase64String(xlsxBytes);
+            await JS.InvokeVoidAsync("hosvetDownloadFile", $"Kardex_Orden_{Orden}_NHCL_{Nhcl}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", base64);
+        }
+        catch (Exception ex)
+        {
+            MostrarAlerta($"Error al generar Excel: {ex.Message}", false);
+        }
+        finally
+        {
+            _exportando = false;
+        }
+    }
+
+    private async Task ImprimirVistaAsync()
+    {
+        _tabActiva = 1;
+        _sabana = await KardexService.ConstruirSabanaKardex5DiasAsync(Orden, Nhcl);
+        StateHasChanged();
+        await Task.Delay(150);
+        await JS.InvokeVoidAsync("hosvetPrintElement", "sabana-kardex-print");
+    }
+
+    private void MostrarAlerta(string msg, bool exito)
+    {
+        _alertaMensaje = msg;
+        _alertaExito = exito;
+    }
+}
