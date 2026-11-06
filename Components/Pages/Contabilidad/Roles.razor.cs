@@ -56,8 +56,8 @@ public partial class Roles
         var user = (await Auth.GetAuthenticationStateAsync()).User;
         if (user.Identity?.IsAuthenticated != true)
         {
-            var vuelta = "/invitaciones/e-contax?codigo=" + Uri.EscapeDataString(Codigo ?? "");
-            Nav.NavigateTo("/login?ReturnUrl=" + Uri.EscapeDataString(Codigo is null ? "/e-contax/administracion/roles" : vuelta), true);
+            var vuelta = "/invitaciones/contabilidad?codigo=" + Uri.EscapeDataString(Codigo ?? "");
+            Nav.NavigateTo("/login?ReturnUrl=" + Uri.EscapeDataString(Codigo is null ? "/contabilidad/administracion/roles" : vuelta), true);
             return;
         }
         userId = int.TryParse(user.FindFirst("IdUsuario")?.Value ?? user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
@@ -235,7 +235,7 @@ public partial class Roles
         var token = await Seguridad.InvitarAsync(userId, email, sucursalId, perfilAsignado, adminSucursal);
         var sucursal = resumen!.Sucursales.FirstOrDefault(x => x.IdSucursal == sucursalId)?.Nombre ?? "Sucursal asignada";
         var perfil = PerfilesSucursal.FirstOrDefault(x => x.IdPerfil == perfilAsignado)?.Nombre ?? "Rol de la sucursal";
-        var enlace = new Uri(new Uri(Nav.BaseUri), "/invitaciones/e-contax?codigo=" + token).AbsoluteUri;
+        var enlace = new Uri(new Uri(Nav.BaseUri), "/invitaciones/contabilidad?codigo=" + token).AbsoluteUri;
         ultimoEnlaceInvitacion = enlace;
         try { await Correo.EnviarInvitacionEContaxAsync(email, resumen.Empresa.Nombre, sucursal, perfil, enlace); }
         catch (Exception ex)

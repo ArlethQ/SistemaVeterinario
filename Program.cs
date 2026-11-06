@@ -79,6 +79,7 @@ builder.Services.AddScoped<IAdministracionClinicaService, AdministracionClinicaS
 builder.Services.AddScoped<IGestionMigradaService, GestionMigradaService>();
 builder.Services.AddScoped<IEFactCatalogService, EFactCatalogService>();
 builder.Services.AddSingleton<IReportExportService, ReportExportService>();
+builder.Services.AddSingleton<NumericaBackOfficeService>();
 
 // Módulo original de Numerica: utiliza la misma base integrada y la sesión veterinaria.
 var numericaConnection = builder.Configuration.GetConnectionString("VeterinariaConnection") ?? string.Empty;
@@ -102,7 +103,8 @@ builder.Services.AddSingleton<AuditService>();
 builder.Services.AddSingleton<CurrentUserContext>();
 builder.Services.AddSingleton<AuditActorResolver>();
 builder.Services.AddScoped<ICajaSerieResolver, CajaSerieResolver>();
-builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<HosvetKardex.Web.Services.IEmailService, HosvetKardex.Web.Services.EmailService>();
+builder.Services.AddScoped<global::IEmailService, global::EmailService>();
 builder.Services.AddScoped<IFacturaPdfService, FacturaPdfService>();
 builder.Services.AddScoped<IGuiaRemisionPdfService, GuiaRemisionPdfService>();
 builder.Services.AddScoped<ILiquidacionCompraPdfService, LiquidacionCompraPdfService>();
@@ -145,6 +147,7 @@ builder.Services.AddScoped<SweetAlertService>();
 builder.Services.AddScoped<InitialSequencePromptService>();
 builder.Services.AddScoped<ComprobanteCorreoEstadoService>();
 builder.Services.AddScoped<EmisionControlService>();
+builder.Services.AddScoped<CompraDocumentosFacturacionService>();
 builder.Services.AddScoped<EmisorSistemaService>();
 builder.Services.AddScoped<EmisorOnboardingService>();
 builder.Services.AddScoped<ConfiguracionService>();

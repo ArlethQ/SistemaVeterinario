@@ -1,7 +1,11 @@
 @page "/dashboard"
+@using Microsoft.EntityFrameworkCore
 @inject IKardexService KardexService
 @inject IAdmisionFacturacionService AdmisionService
 @inject NavigationManager Nav
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
+@inject Microsoft.EntityFrameworkCore.IDbContextFactory<Simetric.Data.AppDbContext> DbFactory
+@inject Simetric.Services.EmisorCertificadoValidator FirmaValidator
 
 <PageTitle>e-ForVets - Panel Principal</PageTitle>
 
@@ -50,6 +54,40 @@
 
 <!-- Tarjetas de Métricas / KPIs del Día -->
 <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-lg-3">
+        <div class="card shadow-sm border-0 h-100 border-start border-danger border-4" style="border-radius: 12px;">
+            <div class="card-body p-3 d-flex flex-column justify-content-between">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small text-uppercase fw-bold">Documentos disponibles</div>
+                        <h3 class="fw-bold text-danger mb-0">@_saldoDocumentos</h3>
+                    </div>
+                    <div class="fs-1 text-danger opacity-50">📄</div>
+                </div>
+                <div class="mt-3"><a href="/contabilidad/compra-documentos" class="text-danger text-decoration-none small fw-semibold">Recargar documentos &rarr;</a></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+        <div class="card shadow-sm border-0 h-100 border-start @_firmaColor border-4" style="border-radius: 12px;">
+            <div class="card-body p-3 d-flex flex-column justify-content-between">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small text-uppercase fw-bold">Vigencia de firma</div>
+                        <h5 class="fw-bold mb-0">@_firmaResumen</h5>
+                        @if (_firmaExpiracion is not null)
+                        {
+                            <small class="text-muted">Hasta @_firmaExpiracion.Value.ToString("dd/MM/yyyy")</small>
+                        }
+                    </div>
+                    <div class="fs-1 opacity-50">✍️</div>
+                </div>
+                <div class="mt-3"><a href="/facturacion/configuracion/firma" class="text-decoration-none small fw-semibold">Ver firma electrónica &rarr;</a></div>
+            </div>
+        </div>
+    </div>
+
     <div class="col-sm-6 col-lg-3">
         <div class="card shadow-sm border-0 h-100 border-start border-primary border-4" style="border-radius: 12px;">
             <div class="card-body p-3 d-flex flex-column justify-content-between">
@@ -468,6 +506,10 @@
     private int _totalOrdenesActivas;
     private int _totalCitasHoy;
     private int _totalHospitalizados;
+    private int _saldoDocumentos;
+    private string _firmaResumen = "No configurada";
+    private string _firmaColor = "border-secondary";
+    private DateTime? _firmaExpiracion;
     private int _ordenDefault;
     private int _nhclDefault;
     private int _ordenManual;
@@ -483,8 +525,9 @@
         {
             var ordenesTask = KardexService.ObtenerOrdenesActivasAsync();
             var citasTask = AdmisionService.ObtenerCitasPorFechaAsync(DateTime.Today, DateTime.Today);
+            var cuentaTask = CargarIndicadoresFacturacionAsync();
 
-            await Task.WhenAll(ordenesTask, citasTask);
+            await Task.WhenAll(ordenesTask, citasTask, cuentaTask);
 
             _pacientesRecientes = await ordenesTask;
             _totalOrdenesActivas = _pacientesRecientes.Count;
@@ -510,6 +553,36 @@
         {
             _cargando = false;
         }
+    }
+
+    private async Task CargarIndicadoresFacturacionAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (!int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var usuarioId)) return;
+
+        await using var context = await DbFactory.CreateDbContextAsync();
+        var usuario = await context.Usuarios.AsNoTracking().FirstOrDefaultAsync(x => x.IdUsuario == usuarioId);
+        if (usuario is null) return;
+        if (usuario.estadoAsociado == true && usuario.idJefe is > 0)
+            usuario = await context.Usuarios.AsNoTracking().FirstOrDefaultAsync(x => x.IdUsuario == usuario.idJefe.Value) ?? usuario;
+
+        _saldoDocumentos = Math.Max(0, usuario.SaldoDocumentos);
+        var emisor = await context.Emisores.AsNoTracking()
+            .Where(x => x.IdUsuario == usuario.IdUsuario && x.Estado)
+            .OrderByDescending(x => x.Codigo)
+            .FirstOrDefaultAsync();
+        if (emisor is null) return;
+
+        var firma = await FirmaValidator.ValidarConApiAsync(emisor);
+        _firmaExpiracion = firma.FechaExpiracion;
+        _firmaResumen = firma.DiasRestantes switch
+        {
+            < 0 => "Caducada",
+            0 => "Vence hoy",
+            int dias => $"{dias} días restantes",
+            _ => firma.TieneConfiguracion ? "Validar vigencia" : "No configurada"
+        };
+        _firmaColor = firma.IsValid ? "border-success" : "border-warning";
     }
 
     private void IrModuloManual(string modulo)
