@@ -156,8 +156,20 @@ public class ConsultaExternaService : IConsultaExternaService
                 "SELECT mas_colortriaje, mas_castrado FROM vt_pacientes WHERE mas_nhcl = @Nhcl", new { Nhcl = nhcl });
             if (pac != null)
             {
-                dto.ColorTriaje = pac.mas_colortriaje?.ToString()?.Trim() ?? "imagenes/temperamento/blanco.png";
+                string colStr = pac.mas_colortriaje?.ToString()?.Trim() ?? "green";
                 dto.Esterilizado = pac.mas_castrado?.ToString()?.Trim() ?? "N";
+                dto.ColorTriaje = colStr;
+
+                // Si no hay temperamento en vt_fichamedica o está en blanco/tranquilo, sincronizar con el semáforo de vt_pacientes
+                if (string.IsNullOrWhiteSpace(dto.Temperamento) || dto.Temperamento == "TRANQUILO")
+                {
+                    if (colStr.Equals("red", StringComparison.OrdinalIgnoreCase) || colStr.Contains("rojo"))
+                        dto.Temperamento = "AGRESIVO";
+                    else if (colStr.Equals("yellow", StringComparison.OrdinalIgnoreCase) || colStr.Contains("amarill"))
+                        dto.Temperamento = "A LA DEFENSIVA";
+                    else if (colStr.Equals("green", StringComparison.OrdinalIgnoreCase) || colStr.Contains("verd"))
+                        dto.Temperamento = "TRANQUILO";
+                }
             }
 
             dto.IndicacionesGeneralesReceta = await ObtenerIndicacionesGeneralesAsync(idOrden);
@@ -287,9 +299,20 @@ public class ConsultaExternaService : IConsultaExternaService
             // Actualizar color de triaje y esterilizado en vt_pacientes
             if (dto.MedNhcl > 0)
             {
+                string colorCode = "green";
+                string temp = (dto.Temperamento ?? "").ToUpperInvariant();
+                string col = (dto.ColorTriaje ?? "").ToLowerInvariant();
+
+                if (temp.Contains("AGRESIV") || col.Contains("rojo") || col.Contains("red"))
+                    colorCode = "red";
+                else if (temp.Contains("DEFENSIV") || col.Contains("amarill") || col.Contains("yellow"))
+                    colorCode = "yellow";
+                else
+                    colorCode = "green";
+
                 await _db.ExecuteAsync(
-                    "UPDATE vt_pacientes SET mas_castrado = @Esterilizado, mas_colortriaje = @ColorTriaje WHERE mas_nhcl = @MedNhcl",
-                    new { dto.Esterilizado, dto.ColorTriaje, dto.MedNhcl });
+                    "UPDATE vt_pacientes SET mas_castrado = @Esterilizado, mas_colortriaje = @ColorCode WHERE mas_nhcl = @MedNhcl",
+                    new { dto.Esterilizado, ColorCode = colorCode, dto.MedNhcl });
             }
 
             // Actualizar indicaciones generales de receta siempre

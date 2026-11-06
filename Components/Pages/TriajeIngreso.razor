@@ -359,6 +359,11 @@
             _mensajeAlerta = exito
                 ? "Constantes de triaje guardadas exitosamente y sincronizadas con la Historia Clínica SOAP."
                 : "No fue posible guardar las constantes de triaje.";
+
+            if (exito)
+            {
+                Session.SeleccionarOrden(_ficha.MedOrden, _ficha.MedNhcl, _paciente?.PacienteNombre);
+            }
         }
         catch (Exception ex)
         {

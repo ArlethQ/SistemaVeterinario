@@ -99,6 +99,17 @@
                     <button type="button" class="order-drawer-close" title="Cerrar" @onclick="CerrarFormularioOrden">×</button>
                 </div>
                 <div class="card-body">
+                    @if (CitaOrigenId.HasValue && CitaOrigenId.Value > 0)
+                    {
+                        <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center justify-content-between">
+                            <div>
+                                <i class="bi bi-calendar2-check-fill me-2 text-primary fs-6"></i>
+                                <strong>Datos cargados desde Cita Médica #@CitaOrigenId</strong>
+                            </div>
+                            <span class="badge bg-primary">Agenda Médica</span>
+                        </div>
+                    }
+
                     <!-- Selector rápido de paciente -->
                     <div class="mb-3">
                         <label class="form-label small fw-bold"><span class="step-dot">1</span> Buscar paciente</label>
@@ -357,6 +368,10 @@
 
 @code {
     private int? NhclPreseleccionado { get; set; }
+    private int? MedicoPreseleccionado { get; set; }
+    private int? EspecialidadPreseleccionada { get; set; }
+    private int? TipoDespachoPreseleccionado { get; set; }
+    private int? CitaOrigenId { get; set; }
 
     private List<CatalogoItemGenericoDto> _especialidades = new();
     private List<CatalogoItemGenericoDto> _medicosDisponibles = new();
@@ -440,23 +455,101 @@
                 NhclPreseleccionado = qNhcl;
                 _mostrarFormularioOrden = true;
             }
+            if (int.TryParse(q["idMedico"], out int qMed) && qMed > 0)
+            {
+                MedicoPreseleccionado = qMed;
+            }
+            if (int.TryParse(q["idEspecialidad"], out int qEsp) && qEsp > 0)
+            {
+                EspecialidadPreseleccionada = qEsp;
+            }
+            if (int.TryParse(q["tipoConsulta"], out int qTipoCons))
+            {
+                TipoDespachoPreseleccionado = qTipoCons switch
+                {
+                    3 => 4, // Cirugía programada -> Quirófano
+                    5 => 1, // Imagen / Ecografía -> Imagenología
+                    _ => 0  // Consulta general, especialidad, control -> Consulta externa / Ambulatorio
+                };
+            }
+            if (int.TryParse(q["tipoDespacho"], out int qDespacho))
+            {
+                TipoDespachoPreseleccionado = qDespacho;
+            }
+            if (int.TryParse(q["idCita"], out int qCita) && qCita > 0)
+            {
+                CitaOrigenId = qCita;
+            }
+            if (!string.IsNullOrWhiteSpace(q["hora"]))
+            {
+                _nuevaOrden.HoraOrden = q["hora"]!;
+            }
+            if (DateTime.TryParse(q["fecha"], out var qFec))
+            {
+                _nuevaOrden.FechaOrden = qFec;
+            }
         }
 
         var tEsp = AdmisionService.ObtenerEspecialidadesAsync();
+        var tMedicosTodos = AdmisionService.ObtenerMedicosPorEspecialidadAsync(0);
         var tPac = BuscarPacientesAsync();
         var tOrd = CargarOrdenesAsync();
-        await Task.WhenAll(tEsp, tPac, tOrd);
+        await Task.WhenAll(tEsp, tMedicosTodos, tPac, tOrd);
 
         _especialidades = await tEsp;
-        int espInicial = _especialidades.FirstOrDefault()?.Id ?? 1;
-        _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(espInicial);
+        var todosMedicos = await tMedicosTodos;
 
-        _nuevaOrden.IdEspecialidad = espInicial;
-        _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 1;
+        if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0)
+        {
+            var medInfo = todosMedicos.FirstOrDefault(m => m.Id == MedicoPreseleccionado.Value);
+            if (medInfo != null && medInfo.IdPadre.GetValueOrDefault() > 0)
+            {
+                int espId = medInfo.IdPadre.Value;
+                _nuevaOrden.IdEspecialidad = espId;
+                _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(espId);
+                _nuevaOrden.IdMedico = medInfo.Id;
+            }
+            else
+            {
+                int espInicial = _especialidades.FirstOrDefault()?.Id ?? 1;
+                _nuevaOrden.IdEspecialidad = espInicial;
+                _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(espInicial);
+                _nuevaOrden.IdMedico = MedicoPreseleccionado.Value;
+            }
+        }
+        else if (EspecialidadPreseleccionada.HasValue && EspecialidadPreseleccionada.Value > 0)
+        {
+            _nuevaOrden.IdEspecialidad = EspecialidadPreseleccionada.Value;
+            _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(_nuevaOrden.IdEspecialidad);
+            _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 1;
+        }
+        else
+        {
+            int espInicial = _especialidades.FirstOrDefault()?.Id ?? 1;
+            _nuevaOrden.IdEspecialidad = espInicial;
+            _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(espInicial);
+            _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 1;
+        }
+
+        if (TipoDespachoPreseleccionado.HasValue)
+        {
+            _nuevaOrden.TipoDespacho = TipoDespachoPreseleccionado.Value;
+        }
 
         if (NhclPreseleccionado.HasValue && NhclPreseleccionado.Value > 0)
         {
+            _filtroPaciente = NhclPreseleccionado.Value.ToString();
+            _pacientesEncontrados = await AdmisionService.BuscarMascotasAsync(_filtroPaciente);
             var encontrado = _pacientesEncontrados.FirstOrDefault(p => p.MasNhcl == NhclPreseleccionado.Value);
+            if (encontrado == null)
+            {
+                var resultados = await AdmisionService.BuscarMascotasAsync(string.Empty);
+                encontrado = resultados.FirstOrDefault(p => p.MasNhcl == NhclPreseleccionado.Value);
+                if (encontrado != null && !_pacientesEncontrados.Any(p => p.MasNhcl == encontrado.MasNhcl))
+                {
+                    _pacientesEncontrados.Insert(0, encontrado);
+                }
+            }
             if (encontrado != null)
             {
                 SeleccionarPacienteParaOrden(encontrado);
@@ -521,10 +614,24 @@
         _nuevaOrden.IdLocalidad = SessionState.Localidad;
         int idUsuario = SessionState.UsuarioActual?.IdUsuario ?? 1;
         int idCreada = await AdmisionService.CrearOrdenAtencionAsync(_nuevaOrden, idUsuario, "127.0.0.1");
+
+        if (CitaOrigenId.HasValue && CitaOrigenId.Value > 0)
+        {
+            try
+            {
+                await AdmisionService.ActualizarEstadoCitaAsync(CitaOrigenId.Value, "A");
+            }
+            catch
+            {
+                // No bloquear la orden si la cita no puede cambiar a atendida
+            }
+        }
+
         await CargarOrdenesAsync();
 
         _esError = false;
-        _mensajeAlerta = $"Orden de Atención #{idCreada} creada exitosamente para {_nuevaOrden.NombreMascota} (NHCL #{_nuevaOrden.Nhcl}).";
+        string vinculoCita = (CitaOrigenId.HasValue && CitaOrigenId.Value > 0) ? $" (Vinculada a Cita #{CitaOrigenId.Value})" : "";
+        _mensajeAlerta = $"Orden de Atención #{idCreada} creada exitosamente para {_nuevaOrden.NombreMascota} (NHCL #{_nuevaOrden.Nhcl}){vinculoCita}.";
         _mostrarFormularioOrden = false;
     }
 

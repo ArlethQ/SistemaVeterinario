@@ -6,6 +6,7 @@
 @inject SessionStateService SessionState
 @inject IJSRuntime JS
 @inject IWebHostEnvironment Env
+@inject NavigationManager NavManager
 
 <PageTitle>e-ForVets — Agenda Médica y Calendarización de Citas</PageTitle>
 
@@ -149,6 +150,7 @@
                                 <td><span class="table-status @ClaseEstadoCita(cita.CiEstadoCita)">@TextoEstadoCita(cita.CiEstadoCita)</span></td>
                                 <td class="text-end">
                                     <button class="btn btn-info btn-sm" @onclick="() => VerDetalleCita(cita)">Ver</button>
+                                    <button class="btn btn-primary btn-sm" title="Mandar a Recepción de Órdenes" @onclick="() => EnviarARecepcionOrdenes(cita)"><i class="bi bi-clipboard2-pulse"></i> Orden</button>
                                     @if (cita.CiEstadoCita != "X")
                                     {
                                         <button class="btn btn-outline-primary btn-sm" @onclick="() => AbrirReagendar(cita)">Reagendar</button>
@@ -338,6 +340,9 @@
                             <i class="bi bi-arrow-counterclockwise me-1"></i>Por confirmar
                         </button>
                     }
+                    <button type="button" class="btn btn-primary fw-bold" @onclick="() => EnviarARecepcionOrdenes(_citaDetalle)" title="Crear Orden de Atención en Recepción con los datos de esta cita">
+                        <i class="bi bi-clipboard2-pulse-fill me-1"></i>Recepción / Crear Orden
+                    </button>
                 </div>
             </footer>
         </section>
@@ -791,6 +796,21 @@
     private void CerrarFormularioCita() => _mostrarFormularioCita = false;
     private void VerDetalleCita(CitaMedicaDto cita) => _citaDetalle = cita;
     private void CerrarDetalleCita() => _citaDetalle = null;
+    private void EnviarARecepcionOrdenes(CitaMedicaDto cita)
+    {
+        if (cita.CiNhcl <= 0)
+        {
+            _mensajeEsError = true;
+            _mensaje = $"La cita de {cita.CiNombreMas} no tiene un paciente (NHCL) asignado. Primero vincule o registre el paciente en 'Clientes, tutores y mascotas'.";
+            return;
+        }
+
+        string horaNorm = string.IsNullOrWhiteSpace(cita.CiHora) ? DateTime.Now.ToString("HH:mm") : cita.CiHora.Trim();
+        string fechaNorm = (cita.CiFecha == default ? DateTime.Today : cita.CiFecha).ToString("yyyy-MM-dd");
+        
+        NavManager.NavigateTo($"/admision/ordenes?nhcl={cita.CiNhcl}&idMedico={cita.CiUsuario}&tipoConsulta={cita.CiTipoConsulta}&idCita={cita.CiId}&hora={Uri.EscapeDataString(horaNorm)}&fecha={fechaNorm}");
+    }
+
     private void AbrirCancelarDesdeDetalle(CitaMedicaDto cita)
     {
         _citaDetalle = null;
