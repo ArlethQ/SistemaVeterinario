@@ -1,154 +1,634 @@
+@implements IDisposable
 @inject SessionStateService Session
+@inject IAuthService AuthService
 
 <div class="nav-shell">
     <input id="menu-toggle" type="checkbox" class="menu-toggle" />
     <label for="menu-toggle" class="menu-toggle-label" aria-label="Abrir o cerrar menú">☰ <span>Menú</span></label>
     <div class="nav-scrollable">
         <nav class="menu-tree" aria-label="Navegación del sistema">
-            <span class="menu-section-label">General</span>
-            <NavLink class="menu-link" href="dashboard"><MenuIcon Name="dashboard" /><span>Dashboard</span></NavLink>
-            <NavLink class="menu-link" href="suscripciones"><MenuIcon Name="billing" /><span>Planes y suscripciones</span></NavLink>
-
-            <span class="menu-section-label">Gestión</span>
-            <details open>
-                <summary><MenuIcon Name="admission" /><span>Admisión</span><i>⌄</i></summary>
-                <div class="submenu">
-                    <NavLink href="admision/clientes-pacientes">Clientes, tutores y mascotas</NavLink>
-                    <NavLink href="admision/ordenes">Recepción de órdenes</NavLink>
-                    <NavLink href="admision/citas">Agenda de citas</NavLink>
-                    <NavLink href="admision/triaje">Triaje de ingreso</NavLink>
-                </div>
-            </details>
-
-            <span class="menu-section-label">Atención clínica</span>
-            <details>
-                <summary><MenuIcon Name="kardex" /><span>Kardex clínico</span><i>⌄</i></summary>
-                <div class="submenu">
-                    <NavLink href="kardex/ordenes">Bandeja de órdenes</NavLink>
-                    <NavLink href="kardex/enfermeria">Kardex enfermería</NavLink>
-                    <NavLink href="kardex/signos">Signos y balance hídrico</NavLink>
-                </div>
-            </details>
-
-            <details>
-                <summary><MenuIcon Name="hospital" /><span>Hospitalización 24h</span><i>⌄</i></summary>
-                <div class="submenu">
-                    <NavLink href="hospitalizacion/ficha">Ficha de hospitalización</NavLink>
-                    <NavLink href="hospitalizacion/monitoreo">Monitoreo 24 horas</NavLink>
-                    <NavLink href="hospitalizacion/fichas-complementarias">Turnos, exámenes y transfusión</NavLink>
-                    <NavLink href="hospitalizacion/calculadora-infusiones">Calculadora de infusiones</NavLink>
-                </div>
-            </details>
-
-            <details>
-                <summary><MenuIcon Name="surgery" /><span>Quirófano y anestesia</span><i>⌄</i></summary>
-                <div class="submenu">
-                    <NavLink href="quirofano/preanestesia">Pre-anestesia</NavLink>
-                    <NavLink href="quirofano/preanestesia/checklist">Checklist preoperatorio</NavLink>
-                    <NavLink href="quirofano/pausa-seguridad">Pausa de seguridad</NavLink>
-                    <NavLink href="quirofano/anestesia">Hoja de anestesia</NavLink>
-                    <NavLink href="quirofano/protocolo">Protocolo quirúrgico</NavLink>
-                    <NavLink href="quirofano/recuperacion">Sala de recuperación</NavLink>
-                </div>
-            </details>
-
-            <details>
-                <summary><MenuIcon Name="consultation" /><span>Consulta e historia</span><i>⌄</i></summary>
-                <div class="submenu">
-                    <NavLink href="consulta/fichamedica">Historia clínica SOAP</NavLink>
-                    <NavLink href="consulta/historial/apuntes">Apuntes a historias</NavLink>
-                    <NavLink href="consulta/vacunas">Vacunación</NavLink>
-                    <NavLink href="consulta/evoluciones">Evolución médica</NavLink>
-                    <NavLink href="consulta/recetario">Recetario médico</NavLink>
-                    <NavLink href="consulta/recetario/sin-orden">Recetas sin orden</NavLink>
-                    <NavLink href="consulta/autorizaciones">Consentimientos y alta</NavLink>
-                    <NavLink href="seguimiento/clinico">Seguimiento clínico</NavLink>
-                    <NavLink href="consulta/imprimir-fichas">Dossier / Lotes fichas</NavLink>
-                </div>
-            </details>
-
-            <NavLink class="menu-link" href="operaciones/clinicas"><MenuIcon Name="hospital" /><span>Operaciones clínicas</span></NavLink>
-
-            <NavLink class="menu-link" href="programacion/clinica"><MenuIcon Name="surgery" /><span>Programación clínica</span></NavLink>
-
-            <details>
-                <summary><MenuIcon Name="diagnostic" /><span>Laboratorio e imagen</span><i>⌄</i></summary>
-                <div class="submenu">
-                    <NavLink href="diagnostico/laboratorio">Órdenes de laboratorio</NavLink>
-                    <NavLink href="diagnostico/imagenologia">Rayos X y ecografía</NavLink>
-                    <NavLink href="diagnostico/bandeja">Bandeja de resultados</NavLink>
-                </div>
-            </details>
-
-            <span class="menu-section-label">Administración</span>
-            <details>
-                <summary><MenuIcon Name="billing" /><span>Facturación</span><i>⌄</i></summary>
-                <div class="submenu">
-                    <NavLink href="facturacion/proformas">Pre-facturación veterinaria</NavLink>
-                    <NavLink href="facturacion/productos">Productos y servicios</NavLink>
-                    <NavLink href="facturacion/nueva">Nueva factura electrónica</NavLink>
-                    <NavLink href="facturas">Facturas emitidas</NavLink>
-                    <NavLink href="facturacion/nota-credito">Nota de crédito</NavLink>
-                    <NavLink href="facturacion/notas-credito-generadas">Notas de crédito emitidas</NavLink>
-                    <NavLink href="facturacion/nota-debito">Nota de débito</NavLink>
-                    <NavLink href="facturacion/notas-debito-generadas">Notas de débito emitidas</NavLink>
-                    <NavLink href="facturacion/guia-remision">Guía de remisión</NavLink>
-                    <NavLink href="facturacion/guias-remision-generadas">Guías emitidas</NavLink>
-                    <NavLink href="compras/importar-xml">Importar compra / generar retención</NavLink>
-                    <NavLink href="facturacion/retenciones-generadas">Retenciones</NavLink>
-                    <NavLink href="contabilidad/compra-documentos">Recargar documentos</NavLink>
-                    <NavLink href="compras/nueva-liquidacion">Liquidación de compra</NavLink>
-                    <NavLink href="compras/liquidaciones-generadas">Liquidaciones emitidas</NavLink>
-                    @if (Session.TipoUser == 1)
-                    {
-                        <NavLink href="facturacion/configuracion/emisor">Configurar emisor</NavLink>
-                        <NavLink href="facturacion/configuracion/firma">Firma electrónica</NavLink>
-                        <NavLink href="facturacion/configuracion/caja">Caja y secuenciales</NavLink>
-                    }
-                </div>
-            </details>
-
-            <details>
-                <summary><MenuIcon Name="billing" /><span>Contabilidad</span><i>⌄</i></summary>
-                <div class="submenu">
-                    <NavLink href="contabilidad">Inicio contable</NavLink>
-                    <NavLink href="contabilidad/cuentas-por-cobrar">Cuentas por cobrar y abonos</NavLink>
-                    <NavLink href="contabilidad/clientes">Clientes contables</NavLink>
-                    <NavLink href="contabilidad/proveedores">Proveedores</NavLink>
-                    <NavLink href="contabilidad/compras/importar-xml">Importar compras</NavLink>
-                    <NavLink href="contabilidad/compras/ordenes">Órdenes de compra</NavLink>
-                    <NavLink href="contabilidad/compras/recepciones">Recepciones de compra</NavLink>
-                    <NavLink href="contabilidad/inventarios">Inventario y kardex</NavLink>
-                    <NavLink href="contabilidad/inventarios/bodegas">Bodegas</NavLink>
-                    <NavLink href="contabilidad/reportes/documentos">Reportes contables</NavLink>
-                    <NavLink href="contabilidad/parametrizacion">Parametrización</NavLink>
-                    @if (Session.TipoUser == 1)
-                    {
-                        <NavLink href="contabilidad/configuracion/general">Configuración contable</NavLink>
-                        <NavLink href="contabilidad/administracion/usuarios">Usuarios contables</NavLink>
-                        <NavLink href="contabilidad/administracion/roles">Roles y permisos</NavLink>
-                    }
-                </div>
-            </details>
-            <NavLink class="menu-link" href="reportes/clinicos"><MenuIcon Name="diagnostic" /><span>Reportes clínicos</span></NavLink>
-
-            @if (Session.TipoUser == 1)
+            @if (TieneAlguno("dashboard", "suscripciones"))
             {
-                <span class="menu-section-label">Sistema</span>
-                <details>
-                    <summary><MenuIcon Name="consultation" /><span>Configuración clínica</span><i>⌄</i></summary>
+                <span class="menu-section-label">General</span>
+                @if (TienePermiso("dashboard"))
+                {
+                    <NavLink class="menu-link" href="dashboard"><MenuIcon Name="dashboard" /><span>Dashboard</span></NavLink>
+                }
+                @if (TienePermiso("suscripciones"))
+                {
+                    <NavLink class="menu-link" href="suscripciones"><MenuIcon Name="billing" /><span>Planes y suscripciones</span></NavLink>
+                }
+            }
+
+            @if (TieneAlguno(RutasAdmision))
+            {
+                <span class="menu-section-label">Gestión</span>
+                <details open>
+                    <summary><MenuIcon Name="admission" /><span>Admisión</span><i>⌄</i></summary>
                     <div class="submenu">
-                        <NavLink href="administracion/catalogos">Catálogos clínicos</NavLink>
-                        <NavLink href="administracion/catalogos-operativos">Diagnósticos, productos y laboratorio</NavLink>
-                        <NavLink href="administracion/localidades">Localidades y especialidades</NavLink>
+                        @if (TienePermiso("admision/clientes-pacientes"))
+                        {
+                            <NavLink href="admision/clientes-pacientes">Clientes, tutores y mascotas</NavLink>
+                        }
+                        @if (TienePermiso("admision/ordenes"))
+                        {
+                            <NavLink href="admision/ordenes">Recepción de órdenes</NavLink>
+                        }
+                        @if (TienePermiso("admision/citas"))
+                        {
+                            <NavLink href="admision/citas">Agenda de citas</NavLink>
+                        }
+                        @if (TienePermiso("admision/triaje"))
+                        {
+                            <NavLink href="admision/triaje">Triaje de ingreso</NavLink>
+                        }
                     </div>
                 </details>
-                <details>
-                    <summary><MenuIcon Name="security" /><span>Seguridad</span><i>⌄</i></summary>
-                    <div class="submenu"><NavLink href="administracion/usuarios">Usuarios</NavLink><NavLink href="administracion/roles">Roles</NavLink><NavLink href="administracion/menus">Menús</NavLink><NavLink href="administracion/roles-permisos">Asignar permisos</NavLink><NavLink href="administracion/bitacora">Bitácora de auditoría</NavLink></div>
-                </details>
+            }
+
+            @if (TieneAlguno(RutasAtencionClinica))
+            {
+                <span class="menu-section-label">Atención clínica</span>
+
+                @if (TieneAlguno(RutasKardex))
+                {
+                    <details>
+                        <summary><MenuIcon Name="kardex" /><span>Kardex clínico</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("kardex/ordenes"))
+                            {
+                                <NavLink href="kardex/ordenes">Bandeja de órdenes</NavLink>
+                            }
+                            @if (TienePermiso("kardex/enfermeria"))
+                            {
+                                <NavLink href="kardex/enfermeria">Kardex enfermería</NavLink>
+                            }
+                            @if (TienePermiso("kardex/signos"))
+                            {
+                                <NavLink href="kardex/signos">Signos y balance hídrico</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
+
+                @if (TieneAlguno(RutasHospitalizacion))
+                {
+                    <details>
+                        <summary><MenuIcon Name="hospital" /><span>Hospitalización 24h</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("hospitalizacion/ficha"))
+                            {
+                                <NavLink href="hospitalizacion/ficha">Ficha de hospitalización</NavLink>
+                            }
+                            @if (TienePermiso("hospitalizacion/monitoreo"))
+                            {
+                                <NavLink href="hospitalizacion/monitoreo">Monitoreo 24 horas</NavLink>
+                            }
+                            @if (TienePermiso("hospitalizacion/fichas-complementarias"))
+                            {
+                                <NavLink href="hospitalizacion/fichas-complementarias">Turnos, exámenes y transfusión</NavLink>
+                            }
+                            @if (TienePermiso("hospitalizacion/calculadora-infusiones"))
+                            {
+                                <NavLink href="hospitalizacion/calculadora-infusiones">Calculadora de infusiones</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
+
+                @if (TieneAlguno(RutasQuirofano))
+                {
+                    <details>
+                        <summary><MenuIcon Name="surgery" /><span>Quirófano y anestesia</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("quirofano/preanestesia"))
+                            {
+                                <NavLink href="quirofano/preanestesia">Pre-anestesia</NavLink>
+                            }
+                            @if (TienePermiso("quirofano/preanestesia/checklist"))
+                            {
+                                <NavLink href="quirofano/preanestesia/checklist">Checklist preoperatorio</NavLink>
+                            }
+                            @if (TienePermiso("quirofano/pausa-seguridad"))
+                            {
+                                <NavLink href="quirofano/pausa-seguridad">Pausa de seguridad</NavLink>
+                            }
+                            @if (TienePermiso("quirofano/anestesia"))
+                            {
+                                <NavLink href="quirofano/anestesia">Hoja de anestesia</NavLink>
+                            }
+                            @if (TienePermiso("quirofano/protocolo"))
+                            {
+                                <NavLink href="quirofano/protocolo">Protocolo quirúrgico</NavLink>
+                            }
+                            @if (TienePermiso("quirofano/recuperacion"))
+                            {
+                                <NavLink href="quirofano/recuperacion">Sala de recuperación</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
+
+                @if (TieneAlguno(RutasConsulta))
+                {
+                    <details>
+                        <summary><MenuIcon Name="consultation" /><span>Consulta e historia</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("consulta/fichamedica"))
+                            {
+                                <NavLink href="consulta/fichamedica">Historia clínica SOAP</NavLink>
+                            }
+                            @if (TienePermiso("consulta/historial/apuntes"))
+                            {
+                                <NavLink href="consulta/historial/apuntes">Apuntes a historias</NavLink>
+                            }
+                            @if (TienePermiso("consulta/vacunas"))
+                            {
+                                <NavLink href="consulta/vacunas">Vacunación</NavLink>
+                            }
+                            @if (TienePermiso("consulta/evoluciones"))
+                            {
+                                <NavLink href="consulta/evoluciones">Evolución médica</NavLink>
+                            }
+                            @if (TienePermiso("consulta/recetario"))
+                            {
+                                <NavLink href="consulta/recetario">Recetario médico</NavLink>
+                            }
+                            @if (TienePermiso("consulta/recetario/sin-orden"))
+                            {
+                                <NavLink href="consulta/recetario/sin-orden">Recetas sin orden</NavLink>
+                            }
+                            @if (TienePermiso("consulta/autorizaciones"))
+                            {
+                                <NavLink href="consulta/autorizaciones">Consentimientos y alta</NavLink>
+                            }
+                            @if (TienePermiso("seguimiento/clinico"))
+                            {
+                                <NavLink href="seguimiento/clinico">Seguimiento clínico</NavLink>
+                            }
+                            @if (TienePermiso("consulta/imprimir-fichas"))
+                            {
+                                <NavLink href="consulta/imprimir-fichas">Dossier / Lotes fichas</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
+
+                @if (TienePermiso("operaciones/clinicas"))
+                {
+                    <NavLink class="menu-link" href="operaciones/clinicas"><MenuIcon Name="hospital" /><span>Operaciones clínicas</span></NavLink>
+                }
+
+                @if (TienePermiso("programacion/clinica"))
+                {
+                    <NavLink class="menu-link" href="programacion/clinica"><MenuIcon Name="surgery" /><span>Programación clínica</span></NavLink>
+                }
+
+                @if (TieneAlguno(RutasLaboratorio))
+                {
+                    <details>
+                        <summary><MenuIcon Name="diagnostic" /><span>Laboratorio e imagen</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("diagnostico/laboratorio"))
+                            {
+                                <NavLink href="diagnostico/laboratorio">Órdenes de laboratorio</NavLink>
+                            }
+                            @if (TienePermiso("diagnostico/imagenologia"))
+                            {
+                                <NavLink href="diagnostico/imagenologia">Rayos X y ecografía</NavLink>
+                            }
+                            @if (TienePermiso("diagnostico/bandeja"))
+                            {
+                                <NavLink href="diagnostico/bandeja">Bandeja de resultados</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
+            }
+
+            @if (TieneAlguno(RutasAdministracion))
+            {
+                <span class="menu-section-label">Administración</span>
+
+                @if (TieneAlguno(RutasFacturacion))
+                {
+                    <details>
+                        <summary><MenuIcon Name="billing" /><span>Facturación</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("facturacion/proformas"))
+                            {
+                                <NavLink href="facturacion/proformas">Pre-facturación veterinaria</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/productos"))
+                            {
+                                <NavLink href="facturacion/productos">Productos y servicios</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/nueva"))
+                            {
+                                <NavLink href="facturacion/nueva">Nueva factura electrónica</NavLink>
+                            }
+                            @if (TienePermiso("facturas"))
+                            {
+                                <NavLink href="facturas">Facturas emitidas</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/nota-credito"))
+                            {
+                                <NavLink href="facturacion/nota-credito">Nota de crédito</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/notas-credito-generadas"))
+                            {
+                                <NavLink href="facturacion/notas-credito-generadas">Notas de crédito emitidas</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/nota-debito"))
+                            {
+                                <NavLink href="facturacion/nota-debito">Nota de débito</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/notas-debito-generadas"))
+                            {
+                                <NavLink href="facturacion/notas-debito-generadas">Notas de débito emitidas</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/guia-remision"))
+                            {
+                                <NavLink href="facturacion/guia-remision">Guía de remisión</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/guias-remision-generadas"))
+                            {
+                                <NavLink href="facturacion/guias-remision-generadas">Guías emitidas</NavLink>
+                            }
+                            @if (TienePermiso("compras/importar-xml"))
+                            {
+                                <NavLink href="compras/importar-xml">Importar compra / generar retención</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/retenciones-generadas"))
+                            {
+                                <NavLink href="facturacion/retenciones-generadas">Retenciones</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/compra-documentos"))
+                            {
+                                <NavLink href="contabilidad/compra-documentos">Recargar documentos</NavLink>
+                            }
+                            @if (TienePermiso("compras/nueva-liquidacion"))
+                            {
+                                <NavLink href="compras/nueva-liquidacion">Liquidación de compra</NavLink>
+                            }
+                            @if (TienePermiso("compras/liquidaciones-generadas"))
+                            {
+                                <NavLink href="compras/liquidaciones-generadas">Liquidaciones emitidas</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/configuracion/emisor"))
+                            {
+                                <NavLink href="facturacion/configuracion/emisor">Configurar emisor</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/configuracion/firma"))
+                            {
+                                <NavLink href="facturacion/configuracion/firma">Firma electrónica</NavLink>
+                            }
+                            @if (TienePermiso("facturacion/configuracion/caja"))
+                            {
+                                <NavLink href="facturacion/configuracion/caja">Caja y secuenciales</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
+
+                @if (TieneAlguno(RutasContabilidad))
+                {
+                    <details>
+                        <summary><MenuIcon Name="billing" /><span>Contabilidad</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("contabilidad"))
+                            {
+                                <NavLink href="contabilidad">Inicio contable</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/cuentas-por-cobrar"))
+                            {
+                                <NavLink href="contabilidad/cuentas-por-cobrar">Cuentas por cobrar y abonos</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/clientes"))
+                            {
+                                <NavLink href="contabilidad/clientes">Clientes contables</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/proveedores"))
+                            {
+                                <NavLink href="contabilidad/proveedores">Proveedores</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/compras/importar-xml"))
+                            {
+                                <NavLink href="contabilidad/compras/importar-xml">Importar compras</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/compras/ordenes"))
+                            {
+                                <NavLink href="contabilidad/compras/ordenes">Órdenes de compra</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/compras/recepciones"))
+                            {
+                                <NavLink href="contabilidad/compras/recepciones">Recepciones de compra</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/inventarios"))
+                            {
+                                <NavLink href="contabilidad/inventarios">Inventario y kardex</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/inventarios/bodegas"))
+                            {
+                                <NavLink href="contabilidad/inventarios/bodegas">Bodegas</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/reportes/documentos"))
+                            {
+                                <NavLink href="contabilidad/reportes/documentos">Reportes contables</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/parametrizacion"))
+                            {
+                                <NavLink href="contabilidad/parametrizacion">Parametrización</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/configuracion/general"))
+                            {
+                                <NavLink href="contabilidad/configuracion/general">Configuración contable</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/administracion/usuarios"))
+                            {
+                                <NavLink href="contabilidad/administracion/usuarios">Usuarios contables</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/administracion/roles"))
+                            {
+                                <NavLink href="contabilidad/administracion/roles">Roles y permisos</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
+
+                @if (TienePermiso("reportes/clinicos"))
+                {
+                    <NavLink class="menu-link" href="reportes/clinicos"><MenuIcon Name="diagnostic" /><span>Reportes clínicos</span></NavLink>
+                }
+            }
+
+            @if (TieneAlguno(RutasSistema))
+            {
+                <span class="menu-section-label">Sistema</span>
+
+                @if (TieneAlguno(RutasConfiguracionClinica))
+                {
+                    <details>
+                        <summary><MenuIcon Name="consultation" /><span>Configuración clínica</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("administracion/catalogos"))
+                            {
+                                <NavLink href="administracion/catalogos">Catálogos clínicos</NavLink>
+                            }
+                            @if (TienePermiso("administracion/catalogos-operativos"))
+                            {
+                                <NavLink href="administracion/catalogos-operativos">Diagnósticos, productos y laboratorio</NavLink>
+                            }
+                            @if (TienePermiso("administracion/localidades"))
+                            {
+                                <NavLink href="administracion/localidades">Localidades y especialidades</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
+
+                @if (TieneAlguno(RutasSeguridad))
+                {
+                    <details>
+                        <summary><MenuIcon Name="security" /><span>Seguridad</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("administracion/usuarios"))
+                            {
+                                <NavLink href="administracion/usuarios">Usuarios</NavLink>
+                            }
+                            @if (TienePermiso("administracion/roles"))
+                            {
+                                <NavLink href="administracion/roles">Roles</NavLink>
+                            }
+                            @if (TienePermiso("administracion/menus"))
+                            {
+                                <NavLink href="administracion/menus">Menús</NavLink>
+                            }
+                            @if (TienePermiso("administracion/roles-permisos"))
+                            {
+                                <NavLink href="administracion/roles-permisos">Asignar permisos</NavLink>
+                            }
+                            @if (TienePermiso("administracion/bitacora"))
+                            {
+                                <NavLink href="administracion/bitacora">Bitácora de auditoría</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
             }
         </nav>
     </div>
 </div>
 
+@code {
+    private static readonly string[] RutasAdmision =
+    [
+        "admision/clientes-pacientes",
+        "admision/ordenes",
+        "admision/citas",
+        "admision/triaje"
+    ];
+
+    private static readonly string[] RutasKardex =
+    [
+        "kardex/ordenes",
+        "kardex/enfermeria",
+        "kardex/signos"
+    ];
+
+    private static readonly string[] RutasHospitalizacion =
+    [
+        "hospitalizacion/ficha",
+        "hospitalizacion/monitoreo",
+        "hospitalizacion/fichas-complementarias",
+        "hospitalizacion/calculadora-infusiones"
+    ];
+
+    private static readonly string[] RutasQuirofano =
+    [
+        "quirofano/preanestesia",
+        "quirofano/preanestesia/checklist",
+        "quirofano/pausa-seguridad",
+        "quirofano/anestesia",
+        "quirofano/protocolo",
+        "quirofano/recuperacion"
+    ];
+
+    private static readonly string[] RutasConsulta =
+    [
+        "consulta/fichamedica",
+        "consulta/historial/apuntes",
+        "consulta/vacunas",
+        "consulta/evoluciones",
+        "consulta/recetario",
+        "consulta/recetario/sin-orden",
+        "consulta/autorizaciones",
+        "seguimiento/clinico",
+        "consulta/imprimir-fichas"
+    ];
+
+    private static readonly string[] RutasLaboratorio =
+    [
+        "diagnostico/laboratorio",
+        "diagnostico/imagenologia",
+        "diagnostico/bandeja"
+    ];
+
+    private static readonly string[] RutasAtencionClinica =
+    [
+        ..RutasKardex,
+        ..RutasHospitalizacion,
+        ..RutasQuirofano,
+        ..RutasConsulta,
+        "operaciones/clinicas",
+        "programacion/clinica",
+        ..RutasLaboratorio
+    ];
+
+    private static readonly string[] RutasFacturacion =
+    [
+        "facturacion/proformas",
+        "facturacion/productos",
+        "facturacion/nueva",
+        "facturas",
+        "facturacion/nota-credito",
+        "facturacion/notas-credito-generadas",
+        "facturacion/nota-debito",
+        "facturacion/notas-debito-generadas",
+        "facturacion/guia-remision",
+        "facturacion/guias-remision-generadas",
+        "compras/importar-xml",
+        "facturacion/retenciones-generadas",
+        "contabilidad/compra-documentos",
+        "compras/nueva-liquidacion",
+        "compras/liquidaciones-generadas",
+        "facturacion/configuracion/emisor",
+        "facturacion/configuracion/firma",
+        "facturacion/configuracion/caja"
+    ];
+
+    private static readonly string[] RutasContabilidad =
+    [
+        "contabilidad",
+        "contabilidad/cuentas-por-cobrar",
+        "contabilidad/clientes",
+        "contabilidad/proveedores",
+        "contabilidad/compras/importar-xml",
+        "contabilidad/compras/ordenes",
+        "contabilidad/compras/recepciones",
+        "contabilidad/inventarios",
+        "contabilidad/inventarios/bodegas",
+        "contabilidad/reportes/documentos",
+        "contabilidad/parametrizacion",
+        "contabilidad/configuracion/general",
+        "contabilidad/administracion/usuarios",
+        "contabilidad/administracion/roles"
+    ];
+
+    private static readonly string[] RutasAdministracion =
+    [
+        ..RutasFacturacion,
+        ..RutasContabilidad,
+        "reportes/clinicos"
+    ];
+
+    private static readonly string[] RutasConfiguracionClinica =
+    [
+        "administracion/catalogos",
+        "administracion/catalogos-operativos",
+        "administracion/localidades"
+    ];
+
+    private static readonly string[] RutasSeguridad =
+    [
+        "administracion/usuarios",
+        "administracion/roles",
+        "administracion/menus",
+        "administracion/roles-permisos",
+        "administracion/bitacora"
+    ];
+
+    private static readonly string[] RutasSistema =
+    [
+        ..RutasConfiguracionClinica,
+        ..RutasSeguridad
+    ];
+
+    private HashSet<string> _rutasPermitidas = new(StringComparer.OrdinalIgnoreCase);
+    private int _ultimoUsuarioId = -1;
+    private int _ultimoTipoUser = -1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.OnChange += HandleSessionChanged;
+        await CargarPermisosMenuAsync(forzar: true);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_ultimoUsuarioId != Session.IdUser || _ultimoTipoUser != Session.TipoUser)
+        {
+            await CargarPermisosMenuAsync(forzar: true);
+        }
+    }
+
+    private async void HandleSessionChanged()
+    {
+        try
+        {
+            await CargarPermisosMenuAsync(forzar: true);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    private async Task CargarPermisosMenuAsync(bool forzar = false)
+    {
+        if (!forzar && _ultimoUsuarioId == Session.IdUser && _ultimoTipoUser == Session.TipoUser)
+            return;
+
+        _ultimoUsuarioId = Session.IdUser;
+        _ultimoTipoUser = Session.TipoUser;
+
+        if (!Session.IsAuthenticated || Session.IdUser <= 0)
+        {
+            _rutasPermitidas.Clear();
+            return;
+        }
+
+        if (Session.TipoUser == 1)
+        {
+            _rutasPermitidas.Clear();
+            return;
+        }
+
+        var items = await AuthService.ObtenerMenuUsuarioAsync(Session.IdUser, Session.TipoUser);
+        _rutasPermitidas = items
+            .Select(m => NormalizarRuta(m.Url))
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private bool TienePermiso(string ruta)
+    {
+        if (Session.TipoUser == 1) return true;
+        if (!Session.IsAuthenticated) return false;
+        string normalizada = NormalizarRuta(ruta);
+        if (normalizada == "dashboard") return true;
+        return _rutasPermitidas.Contains(normalizada);
+    }
+
+    private bool TieneAlguno(params string[] rutas) =>
+        rutas.Any(TienePermiso);
+
+    private static string NormalizarRuta(string? ruta)
+    {
+        if (string.IsNullOrWhiteSpace(ruta)) return string.Empty;
+        return ruta.Trim().Replace('\\', '/').TrimStart('~').Trim('/').ToLowerInvariant();
+    }
+
+    public void Dispose()
+    {
+        Session.OnChange -= HandleSessionChanged;
+    }
+}

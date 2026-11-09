@@ -19,7 +19,7 @@
         <div class="users-table"><div class="table-head"><span>Usuario</span><span>Rol</span><span>Contacto</span><span>Estado</span><span>Acciones</span></div>
         @foreach (var u in Filtrados)
         {
-            <div class="table-row"><span class="person"><b>@Iniciales(u)</b><span><strong>@u.Nombre</strong><small>@@@u.Login</small></span></span><span><em>@Rol(u.RolId)</em>@if(u.RolId is 2 or 3){<small>@u.Especialidad</small>}</span><span><strong class="contact">@u.Email</strong><small>@u.Celular</small></span><span><i class="status-dot @(u.Estado == "A" ? "active" : "inactive")"></i>@(u.Estado == "A" ? "Activo" : "Inactivo")</span><span class="actions"><button title="Editar usuario" @onclick="() => Editar(u)">Editar</button><a href="@($"/administracion/roles-permisos?usuario={u.Id}")">Permisos</a><button title="Restablecer contraseña" @onclick="() => PrepararClave(u)">Contraseña</button><button class="danger" @onclick="() => CambiarEstado(u)">@(u.Estado == "A" ? "Desactivar" : "Activar")</button></span></div>
+            <div class="table-row"><span class="person"><b>@Iniciales(u)</b><span><strong>@u.Nombre</strong><small>@@@u.Login</small></span></span><span><em>@Rol(u.RolId)</em>@if(u.RolId == 2 && !string.IsNullOrWhiteSpace(u.Especialidad)){<small>@u.Especialidad</small>}</span><span><strong class="contact">@u.Email</strong><small>@u.Celular</small></span><span><i class="status-dot @(u.Estado == "A" ? "active" : "inactive")"></i>@(u.Estado == "A" ? "Activo" : "Inactivo")</span><span class="actions"><button title="Editar usuario" @onclick="() => Editar(u)">Editar</button><a href="@($"/administracion/roles-permisos?usuario={u.Id}")">Permisos</a><button title="Restablecer contraseña" @onclick="() => PrepararClave(u)">Contraseña</button><button class="danger" @onclick="() => CambiarEstado(u)">@(u.Estado == "A" ? "Desactivar" : "Activar")</button></span></div>
         }
         </div>
     }
@@ -29,10 +29,16 @@
 {
     <div class="modal-backdrop" role="presentation" @onclick="CerrarEditor"><section class="editor-modal" role="dialog" aria-modal="true" aria-labelledby="user-editor-title" @onclick:stopPropagation><header><div><span>@(_edit.Id == 0 ? "Nueva cuenta" : "Editar cuenta")</span><h2 id="user-editor-title">@(_edit.Id == 0 ? "Crear usuario y perfil" : _edit.Nombre)</h2></div><button aria-label="Cerrar" @onclick="CerrarEditor">×</button></header><div class="editor-body">
         <h3 class="editor-section-title">Cuenta y contacto</h3><div class="form-grid"><label>Nombre completo<input @bind="_edit.Nombre" /></label><label>Usuario de acceso<input autocomplete="off" @bind="_edit.Login" /></label><label>Correo electrónico<input type="email" @bind="_edit.Email" /></label><label>Celular<input @bind="_edit.Celular" /></label><label>Teléfono convencional<input @bind="_edit.Convencional" /></label><label>Cédula / identificación<input @bind="_edit.Cedula" /></label><label>Iniciales<input maxlength="4" @bind="_edit.Iniciales" /></label><label>Rol<select @bind="_edit.RolId"><option value="0">Seleccione</option>@foreach(var r in _roles){<option value="@r.Id">@r.Descripcion</option>}</select></label>@if(_edit.Id==0){<label class="wide">Contraseña temporal<input type="password" minlength="8" autocomplete="new-password" @bind="_claveTemporal" /><small>Mínimo 8 caracteres.</small></label>}</div>
-        @if (EsPersonalClinico)
-        {
-            <h3 class="editor-section-title">Perfil clínico y laboral</h3><div class="form-grid"><label>Especialidad<select @bind="_edit.EspecialidadId"><option value="0">Seleccione</option>@foreach(var e in _especialidades){<option value="@e.Id">@e.Descripcion</option>}</select></label><label>Tipo de médico<select @bind="_edit.TipoMedico"><option value="P">Médico de planta</option><option value="L">Médico a llamada</option><option value="N">No aplica</option></select></label><label class="wide">Observaciones<textarea rows="2" @bind="_edit.Observaciones"></textarea></label><fieldset class="wide locations-field"><legend>Localidades donde trabaja</legend>@foreach(var l in _localidades){<label class="location-option"><input type="checkbox" checked="@_edit.LocalidadesIds.Contains(l.Id)" @onchange="e => CambiarLocalidad(l.Id, e)" /> @l.Descripcion</label>}</fieldset></div>
-        }
+        <h3 class="editor-section-title">@(EsMedico ? "Perfil médico y laboral" : "Perfil laboral")</h3>
+        <div class="form-grid">
+            @if (EsMedico)
+            {
+                <label>Especialidad<select @bind="_edit.EspecialidadId"><option value="0">Seleccione</option>@foreach(var e in _especialidades){<option value="@e.Id">@e.Descripcion</option>}</select></label>
+                <label>Tipo de médico<select @bind="_edit.TipoMedico"><option value="P">Médico de planta</option><option value="L">Médico a llamada</option><option value="N">No aplica</option></select></label>
+            }
+            <label class="wide">Observaciones<textarea rows="2" @bind="_edit.Observaciones"></textarea></label>
+            <fieldset class="wide locations-field"><legend>Localidades donde trabaja</legend>@foreach(var l in _localidades){<label class="location-option"><input type="checkbox" checked="@_edit.LocalidadesIds.Contains(l.Id)" @onchange="e => CambiarLocalidad(l.Id, e)" /> @l.Descripcion</label>}</fieldset>
+        </div>
     </div><footer><button @onclick="CerrarEditor">Cancelar</button><button class="primary" disabled="@_guardando" @onclick="Guardar">@(_guardando ? "Guardando..." : "Guardar usuario")</button></footer></section></div>
 }
 
@@ -61,7 +67,7 @@
     private UsuarioAdministracionModel _edit = new();
     private UsuarioAdministracionModel? _usuarioClave;
     private IEnumerable<UsuarioAdministracionModel> Filtrados => _usuarios.Where(u => (string.IsNullOrWhiteSpace(_filtro) || u.Nombre.Contains(_filtro,StringComparison.OrdinalIgnoreCase) || u.Login.Contains(_filtro,StringComparison.OrdinalIgnoreCase) || u.Email.Contains(_filtro,StringComparison.OrdinalIgnoreCase)) && (string.IsNullOrEmpty(_estadoFiltro) || u.Estado == _estadoFiltro));
-    private bool EsPersonalClinico => _edit.RolId is 2 or 3;
+    private bool EsMedico => _edit.RolId == 2;
     protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated||Session.TipoUser!=1){Nav.NavigateTo("/dashboard");return;}_autorizado=true;await Cargar();}
     private async Task Cargar(){_cargando=true;var a=AuthService.ObtenerUsuariosAdministracionAsync();var b=AuthService.ObtenerRolesAsync();var c=AuthService.ObtenerEspecialidadesUsuarioAsync();var d=AuthService.ObtenerLocalidadesUsuarioAsync();_usuarios=await a;_roles=await b;_especialidades=await c;_localidades=await d;_cargando=false;}
     private void Nuevo(){_edit=new(){RolId=_roles.FirstOrDefault(r=>r.Id!=1)?.Id??2,EspecialidadId=_especialidades.FirstOrDefault()?.Id??1,TipoMedico="P",Estado="A"};_claveTemporal="";_mensaje="";_mostrarEditor=true;}

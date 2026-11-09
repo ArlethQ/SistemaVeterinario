@@ -10,9 +10,22 @@
 {
     <div class="permissions-page">
         <SecurityNav />
-        <header class="page-heading"><div><span>Administración</span><h1>Roles y permisos</h1><p>Asigna un rol y define los módulos disponibles para cada usuario.</p></div><div class="security-badge"><MenuIcon Name="security" /><span>Solo administradores</span></div></header>
+        <header class="page-heading">
+            <div>
+                <span>Administración</span>
+                <h1>Roles y permisos</h1>
+                <p>Asigna un rol y define los módulos disponibles para cada usuario.</p>
+            </div>
+            <div class="security-badge">
+                <MenuIcon Name="security" />
+                <span>Solo administradores</span>
+            </div>
+        </header>
 
-        @if (!string.IsNullOrWhiteSpace(_mensaje)) { <div class="status-message @(_esError ? "is-error" : "is-success")" role="status">@_mensaje</div> }
+        @if (!string.IsNullOrWhiteSpace(_mensaje))
+        {
+            <div class="status-message @(_esError ? "is-error" : "is-success")" role="status">@_mensaje</div>
+        }
 
         @if (_cargando)
         {
@@ -25,27 +38,112 @@
         else
         {
             <div class="permissions-layout">
-                <aside class="users-panel"><label>Buscar usuario<input type="search" @bind="_filtro" @bind:event="oninput" placeholder="Nombre o usuario" /></label><div class="users-list">
-                    @foreach (var usuario in UsuariosFiltrados)
-                    {
-                        <button type="button" class="user-row @(usuario.UserNumero == _usuarioId ? "is-selected" : "")" @onclick="() => SeleccionarUsuarioAsync(usuario)"><span class="avatar">@ObtenerIniciales(usuario)</span><span><strong>@usuario.UserNombre</strong><small>@@@usuario.UserLogin</small></span></button>
-                    }
-                </div></aside>
+                <aside class="users-panel">
+                    <label>
+                        Buscar usuario
+                        <input type="search" @bind="_filtro" @bind:event="oninput" placeholder="Nombre o usuario" />
+                    </label>
+                    <div class="users-list">
+                        @foreach (var usuario in UsuariosFiltrados)
+                        {
+                            <button type="button"
+                                    class="user-row @(usuario.UserNumero == _usuarioId ? "is-selected" : "")"
+                                    @onclick="() => SeleccionarUsuarioAsync(usuario)">
+                                <span class="avatar">@ObtenerIniciales(usuario)</span>
+                                <span>
+                                    <strong>@usuario.UserNombre</strong>
+                                    <small>@@@usuario.UserLogin · @NombreRol(usuario.UserTipoUserNumero)</small>
+                                </span>
+                            </button>
+                        }
+                    </div>
+                </aside>
 
                 <section class="access-panel">
                     @if (_usuarioActual is not null)
                     {
-                        <div class="selected-user"><span class="avatar large">@ObtenerIniciales(_usuarioActual)</span><div><small>Configurando acceso de</small><h2>@_usuarioActual.UserNombre</h2></div></div>
-                        <label class="role-field">Rol<select @bind="_tipoUser"><option value="0">Seleccione un rol</option>@foreach (var rol in _roles){<option value="@rol.Id">@rol.Descripcion</option>}</select></label>
-                        @if (_tipoUser == 1) { <div class="admin-note">Los administradores tienen acceso automático a todos los módulos.</div> }
-                        <div class="modules-header"><div><h3>Permisos por módulo</h3><p>Selecciona las opciones disponibles para este usuario.</p></div><button type="button" class="link-button" disabled="@(_tipoUser == 1)" @onclick="AlternarTodos">@(_seleccion.Count == _menus.Count ? "Desmarcar todos" : "Seleccionar todos")</button></div>
-                        <div class="modules-grid">
-                            @foreach (var menu in _menus)
+                        <div class="selected-user">
+                            <span class="avatar large">@ObtenerIniciales(_usuarioActual)</span>
+                            <div>
+                                <small>Configurando acceso de</small>
+                                <h2>@_usuarioActual.UserNombre</h2>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-wrap:wrap; align-items:flex-end; gap:1rem; margin:1.25rem 0;">
+                            <label class="role-field" style="margin:0; flex:1; min-width:240px;">
+                                Rol
+                                <select value="@_tipoUser" @onchange="CambiarRolUsuarioAsync">
+                                    <option value="0">Seleccione un rol</option>
+                                    @foreach (var rol in _roles)
+                                    {
+                                        <option value="@rol.Id">@rol.Descripcion</option>
+                                    }
+                                </select>
+                            </label>
+                            @if (_tipoUser > 1)
                             {
-                                <label class="module-option @(_seleccion.Contains(menu.Id) || _tipoUser == 1 ? "is-checked" : "")"><input type="checkbox" checked="@(_seleccion.Contains(menu.Id) || _tipoUser == 1)" disabled="@(_tipoUser == 1)" @onchange="e => CambiarPermiso(menu.Id, e.Value as bool? == true)" /><span><strong>@menu.Descripcion</strong><small>@(string.IsNullOrWhiteSpace(menu.Url) ? "Módulo principal" : menu.Url)</small></span></label>
+                                <button type="button"
+                                        class="btn btn-outline-primary btn-sm"
+                                        style="height:40px; font-weight:700; font-size:0.76rem;"
+                                        title="Cargar únicamente los permisos predeterminados configurados en el rol"
+                                        @onclick="RestaurarPermisosDelRol">
+                                    ↺ Usar predeterminados del rol (@_permisosRol.Count)
+                                </button>
                             }
                         </div>
-                        <div class="form-actions"><button type="button" class="save-button" disabled="@_guardando" @onclick="GuardarAsync">@(_guardando ? "Guardando..." : "Guardar cambios")</button></div>
+
+                        @if (_tipoUser == 1)
+                        {
+                            <div class="admin-note">Los administradores tienen acceso automático a todos los módulos.</div>
+                        }
+                        else
+                        {
+                            <div class="admin-note">
+                                El rol <strong>@NombreRol(_tipoUser)</strong> incluye <strong>@_permisosRol.Count</strong> módulos predeterminados. Aquí puedes habilitar o quitar módulos específicos para <strong>@_usuarioActual.UserNombre</strong> sin afectar al resto de usuarios con su rol.
+                            </div>
+                        }
+
+                        <div class="modules-header">
+                            <div>
+                                <h3>Permisos por módulo</h3>
+                                <p>Selecciona las opciones disponibles para este usuario.</p>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                                <input type="search"
+                                       class="form-control form-control-sm"
+                                       style="width:220px; font-size:0.78rem;"
+                                       @bind="_filtroModulo"
+                                       @bind:event="oninput"
+                                       placeholder="Buscar módulo..." />
+                                <button type="button" class="link-button" disabled="@(_tipoUser == 1)" @onclick="AlternarTodos">
+                                    @(_seleccion.Count == _menus.Count ? "Desmarcar todos" : "Seleccionar todos")
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="modules-grid">
+                            @foreach (var menu in MenusFiltrados)
+                            {
+                                bool marcado = _seleccion.Contains(menu.Id) || _tipoUser == 1;
+                                <label class="module-option @(marcado ? "is-checked" : "")">
+                                    <input type="checkbox"
+                                           checked="@marcado"
+                                           disabled="@(_tipoUser == 1)"
+                                           @onchange="e => CambiarPermiso(menu.Id, e.Value as bool? == true)" />
+                                    <span>
+                                        <strong>@menu.Descripcion</strong>
+                                        <small>@(string.IsNullOrWhiteSpace(menu.Url) ? "Módulo principal" : menu.Url)</small>
+                                    </span>
+                                </label>
+                            }
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="save-button" disabled="@_guardando" @onclick="GuardarAsync">
+                                @(_guardando ? "Guardando..." : "Guardar permisos")
+                            </button>
+                        </div>
                     }
                 </section>
             </div>
@@ -56,29 +154,118 @@
 @code {
     [SupplyParameterFromQuery(Name = "usuario")] public int? UsuarioQuery { get; set; }
     private bool _autorizado, _cargando = true, _guardando, _esError;
-    private string _filtro = "", _mensaje = "";
+    private string _filtro = "", _filtroModulo = "", _mensaje = "";
     private int _usuarioId, _tipoUser;
     private UsuarioModel? _usuarioActual;
     private List<UsuarioModel> _usuarios = [];
     private List<RolUsuarioModel> _roles = [];
     private List<MenuItemModel> _menus = [];
     private HashSet<int> _seleccion = [];
-    private IEnumerable<UsuarioModel> UsuariosFiltrados => _usuarios.Where(u => string.IsNullOrWhiteSpace(_filtro) || u.UserNombre.Contains(_filtro, StringComparison.OrdinalIgnoreCase) || u.UserLogin.Contains(_filtro, StringComparison.OrdinalIgnoreCase));
+    private HashSet<int> _permisosRol = [];
+
+    private IEnumerable<UsuarioModel> UsuariosFiltrados =>
+        _usuarios.Where(u => string.IsNullOrWhiteSpace(_filtro) ||
+                             u.UserNombre.Contains(_filtro, StringComparison.OrdinalIgnoreCase) ||
+                             u.UserLogin.Contains(_filtro, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<MenuItemModel> MenusFiltrados =>
+        _menus.Where(m => string.IsNullOrWhiteSpace(_filtroModulo)
+                          || m.Descripcion.Contains(_filtroModulo, StringComparison.OrdinalIgnoreCase)
+                          || (m.Url?.Contains(_filtroModulo, StringComparison.OrdinalIgnoreCase) ?? false));
 
     protected override async Task OnInitializedAsync()
     {
-        if (!Session.IsAuthenticated || Session.TipoUser != 1) { Nav.NavigateTo("/dashboard"); return; }
+        if (!Session.IsAuthenticated || Session.TipoUser != 1)
+        {
+            Nav.NavigateTo("/dashboard");
+            return;
+        }
         _autorizado = true;
-        var usuariosTask = AuthService.ObtenerUsuariosParaPermisosAsync(); var rolesTask = AuthService.ObtenerRolesAsync(); var menusTask = AuthService.ObtenerMenuUsuarioAsync(Session.IdUser, 1);
-        await Task.WhenAll(usuariosTask, rolesTask, menusTask); _usuarios = usuariosTask.Result; _roles = rolesTask.Result; _menus = menusTask.Result;
-        var inicial = UsuarioQuery.HasValue ? _usuarios.FirstOrDefault(x => x.UserNumero == UsuarioQuery.Value) : _usuarios.FirstOrDefault();
-        if (inicial is not null) await SeleccionarUsuarioAsync(inicial);
+        var usuariosTask = AuthService.ObtenerUsuariosParaPermisosAsync();
+        var rolesTask = AuthService.ObtenerRolesAsync();
+        var menusTask = AuthService.ObtenerMenuUsuarioAsync(Session.IdUser, 1);
+        await Task.WhenAll(usuariosTask, rolesTask, menusTask);
+        _usuarios = usuariosTask.Result;
+        _roles = rolesTask.Result;
+        _menus = menusTask.Result;
+
+        var inicial = UsuarioQuery.HasValue
+            ? _usuarios.FirstOrDefault(x => x.UserNumero == UsuarioQuery.Value)
+            : _usuarios.FirstOrDefault();
+        if (inicial is not null)
+            await SeleccionarUsuarioAsync(inicial);
         _cargando = false;
     }
 
-    private async Task SeleccionarUsuarioAsync(UsuarioModel usuario) { _usuarioActual = usuario; _usuarioId = usuario.UserNumero; _tipoUser = usuario.UserTipoUserNumero; _seleccion = await AuthService.ObtenerAccesosUsuarioAsync(_usuarioId); _mensaje = ""; }
-    private void CambiarPermiso(int id, bool marcado) { if (marcado) _seleccion.Add(id); else _seleccion.Remove(id); }
-    private void AlternarTodos() { if (_seleccion.Count == _menus.Count) _seleccion.Clear(); else _seleccion = _menus.Select(m => m.Id).ToHashSet(); }
-    private async Task GuardarAsync() { if (_usuarioId <= 0 || _tipoUser <= 0) { _mensaje = "Selecciona un usuario y un rol."; _esError = true; return; } _guardando = true; var ok = await AuthService.GuardarRolYAccesosAsync(_usuarioId, _tipoUser, _tipoUser == 1 ? [] : _seleccion, Session.IdUser); _guardando = false; _esError = !ok; _mensaje = ok ? "Rol y permisos actualizados correctamente." : "No se pudieron guardar los cambios. Verifica la conexión con la base de datos."; }
-    private static string ObtenerIniciales(UsuarioModel usuario) => !string.IsNullOrWhiteSpace(usuario.UserIniciales) ? usuario.UserIniciales : string.Concat(usuario.UserNombre.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x => x[0])).ToUpperInvariant();
+    private async Task SeleccionarUsuarioAsync(UsuarioModel usuario)
+    {
+        _usuarioActual = usuario;
+        _usuarioId = usuario.UserNumero;
+        _tipoUser = usuario.UserTipoUserNumero;
+        var userAccTask = AuthService.ObtenerAccesosUsuarioAsync(_usuarioId);
+        var rolAccTask = AuthService.ObtenerAccesosRolAsync(_tipoUser);
+        await Task.WhenAll(userAccTask, rolAccTask);
+        _seleccion = userAccTask.Result;
+        _permisosRol = rolAccTask.Result;
+        _mensaje = "";
+    }
+
+    private async Task CambiarRolUsuarioAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int nuevoRol) && nuevoRol > 0)
+        {
+            _tipoUser = nuevoRol;
+            _permisosRol = await AuthService.ObtenerAccesosRolAsync(_tipoUser);
+            _seleccion = new HashSet<int>(_permisosRol);
+            _mensaje = "";
+        }
+    }
+
+    private void RestaurarPermisosDelRol()
+    {
+        _seleccion = new HashSet<int>(_permisosRol);
+    }
+
+    private void CambiarPermiso(int id, bool marcado)
+    {
+        if (marcado) _seleccion.Add(id);
+        else _seleccion.Remove(id);
+    }
+
+    private void AlternarTodos()
+    {
+        if (_seleccion.Count == _menus.Count)
+            _seleccion.Clear();
+        else
+            _seleccion = _menus.Select(m => m.Id).ToHashSet();
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (_usuarioId <= 0 || _tipoUser <= 0)
+        {
+            _mensaje = "Selecciona un usuario y un rol.";
+            _esError = true;
+            return;
+        }
+        _guardando = true;
+        var ok = await AuthService.GuardarRolYAccesosAsync(_usuarioId, _tipoUser, _tipoUser == 1 ? [] : _seleccion, Session.IdUser);
+        _guardando = false;
+        _esError = !ok;
+        if (ok && _usuarioActual is not null)
+            _usuarioActual.UserTipoUserNumero = _tipoUser;
+        _mensaje = ok
+            ? $"Permisos actualizados para {_usuarioActual?.UserNombre}."
+            : "No se pudieron guardar los cambios.";
+    }
+
+    private string NombreRol(int idRol) =>
+        _roles.FirstOrDefault(r => r.Id == idRol)?.Descripcion ?? $"Rol #{idRol}";
+
+    private static string ObtenerIniciales(UsuarioModel u)
+    {
+        if (!string.IsNullOrWhiteSpace(u.UserIniciales)) return u.UserIniciales;
+        var parts = u.UserNombre.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(parts.Take(2).Select(p => char.ToUpperInvariant(p[0])));
+    }
 }

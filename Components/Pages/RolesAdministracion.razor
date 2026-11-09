@@ -3,6 +3,315 @@
 @inject SessionStateService Session
 @inject IAuthService AuthService
 @inject NavigationManager Nav
-<PageTitle>Roles | e-ForVets</PageTitle>
-@if(_autorizado){<div class="catalog-page"><SecurityNav /><header><div><span>Seguridad</span><h1>Roles</h1><p>Crea y edita los perfiles utilizados para clasificar usuarios.</p></div><button @onclick="Nuevo">+ Nuevo rol</button></header>@if(!string.IsNullOrWhiteSpace(_mensaje)){<div class="message @(_error?"error":"success")">@_mensaje</div>}<div class="catalog-layout"><section><h2>Roles disponibles</h2>@if(_cargando){<p>Cargando...</p>}else{@foreach(var rol in _roles){<button class="catalog-row @(rol.Id==_edit.Id?"active":"")" @onclick="()=>Editar(rol)"><span><strong>@rol.Descripcion</strong><small>Identificador @rol.Id</small></span><i>Editar</i></button>}}</section><aside><h2>@(_edit.Id>0?"Editar rol":"Crear rol")</h2><label>Nombre del rol<input maxlength="100" @bind="_edit.Descripcion" placeholder="Ej. Recepción" /></label><small>Después de crearlo podrás asignarlo a usuarios y configurar sus permisos.</small><button class="save" disabled="@_guardando" @onclick="Guardar">@(_guardando?"Guardando...":"Guardar rol")</button></aside></div></div>}
-@code{private bool _autorizado,_cargando=true,_guardando,_error;private string _mensaje="";private List<RolUsuarioModel>_roles=[];private RolUsuarioModel _edit=new();protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated||Session.TipoUser!=1){Nav.NavigateTo("/dashboard");return;}_autorizado=true;await Cargar();}private async Task Cargar(){_cargando=true;_roles=await AuthService.ObtenerRolesAsync();_cargando=false;}private void Nuevo(){_edit=new();_mensaje="";}private void Editar(RolUsuarioModel r){_edit=new(){Id=r.Id,Descripcion=r.Descripcion};_mensaje="";}private async Task Guardar(){if(string.IsNullOrWhiteSpace(_edit.Descripcion)){_error=true;_mensaje="El nombre del rol es obligatorio.";return;}_guardando=true;var ok=await AuthService.GuardarRolAsync(_edit,Session.IdUser);_guardando=false;_error=!ok;_mensaje=ok?"Rol guardado correctamente.":"No se pudo guardar el rol.";if(ok){Nuevo();_mensaje="Rol guardado correctamente.";await Cargar();}}}
+
+<PageTitle>Roles y permisos predeterminados | e-ForVets</PageTitle>
+
+@if (_autorizado)
+{
+    <div class="catalog-page">
+        <SecurityNav />
+        <header>
+            <div>
+                <span>Seguridad</span>
+                <h1>Roles y permisos por módulo</h1>
+                <p>Configura los perfiles de usuario y define los módulos predeterminados para todos los usuarios de cada rol.</p>
+            </div>
+            <button type="button" @onclick="NuevoAsync">+ Nuevo rol</button>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_mensaje))
+        {
+            <div class="message @(_error ? "error" : "success")" role="status">@_mensaje</div>
+        }
+
+        <div class="catalog-layout">
+            <section>
+                <div class="roles-list-header">
+                    <h2>Roles disponibles (@_roles.Count)</h2>
+                    <input type="search" @bind="_filtroRol" @bind:event="oninput" placeholder="Filtrar rol..." />
+                </div>
+                @if (_cargando)
+                {
+                    <p>Cargando roles y módulos...</p>
+                }
+                else
+                {
+                    <div class="roles-list-scroll">
+                        @foreach (var rol in RolesFiltrados)
+                        {
+                            <button type="button"
+                                    class="catalog-row @(rol.Id == _edit.Id ? "active" : "")"
+                                    @onclick="() => EditarAsync(rol)">
+                                <span>
+                                    <strong>@rol.Descripcion</strong>
+                                    <small>
+                                        Identificador #@rol.Id · @(rol.EsPredeterminado ? "Predeterminado" : "Eliminable")
+                                        @(rol.Id == 1 ? " · Acceso total" : "")
+                                        @(rol.Id == 2 ? " · Con especialidad médica" : "")
+                                    </small>
+                                </span>
+                                <i>@(rol.Id == _edit.Id ? "Seleccionado" : "Configurar")</i>
+                            </button>
+                        }
+                    </div>
+                }
+            </section>
+
+            <aside>
+                <div class="role-editor-head" style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap;">
+                    <div>
+                        <small class="role-badge">
+                            @(_edit.Id > 0
+                                ? $"ROL #{_edit.Id} · {(_edit.EsPredeterminado ? "PREDETERMINADO" : "PERSONALIZADO")}"
+                                : "NUEVO ROL")
+                        </small>
+                        <h2>@(_edit.Id > 0 ? $"Configurando rol: {_edit.Descripcion}" : "Crear nuevo rol y permisos")</h2>
+                    </div>
+
+                    @if (_edit.Id > 0 && !_edit.EsPredeterminado)
+                    {
+                        @if (!_confirmandoEliminar)
+                        {
+                            <button type="button"
+                                    class="btn btn-outline-danger btn-sm"
+                                    style="font-weight:700;"
+                                    disabled="@_eliminando"
+                                    @onclick="() => _confirmandoEliminar = true">
+                                Eliminar rol
+                            </button>
+                        }
+                        else
+                        {
+                            <div style="display:flex; align-items:center; gap:0.4rem;">
+                                <button type="button"
+                                        class="btn btn-danger btn-sm"
+                                        style="font-weight:700;"
+                                        disabled="@_eliminando"
+                                        @onclick="EliminarRolActualAsync">
+                                    @(_eliminando ? "Eliminando..." : "Confirmar eliminar")
+                                </button>
+                                <button type="button"
+                                        class="btn btn-light btn-sm"
+                                        disabled="@_eliminando"
+                                        @onclick="() => _confirmandoEliminar = false">
+                                    Cancelar
+                                </button>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <label>
+                    Nombre del rol *
+                    <input maxlength="50"
+                           @bind="_edit.Descripcion"
+                           disabled="@_edit.EsPredeterminado"
+                           readonly="@_edit.EsPredeterminado"
+                           placeholder="Ej. Recepción, Enfermería, Caja..." />
+                </label>
+
+                @if (_edit.Id == 1)
+                {
+                    <div class="role-info-note is-admin">
+                        El rol <strong>Administrador</strong> es predeterminado del sistema: tiene acceso automático a todos los módulos, su nombre viene predefinido y no se puede eliminar.
+                    </div>
+                }
+                else if (_edit.Id == 2)
+                {
+                    <div class="role-info-note">
+                        El rol <strong>Médico</strong> es predeterminado del sistema (habilita la selección de especialidad médica en los usuarios): su nombre viene predefinido y no se puede eliminar, pero puedes configurar sus permisos por módulo predeterminados.
+                    </div>
+                }
+                else
+                {
+                    <div class="role-info-note">
+                        Los módulos marcados serán los <strong>permisos predeterminados</strong> al crear usuarios con este rol y se aplicarán a todos los usuarios que tengan este rol.
+                    </div>
+                }
+
+                <div class="modules-header">
+                    <div>
+                        <h3>Permisos por módulo</h3>
+                        <p>
+                            @if (_edit.Id == 1)
+                            {
+                                <span>Todos los módulos habilitados (@_menus.Count de @_menus.Count).</span>
+                            }
+                            else
+                            {
+                                <span>Selecciona las opciones disponibles para este rol (@_seleccionRol.Count de @_menus.Count).</span>
+                            }
+                        </p>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                        <input type="search"
+                               class="form-control form-control-sm"
+                               style="width:220px; font-size:0.78rem;"
+                               @bind="_filtroModulo"
+                               @bind:event="oninput"
+                               placeholder="Buscar módulo..." />
+                        <button type="button"
+                                class="link-button"
+                                disabled="@(_edit.Id == 1)"
+                                @onclick="AlternarTodos">
+                            @(_seleccionRol.Count == _menus.Count ? "Desmarcar todos" : "Seleccionar todos")
+                        </button>
+                    </div>
+                </div>
+
+                <div class="modules-grid">
+                    @foreach (var menu in MenusFiltrados)
+                    {
+                        bool marcado = _edit.Id == 1 || _seleccionRol.Contains(menu.Id);
+                        <label class="module-option @(marcado ? "is-checked" : "")">
+                            <input type="checkbox"
+                                   checked="@marcado"
+                                   disabled="@(_edit.Id == 1)"
+                                   @onchange="e => CambiarPermisoRol(menu.Id, e.Value as bool? == true)" />
+                            <span>
+                                <strong>@menu.Descripcion</strong>
+                                <small>@(string.IsNullOrWhiteSpace(menu.Url) ? "Módulo principal" : menu.Url)</small>
+                            </span>
+                        </label>
+                    }
+                </div>
+
+                <div class="role-actions">
+                    <button type="button" class="save" disabled="@(_guardando || _edit.Id == 1)" @onclick="GuardarAsync">
+                        @(_edit.Id == 1
+                            ? "Administrador tiene todos los permisos predefinidos"
+                            : (_guardando ? "Guardando y aplicando al rol..." : (_edit.Id > 0 ? "Guardar rol y aplicar permisos" : "Crear rol con estos permisos")))
+                    </button>
+                </div>
+            </aside>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _autorizado, _cargando = true, _guardando, _eliminando, _confirmandoEliminar, _error;
+    private string _mensaje = "", _filtroRol = "", _filtroModulo = "";
+    private List<RolUsuarioModel> _roles = [];
+    private List<MenuItemModel> _menus = [];
+    private HashSet<int> _seleccionRol = [];
+    private RolUsuarioModel _edit = new();
+
+    private IEnumerable<RolUsuarioModel> RolesFiltrados =>
+        _roles.Where(r => string.IsNullOrWhiteSpace(_filtroRol) || r.Descripcion.Contains(_filtroRol, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<MenuItemModel> MenusFiltrados =>
+        _menus.Where(m => string.IsNullOrWhiteSpace(_filtroModulo)
+                          || m.Descripcion.Contains(_filtroModulo, StringComparison.OrdinalIgnoreCase)
+                          || (m.Url?.Contains(_filtroModulo, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated || Session.TipoUser != 1)
+        {
+            Nav.NavigateTo("/dashboard");
+            return;
+        }
+        _autorizado = true;
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        _cargando = true;
+        var rolesTask = AuthService.ObtenerRolesAsync();
+        var menusTask = AuthService.ObtenerMenuUsuarioAsync(Session.IdUser, 1);
+        await Task.WhenAll(rolesTask, menusTask);
+        _roles = rolesTask.Result;
+        _menus = menusTask.Result;
+
+        if (_edit.Id > 0)
+        {
+            var actual = _roles.FirstOrDefault(r => r.Id == _edit.Id);
+            if (actual is not null)
+                await EditarAsync(actual, limpiarMensaje: false);
+            else if (_roles.Count > 0)
+                await EditarAsync(_roles.FirstOrDefault(r => r.Id != 1) ?? _roles[0], limpiarMensaje: false);
+        }
+        else if (_roles.Count > 0)
+        {
+            var inicial = _roles.FirstOrDefault(r => r.Id != 1) ?? _roles[0];
+            await EditarAsync(inicial, limpiarMensaje: false);
+        }
+        _cargando = false;
+    }
+
+    private Task NuevoAsync()
+    {
+        _edit = new RolUsuarioModel();
+        _seleccionRol.Clear();
+        _confirmandoEliminar = false;
+        _mensaje = "";
+        return Task.CompletedTask;
+    }
+
+    private async Task EditarAsync(RolUsuarioModel r, bool limpiarMensaje = true)
+    {
+        _edit = new RolUsuarioModel { Id = r.Id, Descripcion = r.Descripcion };
+        _confirmandoEliminar = false;
+        _seleccionRol = await AuthService.ObtenerAccesosRolAsync(r.Id);
+        if (limpiarMensaje) _mensaje = "";
+    }
+
+    private void CambiarPermisoRol(int idMenu, bool marcado)
+    {
+        if (marcado) _seleccionRol.Add(idMenu);
+        else _seleccionRol.Remove(idMenu);
+    }
+
+    private void AlternarTodos()
+    {
+        if (_seleccionRol.Count == _menus.Count)
+            _seleccionRol.Clear();
+        else
+            _seleccionRol = _menus.Select(m => m.Id).ToHashSet();
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (_edit.Id == 1) return;
+        if (string.IsNullOrWhiteSpace(_edit.Descripcion))
+        {
+            _error = true;
+            _mensaje = "El nombre del rol es obligatorio.";
+            return;
+        }
+
+        bool eraNuevo = _edit.Id == 0;
+        _guardando = true;
+        var ok = await AuthService.GuardarRolConPermisosAsync(_edit, _seleccionRol, Session.IdUser);
+        _guardando = false;
+        _error = !ok;
+        _mensaje = ok
+            ? (eraNuevo
+                ? $"Rol '{_edit.Descripcion}' creado con {_seleccionRol.Count} módulos predeterminados."
+                : $"Rol '{_edit.Descripcion}' actualizado. Se sincronizaron los permisos para todos los usuarios con este rol.")
+            : "No se pudo guardar el rol y sus permisos.";
+
+        if (ok)
+        {
+            await CargarAsync();
+        }
+    }
+
+    private async Task EliminarRolActualAsync()
+    {
+        if (_edit.EsPredeterminado) return;
+        _eliminando = true;
+        var resultado = await AuthService.EliminarRolAsync(_edit.Id, Session.IdUser);
+        _eliminando = false;
+        _confirmandoEliminar = false;
+        _error = !resultado.Exito;
+        _mensaje = resultado.Mensaje;
+
+        if (resultado.Exito)
+        {
+            _edit = new RolUsuarioModel();
+            await CargarAsync();
+        }
+    }
+}
