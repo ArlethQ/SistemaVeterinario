@@ -140,7 +140,8 @@ public class NuevaOrdenAtencionDto
     public string NombrePropietario { get; set; } = string.Empty;
     public string NombreMascota { get; set; } = string.Empty;
 
-    [Range(1, int.MaxValue, ErrorMessage = "Seleccione una especialidad.")]
+    public int TipoConsulta { get; set; } = 1; // 1=Consulta General, 2=Especialidad, 3=Cirugía Programada, 4=Control / Revisión, 5=Imagen / Ecografía
+
     public int IdEspecialidad { get; set; }
 
     [Range(1, int.MaxValue, ErrorMessage = "Seleccione un médico tratante.")]

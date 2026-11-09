@@ -185,28 +185,35 @@
                         <div class="row g-2">
                             <div class="col-md-12">
                                 <label class="form-label small fw-bold">2. Tipo de consulta</label>
-                                <select class="form-select form-select-sm" @bind="_nuevaOrden.TipoDespacho">
-                                    <option value="0">Consulta / Ambulatorio</option>
-                                    <option value="3">Hospitalización directa</option>
-                                    <option value="4">Quirófano / Cirugía</option>
-                                    <option value="1">Imagenología</option>
-                                    <option value="2">Laboratorio</option>
+                                <select class="form-select form-select-sm" value="@_tipoConsulta" @onchange="OnTipoConsultaChangedAsync">
+                                    <option value="1">Consulta General</option>
+                                    <option value="2">Especialidad</option>
+                                    <option value="3">Cirugía Programada</option>
+                                    <option value="4">Control / Revisión</option>
+                                    <option value="5">Imagen / Ecografía</option>
                                 </select>
                             </div>
 
-                            <div class="col-md-12">
-                                <label class="form-label small fw-bold">3. Especialidad requerida</label>
-                                <select class="form-select form-select-sm" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync">
-                                    @foreach (var esp in _especialidades)
-                                    {
-                                        <option value="@esp.Id">[@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)] @esp.Descripcion</option>
-                                    }
-                                </select>
-                            </div>
+                            @if (EsTipoConsultaEspecialidad)
+                            {
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold text-primary"><i class="bi bi-award-fill me-1"></i>3. Especialidad requerida</label>
+                                    <select class="form-select form-select-sm border-primary" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync">
+                                        @foreach (var esp in _especialidades)
+                                        {
+                                            <option value="@esp.Id">[@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)] @esp.Descripcion</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
 
                             <div class="col-md-12">
-                                <label class="form-label small fw-bold">4. Médico tratante asignado</label>
+                                <label class="form-label small fw-bold">@(EsTipoConsultaEspecialidad ? "4. Médico tratante asignado" : "3. Médico tratante asignado")</label>
                                 <select class="form-select form-select-sm" @bind="_nuevaOrden.IdMedico">
+                                    @if (_medicosDisponibles.Count == 0)
+                                    {
+                                        <option value="0">-- Sin médicos disponibles en este horario --</option>
+                                    }
                                     @foreach (var med in _medicosDisponibles)
                                     {
                                         <option value="@med.Id">@med.Descripcion</option>
@@ -234,7 +241,7 @@
                             @if (EspecialidadRequiereTriaje)
                             {
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold">5. Semáforo Triaje</label>
+                                    <label class="form-label small fw-bold">@(EsTipoConsultaEspecialidad ? "5. Semáforo Triaje" : "4. Semáforo Triaje")</label>
                                     <select class="form-select form-select-sm" @bind="_nuevaOrden.ColorTriaje">
                                         <option value="green">🟢 Verde — Estándar</option>
                                         <option value="yellow">🟡 Amarillo — Prioritario</option>
@@ -554,7 +561,10 @@
     private int? CitaOrigenId { get; set; }
 
     private List<CatalogoItemGenericoDto> _especialidades = new();
+    private List<CatalogoItemGenericoDto> _todosMedicos = new();
     private List<CatalogoItemGenericoDto> _medicosDisponibles = new();
+    private int _tipoConsulta = 1;
+    private bool EsTipoConsultaEspecialidad => _tipoConsulta == 2;
     private List<CatalogoItemGenericoDto> _enfermeros = new();
     private List<ConteoMedicoEsperaDto> _conteoMedicos = new();
     private List<PacienteMascotaDto> _pacientesEncontrados = new();
@@ -827,6 +837,7 @@
             }
             if (int.TryParse(q["tipoConsulta"], out int qTipoCons))
             {
+                _tipoConsulta = qTipoCons;
                 TipoDespachoPreseleccionado = qTipoCons switch
                 {
                     3 => 4, // Cirugía programada -> Quirófano
@@ -865,12 +876,28 @@
         {
             _especialidades = _especialidades.Where(e => e.Id == SessionState.EspUser).ToList();
         }
-        var todosMedicos = await tMedicosTodos;
+        _todosMedicos = await tMedicosTodos;
         _enfermeros = await tEnfermeros;
 
-        if (EspecialidadPreseleccionada.HasValue && EspecialidadPreseleccionada.Value > 0)
+        _nuevaOrden.TipoConsulta = _tipoConsulta;
+        _nuevaOrden.TipoDespacho = TipoDespachoPreseleccionado ?? (_tipoConsulta switch
         {
-            _nuevaOrden.IdEspecialidad = EspecialidadPreseleccionada.Value;
+            3 => 4,
+            5 => 1,
+            _ => 0
+        });
+
+        if (EsTipoConsultaEspecialidad)
+        {
+            if (EspecialidadPreseleccionada.HasValue && EspecialidadPreseleccionada.Value > 0)
+            {
+                _nuevaOrden.IdEspecialidad = EspecialidadPreseleccionada.Value;
+            }
+            else
+            {
+                _nuevaOrden.IdEspecialidad = _especialidades.FirstOrDefault()?.Id ?? 0;
+            }
+
             _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad);
             if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0 && _medicosDisponibles.Any(m => m.Id == MedicoPreseleccionado.Value))
             {
@@ -881,35 +908,34 @@
                 _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
             }
         }
-        else if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0)
+        else
         {
-            var medInfo = todosMedicos.FirstOrDefault(m => m.Id == MedicoPreseleccionado.Value);
-            if (medInfo != null && medInfo.IdPadre.GetValueOrDefault() > 0)
+            _nuevaOrden.IdEspecialidad = EspecialidadPreseleccionada.GetValueOrDefault() > 0
+                ? EspecialidadPreseleccionada!.Value
+                : ResolverEspecialidadPorTipo(_tipoConsulta, MedicoPreseleccionado.GetValueOrDefault());
+
+            var medicos = _nuevaOrden.IdEspecialidad > 0
+                ? await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad)
+                : new List<CatalogoItemGenericoDto>();
+
+            if (medicos.Count > 0)
             {
-                int espId = medInfo.IdPadre.GetValueOrDefault();
-                _nuevaOrden.IdEspecialidad = espId;
-                _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(espId);
-                _nuevaOrden.IdMedico = medInfo.Id;
+                _medicosDisponibles = medicos;
             }
             else
             {
-                int espInicial = _especialidades.FirstOrDefault()?.Id ?? 1;
-                _nuevaOrden.IdEspecialidad = espInicial;
-                _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(espInicial);
+                var enHorario = await ObtenerMedicosEnHorarioAsync(0);
+                _medicosDisponibles = enHorario.Count > 0 ? enHorario : _todosMedicos;
+            }
+
+            if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0 && _medicosDisponibles.Any(m => m.Id == MedicoPreseleccionado.Value))
+            {
                 _nuevaOrden.IdMedico = MedicoPreseleccionado.Value;
             }
-        }
-        else
-        {
-            int espInicial = _especialidades.FirstOrDefault()?.Id ?? 1;
-            _nuevaOrden.IdEspecialidad = espInicial;
-            _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(espInicial);
-            _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 1;
-        }
-
-        if (TipoDespachoPreseleccionado.HasValue)
-        {
-            _nuevaOrden.TipoDespacho = TipoDespachoPreseleccionado.Value;
+            else
+            {
+                _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
+            }
         }
 
         if (NhclPreseleccionado.HasValue && NhclPreseleccionado.Value > 0)
@@ -956,6 +982,88 @@
         _nuevaOrden.ColorTriaje = pac.MasColorTriaje;
     }
 
+    private async Task OnTipoConsultaChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int tipo))
+        {
+            _tipoConsulta = tipo;
+            _nuevaOrden.TipoConsulta = tipo;
+            _nuevaOrden.TipoDespacho = tipo switch
+            {
+                3 => 4, // Cirugía Programada -> Quirófano
+                5 => 1, // Imagen / Ecografía -> Imagenología
+                _ => 0  // Consulta General, Especialidad, Control / Revisión -> Consulta / Ambulatorio
+            };
+
+            if (tipo == 2) // Especialidad
+            {
+                if (_nuevaOrden.IdEspecialidad <= 0)
+                {
+                    _nuevaOrden.IdEspecialidad = _especialidades.FirstOrDefault()?.Id ?? 0;
+                }
+                _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad);
+            }
+            else
+            {
+                _nuevaOrden.IdEspecialidad = ResolverEspecialidadPorTipo(tipo, _nuevaOrden.IdMedico);
+                var medicos = _nuevaOrden.IdEspecialidad > 0
+                    ? await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad)
+                    : new List<CatalogoItemGenericoDto>();
+
+                if (medicos.Count > 0)
+                {
+                    _medicosDisponibles = medicos;
+                }
+                else
+                {
+                    var enHorario = await ObtenerMedicosEnHorarioAsync(0);
+                    _medicosDisponibles = enHorario.Count > 0 ? enHorario : _todosMedicos;
+                }
+            }
+
+            if (!_medicosDisponibles.Any(m => m.Id == _nuevaOrden.IdMedico))
+            {
+                _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
+            }
+            _esError = false;
+            _mensajeAlerta = string.Empty;
+        }
+    }
+
+    private int ResolverEspecialidadPorTipo(int tipoConsulta, int idMedico)
+    {
+        if (tipoConsulta == 1 || tipoConsulta == 4)
+        {
+            var medGen = _especialidades.FirstOrDefault(x =>
+                string.Equals(x.Codigo, "MG", StringComparison.OrdinalIgnoreCase) ||
+                x.Descripcion.Contains("MEDICINA GENERAL", StringComparison.OrdinalIgnoreCase) ||
+                x.Descripcion.Contains("GENERAL", StringComparison.OrdinalIgnoreCase));
+            if (medGen != null) return medGen.Id;
+        }
+        else if (tipoConsulta == 3)
+        {
+            var cir = _especialidades.FirstOrDefault(x =>
+                string.Equals(x.Codigo, "CIR", StringComparison.OrdinalIgnoreCase) ||
+                x.Descripcion.Contains("CIRUGIA", StringComparison.OrdinalIgnoreCase));
+            if (cir != null) return cir.Id;
+        }
+        else if (tipoConsulta == 5)
+        {
+            var img = _especialidades.FirstOrDefault(x =>
+                string.Equals(x.Codigo, "IMG", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(x.Codigo, "RX", StringComparison.OrdinalIgnoreCase) ||
+                x.Descripcion.Contains("IMAGEN", StringComparison.OrdinalIgnoreCase) ||
+                x.Descripcion.Contains("ECOGRAFIA", StringComparison.OrdinalIgnoreCase));
+            if (img != null) return img.Id;
+        }
+
+        var med = _todosMedicos.FirstOrDefault(m => m.Id == idMedico);
+        if (med?.IdPadre.GetValueOrDefault() > 0)
+            return med.IdPadre!.Value;
+
+        return _especialidades.FirstOrDefault()?.Id ?? 0;
+    }
+
     private async Task CambiarEspecialidadAsync(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out int idEsp))
@@ -967,6 +1075,11 @@
             {
                 _esError = true;
                 _mensajeAlerta = "No existen médicos con horario de atención activo para esta especialidad y fecha.";
+            }
+            else
+            {
+                _esError = false;
+                _mensajeAlerta = string.Empty;
             }
         }
     }
@@ -1010,6 +1123,18 @@
             _mensajeAlerta = "Seleccione primero un paciente (NHCL) de la lista.";
             return;
         }
+        if (EsTipoConsultaEspecialidad && _nuevaOrden.IdEspecialidad <= 0)
+        {
+            _esError = true;
+            _mensajeAlerta = "Seleccione una especialidad requerida.";
+            return;
+        }
+        if (_nuevaOrden.IdMedico <= 0)
+        {
+            _esError = true;
+            _mensajeAlerta = "Seleccione el médico tratante asignado.";
+            return;
+        }
         if (_nuevaOrden.EsProcedimiento && !_nuevaOrden.IdEnfermero.HasValue)
         {
             _esError = true;
@@ -1021,8 +1146,16 @@
             _nuevaOrden.IdEnfermero = null;
         }
 
-        var medicosEnHorario = await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad);
-        if (!medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
+        if (!EsTipoConsultaEspecialidad && _nuevaOrden.IdEspecialidad <= 0)
+        {
+            _nuevaOrden.IdEspecialidad = ResolverEspecialidadPorTipo(_tipoConsulta, _nuevaOrden.IdMedico);
+        }
+
+        var medicosEnHorario = EsTipoConsultaEspecialidad && _nuevaOrden.IdEspecialidad > 0
+            ? await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad)
+            : await ObtenerMedicosEnHorarioAsync(0);
+
+        if (medicosEnHorario.Count > 0 && !medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
         {
             _esError = true;
             _mensajeAlerta = "El médico seleccionado no tiene un horario de atención disponible en la fecha indicada.";
