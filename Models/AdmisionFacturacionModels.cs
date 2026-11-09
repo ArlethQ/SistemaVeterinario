@@ -122,6 +122,7 @@ public class PacienteMascotaDto
 public class CatalogoItemGenericoDto
 {
     public int Id { get; set; }
+    public string Codigo { get; set; } = string.Empty;
     public string Descripcion { get; set; } = string.Empty;
     public int? IdPadre { get; set; }
     public bool RequiereTriaje { get; set; }
@@ -162,12 +163,16 @@ public class NuevaOrdenAtencionDto
 public class OrdenAtencionResumenDto
 {
     public int IdOrden { get; set; }
+    public string Turno { get; set; } = string.Empty;
+    public string Consultorio { get; set; } = string.Empty;
     public int Nhcl { get; set; }
     public int IdCliente { get; set; }
     public string Propietario { get; set; } = string.Empty;
     public string Cedula { get; set; } = string.Empty;
     public string Mascota { get; set; } = string.Empty;
     public string Especie { get; set; } = string.Empty;
+    public int IdEspecialidad { get; set; }
+    public string CodigoEspecialidad { get; set; } = string.Empty;
     public string Especialidad { get; set; } = string.Empty;
     public int IdMedico { get; set; }
     public string Medico { get; set; } = string.Empty;
@@ -228,6 +233,8 @@ public class CitaMedicaDto
     public int CiLocalidad { get; set; } = 1;
     public int CiUsuario { get; set; } // Médico asignado
     public string NombreMedico { get; set; } = string.Empty;
+    public int CiEspecialidad { get; set; } // Especialidad seleccionada en la cita
+    public string CodigoEspecialidad { get; set; } = string.Empty;
     public string Especialidad { get; set; } = string.Empty;
     public int CiUsuarioEjecuta { get; set; }
     public string CiEstado { get; set; } = "A";

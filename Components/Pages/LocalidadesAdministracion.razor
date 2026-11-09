@@ -113,7 +113,10 @@
                             {
                                 <div class="catalog-row @(esp.Id == _espEdit.Id ? "active" : "") d-flex align-items-center justify-content-between p-2 mb-2">
                                     <button type="button" class="btn text-start p-0 flex-grow-1 border-0 bg-transparent" @onclick="() => EditarEspecialidad(esp)">
-                                        <strong>@esp.Descripcion</strong>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge bg-primary font-monospace px-2">@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)</span>
+                                            <strong>@esp.Descripcion</strong>
+                                        </div>
                                         <small class="d-flex gap-2 align-items-center mt-1">
                                             <span class="badge @(esp.Estado == "A" ? "bg-success" : "bg-secondary")">
                                                 @(esp.Estado == "A" ? "Activa" : "Inactiva")
@@ -149,8 +152,15 @@
                     <h2>@(_espEdit.Id > 0 ? $"Editar especialidad #{_espEdit.Id}" : "Nueva especialidad")</h2>
                     <label>
                         Nombre de la especialidad *
-                        <input maxlength="150" @bind="_espEdit.Descripcion" placeholder="Ej: DERMATOLOGIA, CARDIOLOGIA..." />
+                        <input maxlength="150" style="text-transform: uppercase;" @bind="_espEdit.Descripcion" placeholder="Ej: DERMATOLOGIA, CARDIOLOGIA..." />
                     </label>
+                    <label class="mt-2">
+                        Iniciales / Código para Turno (ej: MG, CIR, DERM) *
+                        <input maxlength="10" style="text-transform: uppercase;" @bind="_espEdit.Codigo" placeholder="Ej: MG, CIR, TRM..." />
+                    </label>
+                    <small class="text-muted d-block mb-2" style="font-size:0.75rem;">
+                        Prefijo usado para numerar los turnos diarios en Recepción (ej: <strong>@(string.IsNullOrWhiteSpace(_espEdit.Codigo) ? "CIR" : _espEdit.Codigo.Trim().ToUpperInvariant())-01</strong>).
+                    </small>
                     <label class="check mt-2">
                         <input type="checkbox" checked="@(_espEdit.Estado == "A")" @onchange="CambiarEstadoEsp" />
                         Especialidad activa (disponible para citas y asignaciones)
@@ -240,7 +250,7 @@
     private List<EspecialidadAdministrativaDto> EspecialidadesFiltradas =>
         string.IsNullOrWhiteSpace(_filtroEsp)
             ? _especialidadesAdmin
-            : _especialidadesAdmin.Where(e => e.Descripcion.Contains(_filtroEsp, StringComparison.OrdinalIgnoreCase)).ToList();
+            : _especialidadesAdmin.Where(e => e.Descripcion.Contains(_filtroEsp, StringComparison.OrdinalIgnoreCase) || e.Codigo.Contains(_filtroEsp, StringComparison.OrdinalIgnoreCase)).ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -293,6 +303,7 @@
         _espEdit = new()
         {
             Id = esp.Id,
+            Codigo = esp.Codigo,
             Descripcion = esp.Descripcion,
             Estado = esp.Estado,
             RequiereTriaje = esp.RequiereTriaje

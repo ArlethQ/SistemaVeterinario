@@ -365,6 +365,7 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
     {
         const string sql = @"SELECT 
             es_id AS Id, 
+            RTRIM(ISNULL(es_codigo, '')) AS Codigo,
             RTRIM(es_descripcion) AS Descripcion, 
             ISNULL(es_estado, 'A') AS Estado,
             CASE WHEN UPPER(RTRIM(ISNULL(es_servicio, ''))) = 'S' THEN 1 ELSE 0 END AS RequiereTriaje
@@ -381,6 +382,13 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
         string servicio = especialidad.RequiereTriaje ? "S" : "";
         string estado = especialidad.Estado == "A" ? "A" : "I";
         string desc = especialidad.Descripcion.Trim().ToUpperInvariant();
+        string codigo = new string((especialidad.Codigo ?? string.Empty).Trim().ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(codigo))
+        {
+            string letras = new string(desc.Where(char.IsLetter).ToArray());
+            codigo = letras.Length >= 3 ? letras[..3] : (letras.Length > 0 ? letras : "GEN");
+        }
+        if (codigo.Length > 10) codigo = codigo[..10];
 
         if (especialidad.Id > 0)
         {
@@ -393,20 +401,22 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
             const string updateSql = @"
                 UPDATE vt_especialidades 
                 SET es_descripcion = @Descripcion, 
+                    es_codigo = @Codigo,
                     es_estado = @Estado, 
                     es_servicio = @Servicio 
                 WHERE es_id = @Id";
             int filas = await _db.ExecuteAsync(updateSql, new
             {
                 Descripcion = desc,
+                Codigo = codigo,
                 Estado = estado,
                 Servicio = servicio,
                 Id = especialidad.Id
             });
             if (filas > 0)
             {
-                await _db.RegistrarBitacoraAsync($"Actualización especialidad {desc}", idUsuario);
-                return (true, "Especialidad actualizada correctamente.");
+                await _db.RegistrarBitacoraAsync($"Actualización especialidad {desc} ({codigo})", idUsuario);
+                return (true, $"Especialidad '{desc}' (Código: {codigo}) actualizada correctamente.");
             }
             return (false, "No se encontró la especialidad para actualizar.");
         }
@@ -419,16 +429,17 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
                 return (false, "Ya existe una especialidad con ese nombre.");
 
             const string insertSql = @"
-                INSERT INTO vt_especialidades (es_descripcion, es_estado, es_servicio) 
-                VALUES (@Descripcion, @Estado, @Servicio)";
+                INSERT INTO vt_especialidades (es_descripcion, es_codigo, es_estado, es_servicio) 
+                VALUES (@Descripcion, @Codigo, @Estado, @Servicio)";
             await _db.ExecuteAsync(insertSql, new
             {
                 Descripcion = desc,
+                Codigo = codigo,
                 Estado = estado,
                 Servicio = servicio
             });
-            await _db.RegistrarBitacoraAsync($"Creación de especialidad {desc}", idUsuario);
-            return (true, "Especialidad creada exitosamente.");
+            await _db.RegistrarBitacoraAsync($"Creación de especialidad {desc} ({codigo})", idUsuario);
+            return (true, $"Especialidad '{desc}' (Código: {codigo}) creada exitosamente.");
         }
     }
 

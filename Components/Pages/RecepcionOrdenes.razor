@@ -40,9 +40,42 @@
     <div class="waiting-strip mb-3">
         <div class="waiting-label"><span>◷</span><div><strong>Pacientes en espera</strong><small>Próximos a ser atendidos</small></div></div>
         <div class="waiting-doctors">
+            @if (_conteoMedicos.Count == 0)
+            {
+                <div class="d-flex align-items-center text-muted small px-3">
+                    <i class="bi bi-check2-circle text-success me-2 fs-5"></i>Sin pacientes en espera en este momento.
+                </div>
+            }
             @foreach (var med in _conteoMedicos.Take(4))
             {
-                <div class="doctor-chip"><span class="doctor-avatar">@InicialesMedico(med.Medico)</span><div><strong>@med.Medico</strong><small>@med.Especialidad</small></div><b>@med.EnEspera</b></div>
+                var sigOrden = ObtenerSiguienteEnEsperaMedico(med.IdMedico);
+                <div class="doctor-chip" style="grid-template-columns: 38px minmax(0, 1fr) auto !important; gap: 10px; padding: 10px 12px;">
+                    <span class="doctor-avatar">@InicialesMedico(med.Medico)</span>
+                    <div style="min-width: 0;">
+                        <strong>@med.Medico</strong>
+                        <small>@med.Especialidad</small>
+                        @if (sigOrden is not null)
+                        {
+                            <small class="text-primary fw-bold mt-1" style="font-size:0.64rem;">
+                                Próximo: @sigOrden.Turno · @sigOrden.Mascota
+                            </small>
+                        }
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                        <b title="Pacientes en espera" style="flex-shrink:0;">@med.EnEspera</b>
+                        @if (sigOrden is not null)
+                        {
+                            <span role="button"
+                                  tabindex="0"
+                                  class="badge bg-success text-white border-0 shadow-sm d-inline-flex align-items-center gap-1"
+                                  style="padding: 5px 10px; font-size: 0.68rem; font-weight: 700; border-radius: 7px; cursor: pointer; white-space: nowrap; user-select: none;"
+                                  title="Hacer pasar a @sigOrden.Mascota (@sigOrden.Turno) a atención"
+                                  @onclick="() => PasarTurnoAAtencionAsync(sigOrden)">
+                                ▶ Pasar
+                            </span>
+                        }
+                    </div>
+                </div>
             }
         </div>
     </div>
@@ -157,7 +190,7 @@
                                 <select class="form-select form-select-sm" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync">
                                     @foreach (var esp in _especialidades)
                                     {
-                                        <option value="@esp.Id">@esp.Descripcion</option>
+                                        <option value="@esp.Id">[@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)] @esp.Descripcion</option>
                                     }
                                 </select>
                             </div>
@@ -170,6 +203,21 @@
                                         <option value="@med.Id">@med.Descripcion</option>
                                     }
                                 </select>
+                            </div>
+
+                            <div class="col-md-12">
+                                <div class="p-2 rounded-3 border bg-primary bg-opacity-10 d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <small class="text-primary fw-bold d-block text-uppercase" style="font-size:0.68rem;">Turno por Especialidad a Asignar</small>
+                                        <div class="fw-bold text-dark small">
+                                            <i class="bi bi-person-Vcard-fill text-primary me-1"></i>Atiende: Dr(a). @ObtenerNombreMedicoSeleccionado()
+                                        </div>
+                                        <small class="text-muted" style="font-size:0.74rem;">Especialidad: @ObtenerNombreEspecialidadSeleccionada()</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-primary font-monospace fs-5 px-3 py-2 shadow-sm">@ObtenerSiguienteTurnoPreview()</span>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="col-md-6">
@@ -224,15 +272,62 @@
         <!-- Columna Derecha: Tablero de Órdenes Activas del Día y Ruteo Clínico -->
         <div class="col-12">
             <div class="row g-2 mb-2 triage-kpis">
-                <div class="col-6 col-xl-3"><div class="kpi-card blue"><span class="kpi-symbol">ORD</span><div><strong>@_ordenes.Count</strong><small>Órdenes en curso</small><em>Actividad del día</em></div></div></div>
+                <div class="col-6 col-xl-3"><div class="kpi-card blue"><span class="kpi-symbol">ORD</span><div><strong>@OrdenesEnCurso</strong><small>Órdenes en curso</small><em>Actividad del día</em></div></div></div>
                 <div class="col-6 col-xl-3"><div class="kpi-card green"><span class="kpi-symbol">ATN</span><div><strong>@OrdenesEnAtencion</strong><small>En atención</small><em>Pacientes atendidos</em></div></div></div>
                 <div class="col-6 col-xl-3"><div class="kpi-card amber"><span class="kpi-symbol">PEN</span><div><strong>@OrdenesPendientes</strong><small>Pendientes</small><em>Requieren seguimiento</em></div></div></div>
                 <div class="col-6 col-xl-3"><div class="kpi-card red"><span class="kpi-symbol">ESP</span><div><strong>@OrdenesEnEspera</strong><small>En espera</small><em>En cola de atención</em></div></div></div>
             </div>
+
+            <!-- Resumen de Turnos Diarios por Especialidad -->
+            <div class="card shadow-sm border-0 mb-2">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-primary rounded-pill"><i class="bi bi-ticket-detailed-fill me-1"></i>Turnos del Día</span>
+                            <strong class="small text-dark">Cantidad de turnos diarios por especialidad (@_fechaConsulta.ToString("dd/MM/yyyy"))</strong>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            @if (_filtroEspecialidadId > 0)
+                            {
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.75rem;" @onclick="() => _filtroEspecialidadId = 0">
+                                    <i class="bi bi-x-circle me-1"></i>Quitar filtro de especialidad
+                                </button>
+                            }
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size:0.76rem;" @onclick="() => _mostrarTodasEspecialidades = !_mostrarTodasEspecialidades">
+                                <i class="bi @(_mostrarTodasEspecialidades ? "bi-eye-slash" : "bi-grid-3x3-gap") me-1"></i>
+                                @(_mostrarTodasEspecialidades ? "Ver solo con turnos hoy" : $"Ver todas las especialidades ({_especialidades.Count})")
+                            </button>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button"
+                                class="btn btn-sm @(_filtroEspecialidadId == 0 ? "btn-dark" : "btn-outline-dark") py-1 px-2 d-flex align-items-center gap-2"
+                                style="font-size:0.78rem;"
+                                @onclick="() => _filtroEspecialidadId = 0">
+                            <span>Todas</span>
+                            <span class="badge bg-secondary rounded-pill">@_ordenes.Count</span>
+                        </button>
+                        @foreach (var item in ObtenerResumenTurnosPorEspecialidad())
+                        {
+                            bool activo = _filtroEspecialidadId == item.IdEspecialidad;
+                            <button type="button"
+                                    class="btn btn-sm @(activo ? "btn-primary" : (item.Cantidad > 0 ? "btn-outline-primary" : "btn-outline-secondary opacity-75")) py-1 px-2 d-flex align-items-center gap-1"
+                                    style="font-size:0.78rem;"
+                                    title="Filtrar turnos de @item.Descripcion"
+                                    @onclick="() => _filtroEspecialidadId = (activo ? 0 : item.IdEspecialidad)">
+                                <span class="badge @(activo ? "bg-light text-primary" : "bg-primary") font-monospace">@item.Codigo</span>
+                                <span class="text-truncate" style="max-width: 145px;">@item.Descripcion</span>
+                                <span class="badge @(activo ? "bg-white text-dark" : (item.Cantidad > 0 ? "bg-dark" : "bg-secondary")) rounded-pill ms-1">@item.Cantidad</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span class="fw-bold text-dark">
-                        <i class="bi bi-list-check me-1"></i>Tablero de Órdenes de Atención en Curso (@_ordenes.Count)
+                        <i class="bi bi-list-check me-1"></i>Tablero de Órdenes y Turnos en Curso (@OrdenesMostradas.Count)
                     </span>
                     <div class="d-flex gap-2 align-items-center">
                         <input type="date" class="form-control form-control-sm" style="width:145px;"
@@ -255,23 +350,40 @@
                         <table class="table table-hover align-middle mb-0 small">
                             <thead class="table-light">
                                 <tr>
-                                    <th>N° Orden</th>
+                                    <th>Turno / Orden</th>
                                     <th>Hora</th>
                                     <th>Prioridad</th>
                                     <th>Paciente (NHCL)</th>
                                     <th>Propietario</th>
-                                    <th>Especialidad / Médico</th>
+                                    <th>Especialidad / Doctor que Atiende</th>
                                     <th>Etapa Actual</th>
                                     <th>Proforma</th>
                                     <th class="text-end">Accesos Clínicos Directos</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var o in _ordenes)
+                                @if (OrdenesMostradas.Count == 0)
                                 {
                                     <tr>
-                                        <td class="fw-bold text-primary">
-                                            <span>#@o.IdOrden</span>
+                                        <td colspan="9" class="text-center text-muted py-4">
+                                            No hay órdenes ni turnos en curso en este momento.
+                                        </td>
+                                    </tr>
+                                }
+                                @foreach (var o in OrdenesMostradas)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <button type="button"
+                                                        class="badge bg-primary font-monospace border-0 px-2 py-1 shadow-sm"
+                                                        style="font-size:0.85rem; cursor:pointer;"
+                                                        title="Ver comprobante / ticket de turno"
+                                                        @onclick="() => _ordenTicket = o">
+                                                    <i class="bi bi-ticket-perforated me-1"></i>@(string.IsNullOrWhiteSpace(o.Turno) ? $"{o.CodigoEspecialidad}-01" : o.Turno)
+                                                </button>
+                                            </div>
+                                            <small class="text-muted d-block mt-1" style="font-size:0.72rem;">Orden #@o.IdOrden</small>
                                         </td>
                                         <td>@o.Hora</td>
                                         <td><span class="triage-priority @ClaseTriaje(o.ColorTriaje)">@TextoPrioridad(o.ColorTriaje)</span></td>
@@ -289,11 +401,52 @@
                                             <small class="text-muted">@o.Cedula</small>
                                         </td>
                                         <td>
-                                            <div class="fw-semibold">@o.Medico</div>
-                                            <small class="text-muted">@o.Especialidad</small>
+                                            <div class="fw-bold text-dark">
+                                                <i class="bi bi-person-badge-fill text-primary me-1"></i>Dr(a). @o.Medico
+                                            </div>
+                                            <div class="d-flex align-items-center gap-1 mt-1">
+                                                <span class="badge bg-light text-primary border font-monospace" style="font-size:0.7rem;">@(string.IsNullOrWhiteSpace(o.CodigoEspecialidad) ? "GEN" : o.CodigoEspecialidad)</span>
+                                                <small class="text-muted">@o.Especialidad</small>
+                                                @if (!string.IsNullOrWhiteSpace(o.Consultorio))
+                                                {
+                                                    <span class="badge bg-info text-dark ms-1" style="font-size:0.7rem;"><i class="bi bi-door-open-fill me-1"></i>@o.Consultorio</span>
+                                                }
+                                            </div>
                                         </td>
                                         <td>
-                                            <span class="badge @ObtenerBadgeEtapa(o.Etapa)">@o.Etapa</span>
+                                            <div class="d-flex flex-column align-items-start gap-1">
+                                                <span class="badge @ObtenerBadgeEtapa(o.Etapa)">@o.Etapa</span>
+                                                @if (o.Estado == "A")
+                                                {
+                                                    <div class="d-flex align-items-center gap-1">
+                                                        <span class="badge bg-warning text-dark" style="font-size:0.65rem;">⏳ En espera</span>
+                                                        <span role="button"
+                                                              class="badge bg-success text-white shadow-sm"
+                                                              style="font-size:0.65rem; padding: 4px 8px; cursor:pointer; user-select:none;"
+                                                              title="Hacer pasar al paciente con el doctor"
+                                                              @onclick="() => PasarTurnoAAtencionAsync(o)">
+                                                            ▶ Pasar
+                                                        </span>
+                                                    </div>
+                                                }
+                                                else if (o.Estado == "E")
+                                                {
+                                                    <div class="d-flex align-items-center gap-1">
+                                                        <span class="badge bg-primary" style="font-size:0.65rem;">🟢 En atención</span>
+                                                        <span role="button"
+                                                              class="badge bg-secondary text-white shadow-sm"
+                                                              style="font-size:0.65rem; padding: 4px 8px; cursor:pointer; user-select:none;"
+                                                              title="Marcar atención como finalizada"
+                                                              @onclick="() => FinalizarTurnoAsync(o)">
+                                                            ✓ Finalizar
+                                                        </span>
+                                                    </div>
+                                                }
+                                                else if (o.Estado == "T")
+                                                {
+                                                    <span class="badge bg-secondary" style="font-size:0.65rem;">◉ Finalizado</span>
+                                                }
+                                            </div>
                                         </td>
                                         <td>
                                             @if (o.Facturado == "S")
@@ -306,28 +459,38 @@
                                             }
                                         </td>
                                         <td class="text-end">
-                                            <div class="btn-group btn-group-sm">
-                                                <a href="/admision/triaje/@o.IdOrden/@o.Nhcl" class="btn btn-outline-warning text-dark fw-semibold" title="Triaje y Constantes de Ingreso">
-                                                    Triaje
-                                                </a>
-                                                <a href="/consulta/fichamedica/@o.IdOrden/@o.Nhcl" class="btn btn-outline-primary" title="Ficha Médica SOAP">
-                                                    SOAP
-                                                </a>
-                                                <a href="/kardex/enfermeria?orden=@o.IdOrden&nhcl=@o.Nhcl" class="btn triage-kardex" title="Kardex Enfermería">
-                                                    Kardex
-                                                </a>
-                                                <a href="/hospitalizacion/ficha/@o.IdOrden/@o.Nhcl" class="btn btn-outline-info" title="Ficha Hospitalización 24h">
-                                                    Hosp
-                                                </a>
-                                                <a href="/quirofano/preanestesia/@o.IdOrden/@o.Nhcl" class="btn btn-outline-danger" title="Quirófano / Anestesia">
-                                                    Quir
-                                                </a>
-                                                <a href="/facturacion/proformas?ordenId=@o.IdOrden" class="btn btn-outline-success" title="Gestionar proforma">
-                                                    $
-                                                </a>
-                                                <button class="btn btn-outline-secondary" title="Cambiar médico/especialidad" @onclick="()=>AbrirCambioAsignacion(o)">Asignar</button>
-                                                <button class="btn btn-outline-danger" title="Anular orden" @onclick="()=>AnularOrdenAsync(o.IdOrden)">Anular</button>
-                                            </div>
+                                            <select class="form-select form-select-sm fw-semibold border-primary text-dark ms-auto"
+                                                    style="width: 195px; font-size: 0.74rem; cursor: pointer;"
+                                                    value=""
+                                                    @onchange="(e) => EjecutarAccionDropboxAsync(o, e)">
+                                                <option value="">⚡ Módulos / Acciones...</option>
+                                                <optgroup label="Módulos Clínicos">
+                                                    <option value="triaje">📋 Triaje de Ingreso</option>
+                                                    <option value="soap">🩺 Ficha Médica SOAP</option>
+                                                    <option value="kardex">💊 Kardex Enfermería</option>
+                                                    <option value="hosp">🏥 Hospitalización 24h</option>
+                                                    <option value="quir">🔪 Quirófano / Anestesia</option>
+                                                    <option value="proforma">💲 Proforma / Facturación</option>
+                                                </optgroup>
+                                                <optgroup label="Gestión del Turno y Orden">
+                                                    @if (o.Estado == "A")
+                                                    {
+                                                        <option value="pasar">▶️ Hacer pasar a consulta</option>
+                                                    }
+                                                    @if (o.Estado == "E")
+                                                    {
+                                                        <option value="finalizar">✅ Finalizar atención</option>
+                                                        <option value="espera">⏳ Devolver a espera</option>
+                                                    }
+                                                    @if (o.Estado == "T")
+                                                    {
+                                                        <option value="espera">⏳ Reabrir / Poner en espera</option>
+                                                    }
+                                                    <option value="ticket">🎫 Ver / Imprimir Ticket</option>
+                                                    <option value="asignar">🔄 Cambiar médico / especialidad</option>
+                                                    <option value="anular">❌ Anular orden</option>
+                                                </optgroup>
+                                            </select>
                                         </td>
                                     </tr>
                                 }
@@ -351,9 +514,26 @@
                     {
                         <div class="stage-empty">Sin pacientes en esta etapa</div>
                     }
-                    @foreach (var orden in pacientesEtapa.Take(4))
+                    @foreach (var orden in pacientesEtapa.Take(10))
                     {
-                        <div class="stage-patient"><span class="stage-pet-avatar">@if (!string.IsNullOrEmpty(ObtenerFotoPaciente(orden.Nhcl))) { <img src="@ObtenerFotoPaciente(orden.Nhcl)" alt="Foto de @orden.Mascota" /> } else { <span>@InicialPaciente(orden.Mascota)</span> }</span><div><strong>@orden.Mascota</strong><small>@orden.Propietario</small></div><time>@orden.Hora</time></div>
+                        <div class="stage-patient">
+                            <span class="stage-pet-avatar">@if (!string.IsNullOrEmpty(ObtenerFotoPaciente(orden.Nhcl))) { <img src="@ObtenerFotoPaciente(orden.Nhcl)" alt="Foto de @orden.Mascota" /> } else { <span>@InicialPaciente(orden.Mascota)</span> }</span>
+                            <div>
+                                <strong><span class="badge bg-primary font-monospace me-1" style="font-size:0.58rem;">@orden.Turno</span>@orden.Mascota</strong>
+                                <small>Dr(a). @orden.Medico</small>
+                            </div>
+                            <div class="text-end">
+                                <time class="d-block">@orden.Hora</time>
+                                @if (etapa.Clave == "ESPERA")
+                                {
+                                    <span role="button" class="badge bg-success text-white mt-1 d-inline-block" style="font-size:0.6rem; padding: 3px 7px; cursor:pointer;" @onclick="() => PasarTurnoAAtencionAsync(orden)">▶ Pasar</span>
+                                }
+                                else if (etapa.Clave == "FINALIZADO")
+                                {
+                                    <span role="button" class="badge bg-outline-secondary border text-secondary mt-1 d-inline-block" style="font-size:0.58rem; padding: 2px 6px; cursor:pointer;" title="Reabrir turno y devolver a espera" @onclick="() => DevolverAEsperaAsync(orden)">↺ Reabrir</span>
+                                }
+                            </div>
+                        </div>
                     }
                 </div>
             }
@@ -362,7 +542,55 @@
 
     @if (_ordenCambio is not null)
     {
-        <div class="order-drawer-backdrop"></div><div class="order-drawer"><div class="card"><div class="card-header"><strong>Cambiar asignación de orden #@_ordenCambio.IdOrden</strong></div><div class="card-body"><label>Especialidad</label><select class="form-select" value="@_cambioEspecialidad" @onchange="CambiarEspecialidadCambioAsync">@foreach(var e in _especialidades){<option value="@e.Id">@e.Descripcion</option>}</select><label class="mt-2">Médico</label><select class="form-select" @bind="_cambioMedico">@foreach(var m in _medicosCambio){<option value="@m.Id">@m.Descripcion</option>}</select><div class="mt-3 d-flex gap-2"><button class="btn btn-secondary" @onclick="()=>_ordenCambio=null">Cancelar</button><button class="btn btn-primary" @onclick="GuardarCambioAsignacionAsync">Guardar cambio auditable</button></div></div></div></div>
+        <div class="order-drawer-backdrop"></div><div class="order-drawer"><div class="card"><div class="card-header"><strong>Cambiar asignación de orden #@_ordenCambio.IdOrden</strong></div><div class="card-body"><label>Especialidad</label><select class="form-select" value="@_cambioEspecialidad" @onchange="CambiarEspecialidadCambioAsync">@foreach(var e in _especialidades){<option value="@e.Id">[@(string.IsNullOrWhiteSpace(e.Codigo) ? "GEN" : e.Codigo)] @e.Descripcion</option>}</select><label class="mt-2">Médico</label><select class="form-select" @bind="_cambioMedico">@foreach(var m in _medicosCambio){<option value="@m.Id">@m.Descripcion</option>}</select><div class="mt-3 d-flex gap-2"><button class="btn btn-secondary" @onclick="()=>_ordenCambio=null">Cancelar</button><button class="btn btn-primary" @onclick="GuardarCambioAsignacionAsync">Guardar cambio auditable</button></div></div></div></div>
+    }
+
+    @if (_ordenTicket is not null)
+    {
+        <div class="order-drawer-backdrop" @onclick="() => _ordenTicket = null"></div>
+        <div class="position-fixed top-50 start-50 translate-middle bg-white rounded-4 shadow-lg border p-4" style="z-index: 1080; width: 380px; max-width: 94vw;">
+            <div class="text-center border-bottom pb-3 mb-3">
+                <small class="text-uppercase fw-bold text-primary d-block">Hospital de Especialidades Veterinarias</small>
+                <span class="text-muted small">Comprobante de Turno por Especialidad</span>
+                <div class="my-3 py-2 px-3 bg-primary bg-opacity-10 rounded-3 border border-primary border-opacity-25">
+                    <small class="text-uppercase text-primary fw-bold d-block" style="font-size:0.72rem;">TURNO ASIGNADO</small>
+                    <div class="display-5 fw-bold text-primary font-monospace mb-0">@_ordenTicket.Turno</div>
+                    <span class="badge bg-primary mt-1">@_ordenTicket.Especialidad</span>
+                </div>
+                <div class="p-2 rounded-3 bg-light border text-start">
+                    <div class="small text-muted">Médico con el que se va a atender:</div>
+                    <div class="fw-bold text-dark fs-6"><i class="bi bi-person-badge-fill text-primary me-1"></i>Dr(a). @_ordenTicket.Medico</div>
+                    @if (!string.IsNullOrWhiteSpace(_ordenTicket.Consultorio))
+                    {
+                        <div class="small fw-semibold text-info mt-1"><i class="bi bi-door-open-fill me-1"></i>Consultorio / Habitación: @_ordenTicket.Consultorio</div>
+                    }
+                </div>
+            </div>
+            <div class="small mb-3">
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted">Paciente:</span>
+                    <strong>@_ordenTicket.Mascota (NHCL #@_ordenTicket.Nhcl)</strong>
+                </div>
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted">Tutor:</span>
+                    <span>@_ordenTicket.Propietario</span>
+                </div>
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted">Fecha y Hora:</span>
+                    <span>@_ordenTicket.Fecha.ToString("dd/MM/yyyy") · @_ordenTicket.Hora</span>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                    <span class="text-muted">N° Orden Interna:</span>
+                    <strong>#@_ordenTicket.IdOrden</strong>
+                </div>
+            </div>
+            <div class="d-flex gap-2 justify-content-end">
+                <button type="button" class="btn btn-outline-secondary btn-sm px-3" @onclick="() => _ordenTicket = null">Cerrar</button>
+                <button type="button" class="btn btn-primary btn-sm px-3" @onclick="() => ImprimirTicketTurnoAsync(_ordenTicket)">
+                    <i class="bi bi-printer-fill me-1"></i>Imprimir
+                </button>
+            </div>
+        </div>
     }
 </div>
 
@@ -379,6 +607,52 @@
     private List<PacienteMascotaDto> _pacientesEncontrados = new();
     private List<OrdenAtencionResumenDto> _ordenes = new();
     private OrdenAtencionResumenDto? _ordenCambio;
+    private OrdenAtencionResumenDto? _ordenTicket;
+    private int _filtroEspecialidadId;
+    private bool _mostrarTodasEspecialidades = true;
+
+    private List<OrdenAtencionResumenDto> OrdenesMostradas =>
+        _ordenes
+            .Where(o => o.Estado != "T" && o.Estado != "I")
+            .Where(o => _filtroEspecialidadId == 0 || o.IdEspecialidad == _filtroEspecialidadId)
+            .ToList();
+
+    private sealed record ResumenTurnoEspecialidad(int IdEspecialidad, string Codigo, string Descripcion, int Cantidad);
+
+    private List<ResumenTurnoEspecialidad> ObtenerResumenTurnosPorEspecialidad()
+    {
+        var conteos = _ordenes
+            .GroupBy(o => o.IdEspecialidad)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var lista = _especialidades
+            .Select(e => new ResumenTurnoEspecialidad(
+                e.Id,
+                string.IsNullOrWhiteSpace(e.Codigo) ? "GEN" : e.Codigo,
+                e.Descripcion,
+                conteos.GetValueOrDefault(e.Id, 0)))
+            .Where(x => _mostrarTodasEspecialidades || x.Cantidad > 0 || x.IdEspecialidad == _filtroEspecialidadId)
+            .OrderByDescending(x => x.Cantidad)
+            .ThenBy(x => x.Descripcion)
+            .ToList();
+
+        return lista;
+    }
+
+    private string ObtenerSiguienteTurnoPreview()
+    {
+        var esp = _especialidades.FirstOrDefault(e => e.Id == _nuevaOrden.IdEspecialidad);
+        string prefijo = !string.IsNullOrWhiteSpace(esp?.Codigo) ? esp.Codigo : "GEN";
+        int existentes = _ordenes.Count(o => o.IdEspecialidad == _nuevaOrden.IdEspecialidad && o.Fecha.Date == _nuevaOrden.FechaOrden.Date);
+        int sig = existentes + 1;
+        return $"{prefijo}-{sig:D2}";
+    }
+
+    private string ObtenerNombreMedicoSeleccionado() =>
+        _medicosDisponibles.FirstOrDefault(m => m.Id == _nuevaOrden.IdMedico)?.Descripcion ?? "Por asignar";
+
+    private string ObtenerNombreEspecialidadSeleccionada() =>
+        _especialidades.FirstOrDefault(e => e.Id == _nuevaOrden.IdEspecialidad)?.Descripcion ?? "General";
     private List<CatalogoItemGenericoDto> _medicosCambio = new();
     private int _cambioEspecialidad, _cambioMedico;
 
@@ -391,24 +665,188 @@
     private string _mensajeAlerta = string.Empty;
     private bool _esError;
     private bool _mostrarFormularioOrden;
-    private int OrdenesEnAtencion => _ordenes.Count(o => o.Etapa.Contains("Consulta", StringComparison.OrdinalIgnoreCase));
-    private int OrdenesPendientes => _ordenes.Count(o => o.Facturado != "S");
-    private int OrdenesEnEspera => Math.Max(0, _conteoMedicos.Sum(m => m.EnEspera));
+    private int OrdenesEnCurso => _ordenes.Count(o => o.Estado != "T" && o.Estado != "I");
+    private int OrdenesEnAtencion => _ordenes.Count(o => o.Estado == "E");
+    private int OrdenesPendientes => _ordenes.Count(o => o.Facturado != "S" && o.Estado != "T" && o.Estado != "I");
+    private int OrdenesEnEspera => _ordenes.Count(o => o.Estado == "A");
     private static readonly (string Clave, string Titulo, string Clase, string Icono)[] EtapasResumen =
     [
         ("ESPERA", "En espera", "waiting", "⌛"),
-        ("Consulta", "En atención", "attention", "▣"),
+        ("ATENCION", "En atención", "attention", "▣"),
         ("PENDIENTE", "Pendientes", "pending", "✓"),
         ("FINALIZADO", "Finalizados", "finished", "◉")
     ];
 
     private List<OrdenAtencionResumenDto> FiltrarPorEtapa(string etapa) => etapa switch
     {
-        "ESPERA" => _ordenes.Where(o => string.IsNullOrWhiteSpace(o.Etapa)).ToList(),
-        "PENDIENTE" => _ordenes.Where(o => o.Facturado != "S" && !o.Etapa.Contains("Consulta", StringComparison.OrdinalIgnoreCase)).ToList(),
-        "FINALIZADO" => _ordenes.Where(o => o.Etapa.Contains("Final", StringComparison.OrdinalIgnoreCase)).ToList(),
+        "ESPERA" => _ordenes.Where(o => o.Estado == "A").OrderBy(o => o.IdOrden).ToList(),
+        "ATENCION" => _ordenes.Where(o => o.Estado == "E").ToList(),
+        "PENDIENTE" => _ordenes.Where(o => o.Facturado != "S" && o.Estado != "T").ToList(),
+        "FINALIZADO" => _ordenes.Where(o => o.Estado == "T").ToList(),
         _ => _ordenes.Where(o => o.Etapa.Contains(etapa, StringComparison.OrdinalIgnoreCase)).ToList()
     };
+
+    private OrdenAtencionResumenDto? ObtenerSiguienteEnEsperaMedico(int idMedico) =>
+        _ordenes
+            .Where(o => o.IdMedico == idMedico && o.Estado == "A")
+            .OrderBy(o => o.IdOrden)
+            .FirstOrDefault();
+
+    private async Task PasarTurnoAAtencionAsync(OrdenAtencionResumenDto orden)
+    {
+        bool ok = await AdmisionService.CambiarEstadoOrdenAsync(orden.IdOrden, "E", string.IsNullOrWhiteSpace(orden.Etapa) ? "Consulta" : orden.Etapa);
+        if (ok)
+        {
+            _esError = false;
+            _mensajeAlerta = $"▶ Turno {orden.Turno} ({orden.Mascota}) pasó a atención con Dr(a). {orden.Medico}.";
+            KardexService.InvalidarCacheOrdenesActivas();
+            await CargarOrdenesAsync();
+        }
+    }
+
+    private async Task FinalizarTurnoAsync(OrdenAtencionResumenDto orden)
+    {
+        bool ok = await AdmisionService.CambiarEstadoOrdenAsync(orden.IdOrden, "T", orden.Etapa);
+        if (ok)
+        {
+            _esError = false;
+            _mensajeAlerta = $"✓ Turno {orden.Turno} ({orden.Mascota}) marcado como finalizado.";
+            KardexService.InvalidarCacheOrdenesActivas();
+            await CargarOrdenesAsync();
+        }
+    }
+
+    private async Task DevolverAEsperaAsync(OrdenAtencionResumenDto orden)
+    {
+        bool ok = await AdmisionService.CambiarEstadoOrdenAsync(orden.IdOrden, "A", orden.Etapa);
+        if (ok)
+        {
+            _esError = false;
+            _mensajeAlerta = $"⏳ Turno {orden.Turno} ({orden.Mascota}) devuelto a sala de espera.";
+            KardexService.InvalidarCacheOrdenesActivas();
+            await CargarOrdenesAsync();
+        }
+    }
+
+    private async Task EjecutarAccionDropboxAsync(OrdenAtencionResumenDto o, ChangeEventArgs e)
+    {
+        string accion = e.Value?.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(accion)) return;
+
+        switch (accion)
+        {
+            case "triaje":
+                NavManager.NavigateTo($"/admision/triaje/{o.IdOrden}/{o.Nhcl}");
+                break;
+            case "soap":
+                NavManager.NavigateTo($"/consulta/fichamedica/{o.IdOrden}/{o.Nhcl}");
+                break;
+            case "kardex":
+                NavManager.NavigateTo($"/kardex/enfermeria?orden={o.IdOrden}&nhcl={o.Nhcl}");
+                break;
+            case "hosp":
+                NavManager.NavigateTo($"/hospitalizacion/ficha/{o.IdOrden}/{o.Nhcl}");
+                break;
+            case "quir":
+                NavManager.NavigateTo($"/quirofano/preanestesia/{o.IdOrden}/{o.Nhcl}");
+                break;
+            case "proforma":
+                NavManager.NavigateTo($"/facturacion/proformas?ordenId={o.IdOrden}");
+                break;
+            case "pasar":
+                await PasarTurnoAAtencionAsync(o);
+                break;
+            case "finalizar":
+                await FinalizarTurnoAsync(o);
+                break;
+            case "espera":
+                await DevolverAEsperaAsync(o);
+                break;
+            case "ticket":
+                _ordenTicket = o;
+                break;
+            case "asignar":
+                await AbrirCambioAsignacion(o);
+                break;
+            case "anular":
+                await AnularOrdenAsync(o.IdOrden);
+                break;
+        }
+    }
+
+    private async Task ImprimirTicketTurnoAsync(OrdenAtencionResumenDto t)
+    {
+        string consultorioHtml = !string.IsNullOrWhiteSpace(t.Consultorio)
+            ? $"<div style='margin-top:4px;color:#0284c7;font-weight:600;font-size:12px;'>Consultorio / Habitación: {System.Net.WebUtility.HtmlEncode(t.Consultorio)}</div>"
+            : "";
+
+        string html = $@"<!DOCTYPE html>
+<html lang='es'>
+<head>
+<meta charset='utf-8'/>
+<title>Ticket {System.Net.WebUtility.HtmlEncode(t.Turno)}</title>
+<style>
+  @page {{ size: auto; margin: 12mm; }}
+  body {{ font-family: Segoe UI, Arial, sans-serif; margin: 0; padding: 0; color: #0f172a; background: #fff; }}
+  .ticket {{ width: 320px; margin: 0 auto; border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 20px; box-sizing: border-box; text-align: center; }}
+  .hosp {{ color: #0872df; font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }}
+  .sub {{ color: #64748b; font-size: 11px; margin-top: 2px; }}
+  .turn-box {{ margin: 14px 0; padding: 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; }}
+  .turn-lbl {{ color: #0872df; font-size: 10px; font-weight: 700; text-transform: uppercase; }}
+  .turn-code {{ color: #0872df; font-size: 36px; font-weight: 900; font-family: Consolas, monospace; line-height: 1.1; margin: 4px 0; }}
+  .esp-badge {{ display: inline-block; background: #0872df; color: #fff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 6px; }}
+  .doc-box {{ text-align: left; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 9px 12px; margin-bottom: 14px; }}
+  .doc-lbl {{ color: #64748b; font-size: 11px; }}
+  .doc-name {{ color: #0f172a; font-size: 14px; font-weight: 800; margin-top: 2px; }}
+  .row-item {{ display: flex; justify-content: space-between; font-size: 12px; padding: 5px 0; border-bottom: 1px solid #f1f5f9; }}
+  .row-item:last-child {{ border-bottom: none; }}
+  .muted {{ color: #64748b; }}
+</style>
+</head>
+<body>
+  <div class='ticket'>
+    <div class='hosp'>Hospital de Especialidades Veterinarias</div>
+    <div class='sub'>Comprobante de Turno por Especialidad</div>
+    <div class='turn-box'>
+      <div class='turn-lbl'>TURNO ASIGNADO</div>
+      <div class='turn-code'>{System.Net.WebUtility.HtmlEncode(t.Turno)}</div>
+      <span class='esp-badge'>{System.Net.WebUtility.HtmlEncode(t.Especialidad)}</span>
+    </div>
+    <div class='doc-box'>
+      <div class='doc-lbl'>Médico con el que se va a atender:</div>
+      <div class='doc-name'>Dr(a). {System.Net.WebUtility.HtmlEncode(t.Medico)}</div>
+      {consultorioHtml}
+    </div>
+    <div class='row-item'><span class='muted'>Paciente:</span><strong>{System.Net.WebUtility.HtmlEncode(t.Mascota)} (NHCL #{t.Nhcl})</strong></div>
+    <div class='row-item'><span class='muted'>Tutor:</span><span>{System.Net.WebUtility.HtmlEncode(t.Propietario)}</span></div>
+    <div class='row-item'><span class='muted'>Fecha y Hora:</span><span>{t.Fecha:dd/MM/yyyy} · {System.Net.WebUtility.HtmlEncode(t.Hora)}</span></div>
+    <div class='row-item'><span class='muted'>N° Orden Interna:</span><strong>#{t.IdOrden}</strong></div>
+  </div>
+</body>
+</html>";
+
+        string b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(html));
+        await JS.InvokeVoidAsync("eval", $@"{{
+            const htmlStr = decodeURIComponent(escape(atob('{b64}')));
+            const iframe = document.createElement('iframe');
+            iframe.style.position = 'fixed';
+            iframe.style.right = '0';
+            iframe.style.bottom = '0';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = '0';
+            document.body.appendChild(iframe);
+            const doc = iframe.contentWindow.document;
+            doc.open();
+            doc.write(htmlStr);
+            doc.close();
+            setTimeout(() => {{
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+                setTimeout(() => document.body.removeChild(iframe), 1000);
+            }}, 150);
+        }}");
+    }
 
     private static string InicialesMedico(string nombre)
     {
@@ -499,12 +937,25 @@
         _especialidades = await tEsp;
         var todosMedicos = await tMedicosTodos;
 
-        if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0)
+        if (EspecialidadPreseleccionada.HasValue && EspecialidadPreseleccionada.Value > 0)
+        {
+            _nuevaOrden.IdEspecialidad = EspecialidadPreseleccionada.Value;
+            _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(_nuevaOrden.IdEspecialidad);
+            if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0 && _medicosDisponibles.Any(m => m.Id == MedicoPreseleccionado.Value))
+            {
+                _nuevaOrden.IdMedico = MedicoPreseleccionado.Value;
+            }
+            else
+            {
+                _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
+            }
+        }
+        else if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0)
         {
             var medInfo = todosMedicos.FirstOrDefault(m => m.Id == MedicoPreseleccionado.Value);
             if (medInfo != null && medInfo.IdPadre.GetValueOrDefault() > 0)
             {
-                int espId = medInfo.IdPadre.Value;
+                int espId = medInfo.IdPadre.GetValueOrDefault();
                 _nuevaOrden.IdEspecialidad = espId;
                 _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(espId);
                 _nuevaOrden.IdMedico = medInfo.Id;
@@ -516,12 +967,6 @@
                 _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(espInicial);
                 _nuevaOrden.IdMedico = MedicoPreseleccionado.Value;
             }
-        }
-        else if (EspecialidadPreseleccionada.HasValue && EspecialidadPreseleccionada.Value > 0)
-        {
-            _nuevaOrden.IdEspecialidad = EspecialidadPreseleccionada.Value;
-            _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(_nuevaOrden.IdEspecialidad);
-            _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 1;
         }
         else
         {
@@ -586,7 +1031,7 @@
         {
             _nuevaOrden.IdEspecialidad = idEsp;
             _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(idEsp);
-            _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 1;
+            _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
         }
     }
 
@@ -629,10 +1074,17 @@
 
         await CargarOrdenesAsync();
 
+        var ordenRecienCreada = _ordenes.FirstOrDefault(o => o.IdOrden == idCreada);
+        string turnoTexto = ordenRecienCreada != null ? $" — Turno {ordenRecienCreada.Turno} (Atiende: Dr(a). {ordenRecienCreada.Medico})" : "";
+
         _esError = false;
         string vinculoCita = (CitaOrigenId.HasValue && CitaOrigenId.Value > 0) ? $" (Vinculada a Cita #{CitaOrigenId.Value})" : "";
-        _mensajeAlerta = $"Orden de Atención #{idCreada} creada exitosamente para {_nuevaOrden.NombreMascota} (NHCL #{_nuevaOrden.Nhcl}){vinculoCita}.";
+        _mensajeAlerta = $"Orden #{idCreada}{turnoTexto} generada para {_nuevaOrden.NombreMascota} (NHCL #{_nuevaOrden.Nhcl}){vinculoCita}.";
         _mostrarFormularioOrden = false;
+        if (ordenRecienCreada != null)
+        {
+            _ordenTicket = ordenRecienCreada;
+        }
     }
 
     private async Task CambiarFechaTableroAsync(ChangeEventArgs e)

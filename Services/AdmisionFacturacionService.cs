@@ -1,4 +1,4 @@
-﻿using HosvetKardex.Web.Data;
+using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Models;
 
 namespace HosvetKardex.Web.Services;
@@ -786,6 +786,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             return (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
                 SELECT 
                     es_id AS Id, 
+                    RTRIM(ISNULL(es_codigo, '')) AS Codigo,
                     RTRIM(es_descripcion) AS Descripcion,
                     CASE WHEN UPPER(RTRIM(ISNULL(es_servicio, ''))) = 'S' THEN 1 ELSE 0 END AS RequiereTriaje
                 FROM vt_especialidades 
@@ -889,17 +890,31 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 IF @ColorTriaje IS NOT NULL AND RTRIM(@ColorTriaje) <> ''
                     UPDATE vt_pacientes SET mas_colortriaje = @ColorTriaje WHERE mas_nhcl = @Nhcl;
 
+                DECLARE @Prefijo VARCHAR(10);
+                SELECT @Prefijo = ISNULL(NULLIF(RTRIM(es_codigo), ''), LEFT(UPPER(LTRIM(RTRIM(ISNULL(es_descripcion, 'GEN')))), 3))
+                FROM vt_especialidades WHERE es_id = @IdEspecialidad;
+                IF @Prefijo IS NULL OR @Prefijo = '' SET @Prefijo = 'GEN';
+
+                DECLARE @SiguienteNum INT;
+                SELECT @SiguienteNum = COUNT(1) + 1
+                FROM vt_ordenAtencion
+                WHERE CAST(ordenAten_fecha AS DATE) = CAST(@FechaOrden AS DATE)
+                  AND ordenAten_esp_numero = @IdEspecialidad;
+
+                DECLARE @TurnoCodigo VARCHAR(20);
+                SET @TurnoCodigo = @Prefijo + '-' + RIGHT('00' + CAST(@SiguienteNum AS VARCHAR(10)), CASE WHEN @SiguienteNum < 100 THEN 2 ELSE LEN(CAST(@SiguienteNum AS VARCHAR(10))) END);
+
                 INSERT INTO vt_ordenAtencion (
                     ordenAten_nombre, ordenAten_idcliente, ordenAten_nhcl, ordenAten_idMedico,
                     ordenAten_estado, ordenAten_fecha, ordenAten_esp_numero, ordenAten_idlocalidad,
                     ordenAten_hora, ordenAten_IdUsuario, ordenaten_IPOrigen, ordenAten_etapa,
-                    ordenAten_Tipo, ordenAten_Despacho
+                    ordenAten_Tipo, ordenAten_Despacho, ordenAten_turno
                 )
                 VALUES (
                     @NombrePropietario, @IdCliente, @Nhcl, @IdMedico,
                     'A', @FechaOrden, @IdEspecialidad, @IdLocalidad,
                     @HoraOrden, @IdUsuario, @IpOrigen, @Etapa,
-                    @TipoOrigen, @TipoDespacho
+                    @TipoOrigen, @TipoDespacho, @TurnoCodigo
                 );
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -936,12 +951,16 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         const string sql = @"
             SELECT TOP 150
                 o.ordenAten_id AS IdOrden,
+                ISNULL(NULLIF(RTRIM(o.ordenAten_turno), ''), ISNULL(NULLIF(RTRIM(es.es_codigo), ''), 'GEN') + '-01') AS Turno,
+                ISNULL(RTRIM(o.ordenAten_consultorio), '') AS Consultorio,
                 o.ordenAten_nhcl AS Nhcl,
                 o.ordenAten_idcliente AS IdCliente,
                 ISNULL(o.ordenAten_nombre, '') AS Propietario,
                 ISNULL(c.pa_cedula, '') AS Cedula,
                 ISNULL(p.mas_nombre, '') AS Mascota,
                 ISNULL(esp.especie_descripcion, '') AS Especie,
+                ISNULL(o.ordenAten_esp_numero, 0) AS IdEspecialidad,
+                ISNULL(NULLIF(RTRIM(es.es_codigo), ''), 'GEN') AS CodigoEspecialidad,
                 ISNULL(es.es_descripcion, '') AS Especialidad,
                 o.ordenAten_idMedico AS IdMedico,
                 ISNULL(u.user_nombre, '') AS Medico,
@@ -961,8 +980,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LEFT JOIN vt_especialidades es ON o.ordenAten_esp_numero = es.es_id
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             WHERE o.ordenAten_fecha = @Fecha
+              AND ISNULL(o.ordenAten_estado, 'A') <> 'I'
               AND (@Etapa = '' OR o.ordenAten_etapa = @Etapa)
-              AND (@Filtro = '' OR o.ordenAten_nombre LIKE '%' + @Filtro + '%' OR p.mas_nombre LIKE '%' + @Filtro + '%' OR CAST(o.ordenAten_id AS VARCHAR) = @Filtro)
+              AND (@Filtro = '' OR o.ordenAten_nombre LIKE '%' + @Filtro + '%' OR p.mas_nombre LIKE '%' + @Filtro + '%' OR ISNULL(o.ordenAten_turno, '') LIKE '%' + @Filtro + '%' OR CAST(o.ordenAten_id AS VARCHAR) = @Filtro)
             ORDER BY o.ordenAten_id DESC;";
 
         try
@@ -986,9 +1006,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         try
         {
-            int rows = await _db.ExecuteAsync(
-                "UPDATE vt_ordenAtencion SET ordenAten_estado = @Estado, ordenAten_etapa = @Etapa WHERE ordenAten_id = @IdOrden",
-                new { IdOrden = idOrden, Estado = nuevoEstado, Etapa = nuevaEtapa });
+            const string sql = @"
+                UPDATE vt_ordenAtencion 
+                SET ordenAten_estado = @Estado, 
+                    ordenAten_etapa = @Etapa,
+                    ordenAten_fechaenAtencion = CASE WHEN @Estado = 'E' THEN GETDATE() ELSE ordenAten_fechaenAtencion END,
+                    ordenAten_fechaProcesado = CASE WHEN @Estado = 'T' THEN GETDATE() ELSE ordenAten_fechaProcesado END
+                WHERE ordenAten_id = @IdOrden";
+            int rows = await _db.ExecuteAsync(sql, new { IdOrden = idOrden, Estado = nuevoEstado, Etapa = nuevaEtapa });
             if (rows > 0) return true;
         }
         catch (Exception ex)
@@ -1004,8 +1029,31 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         if (idOrden <= 0 || idMedico <= 0 || idEspecialidad <= 0) return false;
         var columnas = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
         string anterior = columnas.Contains("ordenaten_anteriorIdMed") ? "ordenaten_anteriorIdMed=ordenAten_idMedico," : string.Empty;
-        int rows = await _db.ExecuteAsync($@"UPDATE vt_ordenAtencion SET {anterior}
-            ordenAten_idMedico=@IdMedico, ordenAten_esp_numero=@IdEspecialidad
+        string updateTurnoSql = @"
+            DECLARE @EspActual INT, @FechaOrd DATE, @NuevoTurno VARCHAR(20);
+            SELECT @EspActual = ordenAten_esp_numero, @FechaOrd = CAST(ordenAten_fecha AS DATE), @NuevoTurno = ordenAten_turno
+            FROM vt_ordenAtencion WHERE ordenAten_id = @IdOrden;
+
+            IF @EspActual IS NULL OR @EspActual <> @IdEspecialidad OR @NuevoTurno IS NULL OR RTRIM(@NuevoTurno) = ''
+            BEGIN
+                DECLARE @Pref VARCHAR(10);
+                SELECT @Pref = ISNULL(NULLIF(RTRIM(es_codigo), ''), LEFT(UPPER(LTRIM(RTRIM(ISNULL(es_descripcion, 'GEN')))), 3))
+                FROM vt_especialidades WHERE es_id = @IdEspecialidad;
+                IF @Pref IS NULL OR @Pref = '' SET @Pref = 'GEN';
+
+                DECLARE @Sig INT;
+                SELECT @Sig = COUNT(1) + 1
+                FROM vt_ordenAtencion
+                WHERE CAST(ordenAten_fecha AS DATE) = @FechaOrd
+                  AND ordenAten_esp_numero = @IdEspecialidad
+                  AND ordenAten_id <> @IdOrden;
+
+                SET @NuevoTurno = @Pref + '-' + RIGHT('00' + CAST(@Sig AS VARCHAR(10)), CASE WHEN @Sig < 100 THEN 2 ELSE LEN(CAST(@Sig AS VARCHAR(10))) END);
+            END
+        ";
+        int rows = await _db.ExecuteAsync($@"{updateTurnoSql}
+            UPDATE vt_ordenAtencion SET {anterior}
+            ordenAten_idMedico=@IdMedico, ordenAten_esp_numero=@IdEspecialidad, ordenAten_turno=@NuevoTurno
             WHERE ordenAten_id=@IdOrden", new { IdOrden = idOrden, IdMedico = idMedico, IdEspecialidad = idEspecialidad });
         if (rows > 0) await _db.RegistrarBitacoraAsync($"Cambio de médico/especialidad en orden #{idOrden}: médico {idMedico}, especialidad {idEspecialidad}", idUsuario);
         return rows > 0;
@@ -1106,10 +1154,33 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         return TimeSpan.TryParse(hasta, out var fin) && hora >= inicio && hora < fin;
     }
 
-    public async Task<List<CitaMedicaDto>> ObtenerCitasPorFechaAsync(DateTime fechaDesde, DateTime fechaHasta, int idMedico = 0)
+    private async Task<HashSet<string>> AsegurarColumnaEspecialidadCitasAsync()
     {
         var columnas = await ObtenerColumnasTablaAsync("vt_citas");
+        if (!columnas.Contains("ci_especialidad"))
+        {
+            try
+            {
+                await _db.ExecuteAsync(@"
+                    IF COL_LENGTH('vt_citas', 'ci_especialidad') IS NULL
+                        ALTER TABLE vt_citas ADD ci_especialidad INT NULL;");
+                columnas.Add("ci_especialidad");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo agregar automáticamente la columna ci_especialidad en vt_citas");
+            }
+        }
+        return columnas;
+    }
+
+    public async Task<List<CitaMedicaDto>> ObtenerCitasPorFechaAsync(DateTime fechaDesde, DateTime fechaHasta, int idMedico = 0)
+    {
+        var columnas = await AsegurarColumnaEspecialidadCitasAsync();
         string motivoCancelacion = columnas.Contains("ci_refeliminacion") ? "ISNULL(c.ci_refeliminacion, '')" : "CAST('' AS VARCHAR(250))";
+        string colEspExpr = columnas.Contains("ci_especialidad")
+            ? "ISNULL(NULLIF(c.ci_especialidad, 0), ISNULL(u.user_esp_numero, 0))"
+            : "ISNULL(u.user_esp_numero, 0)";
         string sql = $@"
             SELECT
                 c.ci_id AS CiId,
@@ -1130,13 +1201,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(c.ci_localidad, 1) AS CiLocalidad,
                 ISNULL(c.ci_usuario, 0) AS CiUsuario,
                 ISNULL(u.user_nombre, '') AS NombreMedico,
-                ISNULL(e.es_descripcion, '') AS Especialidad,
+                {colEspExpr} AS CiEspecialidad,
+                ISNULL(RTRIM(e.es_codigo), '') AS CodigoEspecialidad,
+                ISNULL(RTRIM(e.es_descripcion), '') AS Especialidad,
                 ISNULL(c.ci_estado, 'A') AS CiEstado,
                 ISNULL(c.ci_tipoConsulta, 1) AS CiTipoConsulta,
                 ISNULL(c.ci_tipo, 'M') AS CiTipo
             FROM vt_citas c
             LEFT JOIN vt_usuarios u ON c.ci_usuario = u.user_numero
-            LEFT JOIN vt_especialidades e ON u.user_esp_numero = e.es_id
+            LEFT JOIN vt_especialidades e ON {colEspExpr} = e.es_id
             WHERE c.ci_fecha BETWEEN @Desde AND @Hasta
               AND (@IdMedico = 0 OR c.ci_usuario = @IdMedico)
             ORDER BY c.ci_fecha, c.ci_hora;";
@@ -1162,7 +1235,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         try
         {
-                        if (TimeSpan.TryParse(cita.CiHora, out var tsHora))
+            if (TimeSpan.TryParse(cita.CiHora, out var tsHora))
             {
                 cita.CiHora = $"{tsHora.Hours:D2}:{tsHora.Minutes:D2}";
             }
@@ -1185,16 +1258,20 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             if (superpuestas > 0)
                 throw new InvalidOperationException($"El médico ya tiene una cita activa agendada a las {cita.CiHora} en esta fecha.");
 
-            const string insertSql = @"
+            var columnas = await AsegurarColumnaEspecialidadCitasAsync();
+            string colEspInsert = columnas.Contains("ci_especialidad") ? ", ci_especialidad" : "";
+            string valEspInsert = columnas.Contains("ci_especialidad") ? ", @CiEspecialidad" : "";
+
+            string insertSql = $@"
                 INSERT INTO vt_citas (
                     ci_nombre, ci_nombremas, ci_fecha, ci_hora, ci_estadocita,
                     ci_telefono, ci_observacion, ci_localidad, ci_usuario,
-                    ci_usuarioEjecuta, ci_nhcl, ci_estado, ci_tipoConsulta, ci_email, ci_tipo
+                    ci_usuarioEjecuta, ci_nhcl, ci_estado, ci_tipoConsulta, ci_email, ci_tipo{colEspInsert}
                 )
                 VALUES (
                     @CiNombre, @CiNombreMas, @CiFecha, @CiHora, @CiEstadoCita,
                     @CiTelefono, @CiObservacion, @CiLocalidad, @CiUsuario,
-                    @IdUsuario, @CiNhcl, 'A', @CiTipoConsulta, @CiEmail, @CiTipo
+                    @IdUsuario, @CiNhcl, 'A', @CiTipoConsulta, @CiEmail, @CiTipo{valEspInsert}
                 );
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -1213,7 +1290,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 cita.CiNhcl,
                 cita.CiTipoConsulta,
                 cita.CiEmail,
-                cita.CiTipo
+                cita.CiTipo,
+                CiEspecialidad = cita.CiEspecialidad > 0 ? (int?)cita.CiEspecialidad : null
             });
 
             if (idNueva > 0) return idNueva;

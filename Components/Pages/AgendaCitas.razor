@@ -107,7 +107,7 @@
                                     {
                                         <button type="button" class="calendar-slot appointment @ClaseEstadoCita(cita.CiEstadoCita)" @onclick="() => VerDetalleCita(cita)">
                                             <span class="appointment-photo">@if (!string.IsNullOrEmpty(ObtenerFotoPaciente(cita.CiNhcl))) { <img src="@ObtenerFotoPaciente(cita.CiNhcl)" alt="Foto de @cita.CiNombreMas" /> } else { <b>@Iniciales(cita.CiNombreMas)</b> }</span>
-                                            <span><strong>@cita.CiNombreMas @if(cita.CiNhcl > 0){<small>(#@cita.CiNhcl)</small>}</strong><small>@cita.CiNombre</small><em>@TextoTipoConsulta(cita.CiTipoConsulta)</em></span>
+                                            <span><strong>@cita.CiNombreMas @if(cita.CiNhcl > 0){<small>(#@cita.CiNhcl)</small>}</strong><small>@cita.CiNombre</small><em>@TextoTipoConsultaCita(cita)</em></span>
                                         </button>
                                     }
                                 }
@@ -146,7 +146,7 @@
                                 <td><div class="scheduled-patient"><span class="appointment-photo">@if(!string.IsNullOrEmpty(ObtenerFotoPaciente(cita.CiNhcl))){<img src="@ObtenerFotoPaciente(cita.CiNhcl)" alt="Foto de @cita.CiNombreMas"/>}else{<b>@Iniciales(cita.CiNombreMas)</b>}</span><div><strong>@cita.CiNombreMas</strong><small>@(cita.CiNhcl > 0 ? $"NHCL #{cita.CiNhcl}" : "Sin NHCL")</small></div></div></td>
                                 <td><strong>@cita.CiNombre</strong><small>@cita.CiTelefono</small></td>
                                 <td><strong>@cita.NombreMedico</strong><small>@cita.Especialidad</small></td>
-                                <td><strong>@TextoTipoConsulta(cita.CiTipoConsulta)</strong><small>@cita.CiObservacion</small></td>
+                                <td><strong>@TextoTipoConsultaCita(cita)</strong><small>@cita.CiObservacion</small></td>
                                 <td><span class="table-status @ClaseEstadoCita(cita.CiEstadoCita)">@TextoEstadoCita(cita.CiEstadoCita)</span></td>
                                 <td class="text-end">
                                     <button class="btn btn-info btn-sm" @onclick="() => VerDetalleCita(cita)">Ver</button>
@@ -237,7 +237,11 @@
                         <div class="col-md-6">
                             <label>Médico veterinario *</label>
                             <select class="form-select" value="@_idMedicoFiltro" @onchange="OnMedicoFormChanged">
-                                @foreach(var m in _medicos)
+                                @if (MedicosFormulario.Count == 0)
+                                {
+                                    <option value="0">-- Sin médicos en esta especialidad --</option>
+                                }
+                                @foreach(var m in MedicosFormulario)
                                 {
                                     <option value="@m.Id">@m.Descripcion</option>
                                 }
@@ -245,7 +249,26 @@
                         </div>
                         <div class="col-md-6">
                             <label>Tipo de consulta *</label>
-                            <select class="form-select" @bind="_nuevaCita.CiTipoConsulta">
+                            <select id="selectTipoConsultaCita" class="form-select" value="@_nuevaCita.CiTipoConsulta" @onchange="OnTipoConsultaChanged">
+                                <option value="1">Consulta General</option>
+                                <option value="2">Especialidad</option>
+                                <option value="3">Cirugía Programada</option>
+                                <option value="4">Control / Revisión</option>
+                                <option value="5">Imagen / Ecografía</option>
+                            </select>
+                            @if (_nuevaCita.CiTipoConsulta == 2)
+                            {
+                                <div class="mt-2">
+                                    <label class="text-primary fw-bold"><i class="bi bi-award-fill me-1"></i>Especialidad *</label>
+                                    <select class="form-select border-primary" value="@_nuevaCita.CiEspecialidad" @onchange="OnEspecialidadCitaChanged">
+                                        @foreach (var esp in _especialidades)
+                                        {
+                                            <option value="@esp.Id">[@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)] @esp.Descripcion</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
+                            <select class="d-none">
                                 <option value="1">Consulta General</option>
                                 <option value="2">Especialidad</option>
                                 <option value="3">Cirugía Programada</option>
@@ -312,7 +335,7 @@
                 <div><small>Fecha</small><strong>@_citaDetalle.CiFecha.ToString("dd/MM/yyyy")</strong></div>
                 <div><small>Hora</small><strong>@_citaDetalle.CiHora</strong></div>
                 <div><small>Médico veterinario</small><strong>@_citaDetalle.NombreMedico</strong></div>
-                <div><small>Tipo de consulta</small><strong>@TextoTipoConsulta(_citaDetalle.CiTipoConsulta)</strong></div>
+                <div><small>Tipo de consulta</small><strong>@TextoTipoConsultaCita(_citaDetalle)</strong></div>
                 <div><small>Teléfono</small><strong>@(string.IsNullOrWhiteSpace(_citaDetalle.CiTelefono) ? "No registrado" : _citaDetalle.CiTelefono)</strong></div>
                 <div><small>Correo electrónico</small><strong>@(string.IsNullOrWhiteSpace(_citaDetalle.CiEmail) ? "No registrado" : _citaDetalle.CiEmail)</strong></div>
                 <div class="detail-observation"><small>Motivo / Observaciones</small><strong>@(string.IsNullOrWhiteSpace(_citaDetalle.CiObservacion) ? "Sin observaciones" : _citaDetalle.CiObservacion)</strong></div>
@@ -655,6 +678,7 @@
 
 @code {
     private List<CatalogoItemGenericoDto> _medicos = new();
+    private List<CatalogoItemGenericoDto> _especialidades = new();
     private List<PacienteMascotaDto> _pacientes = new();
     private List<SlotHorarioMedicoDto> _slots = new();
     private Dictionary<int, List<SlotHorarioMedicoDto>> _slotsPorMedico = new();
@@ -695,6 +719,105 @@
     private static string ClaseEstadoCita(string estado) => estado switch { "C" => "confirmed", "X" => "cancelled", "A" => "waiting", _ => "pending" };
     private static string TextoEstadoCita(string estado) => estado switch { "C" => "Confirmada", "X" => "Cancelada", "A" => "Atendida", _ => "Por confirmar" };
     private static string TextoTipoConsulta(int tipo) => tipo switch { 2 => "Especialidad", 3 => "Cirugía programada", 4 => "Control / Revisión", 5 => "Imagen / Ecografía", _ => "Consulta general" };
+
+    private static string TextoTipoConsultaCita(CitaMedicaDto cita)
+    {
+        if (cita.CiTipoConsulta == 2 && !string.IsNullOrWhiteSpace(cita.Especialidad))
+        {
+            string cod = !string.IsNullOrWhiteSpace(cita.CodigoEspecialidad) ? $"[{cita.CodigoEspecialidad}] " : "";
+            return $"Especialidad · {cod}{cita.Especialidad}";
+        }
+        return TextoTipoConsulta(cita.CiTipoConsulta);
+    }
+
+    private List<CatalogoItemGenericoDto> MedicosFormulario =>
+        _nuevaCita.CiTipoConsulta == 2 && _nuevaCita.CiEspecialidad > 0
+            ? _medicos.Where(m => m.IdPadre == _nuevaCita.CiEspecialidad).ToList()
+            : _medicos;
+
+    private void OnTipoConsultaChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int tipo))
+        {
+            _nuevaCita.CiTipoConsulta = tipo;
+            if (tipo == 2)
+            {
+                if (_nuevaCita.CiEspecialidad <= 0)
+                {
+                    var med = _medicos.FirstOrDefault(m => m.Id == _idMedicoFiltro);
+                    _nuevaCita.CiEspecialidad = med?.IdPadre.GetValueOrDefault() > 0
+                        ? med!.IdPadre!.Value
+                        : (_especialidades.FirstOrDefault()?.Id ?? 1);
+                }
+                if (MedicosFormulario.All(m => m.Id != _idMedicoFiltro))
+                {
+                    _idMedicoFiltro = MedicosFormulario.FirstOrDefault()?.Id ?? 0;
+                    _nuevaCita.CiUsuario = _idMedicoFiltro;
+                }
+            }
+            else
+            {
+                if (_idMedicoFiltro <= 0)
+                {
+                    _idMedicoFiltro = _medicos.FirstOrDefault()?.Id ?? 1;
+                    _nuevaCita.CiUsuario = _idMedicoFiltro;
+                }
+                _nuevaCita.CiEspecialidad = ResolverEspecialidadPorTipo(tipo, _idMedicoFiltro);
+            }
+        }
+    }
+
+    private void OnEspecialidadCitaChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int idEsp))
+        {
+            _nuevaCita.CiEspecialidad = idEsp;
+            _idMedicoFiltro = MedicosFormulario.FirstOrDefault()?.Id ?? 0;
+            _nuevaCita.CiUsuario = _idMedicoFiltro;
+            _errorFormulario = string.Empty;
+            if (_idMedicoFiltro > 0)
+            {
+                var libre = ObtenerHorasLibresParaFormulario().FirstOrDefault();
+                if (!string.IsNullOrEmpty(libre))
+                {
+                    _nuevaCita.CiHora = libre;
+                }
+            }
+        }
+    }
+
+    private int ResolverEspecialidadPorTipo(int tipoConsulta, int idMedico)
+    {
+        if (tipoConsulta == 1 || tipoConsulta == 4)
+        {
+            var medGen = _especialidades.FirstOrDefault(x =>
+                string.Equals(x.Codigo, "MG", StringComparison.OrdinalIgnoreCase) ||
+                x.Descripcion.Contains("MEDICINA GENERAL", StringComparison.OrdinalIgnoreCase));
+            if (medGen != null) return medGen.Id;
+        }
+        else if (tipoConsulta == 3)
+        {
+            var cir = _especialidades.FirstOrDefault(x =>
+                string.Equals(x.Codigo, "CIR", StringComparison.OrdinalIgnoreCase) ||
+                x.Descripcion.Contains("CIRUGIA", StringComparison.OrdinalIgnoreCase));
+            if (cir != null) return cir.Id;
+        }
+
+        var med = _medicos.FirstOrDefault(m => m.Id == idMedico);
+        if (med?.IdPadre.GetValueOrDefault() > 0)
+            return med.IdPadre!.Value;
+
+        return _especialidades.FirstOrDefault()?.Id ?? 1;
+    }
+
+    private int ResolverEspecialidadCita(CitaMedicaDto cita)
+    {
+        if (cita.CiTipoConsulta == 2 && cita.CiEspecialidad > 0)
+            return cita.CiEspecialidad;
+        if (cita.CiEspecialidad > 0)
+            return cita.CiEspecialidad;
+        return ResolverEspecialidadPorTipo(cita.CiTipoConsulta, cita.CiUsuario);
+    }
 
     private string ObtenerFotoPaciente(int nhcl)
     {
@@ -780,6 +903,7 @@
     private void AbrirFormularioCita()
     {
         _errorFormulario = string.Empty;
+        if (_idMedicoFiltro <= 0) _idMedicoFiltro = _medicos.FirstOrDefault()?.Id ?? 1;
         var horaLibre = ObtenerHorasLibresParaFormulario().FirstOrDefault() ?? "08:00";
         _nuevaCita = new CitaMedicaDto 
         { 
@@ -850,7 +974,8 @@
         string horaNorm = string.IsNullOrWhiteSpace(cita.CiHora) ? DateTime.Now.ToString("HH:mm") : cita.CiHora.Trim();
         string fechaNorm = (cita.CiFecha == default ? DateTime.Today : cita.CiFecha).ToString("yyyy-MM-dd");
         
-        NavManager.NavigateTo($"/admision/ordenes?nhcl={cita.CiNhcl}&idMedico={cita.CiUsuario}&tipoConsulta={cita.CiTipoConsulta}&idCita={cita.CiId}&hora={Uri.EscapeDataString(horaNorm)}&fecha={fechaNorm}");
+        int idEsp = ResolverEspecialidadCita(cita);
+        NavManager.NavigateTo($"/admision/ordenes?nhcl={cita.CiNhcl}&idMedico={cita.CiUsuario}&idEspecialidad={idEsp}&tipoConsulta={cita.CiTipoConsulta}&idCita={cita.CiId}&hora={Uri.EscapeDataString(horaNorm)}&fecha={fechaNorm}");
     }
 
     private void AbrirCancelarDesdeDetalle(CitaMedicaDto cita)
@@ -933,10 +1058,12 @@
         _cargandoInicial = true;
         await Task.Yield();
 
+        var tEsp = AdmisionService.ObtenerEspecialidadesAsync();
         var tMed = AdmisionService.ObtenerMedicosPorEspecialidadAsync(0);
         var tPac = AdmisionService.BuscarMascotasAsync(string.Empty);
         await Task.WhenAll(tMed, tPac);
 
+        _especialidades = await tEsp;
         _medicos = await tMed;
         _pacientes = await tPac;
         _idMedicoFiltro = _medicos.FirstOrDefault()?.Id ?? 1;
@@ -1020,6 +1147,12 @@
                 _nuevaCita.CiHora = $"{ts.Hours:D2}:{ts.Minutes:D2}";
             }
 
+            if (_idMedicoFiltro <= 0)
+            {
+                _errorFormulario = "No hay médicos veterinarios registrados en la especialidad seleccionada.";
+                return;
+            }
+            _nuevaCita.CiEspecialidad = ResolverEspecialidadCita(_nuevaCita);
             int idCita = await AdmisionService.AgendarCitaAsync(_nuevaCita, idUser);
             _mensaje = $"Cita #{idCita} agendada para {_nuevaCita.CiNombreMas} a las {_nuevaCita.CiHora} con {_nuevaCita.NombreMedico}.";
             _mensajeEsError = false;
