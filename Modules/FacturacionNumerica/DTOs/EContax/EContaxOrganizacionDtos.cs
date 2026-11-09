@@ -14,6 +14,13 @@ public sealed class EContaxEmpresaUpsertDto
     public string? Ruc { get; set; }
 }
 
+public sealed class EContaxEmpresaCreateDto
+{
+    public string Nombre { get; set; } = string.Empty;
+    public string? Ruc { get; set; }
+    public int IdTitular { get; set; }
+}
+
 public class EContaxSucursalDto
 {
     public int IdSucursal { get; set; }

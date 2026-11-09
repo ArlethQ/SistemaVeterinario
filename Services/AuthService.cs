@@ -236,12 +236,42 @@ public class AuthService : IAuthService
 
         const string localidadQuery = @"
             SELECT TOP (1) RTRIM(ISNULL(l.loc_descripcion, ''))
-            FROM vt_usuarioLocalidades ul
-            INNER JOIN vt_localidades l ON l.loc_id = ul.ul_idLocalidad
-            WHERE ul.ul_idUsuario = @IdUsuario
-              AND ul.ul_idLocalidad = @IdLocalidad
-              AND ISNULL(ul.ul_estado, 'A') = 'A'
-              AND ISNULL(l.loc_estado, 'A') = 'A'";
+            FROM vt_localidades l
+            INNER JOIN vt_usuarios u ON u.user_numero = @IdUsuario
+            WHERE l.loc_id = @IdLocalidad
+              AND ISNULL(l.loc_estado, 'A') = 'A'
+              AND (
+                    EXISTS (
+                        SELECT 1
+                        FROM vt_usuarioLocalidades ul
+                        WHERE ul.ul_idUsuario = u.user_numero
+                          AND ul.ul_idLocalidad = l.loc_id
+                          AND ISNULL(ul.ul_estado, 'A') = 'A'
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM EMPRESA e
+                        WHERE e.estado = 1
+                          AND (
+                                e.idEmpresa = l.idEmpresa
+                                OR (
+                                    NULLIF(LTRIM(RTRIM(e.ruc)), '') IS NOT NULL
+                                    AND LTRIM(RTRIM(e.ruc)) = LTRIM(RTRIM(l.loc_ruc))
+                                )
+                          )
+                          AND (
+                                e.idTitular = u.idUsuarioFacturacion
+                                OR EXISTS (
+                                    SELECT 1
+                                    FROM Usuarios uf
+                                    WHERE uf.IdUsuario = e.idTitular
+                                      AND uf.Estado = 1
+                                      AND NULLIF(LTRIM(RTRIM(uf.Email)), '') IS NOT NULL
+                                      AND UPPER(LTRIM(RTRIM(uf.Email))) = UPPER(LTRIM(RTRIM(u.user_email)))
+                                )
+                          )
+                    )
+              )";
         var localidadDescripcion = await _sql.QueryFirstOrDefaultAsync<string>(
             localidadQuery,
             new { IdUsuario = user.UserNumero, IdLocalidad = localidad });
