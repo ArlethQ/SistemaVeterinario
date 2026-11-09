@@ -73,7 +73,7 @@
                         <div style="display:flex; flex-wrap:wrap; align-items:flex-end; gap:1rem; margin:1.25rem 0;">
                             <label class="role-field" style="margin:0; flex:1; min-width:240px;">
                                 Rol
-                                <select value="@_tipoUser" @onchange="CambiarRolUsuarioAsync">
+                                <select value="@_tipoUser" @onchange="CambiarRolUsuarioAsync" disabled="@EsAdminIntocable" class="@(EsAdminIntocable ? "bg-light text-muted" : "")">
                                     <option value="0">Seleccione un rol</option>
                                     @foreach (var rol in _roles)
                                     {
@@ -81,7 +81,7 @@
                                     }
                                 </select>
                             </label>
-                            @if (_tipoUser > 1)
+                            @if (_tipoUser > 1 && !EsAdminIntocable)
                             {
                                 <button type="button"
                                         class="btn btn-outline-primary btn-sm"
@@ -93,7 +93,13 @@
                             }
                         </div>
 
-                        @if (_tipoUser == 1)
+                        @if (EsAdminIntocable)
+                        {
+                            <div class="admin-note" style="border-left: 3px solid #076fa7; background: #eef7fc;">
+                                🛡️ El usuario <strong>admin</strong> es el administrador principal del sistema; su rol es intocable y dispone de acceso automático a todos los módulos.
+                            </div>
+                        }
+                        else if (_tipoUser == 1)
                         {
                             <div class="admin-note">Los administradores tienen acceso automático a todos los módulos.</div>
                         }
@@ -140,8 +146,8 @@
                         </div>
 
                         <div class="form-actions">
-                            <button type="button" class="save-button" disabled="@_guardando" @onclick="GuardarAsync">
-                                @(_guardando ? "Guardando..." : "Guardar permisos")
+                            <button type="button" class="save-button" disabled="@(EsAdminIntocable || _guardando)" @onclick="GuardarAsync">
+                                @(EsAdminIntocable ? "Acceso total permanente" : (_guardando ? "Guardando..." : "Guardar permisos"))
                             </button>
                         </div>
                     }
@@ -167,6 +173,8 @@
         _usuarios.Where(u => string.IsNullOrWhiteSpace(_filtro) ||
                              u.UserNombre.Contains(_filtro, StringComparison.OrdinalIgnoreCase) ||
                              u.UserLogin.Contains(_filtro, StringComparison.OrdinalIgnoreCase));
+
+    private bool EsAdminIntocable => _usuarioActual is not null && _usuarioActual.UserLogin.Equals("admin", StringComparison.OrdinalIgnoreCase);
 
     private IEnumerable<MenuItemModel> MenusFiltrados =>
         _menus.Where(m => string.IsNullOrWhiteSpace(_filtroModulo)
@@ -212,12 +220,22 @@
 
     private async Task CambiarRolUsuarioAsync(ChangeEventArgs e)
     {
+        if (EsAdminIntocable) return;
         if (int.TryParse(e.Value?.ToString(), out int nuevoRol) && nuevoRol > 0)
         {
+            var val = await AuthService.ValidarCambioRolUsuarioAsync(_usuarioId, nuevoRol);
+            if (!val.Puede)
+            {
+                _mensaje = val.Motivo;
+                _esError = true;
+                return;
+            }
+
             _tipoUser = nuevoRol;
             _permisosRol = await AuthService.ObtenerAccesosRolAsync(_tipoUser);
             _seleccion = new HashSet<int>(_permisosRol);
             _mensaje = "";
+            _esError = false;
         }
     }
 
@@ -248,15 +266,22 @@
             _esError = true;
             return;
         }
+        if (EsAdminIntocable)
+        {
+            _mensaje = "El rol y los accesos del usuario admin son totales e intocables.";
+            _esError = false;
+            return;
+        }
+
         _guardando = true;
-        var ok = await AuthService.GuardarRolYAccesosAsync(_usuarioId, _tipoUser, _tipoUser == 1 ? [] : _seleccion, Session.IdUser);
+        var r = await AuthService.GuardarRolYAccesosAsync(_usuarioId, _tipoUser, _tipoUser == 1 ? [] : _seleccion, Session.IdUser);
         _guardando = false;
-        _esError = !ok;
-        if (ok && _usuarioActual is not null)
+        _esError = !r.Exito;
+        _mensaje = r.Mensaje;
+        if (r.Exito && _usuarioActual is not null)
+        {
             _usuarioActual.UserTipoUserNumero = _tipoUser;
-        _mensaje = ok
-            ? $"Permisos actualizados para {_usuarioActual?.UserNombre}."
-            : "No se pudieron guardar los cambios.";
+        }
     }
 
     private string NombreRol(int idRol) =>

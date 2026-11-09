@@ -163,7 +163,8 @@ public interface IAuthService
     Task<bool> GuardarRolConPermisosAsync(RolUsuarioModel rol, IReadOnlyCollection<int> menuIds, int adminId);
     Task<(bool Exito, string Mensaje)> EliminarRolAsync(int idRol, int adminId);
     Task<bool> TieneAccesoRutaAsync(string ruta);
-    Task<bool> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId);
+    Task<(bool Puede, string Motivo)> ValidarCambioRolUsuarioAsync(int idUser, int nuevoRolId, IReadOnlyCollection<int>? nuevasEspecialidades = null);
+    Task<(bool Exito, string Mensaje)> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId);
     Task<bool> GuardarRolAsync(RolUsuarioModel rol, int adminId);
     Task<bool> GuardarMenuAsync(MenuItemModel menu, int adminId);
     Task<List<UsuarioAdministracionModel>> ObtenerUsuariosAdministracionAsync();
@@ -193,14 +194,14 @@ public class AuthService : IAuthService
     public async Task<(bool Exito, string Mensaje, UsuarioModel? Usuario, bool RequiereCambioClave)> LoginAsync(string username, string password, int localidad = 1)
     {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
-            return (false, "Los datos introducidos no son válidos.", null, false);
+            return (false, "Los datos introducidos no son vÃ¡lidos.", null, false);
 
         string loginKey = username.Trim().ToUpperInvariant();
         if (LoginAttempts.TryGetValue(loginKey, out var attempt) &&
             attempt.WindowStartedUtc.Add(LoginWindow) > DateTimeOffset.UtcNow &&
             attempt.Count >= MaxLoginAttempts)
         {
-            return (false, "No fue posible iniciar sesión. Inténtalo nuevamente más tarde.", null, false);
+            return (false, "No fue posible iniciar sesiÃ³n. IntÃ©ntalo nuevamente mÃ¡s tarde.", null, false);
         }
 
         string claveHash = _sql.HashPasswordSha1(password);
@@ -231,8 +232,8 @@ public class AuthService : IAuthService
                 (_, current) => current.WindowStartedUtc.Add(LoginWindow) <= DateTimeOffset.UtcNow
                     ? new LoginAttempt(1, DateTimeOffset.UtcNow)
                     : current with { Count = current.Count + 1 });
-            await _sql.RegistrarBitacoraAsync($"Datos introducidos no válidos: {username}", 0);
-            return (false, "Los datos introducidos no son válidos.", null, false);
+            await _sql.RegistrarBitacoraAsync($"Datos introducidos no vÃ¡lidos: {username}", 0);
+            return (false, "Los datos introducidos no son vÃ¡lidos.", null, false);
         }
 
         const string localidadQuery = @"
@@ -310,77 +311,77 @@ public class AuthService : IAuthService
                 (101, 'Dashboard', 1, 'dashboard'),
                 (102, 'Planes y suscripciones', 1, 'suscripciones'),
                 (201, 'Clientes, tutores y mascotas', 2, 'admision/clientes-pacientes'),
-                (202, 'Recepción de órdenes', 2, 'admision/ordenes'),
+                (202, 'RecepciÃ³n de Ã³rdenes', 2, 'admision/ordenes'),
                 (203, 'Agenda de citas', 2, 'admision/citas'),
                 (204, 'Triaje de ingreso', 2, 'admision/triaje'),
-                (301, 'Bandeja de órdenes', 3, 'kardex/ordenes'),
-                (302, 'Kardex enfermería', 3, 'kardex/enfermeria'),
-                (303, 'Signos y balance hídrico', 3, 'kardex/signos'),
-                (401, 'Ficha de hospitalización', 4, 'hospitalizacion/ficha'),
+                (301, 'Bandeja de Ã³rdenes', 3, 'kardex/ordenes'),
+                (302, 'Kardex enfermerÃ­a', 3, 'kardex/enfermeria'),
+                (303, 'Signos y balance hÃ­drico', 3, 'kardex/signos'),
+                (401, 'Ficha de hospitalizaciÃ³n', 4, 'hospitalizacion/ficha'),
                 (402, 'Monitoreo 24 horas', 4, 'hospitalizacion/monitoreo'),
-                (403, 'Turnos, exámenes y transfusión', 4, 'hospitalizacion/fichas-complementarias'),
+                (403, 'Turnos, exÃ¡menes y transfusiÃ³n', 4, 'hospitalizacion/fichas-complementarias'),
                 (404, 'Calculadora de infusiones', 4, 'hospitalizacion/calculadora-infusiones'),
                 (501, 'Pre-anestesia', 5, 'quirofano/preanestesia'),
                 (502, 'Checklist preoperatorio', 5, 'quirofano/preanestesia/checklist'),
                 (503, 'Pausa de seguridad', 5, 'quirofano/pausa-seguridad'),
                 (504, 'Hoja de anestesia', 5, 'quirofano/anestesia'),
-                (505, 'Protocolo quirúrgico', 5, 'quirofano/protocolo'),
-                (506, 'Sala de recuperación', 5, 'quirofano/recuperacion'),
-                (601, 'Historia clínica SOAP', 6, 'consulta/fichamedica'),
+                (505, 'Protocolo quirÃºrgico', 5, 'quirofano/protocolo'),
+                (506, 'Sala de recuperaciÃ³n', 5, 'quirofano/recuperacion'),
+                (601, 'Historia clÃ­nica SOAP', 6, 'consulta/fichamedica'),
                 (602, 'Apuntes a historias', 6, 'consulta/historial/apuntes'),
-                (603, 'Vacunación', 6, 'consulta/vacunas'),
-                (604, 'Evolución médica', 6, 'consulta/evoluciones'),
-                (605, 'Recetario médico', 6, 'consulta/recetario'),
+                (603, 'VacunaciÃ³n', 6, 'consulta/vacunas'),
+                (604, 'EvoluciÃ³n mÃ©dica', 6, 'consulta/evoluciones'),
+                (605, 'Recetario mÃ©dico', 6, 'consulta/recetario'),
                 (606, 'Recetas sin orden', 6, 'consulta/recetario/sin-orden'),
                 (607, 'Consentimientos y alta', 6, 'consulta/autorizaciones'),
-                (608, 'Seguimiento clínico', 6, 'seguimiento/clinico'),
+                (608, 'Seguimiento clÃ­nico', 6, 'seguimiento/clinico'),
                 (609, 'Expediente / Lotes fichas', 6, 'consulta/imprimir-fichas'),
-                (701, 'Operaciones clínicas', 7, 'operaciones/clinicas'),
-                (702, 'Programación clínica', 7, 'programacion/clinica'),
-                (801, 'Órdenes de laboratorio', 8, 'diagnostico/laboratorio'),
-                (802, 'Rayos X y ecografía', 8, 'diagnostico/imagenologia'),
+                (701, 'Operaciones clÃ­nicas', 7, 'operaciones/clinicas'),
+                (702, 'ProgramaciÃ³n clÃ­nica', 7, 'programacion/clinica'),
+                (801, 'Ã“rdenes de laboratorio', 8, 'diagnostico/laboratorio'),
+                (802, 'Rayos X y ecografÃ­a', 8, 'diagnostico/imagenologia'),
                 (803, 'Bandeja de resultados', 8, 'diagnostico/bandeja'),
-                (901, 'Pre-facturación veterinaria', 9, 'facturacion/proformas'),
+                (901, 'Pre-facturaciÃ³n veterinaria', 9, 'facturacion/proformas'),
                 (902, 'Productos y servicios', 9, 'facturacion/productos'),
-                (903, 'Nueva factura electrónica', 9, 'facturacion/nueva'),
+                (903, 'Nueva factura electrÃ³nica', 9, 'facturacion/nueva'),
                 (904, 'Facturas emitidas', 9, 'facturas'),
-                (905, 'Nota de crédito', 9, 'facturacion/nota-credito'),
-                (906, 'Notas de crédito emitidas', 9, 'facturacion/notas-credito-generadas'),
-                (907, 'Nota de débito', 9, 'facturacion/nota-debito'),
-                (908, 'Notas de débito emitidas', 9, 'facturacion/notas-debito-generadas'),
-                (909, 'Guía de remisión', 9, 'facturacion/guia-remision'),
-                (910, 'Guías emitidas', 9, 'facturacion/guias-remision-generadas'),
-                (911, 'Importar compra / retención', 9, 'compras/importar-xml'),
+                (905, 'Nota de crÃ©dito', 9, 'facturacion/nota-credito'),
+                (906, 'Notas de crÃ©dito emitidas', 9, 'facturacion/notas-credito-generadas'),
+                (907, 'Nota de dÃ©bito', 9, 'facturacion/nota-debito'),
+                (908, 'Notas de dÃ©bito emitidas', 9, 'facturacion/notas-debito-generadas'),
+                (909, 'GuÃ­a de remisiÃ³n', 9, 'facturacion/guia-remision'),
+                (910, 'GuÃ­as emitidas', 9, 'facturacion/guias-remision-generadas'),
+                (911, 'Importar compra / retenciÃ³n', 9, 'compras/importar-xml'),
                 (912, 'Retenciones', 9, 'facturacion/retenciones-generadas'),
                 (913, 'Recargar documentos', 9, 'contabilidad/compra-documentos'),
-                (914, 'Liquidación de compra', 9, 'compras/nueva-liquidacion'),
+                (914, 'LiquidaciÃ³n de compra', 9, 'compras/nueva-liquidacion'),
                 (915, 'Liquidaciones emitidas', 9, 'compras/liquidaciones-generadas'),
                 (916, 'Configurar emisor', 9, 'facturacion/configuracion/emisor'),
-                (917, 'Firma electrónica', 9, 'facturacion/configuracion/firma'),
+                (917, 'Firma electrÃ³nica', 9, 'facturacion/configuracion/firma'),
                 (918, 'Caja y secuenciales', 9, 'facturacion/configuracion/caja'),
                 (1001, 'Inicio contable', 10, 'contabilidad'),
                 (1002, 'Cuentas por cobrar y abonos', 10, 'contabilidad/cuentas-por-cobrar'),
                 (1003, 'Clientes contables', 10, 'contabilidad/clientes'),
                 (1004, 'Proveedores', 10, 'contabilidad/proveedores'),
                 (1005, 'Importar compras', 10, 'contabilidad/compras/importar-xml'),
-                (1006, 'Órdenes de compra', 10, 'contabilidad/compras/ordenes'),
+                (1006, 'Ã“rdenes de compra', 10, 'contabilidad/compras/ordenes'),
                 (1007, 'Recepciones de compra', 10, 'contabilidad/compras/recepciones'),
                 (1008, 'Inventario y kardex', 10, 'contabilidad/inventarios'),
                 (1009, 'Bodegas', 10, 'contabilidad/inventarios/bodegas'),
                 (1010, 'Reportes contables', 10, 'contabilidad/reportes/documentos'),
-                (1011, 'Parametrización', 10, 'contabilidad/parametrizacion'),
-                (1012, 'Configuración contable', 10, 'contabilidad/configuracion/general'),
+                (1011, 'ParametrizaciÃ³n', 10, 'contabilidad/parametrizacion'),
+                (1012, 'ConfiguraciÃ³n contable', 10, 'contabilidad/configuracion/general'),
                 (1013, 'Usuarios contables', 10, 'contabilidad/administracion/usuarios'),
                 (1014, 'Roles y permisos contables', 10, 'contabilidad/administracion/roles'),
-                (1015, 'Reportes clínicos', 10, 'reportes/clinicos'),
-                (1101, 'Catálogos clínicos', 11, 'administracion/catalogos'),
-                (1102, 'Diagnósticos y laboratorio', 11, 'administracion/catalogos-operativos'),
+                (1015, 'Reportes clÃ­nicos', 10, 'reportes/clinicos'),
+                (1101, 'CatÃ¡logos clÃ­nicos', 11, 'administracion/catalogos'),
+                (1102, 'DiagnÃ³sticos y laboratorio', 11, 'administracion/catalogos-operativos'),
                 (1103, 'Localidades y especialidades', 11, 'administracion/localidades'),
                 (1201, 'Usuarios', 12, 'administracion/usuarios'),
                 (1202, 'Roles', 12, 'administracion/roles'),
                 
                 (1204, 'Asignar permisos', 12, 'administracion/roles-permisos'),
-                (1205, 'Bitácora de auditoría', 12, 'administracion/bitacora');
+                (1205, 'BitÃ¡cora de auditorÃ­a', 12, 'administracion/bitacora');
 
             UPDATE dest
             SET dest.descripcion = src.Descripcion,
@@ -627,7 +628,7 @@ public class AuthService : IAuthService
             var nuevoId = await _sql.ExecuteScalarAsync<int>(sql, new { rol.Id, Descripcion = rol.Descripcion.Trim(), MenuIds = ids });
             if (nuevoId <= 0) return false;
             rol.Id = nuevoId;
-            await _sql.RegistrarBitacoraAsync($"{(esEdicion ? "Actualiza" : "Crea")} rol y permisos predeterminados: {rol.Descripcion.Trim()} ({ids.Length} módulos)", adminId);
+            await _sql.RegistrarBitacoraAsync($"{(esEdicion ? "Actualiza" : "Crea")} rol y permisos predeterminados: {rol.Descripcion.Trim()} ({ids.Length} mÃ³dulos)", adminId);
             return true;
         }
         catch
@@ -642,7 +643,7 @@ public class AuthService : IAuthService
             return (false, "No autorizado.");
 
         if (idRol is 1 or 2)
-            return (false, "Los roles predeterminados (Administrador y Médico) no se pueden eliminar.");
+            return (false, "Los roles predeterminados (Administrador y MÃ©dico) no se pueden eliminar.");
 
         try
         {
@@ -720,10 +721,159 @@ public class AuthService : IAuthService
         return valor.Length > 1 ? valor.TrimEnd('/').ToLowerInvariant() : valor;
     }
 
-    public async Task<bool> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId)
+    public async Task<(bool Puede, string Motivo)> ValidarCambioRolUsuarioAsync(
+        int idUser,
+        int nuevoRolId,
+        IReadOnlyCollection<int>? nuevasEspecialidades = null)
+    {
+        var usuario = await _sql.QueryFirstOrDefaultAsync<dynamic>(
+            "SELECT user_numero, RTRIM(user_login) AS Login, user_tipouser_numero AS RolActual FROM vt_usuarios WHERE user_numero=@IdUser",
+            new { IdUser = idUser });
+        if (usuario is null)
+            return (false, "El usuario no existe.");
+
+        string login = (string)usuario.Login ?? string.Empty;
+        int rolActual = Convert.ToInt32(usuario.RolActual ?? 0);
+
+        if (login.Equals("admin", StringComparison.OrdinalIgnoreCase) && nuevoRolId != 1)
+        {
+            return (false, "El usuario 'admin' es el administrador principal y su rol es intocable.");
+        }
+
+        bool cambiaRol = rolActual != nuevoRolId;
+
+        if (rolActual == 2)
+        {
+            if (cambiaRol)
+            {
+                int citasFuturas = await _sql.ExecuteScalarAsync<int>(@"
+                    SELECT COUNT(1) FROM vt_citas
+                    WHERE ci_usuario = @IdUser
+                      AND CAST(ci_fecha AS DATE) >= CAST(GETDATE() AS DATE)
+                      AND ISNULL(ci_estado, 'A') = 'A'
+                      AND ISNULL(ci_estadocita, 'N') NOT IN ('X', 'A')",
+                    new { IdUser = idUser });
+
+                int ordenesActivas = await _sql.ExecuteScalarAsync<int>(@"
+                    SELECT COUNT(1) FROM vt_ordenAtencion
+                    WHERE ordenAten_idMedico = @IdUser
+                      AND ISNULL(ordenAten_estado, 'A') <> 'I'
+                      AND ISNULL(ordenAten_borra, 0) = 0
+                      AND ISNULL(ordenAten_etapa, '') NOT IN ('PROCESADO', 'CANCELADO')",
+                    new { IdUser = idUser });
+
+                int cirugiasActivas = await _sql.ExecuteScalarAsync<int>(@"
+                    SELECT COUNT(1) FROM qvt_team t
+                    INNER JOIN vt_ordenAtencion o ON o.ordenAten_id = t.idOrden
+                    WHERE t.idUsuario = @IdUser
+                      AND ISNULL(t.estado, 'A') = 'A'
+                      AND ISNULL(o.ordenAten_etapa, '') NOT IN ('PROCESADO', 'CANCELADO')",
+                    new { IdUser = idUser });
+
+                if (citasFuturas > 0 || ordenesActivas > 0 || cirugiasActivas > 0)
+                {
+                    var detalles = new List<string>();
+                    if (citasFuturas > 0) detalles.Add($"{citasFuturas} cita(s) próxima(s)");
+                    if (ordenesActivas > 0) detalles.Add($"{ordenesActivas} orden(es) de atención activa(s)");
+                    if (cirugiasActivas > 0) detalles.Add($"{cirugiasActivas} cirugía(s) en curso");
+
+                    return (false, $"No se puede cambiar el rol del médico porque tiene {string.Join(" y ", detalles)} asignadas. Debe reasignar o finalizar estas actividades antes de cambiar de rol.");
+                }
+            }
+            else if (nuevasEspecialidades is not null)
+            {
+                var espsActuales = await ObtenerEspecialidadesAsignadasAsync(idUser);
+                var espsARemover = espsActuales.Where(id => !nuevasEspecialidades.Contains(id)).ToList();
+
+                foreach (var espId in espsARemover)
+                {
+                    int citasEsp = await _sql.ExecuteScalarAsync<int>(@"
+                        SELECT COUNT(1) FROM vt_citas
+                        WHERE ci_usuario = @IdUser
+                          AND ISNULL(ci_especialidad, ci_esp_numero) = @EspId
+                          AND CAST(ci_fecha AS DATE) >= CAST(GETDATE() AS DATE)
+                          AND ISNULL(ci_estado, 'A') = 'A'
+                          AND ISNULL(ci_estadocita, 'N') NOT IN ('X', 'A')",
+                        new { IdUser = idUser, EspId = espId });
+
+                    int ordenesEsp = await _sql.ExecuteScalarAsync<int>(@"
+                        SELECT COUNT(1) FROM vt_ordenAtencion
+                        WHERE ordenAten_idMedico = @IdUser
+                          AND ordenAten_esp_numero = @EspId
+                          AND ISNULL(ordenAten_estado, 'A') <> 'I'
+                          AND ISNULL(ordenAten_borra, 0) = 0
+                          AND ISNULL(ordenAten_etapa, '') NOT IN ('PROCESADO', 'CANCELADO')",
+                        new { IdUser = idUser, EspId = espId });
+
+                    if (citasEsp > 0 || ordenesEsp > 0)
+                    {
+                        string nombreEsp = await _sql.ExecuteScalarAsync<string>(
+                            "SELECT RTRIM(es_descripcion) FROM vt_especialidades WHERE es_id = @EspId",
+                            new { EspId = espId }) ?? $"Especialidad #{espId}";
+
+                        var detalles = new List<string>();
+                        if (citasEsp > 0) detalles.Add($"{citasEsp} cita(s) próxima(s)");
+                        if (ordenesEsp > 0) detalles.Add($"{ordenesEsp} orden(es) activa(s)");
+
+                        return (false, $"No se puede retirar la especialidad '{nombreEsp}' porque el médico tiene {string.Join(" y ", detalles)} asignadas con esa rama. Reasigne esas actividades antes de retirar la especialidad.");
+                    }
+                }
+            }
+        }
+
+        var descRolActual = await _sql.ExecuteScalarAsync<string>(
+            "SELECT RTRIM(tipuser_descripcion) FROM vt_tipos_usuarios WHERE tipuser_numero=@RolId",
+            new { RolId = rolActual }) ?? string.Empty;
+
+        bool esEnfermero = rolActual == 11 || rolActual == 3 || descRolActual.Contains("Enfermer", StringComparison.OrdinalIgnoreCase);
+        if (esEnfermero && cambiaRol)
+        {
+            int monitoreosActivos = await _sql.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(1) FROM hvt_cabMonitoreo m
+                INNER JOIN vt_ordenAtencion o ON o.ordenAten_id = m.idOrden
+                WHERE m.responsable = @IdUser
+                  AND ISNULL(m.cierre, 'N') = 'N'
+                  AND ISNULL(o.ordenAten_etapa, '') NOT IN ('PROCESADO', 'CANCELADO')",
+                new { IdUser = idUser });
+
+            int fichasActivas = await _sql.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(1) FROM hvt_cabFicha f
+                INNER JOIN vt_ordenAtencion o ON o.ordenAten_id = f.idOrden
+                WHERE f.responsable = @IdUser
+                  AND ISNULL(f.estado, 'A') = 'A'
+                  AND ISNULL(o.ordenAten_etapa, '') NOT IN ('PROCESADO', 'CANCELADO')",
+                new { IdUser = idUser });
+
+            int cirugiasEquipo = await _sql.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(1) FROM qvt_team t
+                INNER JOIN vt_ordenAtencion o ON o.ordenAten_id = t.idOrden
+                WHERE t.idUsuario = @IdUser
+                  AND ISNULL(t.estado, 'A') = 'A'
+                  AND ISNULL(o.ordenAten_etapa, '') NOT IN ('PROCESADO', 'CANCELADO')",
+                new { IdUser = idUser });
+
+            if (monitoreosActivos > 0 || fichasActivas > 0 || cirugiasEquipo > 0)
+            {
+                var detalles = new List<string>();
+                if (monitoreosActivos > 0) detalles.Add($"{monitoreosActivos} monitoreo(s) de hospitalización activo(s)");
+                if (fichasActivas > 0) detalles.Add($"{fichasActivas} ficha(s) de hospitalización activa(s)");
+                if (cirugiasEquipo > 0) detalles.Add($"{cirugiasEquipo} procedimiento(s) quirúrgico(s) activo(s)");
+
+                return (false, $"No se puede cambiar el rol del personal de enfermería porque tiene {string.Join(" y ", detalles)} bajo su responsabilidad. Transfiera o finalice estas asignaciones antes de cambiar su rol.");
+            }
+        }
+
+        return (true, string.Empty);
+    }
+
+    public async Task<(bool Exito, string Mensaje)> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId)
     {
         if (!_session.IsAuthenticated || _session.TipoUser != 1 || _session.IdUser != adminId)
-            return false;
+            return (false, "No autorizado.");
+
+        var val = await ValidarCambioRolUsuarioAsync(idUser, tipoUser);
+        if (!val.Puede)
+            return (false, val.Motivo);
 
         var ids = menuIds.Distinct().ToArray();
         var insert = ids.Length == 0
@@ -742,10 +892,18 @@ public class AuthService : IAuthService
                 THROW;
             END CATCH";
 
-        var result = await _sql.ExecuteAsync(sql, new { IdUser = idUser, TipoUser = tipoUser, MenuIds = ids });
-        if (result < 0) return false;
-        await _sql.RegistrarBitacoraAsync($"Actualiza rol y permisos del usuario {idUser}", adminId);
-        return true;
+        try
+        {
+            var result = await _sql.ExecuteAsync(sql, new { IdUser = idUser, TipoUser = tipoUser, MenuIds = ids });
+            if (result < 0) return (false, "No se pudieron guardar los cambios en la base de datos.");
+
+            await _sql.RegistrarBitacoraAsync($"Actualiza rol ({tipoUser}) y accesos del usuario {idUser}", adminId);
+            return (true, "Rol y permisos actualizados correctamente.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Error al guardar permisos: {ex.Message}");
+        }
     }
 
     public async Task<bool> GuardarRolAsync(RolUsuarioModel rol, int adminId)
@@ -771,7 +929,7 @@ public class AuthService : IAuthService
                 VALUES (TRY_CAST(@Seccion AS INT), @Descripcion, TRY_CAST(@Padre AS INT), @Habilitado, @Url)";
         var result = await _sql.ExecuteAsync(sql, new { menu.Id, Seccion = menu.SecNuevoMenu?.Trim() ?? string.Empty, Descripcion = menu.Descripcion.Trim(), Padre = menu.PadreNuevoMenu?.Trim() ?? string.Empty, Habilitado = menu.Habilitado ? 1 : 0, Url = menu.Url?.Trim() ?? string.Empty });
         if (result < 0) return false;
-        await _sql.RegistrarBitacoraAsync($"{(menu.Id > 0 ? "Actualiza" : "Crea")} menú: {menu.Descripcion.Trim()}", adminId);
+        await _sql.RegistrarBitacoraAsync($"{(menu.Id > 0 ? "Actualiza" : "Crea")} menÃº: {menu.Descripcion.Trim()}", adminId);
         return true;
     }
 
@@ -797,7 +955,7 @@ public class AuthService : IAuthService
 
     public async Task<List<CatalogoItemGenericoDto>> ObtenerEspecialidadesUsuarioAsync()
     {
-        try { return (await _sql.QueryAsync<CatalogoItemGenericoDto>("SELECT es_id AS Id, RTRIM(es_descripcion) AS Descripcion FROM vt_especialidades ORDER BY es_descripcion")).ToList(); }
+        try { return (await _sql.QueryAsync<CatalogoItemGenericoDto>("SELECT es_id AS Id, RTRIM(es_descripcion) AS Descripcion FROM vt_especialidades WHERE ISNULL(es_estado,'A')='A' AND UPPER(RTRIM(es_descripcion)) <> 'NINGUNA' ORDER BY es_descripcion")).ToList(); }
         catch { return []; }
     }
 
@@ -842,7 +1000,7 @@ public class AuthService : IAuthService
             {
                 var espPrimaria = await _sql.ExecuteScalarAsync<int>(
                     "SELECT ISNULL(user_esp_numero, 0) FROM vt_usuarios WHERE user_numero=@IdUser", new { IdUser = idUser });
-                if (espPrimaria > 0) list.Add(espPrimaria);
+                if (espPrimaria > 0 && espPrimaria != 1) list.Add(espPrimaria);
             }
             return list;
         }
@@ -859,12 +1017,18 @@ public class AuthService : IAuthService
     {
         if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
         if (string.IsNullOrWhiteSpace(usuario.Nombre) || string.IsNullOrWhiteSpace(usuario.Login) || usuario.RolId <= 0) return (false, "Nombre, usuario y rol son obligatorios.");
+        if (usuario.Login.Equals("admin", StringComparison.OrdinalIgnoreCase) && usuario.RolId != 1) return (false, "El rol del usuario admin principal está protegido y no se puede cambiar.");
+        if (usuario.Id > 0)
+        {
+            var valRol = await ValidarCambioRolUsuarioAsync(usuario.Id, usuario.RolId, usuario.RolId == 2 ? usuario.EspecialidadesIds : null);
+            if (!valRol.Puede) return (false, valRol.Motivo);
+        }
         var duplicado = await _sql.ExecuteScalarAsync<int>("SELECT COUNT(1) FROM vt_usuarios WHERE user_login = @Login AND user_numero <> @Id", new { Login = usuario.Login.Trim(), usuario.Id });
-        if (duplicado > 0) return (false, "El nombre de usuario ya está registrado.");
+        if (duplicado > 0) return (false, "El nombre de usuario ya estÃ¡ registrado.");
         if (usuario.Id == _session.IdUser && usuario.RolId != 1) return (false, "No puedes quitarte tu propio rol de administrador.");
-        if (usuario.Id > 0 && usuario.RolId != 1 && !await PuedeReducirAdministradoresAsync(usuario.Id)) return (false, "No se puede cambiar el rol del último administrador activo.");
+        if (usuario.Id > 0 && usuario.RolId != 1 && !await PuedeReducirAdministradoresAsync(usuario.Id)) return (false, "No se puede cambiar el rol del Ãºltimo administrador activo.");
 
-        if (usuario.Id == 0 && (string.IsNullOrWhiteSpace(claveTemporal) || claveTemporal.Length < 8)) return (false, "La contraseña temporal debe tener al menos 8 caracteres.");
+        if (usuario.Id == 0 && (string.IsNullOrWhiteSpace(claveTemporal) || claveTemporal.Length < 8)) return (false, "La contraseÃ±a temporal debe tener al menos 8 caracteres.");
         int rolAnterior = usuario.Id > 0 ? await _sql.ExecuteScalarAsync<int>("SELECT ISNULL(user_tipouser_numero, 0) FROM vt_usuarios WHERE user_numero=@Id", new { usuario.Id }) : 0;
         var sql = usuario.Id > 0
             ? @"UPDATE vt_usuarios SET user_nombre=@Nombre, user_login=@Login, user_iniciales=@Iniciales,
@@ -917,7 +1081,13 @@ public class AuthService : IAuthService
     {
         if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
         if (idUser == _session.IdUser && !activo) return (false, "No puedes desactivar tu propia cuenta.");
-        if (!activo && !await PuedeReducirAdministradoresAsync(idUser)) return (false, "No se puede desactivar al último administrador activo.");
+        if (!activo)
+        {
+            var userLogin = await _sql.ExecuteScalarAsync<string>("SELECT RTRIM(user_login) FROM vt_usuarios WHERE user_numero=@IdUser", new { IdUser = idUser });
+            if (userLogin != null && userLogin.Equals("admin", StringComparison.OrdinalIgnoreCase))
+                return (false, "El usuario admin principal no puede ser desactivado.");
+        }
+        if (!activo && !await PuedeReducirAdministradoresAsync(idUser)) return (false, "No se puede desactivar al Ãºltimo administrador activo.");
         var result = await _sql.ExecuteAsync("UPDATE vt_usuarios SET user_estado=@Estado WHERE user_numero=@IdUser", new { Estado=activo?"A":"I", IdUser=idUser });
         if (result < 0) return (false, "No se pudo actualizar el estado.");
         await _sql.RegistrarBitacoraAsync($"{(activo ? "Activa" : "Desactiva")} usuario {idUser}", adminId);
@@ -928,16 +1098,16 @@ public class AuthService : IAuthService
     private async Task<(bool Exito, string Mensaje)> SafeRestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId)
     {
         try { return await DoRestablecerClaveUsuarioAsync(idUser, nuevaClave, adminId); }
-        catch (Exception ex) { return (false, $"Error al restablecer contraseña: {ex.Message}"); }
+        catch (Exception ex) { return (false, $"Error al restablecer contraseÃ±a: {ex.Message}"); }
     }
     private async Task<(bool Exito, string Mensaje)> DoRestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId)
     {
         if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
-        if (string.IsNullOrWhiteSpace(nuevaClave) || nuevaClave.Length < 8) return (false, "La contraseña debe tener al menos 8 caracteres.");
+        if (string.IsNullOrWhiteSpace(nuevaClave) || nuevaClave.Length < 8) return (false, "La contraseÃ±a debe tener al menos 8 caracteres.");
         var result = await _sql.ExecuteAsync("UPDATE vt_usuarios SET user_clave=@Clave,user_fechacambio=GETDATE() WHERE user_numero=@IdUser", new { Clave=_sql.HashPasswordSha1(nuevaClave), IdUser=idUser });
-        if (result < 0) return (false, "No se pudo restablecer la contraseña.");
-        await _sql.RegistrarBitacoraAsync($"Restablece contraseña del usuario {idUser}", adminId);
-        return (true, "Contraseña restablecida correctamente.");
+        if (result < 0) return (false, "No se pudo restablecer la contraseÃ±a.");
+        await _sql.RegistrarBitacoraAsync($"Restablece contraseÃ±a del usuario {idUser}", adminId);
+        return (true, "ContraseÃ±a restablecida correctamente.");
     }
 
     private bool EsAdministradorValido(int adminId) => _session.IsAuthenticated && _session.TipoUser == 1 && _session.IdUser == adminId;
