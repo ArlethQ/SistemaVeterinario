@@ -54,32 +54,47 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
                 "UPDATE vt_especie SET especie_descripcion=@Descripcion, especie_estado=@Estado WHERE especie_id=@Id"),
             ["razas"] = new("Razas",
                 "SELECT r.id_raza AS Id, RTRIM(r.des_raza) AS Descripcion, r.estado AS Estado, r.id_especie AS IdPadre, RTRIM(e.especie_descripcion) AS PadreDescripcion FROM vt_razas r INNER JOIN vt_especie e ON e.especie_id=r.id_especie ORDER BY r.des_raza",
-                "INSERT INTO vt_razas (des_raza, id_especie, estado) VALUES (@Descripcion, @IdPadre, @Estado)",
-                "UPDATE vt_razas SET des_raza=@Descripcion, id_especie=@IdPadre, estado=@Estado WHERE id_raza=@Id", true),
-            ["generos"] = new("Géneros",
-                "SELECT id AS Id, RTRIM(sexo) AS Descripcion, estado AS Estado FROM vt_sexo ORDER BY sexo",
-                "INSERT INTO vt_sexo (id, sexo, estado) VALUES ((SELECT ISNULL(MAX(id),0)+1 FROM vt_sexo), @Descripcion, @Estado)",
-                "UPDATE vt_sexo SET sexo=@Descripcion, estado=@Estado WHERE id=@Id"),
+                @"BEGIN TRANSACTION;
+                  INSERT INTO vt_razas (des_raza, id_especie, estado) VALUES (@Descripcion, @IdPadre, @Estado);
+                  IF (@IdPadre = 3 AND NOT EXISTS (SELECT 1 FROM vt_clase WHERE RTRIM(des_clas) = @Descripcion))
+                      INSERT INTO vt_clase (des_clas, estado_clas) VALUES (@Descripcion, @Estado);
+                  COMMIT TRANSACTION;",
+                @"BEGIN TRANSACTION;
+                  DECLARE @AntiguaRaza VARCHAR(100), @AntiguoPadre INT;
+                  SELECT @AntiguaRaza = RTRIM(des_raza), @AntiguoPadre = id_especie FROM vt_razas WHERE id_raza=@Id;
+                  UPDATE vt_razas SET des_raza=@Descripcion, id_especie=@IdPadre, estado=@Estado WHERE id_raza=@Id;
+                  IF (@IdPadre = 3 OR @AntiguoPadre = 3)
+                  BEGIN
+                      IF EXISTS (SELECT 1 FROM vt_clase WHERE RTRIM(des_clas) = @AntiguaRaza)
+                          UPDATE vt_clase SET des_clas=@Descripcion, estado_clas=@Estado WHERE RTRIM(des_clas) = @AntiguaRaza;
+                      ELSE IF (@IdPadre = 3)
+                          INSERT INTO vt_clase (des_clas, estado_clas) VALUES (@Descripcion, @Estado);
+                  END
+                  COMMIT TRANSACTION;", true),
             ["especialidades"] = new("Especialidades",
                 "SELECT es_id AS Id, RTRIM(es_descripcion) AS Descripcion, es_estado AS Estado FROM vt_especialidades ORDER BY es_descripcion",
                 "INSERT INTO vt_especialidades (es_descripcion, es_estado) VALUES (@Descripcion, @Estado)",
                 "UPDATE vt_especialidades SET es_descripcion=@Descripcion, es_estado=@Estado WHERE es_id=@Id"),
-            ["clases"] = new("Clases de fauna",
+            ["clases"] = new("Clases de fauna y animales exóticos",
                 "SELECT id_clas AS Id, RTRIM(des_clas) AS Descripcion, estado_clas AS Estado FROM vt_clase ORDER BY des_clas",
-                "INSERT INTO vt_clase (des_clas, estado_clas) VALUES (@Descripcion, @Estado)",
-                "UPDATE vt_clase SET des_clas=@Descripcion, estado_clas=@Estado WHERE id_clas=@Id"),
+                @"BEGIN TRANSACTION;
+                  INSERT INTO vt_clase (des_clas, estado_clas) VALUES (@Descripcion, @Estado);
+                  IF NOT EXISTS (SELECT 1 FROM vt_razas WHERE id_especie = 3 AND RTRIM(des_raza) = @Descripcion)
+                      INSERT INTO vt_razas (des_raza, id_especie, estado) VALUES (@Descripcion, 3, @Estado);
+                  COMMIT TRANSACTION;",
+                @"BEGIN TRANSACTION;
+                  DECLARE @AntiguaDesc VARCHAR(100);
+                  SELECT @AntiguaDesc = RTRIM(des_clas) FROM vt_clase WHERE id_clas=@Id;
+                  UPDATE vt_clase SET des_clas=@Descripcion, estado_clas=@Estado WHERE id_clas=@Id;
+                  IF EXISTS (SELECT 1 FROM vt_razas WHERE id_especie = 3 AND RTRIM(des_raza) = @AntiguaDesc)
+                      UPDATE vt_razas SET des_raza=@Descripcion, estado=@Estado WHERE id_especie = 3 AND RTRIM(des_raza) = @AntiguaDesc;
+                  ELSE IF NOT EXISTS (SELECT 1 FROM vt_razas WHERE id_especie = 3 AND RTRIM(des_raza) = @Descripcion)
+                      INSERT INTO vt_razas (des_raza, id_especie, estado) VALUES (@Descripcion, 3, @Estado);
+                  COMMIT TRANSACTION;"),
             ["categorias-ingreso"] = new("Categorías de ingreso",
                 "SELECT id AS Id, RTRIM(ingreso) AS Descripcion, estado AS Estado FROM vt_ingreso ORDER BY ingreso",
                 "INSERT INTO vt_ingreso (ingreso, estado) VALUES (@Descripcion, @Estado)",
-                "UPDATE vt_ingreso SET ingreso=@Descripcion, estado=@Estado WHERE id=@Id"),
-            ["tipos-cliente"] = new("Tipos de cliente",
-                "SELECT id_personal AS Id, RTRIM(des_personal) AS Descripcion, estado AS Estado FROM vt_tipo_paciente_clasifica ORDER BY des_personal",
-                "INSERT INTO vt_tipo_paciente_clasifica (des_personal, estado) VALUES (@Descripcion, @Estado)",
-                "UPDATE vt_tipo_paciente_clasifica SET des_personal=@Descripcion, estado=@Estado WHERE id_personal=@Id"),
-            ["tipos-paciente"] = new("Tipos de paciente",
-                "SELECT tip_sec AS Id, RTRIM(tip_descripcion) AS Descripcion, tip_estado AS Estado FROM vt_tipoPaciente ORDER BY tip_descripcion",
-                "INSERT INTO vt_tipoPaciente (tip_descripcion, tip_estado) VALUES (@Descripcion, @Estado)",
-                "UPDATE vt_tipoPaciente SET tip_descripcion=@Descripcion, tip_estado=@Estado WHERE tip_sec=@Id")
+                "UPDATE vt_ingreso SET ingreso=@Descripcion, estado=@Estado WHERE id=@Id")
         };
 
     public AdministracionClinicaService(ISqlDataService db) => _db = db;
