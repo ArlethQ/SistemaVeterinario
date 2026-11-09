@@ -1,0 +1,92 @@
+@page "/programacion/consultorios"
+@inject IGestionMigradaService Service
+@inject SessionStateService Session
+@inject NavigationManager Nav
+
+<PageTitle>Pisos y consultorios | e-ForVets</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div><h2 class="mb-0">Pisos y consultorios</h2><small class="text-muted">Catálogo de espacios utilizados en la programación médica.</small></div>
+        <a class="btn btn-outline-primary" href="/programacion/clinica">Volver a programación clínica</a>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_mensaje))
+    {
+        <div class="alert @(_error ? "alert-danger" : "alert-success")">@_mensaje</div>
+    }
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card shadow-sm"><div class="card-header fw-bold">Pisos</div><div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-5"><label class="form-label">Nombre</label><input class="form-control" placeholder="Ej. Planta baja, Piso 2" @bind="_piso.Nombre" /></div>
+                    <div class="col-md-5"><label class="form-label">Localidad</label><select class="form-select" @bind="_piso.IdLocalidad"><option value="0">Seleccione</option>@foreach(var x in _localidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+                    <div class="col-md-2 align-self-end"><button class="btn btn-primary w-100" @onclick="GuardarPisoAsync">Guardar</button></div>
+                </div>
+                <div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Piso</th><th>Localidad</th><th>Estado</th><th></th></tr></thead><tbody>
+                    @foreach(var x in _pisos){<tr><td>@x.Nombre</td><td>@x.Localidad</td><td><span class="badge @(x.Estado=="A"?"bg-success":"bg-secondary")">@(x.Estado=="A"?"Activo":"Inactivo")</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" @onclick="()=>EditarPiso(x)">Editar</button> <button class="btn btn-sm btn-outline-secondary" @onclick="()=>CambiarEstadoPisoAsync(x)">@(x.Estado=="A"?"Desactivar":"Activar")</button></td></tr>}
+                </tbody></table></div>
+            </div></div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card shadow-sm"><div class="card-header fw-bold">Consultorios</div><div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-5"><label class="form-label">Nombre</label><input class="form-control" placeholder="Ej. Consultorio 101" @bind="_consultorio.Nombre" /></div>
+                    <div class="col-md-5"><label class="form-label">Piso</label><select class="form-select" @bind="_consultorio.IdPiso"><option value="0">Seleccione</option>@foreach(var x in _pisos.Where(p=>p.Estado=="A")){<option value="@x.Id">@x.Localidad · @x.Nombre</option>}</select></div>
+                    <div class="col-md-2 align-self-end"><button class="btn btn-primary w-100" @onclick="GuardarConsultorioAsync">Guardar</button></div>
+                </div>
+                <div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Consultorio</th><th>Piso</th><th>Estado</th><th></th></tr></thead><tbody>
+                    @foreach(var x in _consultorios){<tr><td>@x.Nombre</td><td>@x.Piso</td><td><span class="badge @(x.Estado=="A"?"bg-success":"bg-secondary")">@(x.Estado=="A"?"Activo":"Inactivo")</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" @onclick="()=>EditarConsultorio(x)">Editar</button> <button class="btn btn-sm btn-outline-secondary" @onclick="()=>CambiarEstadoConsultorioAsync(x)">@(x.Estado=="A"?"Desactivar":"Activar")</button></td></tr>}
+                </tbody></table></div>
+            </div></div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private PisoClinicoDto _piso = new();
+    private ConsultorioClinicoDto _consultorio = new();
+    private List<PisoClinicoDto> _pisos = [];
+    private List<ConsultorioClinicoDto> _consultorios = [];
+    private List<SelectorClinicoDto> _localidades = [];
+    private string _mensaje = "";
+    private bool _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated) { Nav.NavigateTo("/login"); return; }
+        _localidades = await Service.ObtenerLocalidadesSelectorAsync();
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        var pisos = Service.ObtenerPisosAsync();
+        var consultorios = Service.ObtenerConsultoriosAsync();
+        await Task.WhenAll(pisos, consultorios);
+        _pisos = await pisos;
+        _consultorios = await consultorios;
+    }
+
+    private async Task GuardarPisoAsync()
+    {
+        bool ok = await Service.GuardarPisoAsync(_piso, Session.IdUser);
+        Mensaje(ok, ok ? "Piso guardado." : "Complete los datos o verifique que el piso no esté duplicado.");
+        if (ok) { _piso = new(); await CargarAsync(); }
+    }
+
+    private async Task GuardarConsultorioAsync()
+    {
+        bool ok = await Service.GuardarConsultorioAsync(_consultorio, Session.IdUser);
+        Mensaje(ok, ok ? "Consultorio guardado." : "Complete los datos o verifique que el consultorio no esté duplicado.");
+        if (ok) { _consultorio = new(); await CargarAsync(); }
+    }
+
+    private void EditarPiso(PisoClinicoDto x) => _piso = new() { Id=x.Id, Nombre=x.Nombre, IdLocalidad=x.IdLocalidad, Estado=x.Estado };
+    private void EditarConsultorio(ConsultorioClinicoDto x) => _consultorio = new() { Id=x.Id, Nombre=x.Nombre, IdPiso=x.IdPiso, Estado=x.Estado };
+    private async Task CambiarEstadoPisoAsync(PisoClinicoDto x) { await Service.CambiarEstadoPisoAsync(x.Id, x.Estado=="A"?"I":"A", Session.IdUser); await CargarAsync(); }
+    private async Task CambiarEstadoConsultorioAsync(ConsultorioClinicoDto x) { await Service.CambiarEstadoConsultorioAsync(x.Id, x.Estado=="A"?"I":"A", Session.IdUser); await CargarAsync(); }
+    private void Mensaje(bool ok,string texto) { _error=!ok; _mensaje=texto; }
+}

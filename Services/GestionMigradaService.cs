@@ -11,6 +11,12 @@ public interface IGestionMigradaService
     Task<List<HorarioMedicoDto>> ObtenerHorariosAsync();
     Task<bool> GuardarHorarioAsync(HorarioMedicoDto item, int idUsuario);
     Task<bool> EliminarHorarioAsync(int id, int idUsuario);
+    Task<List<PisoClinicoDto>> ObtenerPisosAsync(bool soloActivos = false);
+    Task<bool> GuardarPisoAsync(PisoClinicoDto item, int idUsuario);
+    Task<bool> CambiarEstadoPisoAsync(int id, string estado, int idUsuario);
+    Task<List<ConsultorioClinicoDto>> ObtenerConsultoriosAsync(bool soloActivos = false);
+    Task<bool> GuardarConsultorioAsync(ConsultorioClinicoDto item, int idUsuario);
+    Task<bool> CambiarEstadoConsultorioAsync(int id, string estado, int idUsuario);
     Task<List<ExcepcionHorarioDto>> ObtenerExcepcionesAsync(DateTime desde, DateTime hasta);
     Task<bool> GuardarExcepcionAsync(ExcepcionHorarioDto item, int idUsuario);
     Task<bool> DesactivarExcepcionAsync(int id, int idUsuario);
@@ -141,12 +147,73 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     {
         await VerificarColumnasAsync("vt_horariosMedicos", "hr_id", "hr_iduser", "hr_dia", "hr_dia2", "hr_desde", "hr_hasta", "hr_intervalo", "hr_localidad", "hr_piso", "hr_consultorio", "hr_vigencia_desde", "hr_vigencia_hasta");
         if(x.IdMedico<=0||x.IdLocalidad<=0||string.IsNullOrWhiteSpace(x.Piso)||string.IsNullOrWhiteSpace(x.Consultorio)||!HoraValida(x.Desde,x.Hasta)||x.VigenciaHasta<x.VigenciaDesde) return false;
-        var repetido=await db.QueryFirstOrDefaultAsync<int>("SELECT COUNT(1) FROM vt_horariosMedicos WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad AND hr_dia2=@DiaIngles AND hr_id<>@Id AND CAST(hr_desde AS time)<CAST(@Hasta AS time) AND CAST(hr_hasta AS time)>CAST(@Desde AS time)",x);
+        if(!TimeSpan.TryParse(x.Desde,out var desde)||!TimeSpan.TryParse(x.Hasta,out var hasta)) return false;
+        var parametros = new { x.Id, x.IdMedico, x.IdLocalidad, x.DiaIngles, Desde=desde, Hasta=hasta };
+        var repetido=await db.QueryFirstOrDefaultAsync<int>(@"
+            SELECT COUNT(1) FROM vt_horariosMedicos
+            WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad AND hr_dia2=@DiaIngles AND hr_id<>@Id
+              AND TRY_CONVERT(time(0),hr_desde)<@Hasta
+              AND TRY_CONVERT(time(0),hr_hasta)>@Desde",parametros);
         if(repetido>0)return false;
         var sql=x.Id>0?"UPDATE vt_horariosMedicos SET hr_iduser=@IdMedico,hr_dia=@Dia,hr_dia2=@DiaIngles,hr_desde=@Desde,hr_hasta=@Hasta,hr_intervalo=@Intervalo,hr_localidad=@IdLocalidad,hr_piso=@Piso,hr_consultorio=@Consultorio,hr_vigencia_desde=@VigenciaDesde,hr_vigencia_hasta=@VigenciaHasta WHERE hr_id=@Id":"INSERT INTO vt_horariosMedicos(hr_iduser,hr_dia,hr_dia2,hr_desde,hr_hasta,hr_intervalo,hr_localidad,hr_piso,hr_consultorio,hr_vigencia_desde,hr_vigencia_hasta) VALUES(@IdMedico,@Dia,@DiaIngles,@Desde,@Hasta,@Intervalo,@IdLocalidad,@Piso,@Consultorio,@VigenciaDesde,@VigenciaHasta)";
-        var ok=await db.ExecuteAsync(sql,x)>0;if(ok)await db.RegistrarBitacoraAsync($"Horario médico: {x.IdMedico} {x.Dia}",idUsuario);return ok;
+        var ok=await db.ExecuteAsync(sql,new{x.Id,x.IdMedico,x.Dia,x.DiaIngles,Desde=desde,Hasta=hasta,x.Intervalo,x.IdLocalidad,x.Piso,x.Consultorio,x.VigenciaDesde,x.VigenciaHasta})>0;if(ok)await db.RegistrarBitacoraAsync($"Horario médico: {x.IdMedico} {x.Dia}",idUsuario);return ok;
     }
     public async Task<bool> EliminarHorarioAsync(int id,int idUsuario){var ok=await db.ExecuteAsync("DELETE FROM vt_horariosMedicos WHERE hr_id=@Id",new{Id=id})>0;if(ok)await db.RegistrarBitacoraAsync($"Elimina horario médico {id}",idUsuario);return ok;}
+
+    public async Task<List<PisoClinicoDto>> ObtenerPisosAsync(bool soloActivos = false) =>
+        (await db.QueryAsync<PisoClinicoDto>(@"
+            SELECT p.piso_id Id,RTRIM(p.piso_nombre) Nombre,p.piso_localidad IdLocalidad,
+                   RTRIM(ISNULL(l.loc_descripcion,'')) Localidad,ISNULL(p.piso_estado,'A') Estado
+            FROM vt_pisos p LEFT JOIN vt_localidades l ON l.loc_id=p.piso_localidad
+            WHERE @SoloActivos=0 OR ISNULL(p.piso_estado,'A')='A'
+            ORDER BY l.loc_descripcion,p.piso_nombre", new { SoloActivos = soloActivos })).ToList();
+
+    public async Task<bool> GuardarPisoAsync(PisoClinicoDto item, int idUsuario)
+    {
+        if (item.IdLocalidad <= 0 || string.IsNullOrWhiteSpace(item.Nombre)) return false;
+        var repetido = await db.QueryFirstOrDefaultAsync<int>("SELECT COUNT(1) FROM vt_pisos WHERE piso_localidad=@IdLocalidad AND UPPER(LTRIM(RTRIM(piso_nombre)))=UPPER(LTRIM(RTRIM(@Nombre))) AND piso_id<>@Id", item);
+        if (repetido > 0) return false;
+        var sql = item.Id > 0
+            ? "UPDATE vt_pisos SET piso_nombre=@Nombre,piso_localidad=@IdLocalidad,piso_estado=@Estado WHERE piso_id=@Id"
+            : "INSERT INTO vt_pisos(piso_nombre,piso_localidad,piso_estado) VALUES(@Nombre,@IdLocalidad,'A')";
+        var ok = await db.ExecuteAsync(sql, new { item.Id, Nombre = item.Nombre.Trim(), item.IdLocalidad, Estado = item.Estado == "I" ? "I" : "A" }) > 0;
+        if (ok) await db.RegistrarBitacoraAsync($"Piso clínico: {item.Nombre}", idUsuario);
+        return ok;
+    }
+
+    public async Task<bool> CambiarEstadoPisoAsync(int id, string estado, int idUsuario)
+    {
+        var ok = await db.ExecuteAsync("UPDATE vt_pisos SET piso_estado=@Estado WHERE piso_id=@Id", new { Id = id, Estado = estado == "I" ? "I" : "A" }) > 0;
+        if (ok) await db.RegistrarBitacoraAsync($"Cambio de estado de piso clínico {id}", idUsuario);
+        return ok;
+    }
+
+    public async Task<List<ConsultorioClinicoDto>> ObtenerConsultoriosAsync(bool soloActivos = false) =>
+        (await db.QueryAsync<ConsultorioClinicoDto>(@"
+            SELECT c.cons_id Id,c.cons_piso IdPiso,RTRIM(p.piso_nombre) Piso,RTRIM(c.cons_nombre) Nombre,ISNULL(c.cons_estado,'A') Estado
+            FROM vt_consultorios c INNER JOIN vt_pisos p ON p.piso_id=c.cons_piso
+            WHERE @SoloActivos=0 OR (ISNULL(c.cons_estado,'A')='A' AND ISNULL(p.piso_estado,'A')='A')
+            ORDER BY p.piso_nombre,c.cons_nombre", new { SoloActivos = soloActivos })).ToList();
+
+    public async Task<bool> GuardarConsultorioAsync(ConsultorioClinicoDto item, int idUsuario)
+    {
+        if (item.IdPiso <= 0 || string.IsNullOrWhiteSpace(item.Nombre)) return false;
+        var repetido = await db.QueryFirstOrDefaultAsync<int>("SELECT COUNT(1) FROM vt_consultorios WHERE cons_piso=@IdPiso AND UPPER(LTRIM(RTRIM(cons_nombre)))=UPPER(LTRIM(RTRIM(@Nombre))) AND cons_id<>@Id", item);
+        if (repetido > 0) return false;
+        var sql = item.Id > 0
+            ? "UPDATE vt_consultorios SET cons_nombre=@Nombre,cons_piso=@IdPiso,cons_estado=@Estado WHERE cons_id=@Id"
+            : "INSERT INTO vt_consultorios(cons_nombre,cons_piso,cons_estado) VALUES(@Nombre,@IdPiso,'A')";
+        var ok = await db.ExecuteAsync(sql, new { item.Id, Nombre = item.Nombre.Trim(), item.IdPiso, Estado = item.Estado == "I" ? "I" : "A" }) > 0;
+        if (ok) await db.RegistrarBitacoraAsync($"Consultorio clínico: {item.Nombre}", idUsuario);
+        return ok;
+    }
+
+    public async Task<bool> CambiarEstadoConsultorioAsync(int id, string estado, int idUsuario)
+    {
+        var ok = await db.ExecuteAsync("UPDATE vt_consultorios SET cons_estado=@Estado WHERE cons_id=@Id", new { Id = id, Estado = estado == "I" ? "I" : "A" }) > 0;
+        if (ok) await db.RegistrarBitacoraAsync($"Cambio de estado de consultorio clínico {id}", idUsuario);
+        return ok;
+    }
 
     public async Task<List<ExcepcionHorarioDto>> ObtenerExcepcionesAsync(DateTime desde,DateTime hasta)
     {
@@ -193,7 +260,16 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     }
     public async Task<bool> CancelarCirugiaAsync(int id,int idUsuario){var ok=await db.ExecuteAsync("UPDATE qvt_calendario_cirugias SET estado='I',fechaelimina=GETDATE(),quienelimina=@Usuario WHERE sec=@Id AND estado='A'",new{Id=id,Usuario=idUsuario})>0;if(ok)await db.RegistrarBitacoraAsync($"Cancela cirugía programada {id}",idUsuario);return ok;}
 
-    public async Task<List<SelectorClinicoDto>> ObtenerMedicosAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,user_numero) Id,RTRIM(user_nombre) Descripcion,CONVERT(int,user_esp_numero) IdRelacionado FROM vt_usuarios WHERE user_estado='A' AND user_tipouser_numero=2 ORDER BY user_nombre")).ToList();
+    public async Task<List<SelectorClinicoDto>> ObtenerMedicosAsync()=>(await db.QueryAsync<SelectorClinicoDto>(@"
+        SELECT CONVERT(int,user_numero) Id,RTRIM(user_nombre) Descripcion,CONVERT(int,ISNULL(user_esp_numero,0)) IdRelacionado
+        FROM vt_usuarios
+        WHERE user_estado='A'
+          AND (
+              ISNULL(user_tipouser_numero,0)=2
+              OR ISNULL(user_esp_numero,0)>0
+              OR UPPER(LTRIM(RTRIM(ISNULL(user_tipomedico,'')))) IN ('P','L')
+          )
+        ORDER BY user_nombre")).ToList();
     public async Task<List<SelectorClinicoDto>> ObtenerLocalidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,loc_id) Id,RTRIM(loc_descripcion) Descripcion FROM vt_localidades WHERE loc_estado='A' ORDER BY loc_descripcion")).ToList();
     public async Task<List<SelectorClinicoDto>> ObtenerEspecialidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,es_id) Id,RTRIM(es_descripcion) Descripcion FROM vt_especialidades ORDER BY es_descripcion")).ToList();
     public async Task<List<SelectorClinicoDto>> BuscarPacientesAsync(string filtro)=>(await db.QueryAsync<SelectorClinicoDto>("SELECT TOP 100 mas_nhcl Id,RTRIM(mas_nombre)+' · NHCL '+CAST(mas_nhcl AS varchar(20)) Descripcion,mas_idcliente IdRelacionado FROM vt_pacientes WHERE mas_estado='A' AND (@Filtro='' OR mas_nombre LIKE '%'+@Filtro+'%' OR CAST(mas_nhcl AS varchar(20)) LIKE '%'+@Filtro+'%') ORDER BY mas_nombre",new{Filtro=filtro?.Trim()??""})).ToList();

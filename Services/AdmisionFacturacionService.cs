@@ -1102,13 +1102,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
 
         string columnaDia = columnasHorario.Contains("hr_dia2") ? "hr_dia2" : "hr_dia";
+        string filtroVigenciaDesde = columnasHorario.Contains("hr_vigencia_desde") ? "AND (hr_vigencia_desde IS NULL OR hr_vigencia_desde<=@Fecha)" : string.Empty;
+        string filtroVigenciaHasta = columnasHorario.Contains("hr_vigencia_hasta") ? "AND (hr_vigencia_hasta IS NULL OR hr_vigencia_hasta>=@Fecha)" : string.Empty;
         var bloques = (await _db.QueryAsync<(string Desde, string Hasta, int Intervalo)>($@"
             SELECT RTRIM(hr_desde) Desde, RTRIM(hr_hasta) Hasta, ISNULL(hr_intervalo, 30) Intervalo
             FROM vt_horariosMedicos
             WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad
               AND UPPER(RTRIM({columnaDia})) IN (UPPER(@DiaIngles), UPPER(@DiaEspanol))
-              AND (hr_vigencia_desde IS NULL OR hr_vigencia_desde<=@Fecha)
-              AND (hr_vigencia_hasta IS NULL OR hr_vigencia_hasta>=@Fecha)
+              {filtroVigenciaDesde} {filtroVigenciaHasta}
             ORDER BY TRY_CONVERT(time, hr_desde)", new
             {
                 IdMedico = idMedico,
