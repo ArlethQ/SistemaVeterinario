@@ -934,6 +934,8 @@
     private int? _viendoMascotaNhcl;
     private List<CatalogoItemGenericoDto> _especies = new();
     private List<CatalogoItemGenericoDto> _razas = new();
+    private string _nuevaEspecie = string.Empty;
+    private string _nuevaRaza = string.Empty;
     private List<CatalogoItemGenericoDto> _sexos = new();
     private List<CatalogoItemGenericoDto> _clasesTueri = new();
     private List<CatalogoItemGenericoDto> _categoriasTueri = new();
@@ -1577,6 +1579,8 @@
             MasFechaNace = DateTime.Today.AddYears(-1)
         };
         _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(1);
+        _nuevaEspecie = string.Empty;
+        _nuevaRaza = string.Empty;
         _fotoMascota = null;
         _fotoMascotaPreview = null;
         _errorFotoMascota = null;
@@ -1887,6 +1891,8 @@
     private async Task CargarDatosMascotaAsync(PacienteMascotaDto mas)
     {
         _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(mas.MasEspecie);
+        _nuevaEspecie = string.Empty;
+        _nuevaRaza = string.Empty;
         _mascotaEditando = new PacienteMascotaDto
         {
             MasNhcl = mas.MasNhcl,
@@ -1981,8 +1987,21 @@
         if (int.TryParse(e.Value?.ToString(), out int idEsp))
         {
             _mascotaEditando.MasEspecie = idEsp;
-            _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(idEsp);
-            _mascotaEditando.MasRaza = _razas.FirstOrDefault()?.Id ?? 1;
+            _nuevaEspecie = string.Empty;
+            _nuevaRaza = string.Empty;
+            _razas = idEsp > 0
+                ? await AdmisionService.ObtenerRazasPorEspecieAsync(idEsp)
+                : new List<CatalogoItemGenericoDto>();
+            _mascotaEditando.MasRaza = _razas.FirstOrDefault()?.Id ?? -1;
+        }
+    }
+
+    private void CambiarRaza(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int idRaza))
+        {
+            _mascotaEditando.MasRaza = idRaza;
+            if (idRaza != -1) _nuevaRaza = string.Empty;
         }
     }
 
@@ -2019,6 +2038,64 @@
                 _esError = true;
                 _mensajeAlerta = "La fecha y el motivo de muerte son obligatorios para un paciente fallecido.";
                 return;
+            }
+            if (_mascotaEditando.Fallecido && _mascotaEditando.FechaFallecido!.Value.Date > DateTime.Today)
+            {
+                _esError = true;
+                _mensajeAlerta = "La fecha de fallecimiento no puede ser posterior a hoy.";
+                return;
+            }
+            if (_mascotaEditando.MasEspecie == -1)
+            {
+                if (string.IsNullOrWhiteSpace(_nuevaEspecie))
+                {
+                    _esError = true;
+                    _mensajeAlerta = "Ingrese la nueva especie.";
+                    return;
+                }
+
+                var resultado = await AdminService.GuardarCatalogoAsync("especies", new CatalogoAdministrativoDto
+                {
+                    Descripcion = _nuevaEspecie,
+                    Estado = "A"
+                }, SessionState.UsuarioActual.IdUsuario);
+                if (!resultado.Exito)
+                {
+                    _esError = true;
+                    _mensajeAlerta = resultado.Mensaje;
+                    return;
+                }
+
+                _especies = await AdmisionService.ObtenerEspeciesAsync();
+                _mascotaEditando.MasEspecie = _especies.First(x =>
+                    x.Descripcion.Equals(_nuevaEspecie.Trim(), StringComparison.OrdinalIgnoreCase)).Id;
+                _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(_mascotaEditando.MasEspecie);
+            }
+            if (_mascotaEditando.MasRaza == -1)
+            {
+                if (string.IsNullOrWhiteSpace(_nuevaRaza))
+                {
+                    _esError = true;
+                    _mensajeAlerta = "Ingrese la nueva raza o familia.";
+                    return;
+                }
+
+                var resultado = await AdminService.GuardarCatalogoAsync("razas", new CatalogoAdministrativoDto
+                {
+                    Descripcion = _nuevaRaza,
+                    IdPadre = _mascotaEditando.MasEspecie,
+                    Estado = "A"
+                }, SessionState.UsuarioActual.IdUsuario);
+                if (!resultado.Exito)
+                {
+                    _esError = true;
+                    _mensajeAlerta = resultado.Mensaje;
+                    return;
+                }
+
+                _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(_mascotaEditando.MasEspecie);
+                _mascotaEditando.MasRaza = _razas.First(x =>
+                    x.Descripcion.Equals(_nuevaRaza.Trim(), StringComparison.OrdinalIgnoreCase)).Id;
             }
             if (_mascotaEditando.Fallecido && _mascotaEditando.MotivoFallece == -1 && string.IsNullOrWhiteSpace(_mascotaEditando.MotivoFalleceOtro))
             {
@@ -2219,27 +2296,11 @@
                                     }
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Correo para facturación</label>
-                                    <InputText type="email" class="form-control form-control-sm" @bind-Value="_clienteEditando.PaEmailFactura" />
-                                    <ValidationMessage For="() => _clienteEditando.PaEmailFactura" />
-                                </div>
-                                <div class="col-md-3">
                                     <label class="form-label small fw-bold">Tipo de persona</label>
                                     <select class="form-select form-select-sm" @bind="_clienteEditando.PaTipoPersona"><option value="NATURAL">Natural</option><option value="JURIDICA">Jurídica</option></select>
                                 </div>
-                                <div class="col-md-3">
-                                    <label class="form-label small fw-bold">Tipo de cliente</label>
-                                    <select class="form-select form-select-sm" @bind="_clienteEditando.PaTipoCli"><option value="R">Regular</option><option value="C">Convenio</option><option value="E">Empleado</option></select>
-                                </div>
-
-                                <div class="col-12 form-section-title mt-3">Datos comerciales</div>
-                                <div class="col-md-3"><label class="form-label small fw-bold">Grupo de cliente</label><InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaGrupoCliente" /></div>
-                                <div class="col-md-3"><label class="form-label small fw-bold">Términos de pago</label><InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaTerminosPago" /></div>
-                                <div class="col-md-3"><label class="form-label small fw-bold">Forma de pago</label><InputText class="form-control form-control-sm" @bind-Value="_clienteEditando.PaFormaPago" /></div>
-                                <div class="col-md-3"><label class="form-label small fw-bold">Estado</label><select class="form-select form-select-sm" @bind="_clienteEditando.PaEstado"><option value="A">Activo</option><option value="I">Inactivo</option></select></div>
-                                <div class="col-md-4"><label class="form-label small fw-bold">Género</label><select class="form-select form-select-sm" @bind="_clienteEditando.PaGenero"><option value="1">Masculino</option><option value="2">Femenino</option><option value="3">No especificado</option></select></div>
-                                <div class="col-md-4"><label class="form-label small fw-bold">Estado civil</label><select class="form-select form-select-sm" @bind="_clienteEditando.PaEstadoCivil"><option value="1">Soltero/a</option><option value="2">Casado/a</option><option value="3">Divorciado/a</option><option value="4">Viudo/a</option><option value="5">Unión libre</option></select></div>
-                                <div class="col-md-4"><label class="form-label small fw-bold">Apuntes habilitados</label><select class="form-select form-select-sm" @bind="_clienteEditando.PaNotas"><option value="1">Sí</option><option value="0">No</option></select></div>
+                                <div class="col-md-3"><label class="form-label small fw-bold">Género</label><select class="form-select form-select-sm" @bind="_clienteEditando.PaGenero"><option value="1">Masculino</option><option value="2">Femenino</option><option value="3">No especificado</option></select></div>
+                                <div class="col-md-3"><label class="form-label small fw-bold">Estado civil</label><select class="form-select form-select-sm" @bind="_clienteEditando.PaEstadoCivil"><option value="1">Soltero/a</option><option value="2">Casado/a</option><option value="3">Divorciado/a</option><option value="4">Viudo/a</option><option value="5">Unión libre</option></select></div>
 
                                 <div class="col-12 form-section-title mt-3">Dirección</div>
                                 <div class="col-md-12">
@@ -2318,16 +2379,26 @@
                                         {
                                             <option value="@esp.Id">@esp.Descripcion</option>
                                         }
+                                        <option value="-1">Otro</option>
                                     </select>
+                                    @if (_mascotaEditando.MasEspecie == -1)
+                                    {
+                                        <InputText class="form-control form-control-sm mt-1" placeholder="Nueva especie" @bind-Value="_nuevaEspecie" />
+                                    }
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold">Raza / Familia</label>
-                                    <select class="form-select form-select-sm" @bind="_mascotaEditando.MasRaza">
+                                    <select class="form-select form-select-sm" value="@_mascotaEditando.MasRaza" @onchange="CambiarRaza">
                                         @foreach (var raz in _razas)
                                         {
                                             <option value="@raz.Id">@raz.Descripcion</option>
                                         }
+                                        <option value="-1">Otro</option>
                                     </select>
+                                    @if (_mascotaEditando.MasRaza == -1)
+                                    {
+                                        <InputText class="form-control form-control-sm mt-1" placeholder="Nueva raza o familia" @bind-Value="_nuevaRaza" />
+                                    }
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold">Sexo</label>
@@ -2380,15 +2451,18 @@
                                     <div class="col-md-12"><label class="form-label small fw-bold">Sector / barrio</label><InputText class="form-control form-control-sm" @bind-Value="_mascotaEditando.TueSectorBarrio" /></div>
                                 }
 
-                                <div class="col-12 form-section-title mt-3">Estado clínico</div>
-                                <div class="col-md-3 d-flex align-items-end"><label class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_mascotaEditando.Fallecido" /><span class="form-check-label ms-2">Paciente fallecido</span></label></div>
-                                @if (_mascotaEditando.Fallecido)
+                                @if (_editandoMascotaNhcl > 0)
                                 {
-                                    <div class="col-md-4"><label class="form-label small fw-bold">Fecha de fallecimiento *</label><InputDate class="form-control form-control-sm" @bind-Value="_mascotaEditando.FechaFallecido" /></div>
-                                    <div class="col-md-5"><label class="form-label small fw-bold">Motivo de muerte *</label><select class="form-select form-select-sm" @bind="_mascotaEditando.MotivoFallece"><option value="">Seleccione</option>@foreach (var x in _motivosMuerte){<option value="@x.Id">@x.Descripcion</option>}<option value="-1">Otro</option></select></div>
-                                    @if (_mascotaEditando.MotivoFallece == -1)
+                                    <div class="col-12 form-section-title mt-3">Estado clínico</div>
+                                    <div class="col-md-3 d-flex align-items-end"><label class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_mascotaEditando.Fallecido" /><span class="form-check-label ms-2">Paciente fallecido</span></label></div>
+                                    @if (_mascotaEditando.Fallecido)
                                     {
-                                        <div class="col-md-5 offset-md-7"><label class="form-label small fw-bold">Especifique el motivo *</label><InputText class="form-control form-control-sm" maxlength="200" @bind-Value="_mascotaEditando.MotivoFalleceOtro" /></div>
+                                        <div class="col-md-4"><label class="form-label small fw-bold">Fecha de fallecimiento *</label><InputDate class="form-control form-control-sm" max="@MaxFechaNacimiento" @bind-Value="_mascotaEditando.FechaFallecido" /></div>
+                                        <div class="col-md-5"><label class="form-label small fw-bold">Motivo de muerte *</label><select class="form-select form-select-sm" @bind="_mascotaEditando.MotivoFallece"><option value="">Seleccione</option>@foreach (var x in _motivosMuerte){<option value="@x.Id">@x.Descripcion</option>}<option value="-1">Otro</option></select></div>
+                                        @if (_mascotaEditando.MotivoFallece == -1)
+                                        {
+                                            <div class="col-md-5 offset-md-7"><label class="form-label small fw-bold">Especifique el motivo *</label><InputText class="form-control form-control-sm" maxlength="200" @bind-Value="_mascotaEditando.MotivoFalleceOtro" /></div>
+                                        }
                                     }
                                 }
 
