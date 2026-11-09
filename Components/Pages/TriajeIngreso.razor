@@ -289,7 +289,8 @@ else
             {
                 _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(top: 50);
                 _ordenesActivas = _ordenesActivas
-                    .Where(o => !o.EsProcedimiento || o.IdEnfermero == Session.IdUser)
+                    .Where(o => (o.EsProcedimiento && o.IdEnfermero == Session.IdUser)
+                             || (!o.EsProcedimiento && o.TriajeMedico && o.IdMedico == Session.IdUser))
                     .ToList();
             }
             catch
@@ -307,7 +308,7 @@ else
                 IdOrden = null;
                 Nhcl = null;
                 _esError = true;
-                _mensajeAlerta = "Este procedimiento fue asignado a otro enfermero.";
+                _mensajeAlerta = "Esta orden de triaje fue asignada a otro profesional o no requiere triaje.";
             }
 
             if (ordTarget <= 0 && _ordenesActivas.Count > 0)

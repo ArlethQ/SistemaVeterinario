@@ -67,6 +67,7 @@ public class KardexService : IKardexService
                          ELSE RTRIM(ISNULL(p.mas_sexo, 'Indefinido')) END AS Sexo,
                     RTRIM(ISNULL(u.user_nombre, '')) AS Medico,
                     ISNULL(o.ordenAten_idMedico, 0) AS IdMedico,
+                    CAST(ISNULL(o.ordenAten_triajeMedico,0) AS BIT) AS TriajeMedico,
                     CAST(ISNULL(o.ordenAten_esProcedimiento,0) AS BIT) AS EsProcedimiento,
                     o.ordenAten_idEnfermero AS IdEnfermero,
                     RTRIM(ISNULL(esp.es_descripcion, '')) AS Especialidad,
