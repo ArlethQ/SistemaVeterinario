@@ -170,6 +170,7 @@ END");
             await context.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO [dbo].[ECONTAX_ROL_MENU] ([id_rol], [id_menu]) VALUES ({rol.IdRol}, {menuId})");
         }
 
+        await SincronizarSucursalVeterinariaAsync(context, usuario, empresa, sucursal);
         await transaction.CommitAsync();
     }
 
@@ -452,6 +453,9 @@ END");
         await SincronizarPuntoEmisionAsync(context, actor, sucursal.IdSucursal, dto.PuntoEmision);
 
         await context.SaveChangesAsync();
+        var titular = await context.Usuarios.FirstAsync(x => x.IdUsuario == actor.IdUsuarioTitular);
+        var empresa = await context.EContaxEmpresas.FirstAsync(x => x.IdEmpresa == actor.IdEmpresa);
+        await SincronizarSucursalVeterinariaAsync(context, titular, empresa, sucursal);
         return sucursal.IdSucursal;
     }
 
@@ -576,6 +580,56 @@ END");
         dto.Codigo = string.IsNullOrWhiteSpace(dto.Codigo) ? null : dto.Codigo.Trim();
         dto.Direccion = string.IsNullOrWhiteSpace(dto.Direccion) ? null : dto.Direccion.Trim();
         dto.PuntoEmision = string.IsNullOrWhiteSpace(dto.PuntoEmision) ? null : dto.PuntoEmision.Trim();
+    }
+
+    private static Task SincronizarSucursalVeterinariaAsync(
+        AppDbContext context,
+        Usuario titular,
+        EContaxEmpresa empresa,
+        EContaxSucursal sucursal)
+    {
+        var direccion = string.IsNullOrWhiteSpace(sucursal.Direccion) ? "Por configurar" : sucursal.Direccion.Trim();
+        var prefijo = string.IsNullOrWhiteSpace(sucursal.Codigo) ? sucursal.IdSucursal.ToString("000") : sucursal.Codigo.Trim();
+
+        return context.Database.ExecuteSqlInterpolatedAsync($$"""
+            DECLARE @IdLocalidad INT;
+            DECLARE @IdUsuarioVeterinaria INT;
+            DECLARE @Provincia INT = (SELECT TOP (1) prov_id FROM dbo.vt_provincias ORDER BY prov_id);
+            DECLARE @Ciudad INT = (SELECT TOP (1) id_Ciudad FROM dbo.vt_ciudad WHERE id_provincia=@Provincia ORDER BY id_Ciudad);
+
+            SELECT TOP (1) @IdUsuarioVeterinaria = user_numero
+            FROM dbo.vt_usuarios
+            WHERE NULLIF(LTRIM(RTRIM(user_email)), '') IS NOT NULL
+              AND UPPER(LTRIM(RTRIM(user_email))) = UPPER(LTRIM(RTRIM({titular.Email})));
+
+            IF @IdUsuarioVeterinaria IS NOT NULL
+            BEGIN
+                UPDATE dbo.vt_usuarios
+                SET idEmpresa={empresa.IdEmpresa}, idUsuarioFacturacion={titular.IdUsuario}
+                WHERE user_numero=@IdUsuarioVeterinaria;
+
+                SELECT TOP (1) @IdLocalidad=loc_id
+                FROM dbo.vt_localidades
+                WHERE idEmpresa={empresa.IdEmpresa} AND idSucursal={sucursal.IdSucursal};
+
+                IF @IdLocalidad IS NULL AND @Provincia IS NOT NULL AND @Ciudad IS NOT NULL
+                BEGIN
+                    INSERT INTO dbo.vt_localidades
+                        (loc_descripcion,loc_direccion,loc_telefono,loc_ruc,loc_administrador,
+                         loc_estado,loc_nom_empresa,loc_prefijo,loc_region,idCiudad,prov_id,idEmpresa,idSucursal)
+                    VALUES
+                        ({sucursal.Nombre},{direccion},N'',{empresa.Ruc ?? string.Empty},{titular.NombreCompleto},
+                         'A',{empresa.Nombre},{prefijo},N'',@Ciudad,@Provincia,{empresa.IdEmpresa},{sucursal.IdSucursal});
+                    SET @IdLocalidad=CONVERT(INT,SCOPE_IDENTITY());
+                END
+
+                IF @IdLocalidad IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM dbo.vt_usuarioLocalidades
+                    WHERE ul_idUsuario=@IdUsuarioVeterinaria AND ul_idLocalidad=@IdLocalidad)
+                    INSERT INTO dbo.vt_usuarioLocalidades(ul_idUsuario,ul_idLocalidad,ul_estado)
+                    VALUES(@IdUsuarioVeterinaria,@IdLocalidad,'A');
+            END
+            """);
     }
 
     private static async Task AplicarPuntosEmisionAsync(AppDbContext context, IEnumerable<EContaxSucursalDto> sucursales)
