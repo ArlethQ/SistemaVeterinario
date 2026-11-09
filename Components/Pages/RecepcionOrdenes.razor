@@ -207,21 +207,7 @@
                                 </div>
                             }
 
-                            <div class="col-md-12">
-                                <label class="form-label small fw-bold">@(EsTipoConsultaEspecialidad ? "4. Médico tratante asignado" : "3. Médico tratante asignado")</label>
-                                <select class="form-select form-select-sm" @bind="_nuevaOrden.IdMedico">
-                                    @if (_medicosDisponibles.Count == 0)
-                                    {
-                                        <option value="0">-- Sin médicos disponibles en este horario --</option>
-                                    }
-                                    @foreach (var med in _medicosDisponibles)
-                                    {
-                                        <option value="@med.Id">@med.Descripcion</option>
-                                    }
-                                </select>
-                            </div>
-
-                            <div class="col-md-6 d-flex align-items-end">
+                            <div class="col-md-12 d-flex align-items-end">
                                 <label class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_nuevaOrden.EsProcedimiento" /><span class="form-check-label ms-2 fw-bold">Procedimiento</span></label>
                             </div>
                             @if (_nuevaOrden.EsProcedimiento)
@@ -240,7 +226,7 @@
                             else
                             {
                                 <div class="col-md-9">
-                                    <label class="form-label small fw-bold">4. Médico tratante asignado</label>
+                                    <label class="form-label small fw-bold">@(EsTipoConsultaEspecialidad ? "4. Médico tratante asignado" : "3. Médico tratante asignado")</label>
                                     <select class="form-select form-select-sm" @bind="_nuevaOrden.IdMedico">
                                         <option value="0">Seleccione un médico</option>
                                         @foreach (var med in _medicosDisponibles)
@@ -1145,12 +1131,6 @@
             _mensajeAlerta = "Seleccione una especialidad requerida.";
             return;
         }
-        if (_nuevaOrden.IdMedico <= 0)
-        {
-            _esError = true;
-            _mensajeAlerta = "Seleccione el médico tratante asignado.";
-            return;
-        }
         if (_nuevaOrden.EsProcedimiento && !_nuevaOrden.IdEnfermero.HasValue)
         {
             _esError = true;
@@ -1182,7 +1162,7 @@
             ? await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad)
             : await ObtenerMedicosEnHorarioAsync(0);
 
-        if (medicosEnHorario.Count > 0 && !medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
+        if (!_nuevaOrden.EsProcedimiento && medicosEnHorario.Count > 0 && !medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
         {
             _esError = true;
             _mensajeAlerta = "El médico seleccionado no tiene un horario de atención disponible en la fecha indicada.";

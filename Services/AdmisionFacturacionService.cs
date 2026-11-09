@@ -890,6 +890,18 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         if (orden.IdLocalidad <= 0) throw new InvalidOperationException("La localidad de la orden es obligatoria.");
         if (orden.TipoDespacho is < 0 or > 4) throw new InvalidOperationException("El tipo de despacho seleccionado no es válido.");
+        if (orden.EsProcedimiento)
+        {
+            if (!orden.IdEnfermero.HasValue || orden.IdEnfermero.Value <= 0)
+                throw new InvalidOperationException("El procedimiento requiere un enfermero responsable.");
+
+            orden.IdMedico = 0;
+            orden.TriajeMedico = false;
+        }
+        else if (orden.IdMedico <= 0)
+        {
+            throw new InvalidOperationException("La consulta requiere un médico tratante.");
+        }
 
         string etapaInicial = orden.TipoDespacho switch
         {
