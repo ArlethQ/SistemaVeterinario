@@ -805,12 +805,17 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         try
         {
             return (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
-                SELECT user_numero AS Id, user_nombre AS Descripcion, user_esp_numero AS IdPadre
-                FROM vt_usuarios
+                SELECT DISTINCT u.user_numero AS Id, u.user_nombre AS Descripcion, ISNULL(u.user_esp_numero, 0) AS IdPadre
+                FROM vt_usuarios u
+                LEFT JOIN vt_usuarioEspecialidades ue ON ue.ue_idUsuario = u.user_numero AND ISNULL(ue.ue_estado, 'A') = 'A'
                 WHERE user_estado = 'A'
-                  AND ISNULL(user_esp_numero, 0) > 0
+                  AND u.user_tipouser_numero = 2
                   AND UPPER(LTRIM(RTRIM(ISNULL(user_tipomedico, '')))) IN ('P', 'L')
-                  AND (@IdEsp = 0 OR user_esp_numero = @IdEsp)
+                  AND (
+                      @IdEsp = 0 
+                      OR ue.ue_idEspecialidad = @IdEsp 
+                      OR (ue.ue_idEspecialidad IS NULL AND u.user_esp_numero = @IdEsp)
+                  )
                 ORDER BY user_nombre", new { IdEsp = idEspecialidad })).ToList();
         }
         catch (Exception ex)

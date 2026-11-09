@@ -170,6 +170,7 @@ public interface IAuthService
     Task<List<CatalogoItemGenericoDto>> ObtenerEspecialidadesUsuarioAsync();
     Task<List<CatalogoItemGenericoDto>> ObtenerLocalidadesUsuarioAsync();
     Task<List<int>> ObtenerLocalidadesAsignadasAsync(int idUser);
+    Task<List<int>> ObtenerEspecialidadesAsignadasAsync(int idUser);
     Task<(bool Exito, string Mensaje)> GuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId);
     Task<(bool Exito, string Mensaje)> CambiarEstadoUsuarioAsync(int idUser, bool activo, int adminId);
     Task<(bool Exito, string Mensaje)> RestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId);
@@ -377,7 +378,7 @@ public class AuthService : IAuthService
                 (1103, 'Localidades y especialidades', 11, 'administracion/localidades'),
                 (1201, 'Usuarios', 12, 'administracion/usuarios'),
                 (1202, 'Roles', 12, 'administracion/roles'),
-                (1203, 'Menús', 12, 'administracion/menus'),
+                
                 (1204, 'Asignar permisos', 12, 'administracion/roles-permisos'),
                 (1205, 'Bitácora de auditoría', 12, 'administracion/bitacora');
 
@@ -783,7 +784,7 @@ public class AuthService : IAuthService
                                     RTRIM(ISNULL(user_convensional, '')) AS Convencional,
                                     RTRIM(ISNULL(user_cedula, '')) AS Cedula,
                                     ISNULL(user_tipouser_numero, 2) AS RolId, ISNULL(user_esp_numero, 1) AS EspecialidadId,
-                                    RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad,
+                                    COALESCE((SELECT STRING_AGG(RTRIM(esp.es_descripcion), ', ') FROM vt_usuarioEspecialidades ue INNER JOIN vt_especialidades esp ON esp.es_id = ue.ue_idEspecialidad WHERE ue.ue_idUsuario = u.user_numero AND ISNULL(ue.ue_estado, 'A') = 'A'), RTRIM(ISNULL(e.es_descripcion, ''))) AS Especialidad,
                                     RTRIM(ISNULL(user_tipomedico, 'N')) AS TipoMedico,
                                     LTRIM(RTRIM(ISNULL(CONVERT(nvarchar(max), user_observaciones), ''))) AS Observaciones,
                                     RTRIM(ISNULL(user_estado, 'A')) AS Estado
@@ -809,6 +810,45 @@ public class AuthService : IAuthService
     public async Task<List<int>> ObtenerLocalidadesAsignadasAsync(int idUser) =>
         (await _sql.QueryAsync<int>("SELECT ul_idLocalidad FROM vt_usuarioLocalidades WHERE ul_idUsuario=@IdUser AND ISNULL(ul_estado,'A')='A'", new { IdUser=idUser })).ToList();
 
+    private async Task AsegurarTablaUsuarioEspecialidadesAsync()
+    {
+        const string sql = @"
+            IF OBJECT_ID('dbo.vt_usuarioEspecialidades', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.vt_usuarioEspecialidades (
+                    ue_id INT IDENTITY(1,1) PRIMARY KEY,
+                    ue_idUsuario INT NOT NULL,
+                    ue_idEspecialidad INT NOT NULL,
+                    ue_estado CHAR(1) NOT NULL DEFAULT 'A',
+                    CONSTRAINT UQ_vt_usuarioEspecialidades UNIQUE (ue_idUsuario, ue_idEspecialidad)
+                );
+                INSERT INTO dbo.vt_usuarioEspecialidades (ue_idUsuario, ue_idEspecialidad, ue_estado)
+                SELECT user_numero, user_esp_numero, 'A'
+                FROM dbo.vt_usuarios
+                WHERE user_tipouser_numero = 2 AND ISNULL(user_esp_numero, 0) > 0;
+            END";
+        try { await _sql.ExecuteAsync(sql); }
+        catch { }
+    }
+
+    public async Task<List<int>> ObtenerEspecialidadesAsignadasAsync(int idUser)
+    {
+        await AsegurarTablaUsuarioEspecialidadesAsync();
+        const string sql = "SELECT ue_idEspecialidad FROM vt_usuarioEspecialidades WHERE ue_idUsuario=@IdUser AND ISNULL(ue_estado,'A')='A'";
+        try
+        {
+            var list = (await _sql.QueryAsync<int>(sql, new { IdUser = idUser })).ToList();
+            if (list.Count == 0)
+            {
+                var espPrimaria = await _sql.ExecuteScalarAsync<int>(
+                    "SELECT ISNULL(user_esp_numero, 0) FROM vt_usuarios WHERE user_numero=@IdUser", new { IdUser = idUser });
+                if (espPrimaria > 0) list.Add(espPrimaria);
+            }
+            return list;
+        }
+        catch { return []; }
+    }
+
     public async Task<(bool Exito, string Mensaje)> GuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId) => await SafeGuardarUsuarioAdministracionAsync(usuario, claveTemporal, adminId);
     private async Task<(bool Exito, string Mensaje)> SafeGuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId)
     {
@@ -833,7 +873,10 @@ public class AuthService : IAuthService
                     user_observaciones=@Observaciones WHERE user_numero=@Id"
             : @"INSERT INTO vt_usuarios (user_nombre,user_login,user_clave,user_iniciales,user_email,user_celular,user_convensional,user_cedula,user_tipouser_numero,user_esp_numero,user_tipomedico,user_observaciones,user_estado,user_fechacambio)
                 VALUES (@Nombre,@Login,@Clave,@Iniciales,@Email,@Celular,@Convencional,@Cedula,@RolId,@EspecialidadId,@TipoMedico,@Observaciones,'A',GETDATE())";
-        var args = new { usuario.Id, Nombre=usuario.Nombre.Trim(), Login=usuario.Login.Trim(), Iniciales=usuario.Iniciales.Trim(), Email=usuario.Email.Trim(), Celular=usuario.Celular.Trim(), Convencional=usuario.Convencional.Trim(), Cedula=usuario.Cedula.Trim(), usuario.RolId, EspecialidadId = usuario.RolId == 2 ? usuario.EspecialidadId : 0, TipoMedico = usuario.RolId == 2 ? usuario.TipoMedico.Trim() : "N", Observaciones=usuario.Observaciones.Trim(), Clave=_sql.HashPasswordSha1(claveTemporal ?? string.Empty) };
+        int espPrimaria = (usuario.RolId == 2 && usuario.EspecialidadesIds.Count > 0)
+            ? usuario.EspecialidadesIds.First()
+            : (usuario.RolId == 2 ? usuario.EspecialidadId : 0);
+        var args = new { usuario.Id, Nombre=usuario.Nombre.Trim(), Login=usuario.Login.Trim(), Iniciales=usuario.Iniciales.Trim(), Email=usuario.Email.Trim(), Celular=usuario.Celular.Trim(), Convencional=usuario.Convencional.Trim(), Cedula=usuario.Cedula.Trim(), usuario.RolId, EspecialidadId = espPrimaria, TipoMedico = usuario.RolId == 2 ? usuario.TipoMedico.Trim() : "N", Observaciones=usuario.Observaciones.Trim(), Clave=_sql.HashPasswordSha1(claveTemporal ?? string.Empty) };
         var result = await _sql.ExecuteAsync(sql, args);
         if (result < 0) return (false, "No se pudo guardar el usuario.");
         var idUser = usuario.Id > 0 ? usuario.Id : await _sql.ExecuteScalarAsync<int>("SELECT user_numero FROM vt_usuarios WHERE user_login=@Login", new { Login=usuario.Login.Trim() });
@@ -849,6 +892,17 @@ public class AuthService : IAuthService
         await _sql.ExecuteAsync("DELETE FROM vt_usuarioLocalidades WHERE ul_idUsuario=@IdUser", new { IdUser=idUser });
         foreach (var localidadId in usuario.LocalidadesIds.Distinct())
             await _sql.ExecuteAsync("INSERT INTO vt_usuarioLocalidades (ul_idUsuario,ul_idLocalidad,ul_estado) VALUES (@IdUser,@LocalidadId,'A')", new { IdUser=idUser, LocalidadId=localidadId });
+        await AsegurarTablaUsuarioEspecialidadesAsync();
+        await _sql.ExecuteAsync("DELETE FROM vt_usuarioEspecialidades WHERE ue_idUsuario=@IdUser", new { IdUser = idUser });
+        if (usuario.RolId == 2)
+        {
+            var esps = (usuario.EspecialidadesIds.Count > 0 ? usuario.EspecialidadesIds : (usuario.EspecialidadId > 0 ? new List<int> { usuario.EspecialidadId } : new List<int>()))
+                .Distinct().Where(id => id > 0);
+            foreach (var espId in esps)
+            {
+                await _sql.ExecuteAsync("INSERT INTO vt_usuarioEspecialidades (ue_idUsuario,ue_idEspecialidad,ue_estado) VALUES (@IdUser,@EspId,'A')", new { IdUser = idUser, EspId = espId });
+            }
+        }
         await _sql.RegistrarBitacoraAsync($"{(usuario.Id > 0 ? "Actualiza" : "Crea")} usuario: {usuario.Login.Trim()}", adminId);
         return (true, "Usuario guardado correctamente.");
     }

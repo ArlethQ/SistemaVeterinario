@@ -33,8 +33,54 @@
         <div class="form-grid">
             @if (EsMedico)
             {
-                <label>Especialidad<select @bind="_edit.EspecialidadId"><option value="0">Seleccione</option>@foreach(var e in _especialidades){<option value="@e.Id">@e.Descripcion</option>}</select></label>
-                <label>Tipo de médico<select @bind="_edit.TipoMedico"><option value="P">Médico de planta</option><option value="L">Médico a llamada</option><option value="N">No aplica</option></select></label>
+                <label>Tipo de médico
+                    <select @bind="_edit.TipoMedico">
+                        <option value="P">Médico de planta</option>
+                        <option value="L">Médico a llamada</option>
+                        <option value="N">No aplica</option>
+                    </select>
+                </label>
+                <div class="wide specialty-picker-container">
+                    <label style="font-weight:700; font-size:0.8rem; margin:0 0 0.35rem; display:block;">Especialidades médicas asignadas *</label>
+                    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+                        <select class="form-select form-select-sm" style="flex:1; min-width:240px;" @bind="_nuevaEspecialidadSeleccionada">
+                            <option value="0">Seleccionar especialidad para añadir...</option>
+                            @foreach (var e in EspecialidadesDisponiblesParaAgregar)
+                            {
+                                <option value="@e.Id">@e.Descripcion</option>
+                            }
+                        </select>
+                        <button type="button"
+                                class="btn btn-outline-primary btn-sm"
+                                style="font-weight:700; height:31px; display:inline-flex; align-items:center;"
+                                disabled="@(_nuevaEspecialidadSeleccionada <= 0)"
+                                @onclick="AgregarEspecialidad">
+                            + Añadir
+                        </button>
+                    </div>
+
+                    @if (_edit.EspecialidadesIds.Count == 0)
+                    {
+                        <div class="text-danger mt-1" style="font-size:0.75rem; font-weight:600;">
+                            ⚠️ Debe asignar al menos una especialidad al médico.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="specialty-chips-grid mt-2">
+                            @foreach (var espId in _edit.EspecialidadesIds)
+                            {
+                                <div class="specialty-chip">
+                                    <span class="specialty-chip-title">⚕ @NombreEspecialidad(espId)</span>
+                                    <button type="button"
+                                            class="specialty-chip-remove"
+                                            title="Quitar especialidad"
+                                            @onclick="() => QuitarEspecialidad(espId)">×</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
             }
             <label class="wide">Observaciones<textarea rows="2" @bind="_edit.Observaciones"></textarea></label>
             <fieldset class="wide locations-field"><legend>Localidades donde trabaja</legend>@foreach(var l in _localidades){<label class="location-option"><input type="checkbox" checked="@_edit.LocalidadesIds.Contains(l.Id)" @onchange="e => CambiarLocalidad(l.Id, e)" /> @l.Descripcion</label>}</fieldset>
@@ -56,11 +102,17 @@
     .locations-field legend { width: auto; padding: 0 .35rem; color: #405970; font-size: .75rem; font-weight: 750; }
     .editor-body .location-option { flex-direction: row; align-items: center; gap: .45rem; font-weight: 600; }
     .editor-body .location-option input { width: 16px; height: 16px; padding: 0; }
+    .specialty-picker-container { grid-column: 1 / -1; padding: 0.85rem; border: 1px solid #d5e5ec; border-radius: 10px; background: #fbfdff; }
+    .specialty-chips-grid { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .specialty-chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.65rem; background: #eaf3fa; border: 1px solid #bddbee; border-radius: 20px; font-size: 0.78rem; font-weight: 650; color: #074770; }
+    .specialty-chip-remove { border: none; background: #d0e4f3; color: #083b5e; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem; cursor: pointer; padding: 0; line-height: 1; }
+    .specialty-chip-remove:hover { background: #ea3943; color: #ffffff; }
 </style>
 
 @code {
     private bool _autorizado, _cargando = true, _guardando, _error, _mostrarEditor;
     private string _filtro = "", _estadoFiltro = "", _mensaje = "", _claveTemporal = "", _nuevaClave = "", _confirmarClave = "";
+    private int _nuevaEspecialidadSeleccionada;
     private List<UsuarioAdministracionModel> _usuarios = [];
     private List<RolUsuarioModel> _roles = [];
     private List<CatalogoItemGenericoDto> _especialidades = [], _localidades = [];
@@ -68,13 +120,107 @@
     private UsuarioAdministracionModel? _usuarioClave;
     private IEnumerable<UsuarioAdministracionModel> Filtrados => _usuarios.Where(u => (string.IsNullOrWhiteSpace(_filtro) || u.Nombre.Contains(_filtro,StringComparison.OrdinalIgnoreCase) || u.Login.Contains(_filtro,StringComparison.OrdinalIgnoreCase) || u.Email.Contains(_filtro,StringComparison.OrdinalIgnoreCase)) && (string.IsNullOrEmpty(_estadoFiltro) || u.Estado == _estadoFiltro));
     private bool EsMedico => _edit.RolId == 2;
+    private IEnumerable<CatalogoItemGenericoDto> EspecialidadesDisponiblesParaAgregar =>
+        _especialidades.Where(e => !_edit.EspecialidadesIds.Contains(e.Id));
+
     protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated||Session.TipoUser!=1){Nav.NavigateTo("/dashboard");return;}_autorizado=true;await Cargar();}
     private async Task Cargar(){_cargando=true;var a=AuthService.ObtenerUsuariosAdministracionAsync();var b=AuthService.ObtenerRolesAsync();var c=AuthService.ObtenerEspecialidadesUsuarioAsync();var d=AuthService.ObtenerLocalidadesUsuarioAsync();_usuarios=await a;_roles=await b;_especialidades=await c;_localidades=await d;_cargando=false;}
-    private void Nuevo(){_edit=new(){RolId=_roles.FirstOrDefault(r=>r.Id!=1)?.Id??2,EspecialidadId=_especialidades.FirstOrDefault()?.Id??1,TipoMedico="P",Estado="A"};_claveTemporal="";_mensaje="";_mostrarEditor=true;}
-    private async Task Editar(UsuarioAdministracionModel u){_edit=new(){Id=u.Id,Nombre=u.Nombre,Login=u.Login,Iniciales=u.Iniciales,Email=u.Email,Celular=u.Celular,Convencional=u.Convencional,Cedula=u.Cedula,RolId=u.RolId,EspecialidadId=u.EspecialidadId,Especialidad=u.Especialidad,TipoMedico=u.TipoMedico,Observaciones=u.Observaciones,Estado=u.Estado,LocalidadesIds=await AuthService.ObtenerLocalidadesAsignadasAsync(u.Id)};_claveTemporal="";_mensaje="";_mostrarEditor=true;}
+    
+    private void Nuevo()
+    {
+        _edit = new()
+        {
+            RolId = _roles.FirstOrDefault(r => r.Id != 1)?.Id ?? 2,
+            EspecialidadId = _especialidades.FirstOrDefault()?.Id ?? 1,
+            EspecialidadesIds = _especialidades.Count > 0 ? new List<int> { _especialidades[0].Id } : new List<int>(),
+            TipoMedico = "P",
+            Estado = "A"
+        };
+        _claveTemporal = "";
+        _nuevaEspecialidadSeleccionada = 0;
+        _mensaje = "";
+        _mostrarEditor = true;
+    }
+
+    private async Task Editar(UsuarioAdministracionModel u)
+    {
+        var localTask = AuthService.ObtenerLocalidadesAsignadasAsync(u.Id);
+        var espTask = AuthService.ObtenerEspecialidadesAsignadasAsync(u.Id);
+        await Task.WhenAll(localTask, espTask);
+        _edit = new()
+        {
+            Id = u.Id,
+            Nombre = u.Nombre,
+            Login = u.Login,
+            Iniciales = u.Iniciales,
+            Email = u.Email,
+            Celular = u.Celular,
+            Convencional = u.Convencional,
+            Cedula = u.Cedula,
+            RolId = u.RolId,
+            EspecialidadId = u.EspecialidadId,
+            Especialidad = u.Especialidad,
+            TipoMedico = u.TipoMedico,
+            Observaciones = u.Observaciones,
+            Estado = u.Estado,
+            LocalidadesIds = localTask.Result,
+            EspecialidadesIds = espTask.Result
+        };
+        _claveTemporal = "";
+        _nuevaEspecialidadSeleccionada = 0;
+        _mensaje = "";
+        _mostrarEditor = true;
+    }
+
+    private void AgregarEspecialidad()
+    {
+        if (_nuevaEspecialidadSeleccionada > 0 && !_edit.EspecialidadesIds.Contains(_nuevaEspecialidadSeleccionada))
+        {
+            _edit.EspecialidadesIds.Add(_nuevaEspecialidadSeleccionada);
+            _nuevaEspecialidadSeleccionada = 0;
+        }
+    }
+
+    private void QuitarEspecialidad(int id)
+    {
+        _edit.EspecialidadesIds.Remove(id);
+    }
+
+    private string NombreEspecialidad(int id) =>
+        _especialidades.FirstOrDefault(e => e.Id == id)?.Descripcion ?? $"Especialidad #{id}";
+
     private void CambiarLocalidad(int id, ChangeEventArgs e){if(e.Value is true){if(!_edit.LocalidadesIds.Contains(id))_edit.LocalidadesIds.Add(id);}else _edit.LocalidadesIds.Remove(id);}
     private void CerrarEditor()=>_mostrarEditor=false;
-    private async Task Guardar(){try{_guardando=true;var r=await AuthService.GuardarUsuarioAdministracionAsync(_edit,_edit.Id==0?_claveTemporal:null,Session.IdUser);_guardando=false;_error=!r.Exito;_mensaje=r.Mensaje;if(r.Exito){_mostrarEditor=false;await Cargar();}}catch(Exception ex){_guardando=false;_error=true;_mensaje=ex.Message;}}
+    
+    private async Task Guardar()
+    {
+        try
+        {
+            if (EsMedico && _edit.EspecialidadesIds.Count == 0)
+            {
+                _error = true;
+                _mensaje = "Debe asignar al menos una especialidad médica al doctor.";
+                return;
+            }
+            _guardando = true;
+            var r = await AuthService.GuardarUsuarioAdministracionAsync(_edit, _edit.Id == 0 ? _claveTemporal : null, Session.IdUser);
+            _guardando = false;
+            _error = !r.Exito;
+            _mensaje = r.Mensaje;
+            if (r.Exito)
+            {
+                _mostrarEditor = false;
+                await Cargar();
+            }
+        }
+        catch (Exception ex)
+        {
+            _guardando = false;
+            _error = true;
+            _mensaje = ex.Message;
+        }
+    }
+
     private async Task CambiarEstado(UsuarioAdministracionModel u){try{var r=await AuthService.CambiarEstadoUsuarioAsync(u.Id,u.Estado!="A",Session.IdUser);_error=!r.Exito;_mensaje=r.Mensaje;if(r.Exito)await Cargar();}catch(Exception ex){_error=true;_mensaje=ex.Message;}}
     private void PrepararClave(UsuarioAdministracionModel u){_usuarioClave=u;_nuevaClave="";_confirmarClave="";_mensaje="";}
     private void CerrarClave()=>_usuarioClave=null;

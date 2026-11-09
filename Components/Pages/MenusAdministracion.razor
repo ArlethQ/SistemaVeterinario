@@ -1,32 +1,9 @@
 @page "/administracion/menus"
-@using HosvetKardex.Web.Components.Layout
-@inject SessionStateService Session
-@inject IAuthService AuthService
 @inject NavigationManager Nav
-<PageTitle>Menús | e-ForVets</PageTitle>
-
-@if (_autorizado)
-{
-<div class="catalog-page menu-page"><SecurityNav />
-    <header><div><span>Seguridad</span><h1>Menús</h1><p>Administra las opciones asignables como permisos. Crear un menú no crea automáticamente su página.</p></div><button @onclick="Nuevo">+ Nuevo menú</button></header>
-    @if (!string.IsNullOrWhiteSpace(_mensaje)) { <div class="message @(_error ? "error" : "success")">@_mensaje</div> }
-    <div class="catalog-layout"><section><h2>Catálogo de menús</h2>
-        @if (_cargando) { <p>Cargando...</p> }
-        else { @foreach (var menu in _menus) { <button class="catalog-row @(menu.Id == _edit.Id ? "active" : "")" @onclick="() => Editar(menu)"><span><strong>@menu.Descripcion</strong><small>@(string.IsNullOrWhiteSpace(menu.Url) ? "Sin ruta" : menu.Url) · @(menu.Habilitado ? "Habilitado" : "Deshabilitado") · @(RutaExiste(menu.Url) ? "Ruta disponible" : "Sin vista implementada")</small></span><i>Editar</i></button> } }
-    </section><aside><h2>@(_edit.Id > 0 ? "Editar menú" : "Crear menú")</h2><div class="form-grid"><label>Descripción<input maxlength="120" @bind="_edit.Descripcion" /></label><label>Ruta<input maxlength="200" @bind="_edit.Url" placeholder="Ej. /admision/citas" /></label><label>Sección / orden<input maxlength="50" @bind="_edit.SecNuevoMenu" /></label><label>Menú padre<select @bind="_edit.PadreNuevoMenu"><option value="">Sin menú padre</option>@foreach (var p in _menus.Where(x => string.IsNullOrWhiteSpace(x.PadreNuevoMenu) && x.Id != _edit.Id)) { <option value="@p.SecNuevoMenu">@p.Descripcion</option> }</select></label></div><label class="check"><input type="checkbox" @bind="_edit.Habilitado" /> Menú habilitado</label><small>Solo se puede habilitar cuando la ruta corresponde a una página existente.</small><button class="save" disabled="@_guardando" @onclick="Guardar">@(_guardando ? "Guardando..." : "Guardar menú")</button></aside></div>
-</div>
-}
 
 @code {
-    private bool _autorizado, _cargando = true, _guardando, _error;
-    private string _mensaje = "";
-    private List<MenuItemModel> _menus = [];
-    private MenuItemModel _edit = new() { Habilitado = true };
-    private static readonly HashSet<string> RutasDisponibles = new(StringComparer.OrdinalIgnoreCase) { "dashboard","suscripciones","admision/clientes-pacientes","admision/ordenes","admision/citas","admision/triaje","kardex/ordenes","kardex/enfermeria","kardex/signos","hospitalizacion/ficha","hospitalizacion/monitoreo","hospitalizacion/fichas-complementarias","hospitalizacion/calculadora-infusiones","quirofano/preanestesia","quirofano/preanestesia/checklist","quirofano/pausa-seguridad","quirofano/anestesia","quirofano/protocolo","quirofano/recuperacion","consulta/fichamedica","consulta/vacunas","consulta/evoluciones","consulta/recetario","consulta/recetario/sin-orden","consulta/autorizaciones","consulta/historial","consulta/historial/apuntes","consulta/imprimir-fichas","diagnostico/laboratorio","diagnostico/imagenologia","diagnostico/bandeja","facturacion/proformas","facturacion/productos","facturacion/nueva","facturas","facturacion/nota-credito","facturacion/notas-credito-generadas","facturacion/nota-debito","facturacion/notas-debito-generadas","facturacion/guia-remision","facturacion/guias-remision-generadas","compras/importar-xml","facturacion/retenciones-generadas","contabilidad/compra-documentos","compras/nueva-liquidacion","compras/liquidaciones-generadas","facturacion/configuracion/emisor","facturacion/configuracion/firma","facturacion/configuracion/caja","contabilidad","contabilidad/cuentas-por-cobrar","contabilidad/clientes","contabilidad/proveedores","contabilidad/compras/importar-xml","contabilidad/compras/ordenes","contabilidad/compras/recepciones","contabilidad/inventarios","contabilidad/inventarios/bodegas","contabilidad/reportes/documentos","contabilidad/parametrizacion","contabilidad/configuracion/general","contabilidad/administracion/usuarios","contabilidad/administracion/roles","seguimiento/clinico","operaciones/clinicas","programacion/clinica","reportes/clinicos","administracion/usuarios","administracion/roles","administracion/menus","administracion/roles-permisos","administracion/catalogos","administracion/catalogos-operativos","administracion/localidades","administracion/bitacora" };
-    protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated||Session.TipoUser!=1){Nav.NavigateTo("/dashboard");return;}_autorizado=true;await Cargar();}
-    private async Task Cargar(){_cargando=true;_menus=await AuthService.ObtenerMenusAdministracionAsync();_cargando=false;}
-    private void Nuevo(){_edit=new(){Habilitado=true};_mensaje="";}
-    private void Editar(MenuItemModel m){_edit=new(){Id=m.Id,Descripcion=m.Descripcion,Url=m.Url,SecNuevoMenu=m.SecNuevoMenu,PadreNuevoMenu=m.PadreNuevoMenu,Habilitado=m.Habilitado};_mensaje="";}
-    private bool RutaExiste(string? ruta)=>!string.IsNullOrWhiteSpace(ruta)&&RutasDisponibles.Contains(ruta.Trim().TrimStart('/'));
-    private async Task Guardar(){if(string.IsNullOrWhiteSpace(_edit.Descripcion)){_error=true;_mensaje="La descripción es obligatoria.";return;}if(_edit.Habilitado&&!RutaExiste(_edit.Url)){_error=true;_mensaje="No puedes habilitar el menú porque la ruta no corresponde a una vista implementada.";return;}_guardando=true;var ok=await AuthService.GuardarMenuAsync(_edit,Session.IdUser);_guardando=false;_error=!ok;_mensaje=ok?"Menú guardado correctamente.":"No se pudo guardar el menú.";if(ok){Nuevo();_mensaje="Menú guardado correctamente.";await Cargar();}}
+    protected override void OnInitialized()
+    {
+        Nav.NavigateTo("/administracion/roles", replace: true);
+    }
 }

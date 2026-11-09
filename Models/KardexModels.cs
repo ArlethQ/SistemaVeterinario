@@ -50,6 +50,7 @@ public class UsuarioAdministracionModel
     public string TipoMedico { get; set; } = "P";
     public string Observaciones { get; set; } = string.Empty;
     public List<int> LocalidadesIds { get; set; } = [];
+    public List<int> EspecialidadesIds { get; set; } = [];
     public string Estado { get; set; } = "A";
 }
 
