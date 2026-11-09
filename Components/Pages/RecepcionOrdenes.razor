@@ -56,9 +56,7 @@
                         <small>@med.Especialidad</small>
                         @if (sigOrden is not null)
                         {
-                            <small class="text-primary fw-bold mt-1" style="font-size:0.64rem;">
-                                Próximo: @sigOrden.Turno · @sigOrden.Mascota
-                            </small>
+                            <small class="text-primary fw-bold mt-1" style="font-size:0.64rem;">Próximo: Orden #@sigOrden.IdOrden · @sigOrden.Mascota</small>
                         }
                     </div>
                     <div class="d-flex align-items-center gap-2 flex-shrink-0">
@@ -69,7 +67,7 @@
                                   tabindex="0"
                                   class="badge bg-success text-white border-0 shadow-sm d-inline-flex align-items-center gap-1"
                                   style="padding: 5px 10px; font-size: 0.68rem; font-weight: 700; border-radius: 7px; cursor: pointer; white-space: nowrap; user-select: none;"
-                                  title="Hacer pasar a @sigOrden.Mascota (@sigOrden.Turno) a atención"
+                                  title="Hacer pasar a @sigOrden.Mascota a atención"
                                   @onclick="() => PasarTurnoAAtencionAsync(sigOrden)">
                                 ▶ Pasar
                             </span>
@@ -205,21 +203,6 @@
                                 </select>
                             </div>
 
-                            <div class="col-md-12">
-                                <div class="p-2 rounded-3 border bg-primary bg-opacity-10 d-flex align-items-center justify-content-between">
-                                    <div>
-                                        <small class="text-primary fw-bold d-block text-uppercase" style="font-size:0.68rem;">Turno por Especialidad a Asignar</small>
-                                        <div class="fw-bold text-dark small">
-                                            <i class="bi bi-person-Vcard-fill text-primary me-1"></i>Atiende: Dr(a). @ObtenerNombreMedicoSeleccionado()
-                                        </div>
-                                        <small class="text-muted" style="font-size:0.74rem;">Especialidad: @ObtenerNombreEspecialidadSeleccionada()</small>
-                                    </div>
-                                    <div class="text-end">
-                                        <span class="badge bg-primary font-monospace fs-5 px-3 py-2 shadow-sm">@ObtenerSiguienteTurnoPreview()</span>
-                                    </div>
-                                </div>
-                            </div>
-
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">4. Destino / Despacho</label>
                                 <select class="form-select form-select-sm" @bind="_nuevaOrden.TipoDespacho">
@@ -304,7 +287,7 @@
                         <table class="table table-hover align-middle mb-0 small">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Turno / Orden</th>
+                                    <th>Orden</th>
                                     <th>Hora</th>
                                     <th>Prioridad</th>
                                     <th>Paciente (NHCL)</th>
@@ -320,7 +303,7 @@
                                 {
                                     <tr>
                                         <td colspan="9" class="text-center text-muted py-4">
-                                            No hay órdenes ni turnos en curso en este momento.
+                                            No hay órdenes en curso en este momento.
                                         </td>
                                     </tr>
                                 }
@@ -328,16 +311,7 @@
                                 {
                                     <tr>
                                         <td>
-                                            <div class="d-flex align-items-center gap-1">
-                                                <button type="button"
-                                                        class="badge bg-primary font-monospace border-0 px-2 py-1 shadow-sm"
-                                                        style="font-size:0.85rem; cursor:pointer;"
-                                                        title="Ver comprobante / ticket de turno"
-                                                        @onclick="() => _ordenTicket = o">
-                                                    <i class="bi bi-ticket-perforated me-1"></i>@(string.IsNullOrWhiteSpace(o.Turno) ? $"{o.CodigoEspecialidad}-01" : o.Turno)
-                                                </button>
-                                            </div>
-                                            <small class="text-muted d-block mt-1" style="font-size:0.72rem;">Orden #@o.IdOrden</small>
+                                            <span class="badge bg-primary px-2 py-1">Orden #@o.IdOrden</span>
                                         </td>
                                         <td>@o.Hora</td>
                                         <td><span class="triage-priority @ClaseTriaje(o.ColorTriaje)">@TextoPrioridad(o.ColorTriaje)</span></td>
@@ -430,7 +404,7 @@
                                                     <option value="quir">🔪 Quirófano / Anestesia</option>
                                                     <option value="proforma">💲 Proforma / Facturación</option>
                                                 </optgroup>
-                                                <optgroup label="Gestión del Turno y Orden">
+                                                <optgroup label="Gestión de la Orden">
                                                     @if (o.Estado == "A")
                                                     {
                                                         <option value="pasar">▶️ Hacer pasar a consulta</option>
@@ -444,7 +418,6 @@
                                                     {
                                                         <option value="espera">⏳ Reabrir / Poner en espera</option>
                                                     }
-                                                    <option value="ticket">🎫 Ver / Imprimir Ticket</option>
                                                     <option value="asignar">🔄 Cambiar médico / especialidad</option>
                                                     <option value="anular">❌ Anular orden</option>
                                                 </optgroup>
@@ -477,7 +450,7 @@
                         <div class="stage-patient">
                             <span class="stage-pet-avatar">@if (!string.IsNullOrEmpty(ObtenerFotoPaciente(orden.Nhcl))) { <img src="@ObtenerFotoPaciente(orden.Nhcl)" alt="Foto de @orden.Mascota" /> } else { <span>@InicialPaciente(orden.Mascota)</span> }</span>
                             <div>
-                                <strong><span class="badge bg-primary font-monospace me-1" style="font-size:0.58rem;">@orden.Turno</span>@orden.Mascota</strong>
+                                <strong><span class="badge bg-primary font-monospace me-1" style="font-size:0.58rem;">#@orden.IdOrden</span>@orden.Mascota</strong>
                                 <small>Dr(a). @orden.Medico</small>
                             </div>
                             <div class="text-end">
@@ -488,7 +461,7 @@
                                 }
                                 else if (etapa.Clave == "FINALIZADO")
                                 {
-                                    <span role="button" class="badge bg-outline-secondary border text-secondary mt-1 d-inline-block" style="font-size:0.58rem; padding: 2px 6px; cursor:pointer;" title="Reabrir turno y devolver a espera" @onclick="() => DevolverAEsperaAsync(orden)">↺ Reabrir</span>
+                                    <span role="button" class="badge bg-outline-secondary border text-secondary mt-1 d-inline-block" style="font-size:0.58rem; padding: 2px 6px; cursor:pointer;" title="Reabrir orden y devolver a espera" @onclick="() => DevolverAEsperaAsync(orden)">↺ Reabrir</span>
                                 }
                             </div>
                         </div>
@@ -509,10 +482,10 @@
         <div class="position-fixed top-50 start-50 translate-middle bg-white rounded-4 shadow-lg border p-4" style="z-index: 1080; width: 380px; max-width: 94vw;">
             <div class="text-center border-bottom pb-3 mb-3">
                 <small class="text-uppercase fw-bold text-primary d-block">Hospital de Especialidades Veterinarias</small>
-                <span class="text-muted small">Comprobante de Turno por Especialidad</span>
+                <span class="text-muted small">Comprobante de Orden por Especialidad</span>
                 <div class="my-3 py-2 px-3 bg-primary bg-opacity-10 rounded-3 border border-primary border-opacity-25">
-                    <small class="text-uppercase text-primary fw-bold d-block" style="font-size:0.72rem;">TURNO ASIGNADO</small>
-                    <div class="display-5 fw-bold text-primary font-monospace mb-0">@_ordenTicket.Turno</div>
+                    <small class="text-uppercase text-primary fw-bold d-block" style="font-size:0.72rem;">ORDEN ASIGNADA</small>
+                    <div class="display-5 fw-bold text-primary font-monospace mb-0">#@_ordenTicket.IdOrden</div>
                     <span class="badge bg-primary mt-1">@_ordenTicket.Especialidad</span>
                 </div>
                 <div class="p-2 rounded-3 bg-light border text-start">
@@ -630,7 +603,7 @@
         if (ok)
         {
             _esError = false;
-            _mensajeAlerta = $"▶ Turno {orden.Turno} ({orden.Mascota}) pasó a atención con Dr(a). {orden.Medico}.";
+            _mensajeAlerta = $"▶ Orden #{orden.IdOrden} ({orden.Mascota}) pasó a atención con Dr(a). {orden.Medico}.";
             KardexService.InvalidarCacheOrdenesActivas();
             await CargarOrdenesAsync();
         }
@@ -642,7 +615,7 @@
         if (ok)
         {
             _esError = false;
-            _mensajeAlerta = $"✓ Turno {orden.Turno} ({orden.Mascota}) marcado como finalizado.";
+            _mensajeAlerta = $"✓ Orden #{orden.IdOrden} ({orden.Mascota}) marcada como finalizada.";
             KardexService.InvalidarCacheOrdenesActivas();
             await CargarOrdenesAsync();
         }
@@ -654,7 +627,7 @@
         if (ok)
         {
             _esError = false;
-            _mensajeAlerta = $"⏳ Turno {orden.Turno} ({orden.Mascota}) devuelto a sala de espera.";
+            _mensajeAlerta = $"⏳ Orden #{orden.IdOrden} ({orden.Mascota}) devuelta a sala de espera.";
             KardexService.InvalidarCacheOrdenesActivas();
             await CargarOrdenesAsync();
         }
@@ -694,9 +667,6 @@
             case "espera":
                 await DevolverAEsperaAsync(o);
                 break;
-            case "ticket":
-                _ordenTicket = o;
-                break;
             case "asignar":
                 await AbrirCambioAsignacion(o);
                 break;
@@ -716,7 +686,7 @@
 <html lang='es'>
 <head>
 <meta charset='utf-8'/>
-<title>Ticket {System.Net.WebUtility.HtmlEncode(t.Turno)}</title>
+<title>Orden #{t.IdOrden}</title>
 <style>
   @page {{ size: auto; margin: 12mm; }}
   body {{ font-family: Segoe UI, Arial, sans-serif; margin: 0; padding: 0; color: #0f172a; background: #fff; }}
@@ -738,10 +708,10 @@
 <body>
   <div class='ticket'>
     <div class='hosp'>Hospital de Especialidades Veterinarias</div>
-    <div class='sub'>Comprobante de Turno por Especialidad</div>
+    <div class='sub'>Comprobante de Orden por Especialidad</div>
     <div class='turn-box'>
-      <div class='turn-lbl'>TURNO ASIGNADO</div>
-      <div class='turn-code'>{System.Net.WebUtility.HtmlEncode(t.Turno)}</div>
+      <div class='turn-lbl'>ORDEN ASIGNADA</div>
+      <div class='turn-code'>#{t.IdOrden}</div>
       <span class='esp-badge'>{System.Net.WebUtility.HtmlEncode(t.Especialidad)}</span>
     </div>
     <div class='doc-box'>
@@ -968,7 +938,7 @@
             if (_medicosDisponibles.Count == 0)
             {
                 _esError = true;
-                _mensajeAlerta = "No existen médicos con horario de atención activo para esta especialidad, fecha y hora.";
+                _mensajeAlerta = "No existen médicos con horario de atención activo para esta especialidad y fecha.";
             }
         }
     }
@@ -977,11 +947,10 @@
     {
         var medicos = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(idEspecialidad);
         var disponibles = new List<CatalogoItemGenericoDto>();
-        string hora = TimeSpan.TryParse(_nuevaOrden.HoraOrden, out var valorHora) ? valorHora.ToString(@"hh\:mm") : DateTime.Now.ToString("HH:mm");
         foreach (var medico in medicos)
         {
             var slots = await AdmisionService.ObtenerSlotsHorarioMedicoAsync(medico.Id, _nuevaOrden.FechaOrden, SessionState.Localidad);
-            if (slots.Any(s => s.Disponible && s.Hora.StartsWith(hora, StringComparison.OrdinalIgnoreCase)))
+            if (slots.Any(s => s.Disponible))
             {
                 disponibles.Add(medico);
             }
@@ -1018,7 +987,7 @@
         if (!medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
         {
             _esError = true;
-            _mensajeAlerta = "El médico seleccionado no tiene un turno u horario de atención disponible en la fecha y hora indicadas.";
+            _mensajeAlerta = "El médico seleccionado no tiene un horario de atención disponible en la fecha indicada.";
             return;
         }
 
@@ -1050,16 +1019,12 @@
         await CargarOrdenesAsync();
 
         var ordenRecienCreada = _ordenes.FirstOrDefault(o => o.IdOrden == idCreada);
-        string turnoTexto = ordenRecienCreada != null ? $" — Turno {ordenRecienCreada.Turno} (Atiende: Dr(a). {ordenRecienCreada.Medico})" : "";
+        string asignacionTexto = ordenRecienCreada != null ? $" — Atiende: Dr(a). {ordenRecienCreada.Medico}" : "";
 
         _esError = false;
         string vinculoCita = (CitaOrigenId.HasValue && CitaOrigenId.Value > 0) ? $" (Vinculada a Cita #{CitaOrigenId.Value})" : "";
-        _mensajeAlerta = $"Orden #{idCreada}{turnoTexto} generada para {_nuevaOrden.NombreMascota} (NHCL #{_nuevaOrden.Nhcl}){vinculoCita}.";
+        _mensajeAlerta = $"Orden #{idCreada}{asignacionTexto} generada para {_nuevaOrden.NombreMascota} (NHCL #{_nuevaOrden.Nhcl}){vinculoCita}.";
         _mostrarFormularioOrden = false;
-        if (ordenRecienCreada != null)
-        {
-            _ordenTicket = ordenRecienCreada;
-        }
     }
 
     private async Task CambiarFechaTableroAsync(ChangeEventArgs e)
