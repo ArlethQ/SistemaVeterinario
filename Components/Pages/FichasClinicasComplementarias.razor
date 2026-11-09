@@ -6,9 +6,24 @@
 
 <PageTitle>Fichas clínicas complementarias — e-ForVets</PageTitle>
 
-<div class="container-fluid py-3">
-    <div class="card border-0 shadow-sm mb-3">
-        <div class="card-body py-2">
+<div class="container-fluid py-3 clinical-forms-page">
+    <div class="clinical-titlebar shadow-sm mb-3">
+        <div>
+            <div class="clinical-kicker">HOSPITALIZACIÓN 24 HORAS</div>
+            <h4 class="mb-1 fw-bold">📋 Fichas clínicas complementarias</h4>
+            <div class="small opacity-75">Continuidad del cuidado, coordinación diagnóstica y seguridad transfusional.</div>
+        </div>
+        @if (_paciente is not null)
+        {
+            <div class="d-flex gap-2 flex-wrap justify-content-end">
+                <a href="/hospitalizacion/ficha/@IdOrden/@Nhcl" class="btn btn-sm btn-light fw-semibold">🏥 Ficha 24h</a>
+                <a href="/hospitalizacion/monitoreo/@IdOrden/@Nhcl" class="btn btn-sm btn-warning fw-semibold">🩺 Monitoreo</a>
+            </div>
+        }
+    </div>
+
+    <div class="card border-0 shadow-sm mb-3 no-print">
+        <div class="card-body py-2 px-3 bg-light rounded">
             <div class="row g-2 align-items-end">
                 <div class="col-md-4">
                     <label class="form-label small fw-bold">Buscar paciente hospitalizado</label>
@@ -28,31 +43,44 @@
                     </select>
                 </div>
                 <div class="col-md-2 text-end">
-                    @if (_paciente is not null)
-                    {
-                        <span class="badge text-bg-primary">@_paciente.PacienteNombre</span>
-                    }
+                    <span class="badge rounded-pill @(_paciente is null ? "text-bg-secondary" : "text-bg-success") px-3 py-2">@(_paciente is null ? "Sin paciente seleccionado" : "Paciente cargado")</span>
                 </div>
             </div>
         </div>
     </div>
+
+    @if (_paciente is not null)
+    {
+        <div class="card shadow-sm border-0 mb-3 patient-strip">
+            <div class="card-header bg-primary text-white py-2 px-3 fw-bold">🐾 DATOS DEL PACIENTE Y LA ORDEN</div>
+            <div class="card-body py-2 px-3">
+                <div class="row text-center small g-2 align-items-center">
+                    <div class="col-6 col-md-2 border-end"><div class="text-muted">Historia / Orden</div><div class="fw-bold text-danger fs-6">@Nhcl <span class="text-secondary">(#@IdOrden)</span></div></div>
+                    <div class="col-6 col-md-3 border-end"><div class="text-muted">Paciente / Especie</div><div class="fw-bold">@_pacienteVista.PacienteNombre <span class="text-success">(@_pacienteVista.Especie)</span></div></div>
+                    <div class="col-6 col-md-3 border-end"><div class="text-muted">Propietario</div><div class="fw-semibold">@_pacienteVista.ClienteNombre</div></div>
+                    <div class="col-6 col-md-2 border-end"><div class="text-muted">Sexo</div><div class="fw-semibold">@_pacienteVista.Sexo</div></div>
+                    <div class="col-12 col-md-2"><div class="text-muted">Registros</div><div class="fw-bold text-primary">@(_turnos.Count + _interconsultas.Count + _transfusiones.Count)</div></div>
+                </div>
+            </div>
+        </div>
+    }
 
     @if (!string.IsNullOrWhiteSpace(_mensaje))
     {
         <div class="alert @(_error ? "alert-danger" : "alert-success") py-2">@_mensaje</div>
     }
 
-    <ul class="nav nav-tabs mb-3">
-        <li class="nav-item"><button class="nav-link @ClaseTab("turno")" @onclick='() => _tab="turno"'>Paso de turno</button></li>
-        <li class="nav-item"><button class="nav-link @ClaseTab("examenes")" @onclick='() => _tab="examenes"'>Exámenes e interconsultas</button></li>
-        <li class="nav-item"><button class="nav-link @ClaseTab("transfusion")" @onclick='() => _tab="transfusion"'>Transfusión sanguínea</button></li>
-    </ul>
+    <div class="clinical-tabs mb-3 no-print">
+        <button class="clinical-tab @ClaseTab("turno")" @onclick='() => _tab="turno"'><span class="tab-number">1</span><span><strong>Paso de turno</strong><small>Entrega clínica SOAP</small></span></button>
+        <button class="clinical-tab @ClaseTab("examenes")" @onclick='() => _tab="examenes"'><span class="tab-number">2</span><span><strong>Exámenes e interconsultas</strong><small>Solicitudes y pendientes</small></span></button>
+        <button class="clinical-tab @ClaseTab("transfusion")" @onclick='() => _tab="transfusion"'><span class="tab-number">3</span><span><strong>Transfusión sanguínea</strong><small>Compatibilidad y monitoreo</small></span></button>
+    </div>
 
     <fieldset disabled="@(_paciente is null)">
     @if (_tab == "turno")
     {
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-primary text-white fw-bold">Entrega clínica estructurada por turno</div>
+        <div class="card border-0 shadow-sm clinical-card">
+            <div class="card-header section-header section-turno"><span class="section-index">1</span><span><strong>PASO DE TURNO — ENTREGA CLÍNICA ESTRUCTURADA</strong><small>Situación actual, evaluación, plan y pendientes del siguiente equipo.</small></span></div>
             <div class="card-body">
                 <div class="row g-2">
                     <div class="col-md-3"><label class="form-label">Fecha y hora</label><InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_turno.Fecha" /></div>
@@ -70,14 +98,14 @@
                 <div class="mt-3 d-flex gap-2"><button class="btn btn-primary" @onclick="GuardarTurnoAsync">Guardar paso de turno</button><button class="btn btn-outline-secondary" @onclick="NuevoTurno">Limpiar</button></div>
             </div>
         </div>
-        <div class="table-responsive mt-3"><table class="table table-sm table-hover"><thead><tr><th>Fecha</th><th>Turno</th><th>Entrega → recibe</th><th>Pendientes/alertas</th><th></th></tr></thead><tbody>
+        <div class="table-responsive mt-3 history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Fecha</th><th>Turno</th><th>Entrega → recibe</th><th>Pendientes/alertas</th><th></th></tr></thead><tbody>
         @foreach (var x in _turnos) { <tr><td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Turno</td><td>@x.Entrega → @x.Recibe</td><td>@x.Pendientes @x.Alertas</td><td class="text-end"><button class="btn btn-xs btn-outline-primary" @onclick="() => EditarTurno(x)">Editar</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarTurnoAsync(x.Id)">Eliminar</button></td></tr> }
         </tbody></table></div>
     }
     else if (_tab == "examenes")
     {
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-info fw-bold">Exámenes pendientes e interconsultas</div>
+        <div class="card border-0 shadow-sm clinical-card">
+            <div class="card-header section-header section-examen"><span class="section-index">2</span><span><strong>EXÁMENES PENDIENTES E INTERCONSULTAS</strong><small>Agenda, responsables, estados y trazabilidad del resultado.</small></span></div>
             <div class="card-body"><div class="row g-2">
                 <div class="col-md-2"><label class="form-label">Tipo</label><InputSelect class="form-select" @bind-Value="_inter.Tipo"><option>Examen</option><option>Interconsulta</option><option>Laboratorio</option><option>Imagenología</option></InputSelect></div>
                 <div class="col-md-4"><label class="form-label">Detalle *</label><InputText class="form-control" @bind-Value="_inter.Detalle" /></div>
@@ -90,14 +118,14 @@
                 <div class="col-md-3 d-flex align-items-end"><div class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_inter.RegistradoHistoria" /><label class="form-check-label">Registrado en historia</label></div></div>
             </div><div class="mt-3 d-flex gap-2"><button class="btn btn-primary" @onclick="GuardarInterAsync">Guardar</button><button class="btn btn-outline-secondary" @onclick="NuevaInter">Limpiar</button></div></div>
         </div>
-        <div class="table-responsive mt-3"><table class="table table-sm table-hover"><thead><tr><th>Solicitud</th><th>Tipo/detalle</th><th>Agenda</th><th>Estado</th><th>Resultado</th><th></th></tr></thead><tbody>
+        <div class="table-responsive mt-3 history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Solicitud</th><th>Tipo/detalle</th><th>Agenda</th><th>Estado</th><th>Resultado</th><th></th></tr></thead><tbody>
         @foreach (var x in _interconsultas) { <tr><td>@x.FechaSolicitud.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Tipo: @x.Detalle</td><td>@x.FechaAgendada?.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Estado</td><td>@x.ResultadoResumen</td><td class="text-end"><button class="btn btn-xs btn-outline-primary" @onclick="() => EditarInter(x)">Editar</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarInterAsync(x.Id)">Eliminar</button></td></tr> }
         </tbody></table></div>
     }
     else
     {
         <div class="alert alert-warning small"><strong>Seguridad:</strong> verifique identidad del paciente, unidad, vencimiento, consentimiento, tipificación y compatibilidad conforme al protocolo institucional antes de iniciar.</div>
-        <div class="card border-0 shadow-sm"><div class="card-header bg-danger text-white fw-bold">Ficha de transfusión de hemoderivados</div><div class="card-body"><div class="row g-2">
+        <div class="card border-0 shadow-sm clinical-card"><div class="card-header section-header section-transfusion"><span class="section-index">3</span><span><strong>FICHA DE TRANSFUSIÓN DE HEMODERIVADOS</strong><small>Identificación de unidad, compatibilidad, administración y cierre.</small></span></div><div class="card-body"><div class="row g-2">
             <div class="col-md-3"><label class="form-label">Producto *</label><InputSelect class="form-select" @bind-Value="_trans.Producto"><option>Sangre entera</option><option>Concentrado eritrocitario</option><option>Plasma fresco congelado</option><option>Plasma</option><option>Albúmina</option><option>Otro</option></InputSelect></div>
             <div class="col-md-3"><label class="form-label">Identificador de unidad *</label><InputText class="form-control" @bind-Value="_trans.IdentificadorUnidad" /></div>
             <div class="col-md-3"><label class="form-label">Vencimiento</label><InputDate class="form-control" @bind-Value="_trans.FechaVencimiento" /></div>
@@ -118,7 +146,7 @@
 
         @if (_trans.Id > 0)
         {
-            <div class="card border-0 shadow-sm mt-3"><div class="card-header fw-bold">Monitoreo del receptor</div><div class="card-body"><div class="row g-2">
+            <div class="card border-0 shadow-sm mt-3 clinical-card"><div class="card-header bg-dark text-white py-2 px-3 fw-bold">4. MONITOREO SERIADO DEL RECEPTOR</div><div class="card-body"><div class="row g-2">
                 <div class="col-md-2"><label class="form-label">Momento</label><InputText class="form-control" @bind-Value="_mon.Momento" placeholder="T0, 15 min..." /></div>
                 <div class="col-md-2"><label class="form-label">Temperatura °C</label><InputNumber class="form-control" @bind-Value="_mon.Temperatura" /></div>
                 <div class="col-md-2"><label class="form-label">FC lpm</label><InputNumber class="form-control" @bind-Value="_mon.FrecuenciaCardiaca" /></div>
@@ -133,7 +161,7 @@
                 <div class="col-md-3"><label class="form-label">Responsable</label><InputText class="form-control" @bind-Value="_mon.Responsable" /></div>
             </div><button class="btn btn-primary mt-3" @onclick="AgregarMonAsync">Agregar control</button></div></div>
         }
-        <div class="table-responsive mt-3"><table class="table table-sm table-hover"><thead><tr><th>Fecha</th><th>Producto/unidad</th><th>Compatibilidad</th><th>Volumen</th><th>Estado</th><th>Controles</th><th></th></tr></thead><tbody>
+        <div class="table-responsive mt-3 history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Fecha</th><th>Producto/unidad</th><th>Compatibilidad</th><th>Volumen</th><th>Estado</th><th>Controles</th><th></th></tr></thead><tbody>
         @foreach (var x in _transfusiones) { <tr><td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Producto / @x.IdentificadorUnidad</td><td>@x.GrupoReceptor → @x.GrupoDonante</td><td>@x.VolumenAdministradoMl / @x.VolumenPrescritoMl ml</td><td>@x.Estado</td><td>@x.Monitoreos.Count</td><td class="text-end"><button class="btn btn-xs btn-outline-primary" @onclick="() => EditarTrans(x)">Abrir</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarTransAsync(x.Id)">Eliminar</button></td></tr> }
         </tbody></table></div>
     }
@@ -145,6 +173,7 @@
     [Parameter] public int Nhcl { get; set; }
     private string _tab="turno", _filtro="", _mensaje=""; private bool _error;
     private List<OrdenActivaResumenDto> _ordenes=[]; private PacienteHeaderDto? _paciente;
+    private PacienteHeaderDto _pacienteVista => _paciente ?? new();
     private List<PasoTurnoDto> _turnos=[]; private List<InterconsultaHospitalariaDto> _interconsultas=[]; private List<TransfusionDto> _transfusiones=[];
     private PasoTurnoDto _turno=new(); private InterconsultaHospitalariaDto _inter=new(); private TransfusionDto _trans=new(); private TransfusionMonitoreoDto _mon=new();
 
