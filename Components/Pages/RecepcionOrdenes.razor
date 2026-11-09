@@ -184,7 +184,18 @@
 
                         <div class="row g-2">
                             <div class="col-md-12">
-                                <label class="form-label small fw-bold">2. Especialidad Requerida</label>
+                                <label class="form-label small fw-bold">2. Tipo de consulta</label>
+                                <select class="form-select form-select-sm" @bind="_nuevaOrden.TipoDespacho">
+                                    <option value="0">Consulta / Ambulatorio</option>
+                                    <option value="3">Hospitalización directa</option>
+                                    <option value="4">Quirófano / Cirugía</option>
+                                    <option value="1">Imagenología</option>
+                                    <option value="2">Laboratorio</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="form-label small fw-bold">3. Especialidad requerida</label>
                                 <select class="form-select form-select-sm" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync">
                                     @foreach (var esp in _especialidades)
                                     {
@@ -194,23 +205,12 @@
                             </div>
 
                             <div class="col-md-12">
-                                <label class="form-label small fw-bold">3. Médico Tratante Asignado</label>
+                                <label class="form-label small fw-bold">4. Médico tratante asignado</label>
                                 <select class="form-select form-select-sm" @bind="_nuevaOrden.IdMedico">
                                     @foreach (var med in _medicosDisponibles)
                                     {
                                         <option value="@med.Id">@med.Descripcion</option>
                                     }
-                                </select>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label class="form-label small fw-bold">4. Destino / Despacho</label>
-                                <select class="form-select form-select-sm" @bind="_nuevaOrden.TipoDespacho">
-                                    <option value="0">0 — Consulta / Ambulatorio</option>
-                                    <option value="3">3 — Hospitalización Directa</option>
-                                    <option value="4">4 — Quirófano / Cirugía</option>
-                                    <option value="1">1 — Despacho Imagenología</option>
-                                    <option value="2">2 — Despacho Laboratorio</option>
                                 </select>
                             </div>
 
