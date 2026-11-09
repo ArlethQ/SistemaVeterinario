@@ -25,7 +25,7 @@
                 {
                     <button class="btn btn-danger fw-semibold d-flex align-items-center gap-2 shadow-sm"
                             disabled="@_generandoPdf"
-                            @onclick="GenerarDossierConsolidadoPdfAsync">
+                            @onclick="GenerarExpedienteConsolidadoPdfAsync">
                         @if (_generandoPdf)
                         {
                             <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -196,7 +196,7 @@
                         {
                             <button class="btn btn-sm btn-danger py-1 px-3 fw-semibold shadow-sm"
                                     disabled="@_generandoPdf"
-                                    @onclick="GenerarDossierConsolidadoPdfAsync">
+                                    @onclick="GenerarExpedienteConsolidadoPdfAsync">
                                 <i class="bi bi-file-earmark-pdf-fill me-1"></i> Descargar Expediente Consolidado (@AtencionesFiltradas.Count(x => x.Seleccionado))
                             </button>
                         }
@@ -374,7 +374,7 @@
                     {
                         <button class="btn btn-sm btn-danger fw-semibold shadow-sm"
                                 disabled="@_generandoPdf"
-                                @onclick="GenerarDossierConsolidadoPdfAsync">
+                                @onclick="GenerarExpedienteConsolidadoPdfAsync">
                             <i class="bi bi-file-earmark-pdf-fill me-1"></i>
                             Exportar @AtencionesFiltradas.Count(x => x.Seleccionado) Orden(es) en Expediente Consolidado (PDF)
                         </button>
@@ -690,7 +690,7 @@
         }
     }
 
-    private async Task GenerarDossierConsolidadoPdfAsync()
+    private async Task GenerarExpedienteConsolidadoPdfAsync()
     {
         var seleccionadas = AtencionesFiltradas.Where(x => x.Seleccionado).OrderBy(x => x.Fecha).ToList();
         if (seleccionadas.Count == 0)

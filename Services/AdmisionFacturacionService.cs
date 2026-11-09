@@ -904,17 +904,26 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 DECLARE @TurnoCodigo VARCHAR(20);
                 SET @TurnoCodigo = @Prefijo + '-' + RIGHT('00' + CAST(@SiguienteNum AS VARCHAR(10)), CASE WHEN @SiguienteNum < 100 THEN 2 ELSE LEN(CAST(@SiguienteNum AS VARCHAR(10))) END);
 
+                DECLARE @Consultorio NVARCHAR(100);
+                SELECT TOP 1 @Consultorio = CONCAT('Piso ', NULLIF(RTRIM(hr_piso), ''), ' · ', RTRIM(hr_consultorio))
+                FROM vt_horariosMedicos
+                WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad
+                  AND UPPER(RTRIM(hr_dia2)) IN (UPPER(@DiaIngles), UPPER(@DiaEspanol))
+                  AND CAST(hr_desde AS time)<=CAST(@HoraOrden AS time) AND CAST(hr_hasta AS time)>CAST(@HoraOrden AS time)
+                  AND (hr_vigencia_desde IS NULL OR hr_vigencia_desde<=@FechaOrden)
+                  AND (hr_vigencia_hasta IS NULL OR hr_vigencia_hasta>=@FechaOrden);
+
                 INSERT INTO vt_ordenAtencion (
                     ordenAten_nombre, ordenAten_idcliente, ordenAten_nhcl, ordenAten_idMedico,
                     ordenAten_estado, ordenAten_fecha, ordenAten_esp_numero, ordenAten_idlocalidad,
                     ordenAten_hora, ordenAten_IdUsuario, ordenaten_IPOrigen, ordenAten_etapa,
-                    ordenAten_Tipo, ordenAten_Despacho, ordenAten_turno
+                    ordenAten_Tipo, ordenAten_Despacho, ordenAten_turno, ordenAten_consultorio
                 )
                 VALUES (
                     @NombrePropietario, @IdCliente, @Nhcl, @IdMedico,
                     'A', @FechaOrden, @IdEspecialidad, @IdLocalidad,
                     @HoraOrden, @IdUsuario, @IpOrigen, @Etapa,
-                    @TipoOrigen, @TipoDespacho, @TurnoCodigo
+                    @TipoOrigen, @TipoDespacho, @TurnoCodigo, @Consultorio
                 );
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -929,6 +938,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 orden.IdEspecialidad,
                 orden.IdLocalidad,
                 orden.HoraOrden,
+                DiaIngles = orden.FechaOrden.DayOfWeek.ToString(),
+                DiaEspanol = DiaSemanaEspanol(orden.FechaOrden.DayOfWeek),
                 IdUsuario = idUsuario,
                 IpOrigen = ipOrigen,
                 Etapa = etapaInicial,
@@ -1091,12 +1102,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             FROM vt_horariosMedicos
             WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad
               AND UPPER(RTRIM({columnaDia})) IN (UPPER(@DiaIngles), UPPER(@DiaEspanol))
+              AND (hr_vigencia_desde IS NULL OR hr_vigencia_desde<=@Fecha)
+              AND (hr_vigencia_hasta IS NULL OR hr_vigencia_hasta>=@Fecha)
             ORDER BY TRY_CONVERT(time, hr_desde)", new
             {
                 IdMedico = idMedico,
                 IdLocalidad = idLocalidad,
                 DiaIngles = fecha.DayOfWeek.ToString(),
-                DiaEspanol = DiaSemanaEspanol(fecha.DayOfWeek)
+                DiaEspanol = DiaSemanaEspanol(fecha.DayOfWeek),
+                Fecha = fecha.Date
             })).ToList();
 
         var bloqueos = new List<(string Desde, string Hasta)>();

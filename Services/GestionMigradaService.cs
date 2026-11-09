@@ -129,20 +129,21 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
 
     public async Task<List<HorarioMedicoDto>> ObtenerHorariosAsync()
     {
-        await VerificarColumnasAsync("vt_horariosMedicos", "hr_id", "hr_iduser", "hr_dia", "hr_dia2", "hr_desde", "hr_hasta", "hr_intervalo", "hr_localidad");
+        await VerificarColumnasAsync("vt_horariosMedicos", "hr_id", "hr_iduser", "hr_dia", "hr_dia2", "hr_desde", "hr_hasta", "hr_intervalo", "hr_localidad", "hr_piso", "hr_consultorio", "hr_vigencia_desde", "hr_vigencia_hasta");
         return (await db.QueryAsync<HorarioMedicoDto>(@"
         SELECT h.hr_id Id,h.hr_iduser IdMedico,RTRIM(ISNULL(u.user_nombre,'')) Medico,RTRIM(h.hr_dia) Dia,RTRIM(ISNULL(h.hr_dia2,'')) DiaIngles,
-        RTRIM(h.hr_desde) Desde,RTRIM(h.hr_hasta) Hasta,h.hr_intervalo Intervalo,h.hr_localidad IdLocalidad,RTRIM(ISNULL(l.loc_descripcion,'')) Localidad
+        RTRIM(h.hr_desde) Desde,RTRIM(h.hr_hasta) Hasta,h.hr_intervalo Intervalo,h.hr_localidad IdLocalidad,RTRIM(ISNULL(l.loc_descripcion,'')) Localidad,
+        RTRIM(ISNULL(h.hr_piso,'')) Piso,RTRIM(ISNULL(h.hr_consultorio,'')) Consultorio,h.hr_vigencia_desde VigenciaDesde,h.hr_vigencia_hasta VigenciaHasta
         FROM vt_horariosMedicos h LEFT JOIN vt_usuarios u ON u.user_numero=h.hr_iduser LEFT JOIN vt_localidades l ON l.loc_id=h.hr_localidad ORDER BY u.user_nombre,h.hr_id")).ToList();
     }
 
     public async Task<bool> GuardarHorarioAsync(HorarioMedicoDto x,int idUsuario)
     {
-        await VerificarColumnasAsync("vt_horariosMedicos", "hr_id", "hr_iduser", "hr_dia", "hr_dia2", "hr_desde", "hr_hasta", "hr_intervalo", "hr_localidad");
-        if(x.IdMedico<=0||x.IdLocalidad<=0||!HoraValida(x.Desde,x.Hasta)) return false;
+        await VerificarColumnasAsync("vt_horariosMedicos", "hr_id", "hr_iduser", "hr_dia", "hr_dia2", "hr_desde", "hr_hasta", "hr_intervalo", "hr_localidad", "hr_piso", "hr_consultorio", "hr_vigencia_desde", "hr_vigencia_hasta");
+        if(x.IdMedico<=0||x.IdLocalidad<=0||string.IsNullOrWhiteSpace(x.Piso)||string.IsNullOrWhiteSpace(x.Consultorio)||!HoraValida(x.Desde,x.Hasta)||x.VigenciaHasta<x.VigenciaDesde) return false;
         var repetido=await db.QueryFirstOrDefaultAsync<int>("SELECT COUNT(1) FROM vt_horariosMedicos WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad AND hr_dia2=@DiaIngles AND hr_id<>@Id AND CAST(hr_desde AS time)<CAST(@Hasta AS time) AND CAST(hr_hasta AS time)>CAST(@Desde AS time)",x);
         if(repetido>0)return false;
-        var sql=x.Id>0?"UPDATE vt_horariosMedicos SET hr_iduser=@IdMedico,hr_dia=@Dia,hr_dia2=@DiaIngles,hr_desde=@Desde,hr_hasta=@Hasta,hr_intervalo=@Intervalo,hr_localidad=@IdLocalidad WHERE hr_id=@Id":"INSERT INTO vt_horariosMedicos(hr_iduser,hr_dia,hr_dia2,hr_desde,hr_hasta,hr_intervalo,hr_localidad) VALUES(@IdMedico,@Dia,@DiaIngles,@Desde,@Hasta,@Intervalo,@IdLocalidad)";
+        var sql=x.Id>0?"UPDATE vt_horariosMedicos SET hr_iduser=@IdMedico,hr_dia=@Dia,hr_dia2=@DiaIngles,hr_desde=@Desde,hr_hasta=@Hasta,hr_intervalo=@Intervalo,hr_localidad=@IdLocalidad,hr_piso=@Piso,hr_consultorio=@Consultorio,hr_vigencia_desde=@VigenciaDesde,hr_vigencia_hasta=@VigenciaHasta WHERE hr_id=@Id":"INSERT INTO vt_horariosMedicos(hr_iduser,hr_dia,hr_dia2,hr_desde,hr_hasta,hr_intervalo,hr_localidad,hr_piso,hr_consultorio,hr_vigencia_desde,hr_vigencia_hasta) VALUES(@IdMedico,@Dia,@DiaIngles,@Desde,@Hasta,@Intervalo,@IdLocalidad,@Piso,@Consultorio,@VigenciaDesde,@VigenciaHasta)";
         var ok=await db.ExecuteAsync(sql,x)>0;if(ok)await db.RegistrarBitacoraAsync($"Horario médico: {x.IdMedico} {x.Dia}",idUsuario);return ok;
     }
     public async Task<bool> EliminarHorarioAsync(int id,int idUsuario){var ok=await db.ExecuteAsync("DELETE FROM vt_horariosMedicos WHERE hr_id=@Id",new{Id=id})>0;if(ok)await db.RegistrarBitacoraAsync($"Elimina horario médico {id}",idUsuario);return ok;}

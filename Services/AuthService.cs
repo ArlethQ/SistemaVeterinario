@@ -333,7 +333,7 @@ public class AuthService : IAuthService
                 (606, 'Recetas sin orden', 6, 'consulta/recetario/sin-orden'),
                 (607, 'Consentimientos y alta', 6, 'consulta/autorizaciones'),
                 (608, 'Seguimiento clínico', 6, 'seguimiento/clinico'),
-                (609, 'Dossier / Lotes fichas', 6, 'consulta/imprimir-fichas'),
+                (609, 'Expediente / Lotes fichas', 6, 'consulta/imprimir-fichas'),
                 (701, 'Operaciones clínicas', 7, 'operaciones/clinicas'),
                 (702, 'Programación clínica', 7, 'programacion/clinica'),
                 (801, 'Órdenes de laboratorio', 8, 'diagnostico/laboratorio'),

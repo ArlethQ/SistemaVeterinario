@@ -999,9 +999,9 @@ No faltan vistas independientes para I-STAT, evolución impresa, recetas con/sin
 - **Blazor equivalente:** `Components/Pages/ImpresionFichasMasiva.razor`.
 - **Servicio equivalente:** `Services/ConsultaExternaService.cs`, `Services/KardexService.cs`, `Services/ReportExportService.cs`.
 - **Estado:** **parcial**.
-- **Evidencia:** Selecciona atenciones por paciente, genera PDF individual y dossier consolidado para auditoría/seguros.
+- **Evidencia:** Selecciona atenciones por paciente, genera PDF individual y expediente consolidado para auditoría/seguros.
 - **Diferencias encontradas:** Crystal fue sustituido por QuestPDF y la selección se realiza sobre fichas SOAP vigentes.
-- **Trabajo requerido:** Validar el dossier con varias atenciones y los datos requeridos por aseguradoras.
+- **Trabajo requerido:** Validar el expediente con varias atenciones y los datos requeridos por aseguradoras.
 
 ### `vt_labmedicospre.aspx`
 
