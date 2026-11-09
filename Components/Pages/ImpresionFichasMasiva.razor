@@ -8,7 +8,7 @@
 @inject IReportExportService ReportService
 @inject IJSRuntime JS
 @inject NavigationManager Nav
-<PageTitle>Dossier de Fichas Médicas por Mascota | e-ForVets</PageTitle>
+<PageTitle>Expediente de Fichas Médicas por Mascota | e-ForVets</PageTitle>
 
 @if (_autorizado)
 {
@@ -17,15 +17,15 @@
         <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
             <div>
                 <small class="text-primary fw-bold text-uppercase">Expediente Clínico &amp; Reclamo de Seguros</small>
-                <h3 class="fw-bold mb-0 text-dark">Dossier de Fichas Médicas por Mascota</h3>
-                <small class="text-muted">Elija el animal en el dropbox y filtre por orden o fecha para generar el dossier consolidado en PDF</small>
+                <h3 class="fw-bold mb-0 text-dark">Expediente de Fichas Médicas por Mascota</h3>
+                <small class="text-muted">Elija el animal en el dropbox y filtre por orden o fecha para generar el expediente consolidado en PDF</small>
             </div>
             <div class="d-flex gap-2">
                 @if (AtencionesFiltradas.Any(x => x.Seleccionado))
                 {
                     <button class="btn btn-danger fw-semibold d-flex align-items-center gap-2 shadow-sm"
                             disabled="@_generandoPdf"
-                            @onclick="GenerarDossierConsolidadoPdfAsync">
+                            @onclick="GenerarExpedienteConsolidadoPdfAsync">
                         @if (_generandoPdf)
                         {
                             <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -34,7 +34,7 @@
                         else
                         {
                             <i class="bi bi-file-earmark-pdf-fill fs-5"></i>
-                            <span>Descargar Dossier Consolidado (@AtencionesFiltradas.Count(x => x.Seleccionado))</span>
+                            <span>Descargar Expediente Consolidado (@AtencionesFiltradas.Count(x => x.Seleccionado))</span>
                         }
                     </button>
                 }
@@ -196,8 +196,8 @@
                         {
                             <button class="btn btn-sm btn-danger py-1 px-3 fw-semibold shadow-sm"
                                     disabled="@_generandoPdf"
-                                    @onclick="GenerarDossierConsolidadoPdfAsync">
-                                <i class="bi bi-file-earmark-pdf-fill me-1"></i> Descargar Dossier Consolidado (@AtencionesFiltradas.Count(x => x.Seleccionado))
+                                    @onclick="GenerarExpedienteConsolidadoPdfAsync">
+                                <i class="bi bi-file-earmark-pdf-fill me-1"></i> Descargar Expediente Consolidado (@AtencionesFiltradas.Count(x => x.Seleccionado))
                             </button>
                         }
                     </div>
@@ -374,9 +374,9 @@
                     {
                         <button class="btn btn-sm btn-danger fw-semibold shadow-sm"
                                 disabled="@_generandoPdf"
-                                @onclick="GenerarDossierConsolidadoPdfAsync">
+                                @onclick="GenerarExpedienteConsolidadoPdfAsync">
                             <i class="bi bi-file-earmark-pdf-fill me-1"></i>
-                            Exportar @AtencionesFiltradas.Count(x => x.Seleccionado) Orden(es) en Dossier Consolidado (PDF)
+                            Exportar @AtencionesFiltradas.Count(x => x.Seleccionado) Orden(es) en Expediente Consolidado (PDF)
                         </button>
                     }
                 </div>
@@ -690,7 +690,7 @@
         }
     }
 
-    private async Task GenerarDossierConsolidadoPdfAsync()
+    private async Task GenerarExpedienteConsolidadoPdfAsync()
     {
         var seleccionadas = AtencionesFiltradas.Where(x => x.Seleccionado).OrderBy(x => x.Fecha).ToList();
         if (seleccionadas.Count == 0)
@@ -702,7 +702,7 @@
 
         if (_paciente == null)
         {
-            _mensaje = "Faltan los datos del paciente para emitir el dossier consolidado.";
+            _mensaje = "Faltan los datos del paciente para emitir el expediente consolidado.";
             _mensajeEsError = true;
             return;
         }
@@ -735,15 +735,15 @@
             }
 
             var pdfBytes = ReportService.GenerarFichasMedicasLotePdf(_paciente, lote);
-            var fileName = $"Dossier_Fichas_NHCL_{_paciente.Nhcl}_{DateTime.Now:yyyyMMdd_HHmm}.pdf";
+            var fileName = $"Expediente_Fichas_NHCL_{_paciente.Nhcl}_{DateTime.Now:yyyyMMdd_HHmm}.pdf";
             await JS.InvokeVoidAsync("hosvetDownloadFile", fileName, "application/pdf", Convert.ToBase64String(pdfBytes));
 
-            _mensaje = $"Dossier consolidado con {lote.Count} atenciones generado y descargado exitosamente.";
+            _mensaje = $"Expediente consolidado con {lote.Count} atenciones generado y descargado exitosamente.";
             _mensajeEsError = false;
         }
         catch (Exception ex)
         {
-            _mensaje = $"Error generando dossier consolidado: {ex.Message}";
+            _mensaje = $"Error generando expediente consolidado: {ex.Message}";
             _mensajeEsError = true;
         }
         finally

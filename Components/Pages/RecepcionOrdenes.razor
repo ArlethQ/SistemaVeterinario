@@ -278,56 +278,10 @@
                 <div class="col-6 col-xl-3"><div class="kpi-card red"><span class="kpi-symbol">ESP</span><div><strong>@OrdenesEnEspera</strong><small>En espera</small><em>En cola de atención</em></div></div></div>
             </div>
 
-            <!-- Resumen de Turnos Diarios por Especialidad -->
-            <div class="card shadow-sm border-0 mb-2">
-                <div class="card-body py-2 px-3">
-                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge bg-primary rounded-pill"><i class="bi bi-ticket-detailed-fill me-1"></i>Turnos del Día</span>
-                            <strong class="small text-dark">Cantidad de turnos diarios por especialidad (@_fechaConsulta.ToString("dd/MM/yyyy"))</strong>
-                        </div>
-                        <div class="d-flex align-items-center gap-2">
-                            @if (_filtroEspecialidadId > 0)
-                            {
-                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.75rem;" @onclick="() => _filtroEspecialidadId = 0">
-                                    <i class="bi bi-x-circle me-1"></i>Quitar filtro de especialidad
-                                </button>
-                            }
-                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size:0.76rem;" @onclick="() => _mostrarTodasEspecialidades = !_mostrarTodasEspecialidades">
-                                <i class="bi @(_mostrarTodasEspecialidades ? "bi-eye-slash" : "bi-grid-3x3-gap") me-1"></i>
-                                @(_mostrarTodasEspecialidades ? "Ver solo con turnos hoy" : $"Ver todas las especialidades ({_especialidades.Count})")
-                            </button>
-                        </div>
-                    </div>
-                    <div class="d-flex flex-wrap gap-2">
-                        <button type="button"
-                                class="btn btn-sm @(_filtroEspecialidadId == 0 ? "btn-dark" : "btn-outline-dark") py-1 px-2 d-flex align-items-center gap-2"
-                                style="font-size:0.78rem;"
-                                @onclick="() => _filtroEspecialidadId = 0">
-                            <span>Todas</span>
-                            <span class="badge bg-secondary rounded-pill">@_ordenes.Count</span>
-                        </button>
-                        @foreach (var item in ObtenerResumenTurnosPorEspecialidad())
-                        {
-                            bool activo = _filtroEspecialidadId == item.IdEspecialidad;
-                            <button type="button"
-                                    class="btn btn-sm @(activo ? "btn-primary" : (item.Cantidad > 0 ? "btn-outline-primary" : "btn-outline-secondary opacity-75")) py-1 px-2 d-flex align-items-center gap-1"
-                                    style="font-size:0.78rem;"
-                                    title="Filtrar turnos de @item.Descripcion"
-                                    @onclick="() => _filtroEspecialidadId = (activo ? 0 : item.IdEspecialidad)">
-                                <span class="badge @(activo ? "bg-light text-primary" : "bg-primary") font-monospace">@item.Codigo</span>
-                                <span class="text-truncate" style="max-width: 145px;">@item.Descripcion</span>
-                                <span class="badge @(activo ? "bg-white text-dark" : (item.Cantidad > 0 ? "bg-dark" : "bg-secondary")) rounded-pill ms-1">@item.Cantidad</span>
-                            </button>
-                        }
-                    </div>
-                </div>
-            </div>
-
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span class="fw-bold text-dark">
-                        <i class="bi bi-list-check me-1"></i>Tablero de Órdenes y Turnos en Curso (@OrdenesMostradas.Count)
+                        <i class="bi bi-list-check me-1"></i>Tablero de Órdenes en Curso (@OrdenesMostradas.Count)
                     </span>
                     <div class="d-flex gap-2 align-items-center">
                         <input type="date" class="form-control form-control-sm" style="width:145px;"
@@ -419,6 +373,10 @@
                                                 @if (o.Estado == "A")
                                                 {
                                                     <div class="d-flex align-items-center gap-1">
+                                                        @if (_especialidades.Any(e => e.Id == o.IdEspecialidad && e.RequiereTriaje))
+                                                        {
+                                                            <span class="badge bg-info text-dark" style="font-size:0.65rem;">📋 En triaje</span>
+                                                        }
                                                         <span class="badge bg-warning text-dark" style="font-size:0.65rem;">⏳ En espera</span>
                                                         <span role="button"
                                                               class="badge bg-success text-white shadow-sm"
@@ -608,36 +566,10 @@
     private List<OrdenAtencionResumenDto> _ordenes = new();
     private OrdenAtencionResumenDto? _ordenCambio;
     private OrdenAtencionResumenDto? _ordenTicket;
-    private int _filtroEspecialidadId;
-    private bool _mostrarTodasEspecialidades = true;
-
     private List<OrdenAtencionResumenDto> OrdenesMostradas =>
         _ordenes
             .Where(o => o.Estado != "T" && o.Estado != "I")
-            .Where(o => _filtroEspecialidadId == 0 || o.IdEspecialidad == _filtroEspecialidadId)
             .ToList();
-
-    private sealed record ResumenTurnoEspecialidad(int IdEspecialidad, string Codigo, string Descripcion, int Cantidad);
-
-    private List<ResumenTurnoEspecialidad> ObtenerResumenTurnosPorEspecialidad()
-    {
-        var conteos = _ordenes
-            .GroupBy(o => o.IdEspecialidad)
-            .ToDictionary(g => g.Key, g => g.Count());
-
-        var lista = _especialidades
-            .Select(e => new ResumenTurnoEspecialidad(
-                e.Id,
-                string.IsNullOrWhiteSpace(e.Codigo) ? "GEN" : e.Codigo,
-                e.Descripcion,
-                conteos.GetValueOrDefault(e.Id, 0)))
-            .Where(x => _mostrarTodasEspecialidades || x.Cantidad > 0 || x.IdEspecialidad == _filtroEspecialidadId)
-            .OrderByDescending(x => x.Cantidad)
-            .ThenBy(x => x.Descripcion)
-            .ToList();
-
-        return lista;
-    }
 
     private string ObtenerSiguienteTurnoPreview()
     {
@@ -935,12 +867,13 @@
         await Task.WhenAll(tEsp, tMedicosTodos, tPac, tOrd);
 
         _especialidades = await tEsp;
+        _especialidades = await FiltrarEspecialidadesEnHorarioAsync(_especialidades);
         var todosMedicos = await tMedicosTodos;
 
         if (EspecialidadPreseleccionada.HasValue && EspecialidadPreseleccionada.Value > 0)
         {
             _nuevaOrden.IdEspecialidad = EspecialidadPreseleccionada.Value;
-            _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(_nuevaOrden.IdEspecialidad);
+            _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad);
             if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0 && _medicosDisponibles.Any(m => m.Id == MedicoPreseleccionado.Value))
             {
                 _nuevaOrden.IdMedico = MedicoPreseleccionado.Value;
@@ -957,14 +890,14 @@
             {
                 int espId = medInfo.IdPadre.GetValueOrDefault();
                 _nuevaOrden.IdEspecialidad = espId;
-                _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(espId);
+                _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(espId);
                 _nuevaOrden.IdMedico = medInfo.Id;
             }
             else
             {
                 int espInicial = _especialidades.FirstOrDefault()?.Id ?? 1;
                 _nuevaOrden.IdEspecialidad = espInicial;
-                _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(espInicial);
+                _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(espInicial);
                 _nuevaOrden.IdMedico = MedicoPreseleccionado.Value;
             }
         }
@@ -972,7 +905,7 @@
         {
             int espInicial = _especialidades.FirstOrDefault()?.Id ?? 1;
             _nuevaOrden.IdEspecialidad = espInicial;
-            _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(espInicial);
+            _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(espInicial);
             _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 1;
         }
 
@@ -1030,9 +963,43 @@
         if (int.TryParse(e.Value?.ToString(), out int idEsp))
         {
             _nuevaOrden.IdEspecialidad = idEsp;
-            _medicosDisponibles = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(idEsp);
+            _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(idEsp);
             _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
+            if (_medicosDisponibles.Count == 0)
+            {
+                _esError = true;
+                _mensajeAlerta = "No existen médicos con horario de atención activo para esta especialidad, fecha y hora.";
+            }
         }
+    }
+
+    private async Task<List<CatalogoItemGenericoDto>> ObtenerMedicosEnHorarioAsync(int idEspecialidad)
+    {
+        var medicos = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(idEspecialidad);
+        var disponibles = new List<CatalogoItemGenericoDto>();
+        string hora = TimeSpan.TryParse(_nuevaOrden.HoraOrden, out var valorHora) ? valorHora.ToString(@"hh\:mm") : DateTime.Now.ToString("HH:mm");
+        foreach (var medico in medicos)
+        {
+            var slots = await AdmisionService.ObtenerSlotsHorarioMedicoAsync(medico.Id, _nuevaOrden.FechaOrden, SessionState.Localidad);
+            if (slots.Any(s => s.Disponible && s.Hora.StartsWith(hora, StringComparison.OrdinalIgnoreCase)))
+            {
+                disponibles.Add(medico);
+            }
+        }
+        return disponibles;
+    }
+
+    private async Task<List<CatalogoItemGenericoDto>> FiltrarEspecialidadesEnHorarioAsync(IEnumerable<CatalogoItemGenericoDto> especialidades)
+    {
+        var resultado = new List<CatalogoItemGenericoDto>();
+        foreach (var especialidad in especialidades)
+        {
+            if ((await ObtenerMedicosEnHorarioAsync(especialidad.Id)).Count > 0)
+            {
+                resultado.Add(especialidad);
+            }
+        }
+        return resultado;
     }
 
     private bool EspecialidadRequiereTriaje =>
@@ -1044,6 +1011,14 @@
         {
             _esError = true;
             _mensajeAlerta = "Seleccione primero un paciente (NHCL) de la lista.";
+            return;
+        }
+
+        var medicosEnHorario = await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad);
+        if (!medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
+        {
+            _esError = true;
+            _mensajeAlerta = "El médico seleccionado no tiene un turno u horario de atención disponible en la fecha y hora indicadas.";
             return;
         }
 

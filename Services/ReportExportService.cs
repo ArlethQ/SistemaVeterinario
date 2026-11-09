@@ -3117,7 +3117,7 @@ public class ReportExportService : IReportExportService
                         {
                             c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS - e-ForVets")
                                 .Bold().FontSize(13f).FontColor(Colors.Blue.Darken4);
-                            c.Item().Text("DOSSIER CLÍNICO CONSOLIDADO — AUDITORÍA Y RECLAMO DE SEGUROS")
+                            c.Item().Text("EXPEDIENTE CLÍNICO CONSOLIDADO — AUDITORÍA Y RECLAMO DE SEGUROS")
                                 .Bold().FontSize(10f).FontColor(Colors.Blue.Darken2);
                             c.Item().Text($"Fecha de Emisión: {DateTime.Now:dd/MM/yyyy HH:mm}   |   Expediente Paciente NHCL #{paciente.Nhcl}")
                                 .FontSize(7.5f).FontColor(Colors.Grey.Darken2);
@@ -3236,7 +3236,7 @@ public class ReportExportService : IReportExportService
                         r.RelativeItem(1.4f).Border(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5).Column(c =>
                         {
                             c.Item().Text("CERTIFICACIÓN CLÍNICA INSTITUCIONAL PARA AUDITORÍAS Y SEGUROS:").Bold().FontSize(7f).FontColor(Colors.Blue.Darken4);
-                            c.Item().Text("Se certifica que la información constante en el presente dossier consolidado corresponde fielmente a los registros médicos electrónicos archivados en el sistema e-ForVets del Hospital Veterinario. El presente reporte es válido para trámites de cobertura ante compañías aseguradoras, peritajes y auditorías clínicas.").FontSize(6.8f).FontColor(Colors.Grey.Darken2);
+                            c.Item().Text("Se certifica que la información constante en el presente expediente consolidado corresponde fielmente a los registros médicos electrónicos archivados en el sistema e-ForVets del Hospital Veterinario. El presente reporte es válido para trámites de cobertura ante compañías aseguradoras, peritajes y auditorías clínicas.").FontSize(6.8f).FontColor(Colors.Grey.Darken2);
                         });
 
                         r.ConstantItem(25);
@@ -3253,7 +3253,7 @@ public class ReportExportService : IReportExportService
 
                 page.Footer().Row(r =>
                 {
-                    r.RelativeItem().Text($"e-ForVets — Dossier Clínico Consolidado | NHCL: {paciente.Nhcl}").FontSize(7f).FontColor(Colors.Grey.Darken1);
+                    r.RelativeItem().Text($"e-ForVets — Expediente Clínico Consolidado | NHCL: {paciente.Nhcl}").FontSize(7f).FontColor(Colors.Grey.Darken1);
                     r.RelativeItem().AlignRight().Text(t =>
                     {
                         t.DefaultTextStyle(s => s.FontSize(7f).FontColor(Colors.Grey.Darken1));
@@ -3273,7 +3273,7 @@ public class ReportExportService : IReportExportService
 
                 container.Page(page =>
                 {
-                    ComponerPaginaFichaMedica(page, paciente, f, item.Diagnosticos, item.Receta, qrItem, $"DOSSIER CLÍNICO — ATENCIÓN #{f.MedOrden}");
+                    ComponerPaginaFichaMedica(page, paciente, f, item.Diagnosticos, item.Receta, qrItem, $"EXPEDIENTE CLÍNICO — ATENCIÓN #{f.MedOrden}");
                 });
             }
         }).GeneratePdf();
