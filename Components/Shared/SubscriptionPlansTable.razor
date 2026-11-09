@@ -1,0 +1,53 @@
+@namespace HosvetKardex.Web.Components
+
+<section class="plans-comparison" aria-labelledby="@HeadingId">
+    @if (ShowHeading)
+    {
+        <div class="plans-heading">
+            <span class="plans-eyebrow">Planes e-ForVets</span>
+            <h2 id="@HeadingId">Elige la capacidad que necesita tu veterinaria</h2>
+            <p>Compara las funciones incluidas y empieza con el plan adecuado para tu equipo.</p>
+        </div>
+    }
+    <div class="plans-table-wrap">
+        <table class="plans-table">
+            <thead><tr><th scope="col">Función</th>@foreach (var plan in Plans) { <th scope="col" class="@(plan.Highlight ? "highlight" : null)">@if (plan.Highlight) { <span class="recommended">Más completo</span> }<strong>@plan.Name</strong><span class="price">@plan.Price</span><small>@plan.PriceCaption</small></th> }</tr></thead>
+            <tbody>
+                @foreach (var feature in Features)
+                {
+                    <tr><th scope="row"><span class="feature-mark">@feature.Icon</span>@feature.Name</th>@for (var i = 0; i < feature.Values.Length; i++) { var value = feature.Values[i]; <td class="@(Plans[i].Highlight ? "highlight" : null)"><span class="feature-value @(value == "—" ? "unavailable" : null)">@value</span></td> }</tr>
+                }
+            </tbody>
+            <tfoot><tr><th></th>@foreach (var plan in Plans) { <td class="@(plan.Highlight ? "highlight" : null)"><a href="@ActionHref" class="plan-action">@ActionText</a></td> }</tr></tfoot>
+        </table>
+    </div>
+    <div class="addons">
+        <div class="addons-copy"><span>Complementos opcionales</span><strong>Amplía el plan Hospital según tu operación</strong></div>
+        <article><span class="addon-icon">🛍️</span><div><strong>Petshop</strong><small>Gestión para el área comercial.</small></div><b>$10<small>/mes</small></b></article>
+        <article><span class="addon-icon">▦</span><div><strong>e-Contax</strong><small>Inventario, caja, farmacia y cuentas por cobrar/pagar.</small></div><b>$30<small>/mes</small></b></article>
+    </div>
+    <p class="plans-note">* Condiciones de uso comercial aplicables. Los valores mostrados no incluyen impuestos.</p>
+</section>
+
+@code {
+    [Parameter] public bool ShowHeading { get; set; } = true;
+    [Parameter] public string ActionHref { get; set; } = "/registro";
+    [Parameter] public string ActionText { get; set; } = "Seleccionar";
+    private const string HeadingId = "planes-eforvets-title";
+    private sealed record Plan(string Name, string Price, string PriceCaption, bool Highlight = false);
+    private sealed record Feature(string Icon, string Name, string[] Values);
+    private static readonly Plan[] Plans = [new("Gratuito", "$0", "Para comenzar"), new("Consultorio", "$29", "por mes"), new("Clínica", "$69", "por mes"), new("Hospital", "$120", "por mes", true)];
+    private static readonly Feature[] Features =
+    [
+        new("🐾", "Pacientes", ["Hasta 20*", "Sin límite comercial*", "Sin límite comercial*", "Sin límite comercial*"]),
+        new("◷", "Agendamiento de citas", ["Sí", "Sí", "Sí", "Sí"]),
+        new("✚", "Vacunas y recordatorios", ["Sí", "Sí", "Sí", "Sí"]),
+        new("▤", "Historia clínica completa", ["Sí", "Sí", "Sí", "Sí"]),
+        new("♟", "Múltiples veterinarios", ["—", "—", "3", "7 + 1 administrador"]),
+        new("🏥", "Hospitalización, kardex, cirugías y rondas médicas", ["—", "—", "Sí", "Sí"]),
+        new("✓", "Consentimientos y control de internados", ["—", "—", "Sí", "Sí"]),
+        new("♡", "e-ForPets", ["Sí", "Sí", "Sí", "Sí"]),
+        new("✦", "Reportes médicos avanzados + IA", ["—", "Sí", "Sí", "Sí"]),
+        new("▧", "Facturación electrónica e-Fact", ["5 documentos", "5 documentos", "Ilimitada", "Ilimitada"])
+    ];
+}
