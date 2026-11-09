@@ -34,3 +34,5 @@ IF COL_LENGTH('dbo.vt_ordenAtencion', 'ordenAten_esProcedimiento') IS NULL
     ALTER TABLE dbo.vt_ordenAtencion ADD ordenAten_esProcedimiento BIT NOT NULL CONSTRAINT DF_vt_orden_procedimiento DEFAULT(0);
 IF COL_LENGTH('dbo.vt_ordenAtencion', 'ordenAten_idEnfermero') IS NULL
     ALTER TABLE dbo.vt_ordenAtencion ADD ordenAten_idEnfermero INT NULL;
+IF COL_LENGTH('dbo.vt_ordenAtencion', 'ordenAten_triajeMedico') IS NULL
+    ALTER TABLE dbo.vt_ordenAtencion ADD ordenAten_triajeMedico BIT NOT NULL CONSTRAINT DF_vt_orden_triaje_medico DEFAULT(0);

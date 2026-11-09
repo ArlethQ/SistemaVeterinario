@@ -237,8 +237,24 @@
                                     </select>
                                 </div>
                             }
+                            else
+                            {
+                                <div class="col-md-9">
+                                    <label class="form-label small fw-bold">4. Médico tratante asignado</label>
+                                    <select class="form-select form-select-sm" @bind="_nuevaOrden.IdMedico">
+                                        <option value="0">Seleccione un médico</option>
+                                        @foreach (var med in _medicosDisponibles)
+                                        {
+                                            <option value="@med.Id">@med.Descripcion</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-3 d-flex align-items-end">
+                                    <label class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_nuevaOrden.TriajeMedico" /><span class="form-check-label ms-2 fw-bold">Triaje</span></label>
+                                </div>
+                            }
 
-                            @if (EspecialidadRequiereTriaje)
+                            @if (_nuevaOrden.EsProcedimiento || _nuevaOrden.TriajeMedico)
                             {
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">@(EsTipoConsultaEspecialidad ? "5. Semáforo Triaje" : "4. Semáforo Triaje")</label>
@@ -1141,9 +1157,20 @@
             _mensajeAlerta = "Seleccione el enfermero responsable del procedimiento.";
             return;
         }
-        if (!_nuevaOrden.EsProcedimiento)
+        if (_nuevaOrden.EsProcedimiento)
+        {
+            _nuevaOrden.IdMedico = 0;
+            _nuevaOrden.TriajeMedico = false;
+        }
+        else
         {
             _nuevaOrden.IdEnfermero = null;
+            if (_nuevaOrden.IdMedico <= 0)
+            {
+                _esError = true;
+                _mensajeAlerta = "Seleccione el médico tratante.";
+                return;
+            }
         }
 
         if (!EsTipoConsultaEspecialidad && _nuevaOrden.IdEspecialidad <= 0)

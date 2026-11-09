@@ -934,14 +934,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     ordenAten_estado, ordenAten_fecha, ordenAten_esp_numero, ordenAten_idlocalidad,
                     ordenAten_hora, ordenAten_IdUsuario, ordenaten_IPOrigen, ordenAten_etapa,
                     ordenAten_Tipo, ordenAten_Despacho, ordenAten_turno, ordenAten_consultorio,
-                    ordenAten_esProcedimiento, ordenAten_idEnfermero
+                    ordenAten_esProcedimiento, ordenAten_idEnfermero, ordenAten_triajeMedico
                 )
                 VALUES (
                     @NombrePropietario, @IdCliente, @Nhcl, @IdMedico,
                     'A', @FechaOrden, @IdEspecialidad, @IdLocalidad,
                     @HoraOrden, @IdUsuario, @IpOrigen, @Etapa,
                     @TipoOrigen, @TipoDespacho, @TurnoCodigo, @Consultorio,
-                    @EsProcedimiento, @IdEnfermero
+                    @EsProcedimiento, @IdEnfermero, @TriajeMedico
                 );
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -965,6 +965,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 orden.TipoDespacho
                 ,orden.EsProcedimiento
                 ,orden.IdEnfermero
+                ,orden.TriajeMedico
             });
 
             if (idNueva > 0) return idNueva;
@@ -995,6 +996,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(es.es_descripcion, '') AS Especialidad,
                 o.ordenAten_idMedico AS IdMedico,
                 ISNULL(u.user_nombre, '') AS Medico,
+                CAST(ISNULL(o.ordenAten_triajeMedico,0) AS BIT) AS TriajeMedico,
                 CAST(ISNULL(o.ordenAten_esProcedimiento,0) AS BIT) AS EsProcedimiento,
                 o.ordenAten_idEnfermero AS IdEnfermero,
                 ISNULL(enf.user_nombre,'') AS Enfermero,

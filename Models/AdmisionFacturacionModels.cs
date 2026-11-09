@@ -144,8 +144,8 @@ public class NuevaOrdenAtencionDto
 
     public int IdEspecialidad { get; set; }
 
-    [Range(1, int.MaxValue, ErrorMessage = "Seleccione un médico tratante.")]
     public int IdMedico { get; set; }
+    public bool TriajeMedico { get; set; }
     public bool EsProcedimiento { get; set; }
     public int? IdEnfermero { get; set; }
 
@@ -179,6 +179,7 @@ public class OrdenAtencionResumenDto
     public string Especialidad { get; set; } = string.Empty;
     public int IdMedico { get; set; }
     public string Medico { get; set; } = string.Empty;
+    public bool TriajeMedico { get; set; }
     public bool EsProcedimiento { get; set; }
     public int? IdEnfermero { get; set; }
     public string Enfermero { get; set; } = string.Empty;
