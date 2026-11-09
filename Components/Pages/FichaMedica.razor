@@ -26,7 +26,7 @@
                 <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;"
                         value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
                     <option value="0">-- Seleccionar Orden --</option>
-                    @foreach (var ord in _ordenesActivas)
+                    @foreach (var ord in OrdenesVisibles)
                     {
                         <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | @ord.Paciente | Dr(a). @ord.Medico</option>
                     }
@@ -650,6 +650,9 @@
     private int IdOrdenInput { get; set; }
     private int NhclInput { get; set; }
     private List<OrdenActivaResumenDto> _ordenesActivas = new();
+    private IEnumerable<OrdenActivaResumenDto> OrdenesVisibles => Nhcl > 0
+        ? _ordenesActivas.Where(o => o.Nhcl == Nhcl)
+        : _ordenesActivas;
     private int TabActiva { get; set; } = 1;
     private bool CargandoInicial { get; set; } = true;
     private bool Guardando { get; set; }
@@ -678,6 +681,10 @@
         if (_ordenesActivas.Count == 0)
         {
             _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(top: 50);
+            if (Session.TipoUser == 2)
+            {
+                _ordenesActivas = _ordenesActivas.Where(o => o.IdMedico == Session.IdUser).ToList();
+            }
         }
 
         if (IdOrden <= 0 && Nhcl > 0)

@@ -145,6 +145,8 @@ public class NuevaOrdenAtencionDto
 
     [Range(1, int.MaxValue, ErrorMessage = "Seleccione un médico tratante.")]
     public int IdMedico { get; set; }
+    public bool EsProcedimiento { get; set; }
+    public int? IdEnfermero { get; set; }
 
     public int IdLocalidad { get; set; } = 1;
     public DateTime FechaOrden { get; set; } = DateTime.Today;
@@ -176,6 +178,9 @@ public class OrdenAtencionResumenDto
     public string Especialidad { get; set; } = string.Empty;
     public int IdMedico { get; set; }
     public string Medico { get; set; } = string.Empty;
+    public bool EsProcedimiento { get; set; }
+    public int? IdEnfermero { get; set; }
+    public string Enfermero { get; set; } = string.Empty;
     public DateTime Fecha { get; set; }
     public string Hora { get; set; } = string.Empty;
     public string Estado { get; set; } = "A"; // A=Activa/Espera, T=Terminada, P=Pre-alta, I=Anulada

@@ -288,6 +288,9 @@ else
             try
             {
                 _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(top: 50);
+                _ordenesActivas = _ordenesActivas
+                    .Where(o => !o.EsProcedimiento || o.IdEnfermero == Session.IdUser)
+                    .ToList();
             }
             catch
             {
@@ -296,6 +299,16 @@ else
 
             int ordTarget = IdOrden ?? Session.OrdenActiva ?? 0;
             int nhclTarget = Nhcl ?? Session.NhclActivo ?? 0;
+
+            if (ordTarget > 0 && !_ordenesActivas.Any(o => o.IdOrdenAtencion == ordTarget))
+            {
+                ordTarget = 0;
+                nhclTarget = 0;
+                IdOrden = null;
+                Nhcl = null;
+                _esError = true;
+                _mensajeAlerta = "Este procedimiento fue asignado a otro enfermero.";
+            }
 
             if (ordTarget <= 0 && _ordenesActivas.Count > 0)
             {

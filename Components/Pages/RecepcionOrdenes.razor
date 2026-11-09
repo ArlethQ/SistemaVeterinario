@@ -122,7 +122,7 @@
 
     <div class="row g-3">
         <!-- Columna Izquierda: Emisión de Nueva Orden de Atención -->
-        <div class="@(_mostrarFormularioOrden ? "order-drawer" : "d-none")">
+        <div class="@(_mostrarFormularioOrden ? "order-drawer" : "d-none")" role="dialog" aria-modal="true" aria-label="Registrar nueva orden de atención">
             <div class="card shadow-sm border-0 triage-register-card">
                 <div class="card-header text-white fw-bold">
                     <div><i class="bi bi-plus-circle me-1"></i><span>1.</span> Registrar Nueva Orden de Atención
@@ -213,6 +213,23 @@
                                     <option value="2">2 — Despacho Laboratorio</option>
                                 </select>
                             </div>
+
+                            <div class="col-md-6 d-flex align-items-end">
+                                <label class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_nuevaOrden.EsProcedimiento" /><span class="form-check-label ms-2 fw-bold">Procedimiento</span></label>
+                            </div>
+                            @if (_nuevaOrden.EsProcedimiento)
+                            {
+                                <div class="col-md-12">
+                                    <label class="form-label small fw-bold">Enfermero responsable *</label>
+                                    <select class="form-select form-select-sm" @bind="_nuevaOrden.IdEnfermero">
+                                        <option value="">Seleccione un enfermero</option>
+                                        @foreach (var enfermero in _enfermeros)
+                                        {
+                                            <option value="@enfermero.Id">@enfermero.Descripcion</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
 
                             @if (EspecialidadRequiereTriaje)
                             {
@@ -338,6 +355,10 @@
                                                 @if (!string.IsNullOrWhiteSpace(o.Consultorio))
                                                 {
                                                     <span class="badge bg-info text-dark ms-1" style="font-size:0.7rem;"><i class="bi bi-door-open-fill me-1"></i>@o.Consultorio</span>
+                                                }
+                                                @if (o.EsProcedimiento)
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">Procedimiento · @o.Enfermero</span>
                                                 }
                                             </div>
                                         </td>
@@ -534,6 +555,7 @@
 
     private List<CatalogoItemGenericoDto> _especialidades = new();
     private List<CatalogoItemGenericoDto> _medicosDisponibles = new();
+    private List<CatalogoItemGenericoDto> _enfermeros = new();
     private List<ConteoMedicoEsperaDto> _conteoMedicos = new();
     private List<PacienteMascotaDto> _pacientesEncontrados = new();
     private List<OrdenAtencionResumenDto> _ordenes = new();
@@ -832,13 +854,19 @@
 
         var tEsp = AdmisionService.ObtenerEspecialidadesAsync();
         var tMedicosTodos = AdmisionService.ObtenerMedicosPorEspecialidadAsync(0);
+        var tEnfermeros = AdmisionService.ObtenerEnfermerosAsync();
         var tPac = BuscarPacientesAsync();
         var tOrd = CargarOrdenesAsync();
-        await Task.WhenAll(tEsp, tMedicosTodos, tPac, tOrd);
+        await Task.WhenAll(tEsp, tMedicosTodos, tEnfermeros, tPac, tOrd);
 
         _especialidades = await tEsp;
         _especialidades = await FiltrarEspecialidadesEnHorarioAsync(_especialidades);
+        if (SessionState.TipoUser == 2 && SessionState.EspUser > 0)
+        {
+            _especialidades = _especialidades.Where(e => e.Id == SessionState.EspUser).ToList();
+        }
         var todosMedicos = await tMedicosTodos;
+        _enfermeros = await tEnfermeros;
 
         if (EspecialidadPreseleccionada.HasValue && EspecialidadPreseleccionada.Value > 0)
         {
@@ -982,6 +1010,16 @@
             _mensajeAlerta = "Seleccione primero un paciente (NHCL) de la lista.";
             return;
         }
+        if (_nuevaOrden.EsProcedimiento && !_nuevaOrden.IdEnfermero.HasValue)
+        {
+            _esError = true;
+            _mensajeAlerta = "Seleccione el enfermero responsable del procedimiento.";
+            return;
+        }
+        if (!_nuevaOrden.EsProcedimiento)
+        {
+            _nuevaOrden.IdEnfermero = null;
+        }
 
         var medicosEnHorario = await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad);
         if (!medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
@@ -1046,6 +1084,11 @@
     {
         _ordenes = await AdmisionService.ObtenerOrdenesDelDiaAsync(_fechaConsulta, _filtroOrdenTexto, _filtroEtapa);
         _conteoMedicos = await AdmisionService.ObtenerConteoMedicosEsperaAsync(_fechaConsulta, 0);
+        if (SessionState.TipoUser == 2)
+        {
+            _ordenes = _ordenes.Where(o => o.IdMedico == SessionState.IdUser).ToList();
+            _conteoMedicos = _conteoMedicos.Where(m => m.IdMedico == SessionState.IdUser).ToList();
+        }
     }
 
     private async Task AbrirCambioAsignacion(OrdenAtencionResumenDto orden)

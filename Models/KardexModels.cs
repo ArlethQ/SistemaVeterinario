@@ -204,6 +204,9 @@ public class OrdenActivaResumenDto
     public string Especie { get; set; } = string.Empty;
     public string Sexo { get; set; } = string.Empty;
     public string Medico { get; set; } = string.Empty;
+    public int IdMedico { get; set; }
+    public bool EsProcedimiento { get; set; }
+    public int? IdEnfermero { get; set; }
     public string Especialidad { get; set; } = string.Empty;
     public DateTime FechaOrden { get; set; }
     public string Estado { get; set; } = string.Empty;
