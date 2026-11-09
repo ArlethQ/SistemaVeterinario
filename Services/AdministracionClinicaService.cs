@@ -8,6 +8,7 @@ public interface IAdministracionClinicaService
     IReadOnlyList<TipoCatalogoAdministrativo> ObtenerTiposCatalogo();
     Task<List<CatalogoAdministrativoDto>> ObtenerCatalogoAsync(string tipo);
     Task<(bool Exito, string Mensaje)> GuardarCatalogoAsync(string tipo, CatalogoAdministrativoDto item, int idUsuario);
+    Task<(bool Exito, string Mensaje)> EliminarCatalogoAsync(string tipo, int id, int idUsuario);
     Task<List<RecordatorioVacunaDto>> ObtenerRecordatoriosAsync(DateTime desde, DateTime hasta, bool porFechaRevision);
     Task<List<AlertaClinicaDto>> ObtenerAlertasAsync(DateTime desde, DateTime hasta, string estado);
     Task<List<PacienteFallecidoDto>> ObtenerFallecidosAsync(DateTime desde, DateTime hasta);
@@ -43,24 +44,29 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
         string SelectSql,
         string InsertSql,
         string UpdateSql,
+        string UpdateEstadoPredeterminadoSql,
+        string ContarUsoSql,
+        string DeleteSql,
         bool RequierePadre = false);
 
     private static readonly IReadOnlyDictionary<string, CatalogoSql> Catalogos =
         new Dictionary<string, CatalogoSql>(StringComparer.OrdinalIgnoreCase)
         {
             ["especies"] = new("Especies",
-                "SELECT especie_id AS Id, RTRIM(especie_descripcion) AS Descripcion, especie_estado AS Estado FROM vt_especie ORDER BY especie_descripcion",
+                "SELECT especie_id AS Id, RTRIM(especie_descripcion) AS Descripcion, ISNULL(especie_estado, 'A') AS Estado FROM vt_especie ORDER BY especie_descripcion",
                 "INSERT INTO vt_especie (especie_descripcion, especie_estado) VALUES (@Descripcion, @Estado)",
-                "UPDATE vt_especie SET especie_descripcion=@Descripcion, especie_estado=@Estado WHERE especie_id=@Id"),
+                "UPDATE vt_especie SET especie_descripcion=@Descripcion, especie_estado=@Estado WHERE especie_id=@Id",
+                "UPDATE vt_especie SET especie_estado=@Estado WHERE especie_id=@Id",
+                @"SELECT (SELECT COUNT(1) FROM vt_pacientes WHERE ISNULL(mas_especie,0) = @Id)
+                       + (SELECT COUNT(1) FROM vt_razas WHERE id_especie = @Id)
+                       + (SELECT COUNT(1) FROM vt_fichamedica WHERE ISNULL(med_especie,0) = @Id)",
+                "DELETE FROM vt_especie WHERE especie_id = @Id"),
             ["razas"] = new("Razas",
-                "SELECT r.id_raza AS Id, RTRIM(r.des_raza) AS Descripcion, r.estado AS Estado, r.id_especie AS IdPadre, RTRIM(e.especie_descripcion) AS PadreDescripcion FROM vt_razas r INNER JOIN vt_especie e ON e.especie_id=r.id_especie ORDER BY r.des_raza",
-                @"BEGIN TRANSACTION;
-                  INSERT INTO vt_razas (des_raza, id_especie, estado) VALUES (@Descripcion, @IdPadre, @Estado);
+                "SELECT r.id_raza AS Id, RTRIM(r.des_raza) AS Descripcion, ISNULL(r.estado, 'A') AS Estado, r.id_especie AS IdPadre, RTRIM(e.especie_descripcion) AS PadreDescripcion FROM vt_razas r INNER JOIN vt_especie e ON e.especie_id=r.id_especie ORDER BY r.des_raza",
+                @"INSERT INTO vt_razas (des_raza, id_especie, estado) VALUES (@Descripcion, @IdPadre, @Estado);
                   IF (@IdPadre = 3 AND NOT EXISTS (SELECT 1 FROM vt_clase WHERE RTRIM(des_clas) = @Descripcion))
-                      INSERT INTO vt_clase (des_clas, estado_clas) VALUES (@Descripcion, @Estado);
-                  COMMIT TRANSACTION;",
-                @"BEGIN TRANSACTION;
-                  DECLARE @AntiguaRaza VARCHAR(100), @AntiguoPadre INT;
+                      INSERT INTO vt_clase (des_clas, estado_clas) VALUES (@Descripcion, @Estado);",
+                @"DECLARE @AntiguaRaza VARCHAR(100), @AntiguoPadre INT;
                   SELECT @AntiguaRaza = RTRIM(des_raza), @AntiguoPadre = id_especie FROM vt_razas WHERE id_raza=@Id;
                   UPDATE vt_razas SET des_raza=@Descripcion, id_especie=@IdPadre, estado=@Estado WHERE id_raza=@Id;
                   IF (@IdPadre = 3 OR @AntiguoPadre = 3)
@@ -69,35 +75,75 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
                           UPDATE vt_clase SET des_clas=@Descripcion, estado_clas=@Estado WHERE RTRIM(des_clas) = @AntiguaRaza;
                       ELSE IF (@IdPadre = 3)
                           INSERT INTO vt_clase (des_clas, estado_clas) VALUES (@Descripcion, @Estado);
-                  END
-                  COMMIT TRANSACTION;", true),
+                  END",
+                @"UPDATE vt_razas SET estado=@Estado WHERE id_raza=@Id;
+                  IF (@IdPadre = 3)
+                      UPDATE vt_clase SET estado_clas=@Estado WHERE RTRIM(des_clas) = @Descripcion;",
+                "SELECT COUNT(1) FROM vt_pacientes WHERE ISNULL(mas_raza,0) = @Id",
+                @"DECLARE @Desc VARCHAR(100), @Esp INT;
+                  SELECT @Desc = RTRIM(des_raza), @Esp = id_especie FROM vt_razas WHERE id_raza = @Id;
+                  DELETE FROM vt_razas WHERE id_raza = @Id;
+                  IF (@Esp = 3)
+                  BEGIN
+                      IF NOT EXISTS (SELECT 1 FROM vt_pacientes WHERE ISNULL(tue_clase,0) IN (SELECT id_clas FROM vt_clase WHERE RTRIM(des_clas) = @Desc))
+                         AND NOT EXISTS (SELECT 1 FROM vt_razas WHERE id_especie = 3 AND RTRIM(des_raza) = @Desc)
+                      BEGIN
+                          DELETE FROM vt_clase WHERE RTRIM(des_clas) = @Desc;
+                      END
+                  END", true),
             ["especialidades"] = new("Especialidades",
-                "SELECT es_id AS Id, RTRIM(es_descripcion) AS Descripcion, es_estado AS Estado FROM vt_especialidades ORDER BY es_descripcion",
+                "SELECT es_id AS Id, RTRIM(es_descripcion) AS Descripcion, ISNULL(es_estado, 'A') AS Estado FROM vt_especialidades ORDER BY es_descripcion",
                 "INSERT INTO vt_especialidades (es_descripcion, es_estado) VALUES (@Descripcion, @Estado)",
-                "UPDATE vt_especialidades SET es_descripcion=@Descripcion, es_estado=@Estado WHERE es_id=@Id"),
+                "UPDATE vt_especialidades SET es_descripcion=@Descripcion, es_estado=@Estado WHERE es_id=@Id",
+                "UPDATE vt_especialidades SET es_estado=@Estado WHERE es_id=@Id",
+                @"SELECT (SELECT COUNT(1) FROM vt_usuarios WHERE ISNULL(user_esp_numero,0) = @Id)
+                       + (SELECT COUNT(1) FROM vt_usuarioEspecialidades WHERE ue_idEspecialidad = @Id)
+                       + (SELECT COUNT(1) FROM vt_citas WHERE ISNULL(ci_especialidad,0) = @Id)
+                       + (SELECT COUNT(1) FROM vt_fichamedica WHERE ISNULL(med_especialidad,0) = @Id)",
+                "DELETE FROM vt_especialidades WHERE es_id = @Id"),
             ["clases"] = new("Clases de fauna y animales exóticos",
-                "SELECT id_clas AS Id, RTRIM(des_clas) AS Descripcion, estado_clas AS Estado FROM vt_clase ORDER BY des_clas",
-                @"BEGIN TRANSACTION;
-                  INSERT INTO vt_clase (des_clas, estado_clas) VALUES (@Descripcion, @Estado);
+                "SELECT id_clas AS Id, RTRIM(des_clas) AS Descripcion, ISNULL(estado_clas, 'A') AS Estado FROM vt_clase ORDER BY des_clas",
+                @"INSERT INTO vt_clase (des_clas, estado_clas) VALUES (@Descripcion, @Estado);
                   IF NOT EXISTS (SELECT 1 FROM vt_razas WHERE id_especie = 3 AND RTRIM(des_raza) = @Descripcion)
-                      INSERT INTO vt_razas (des_raza, id_especie, estado) VALUES (@Descripcion, 3, @Estado);
-                  COMMIT TRANSACTION;",
-                @"BEGIN TRANSACTION;
-                  DECLARE @AntiguaDesc VARCHAR(100);
+                      INSERT INTO vt_razas (des_raza, id_especie, estado) VALUES (@Descripcion, 3, @Estado);",
+                @"DECLARE @AntiguaDesc VARCHAR(100);
                   SELECT @AntiguaDesc = RTRIM(des_clas) FROM vt_clase WHERE id_clas=@Id;
                   UPDATE vt_clase SET des_clas=@Descripcion, estado_clas=@Estado WHERE id_clas=@Id;
                   IF EXISTS (SELECT 1 FROM vt_razas WHERE id_especie = 3 AND RTRIM(des_raza) = @AntiguaDesc)
                       UPDATE vt_razas SET des_raza=@Descripcion, estado=@Estado WHERE id_especie = 3 AND RTRIM(des_raza) = @AntiguaDesc;
                   ELSE IF NOT EXISTS (SELECT 1 FROM vt_razas WHERE id_especie = 3 AND RTRIM(des_raza) = @Descripcion)
-                      INSERT INTO vt_razas (des_raza, id_especie, estado) VALUES (@Descripcion, 3, @Estado);
-                  COMMIT TRANSACTION;"),
+                      INSERT INTO vt_razas (des_raza, id_especie, estado) VALUES (@Descripcion, 3, @Estado);",
+                @"UPDATE vt_clase SET estado_clas=@Estado WHERE id_clas=@Id;
+                  UPDATE vt_razas SET estado=@Estado WHERE id_especie = 3 AND RTRIM(des_raza) = @Descripcion;",
+                @"SELECT (SELECT COUNT(1) FROM vt_pacientes WHERE ISNULL(tue_clase,0) = @Id)
+                       + (SELECT COUNT(1) FROM vt_nombres_cientificos WHERE clas_id = @Id)",
+                @"DECLARE @Desc VARCHAR(100);
+                  SELECT @Desc = RTRIM(des_clas) FROM vt_clase WHERE id_clas = @Id;
+                  DELETE FROM vt_clase WHERE id_clas = @Id;
+                  IF NOT EXISTS (SELECT 1 FROM vt_pacientes WHERE ISNULL(mas_raza,0) IN (SELECT id_raza FROM vt_razas WHERE id_especie = 3 AND RTRIM(des_raza) = @Desc))
+                  BEGIN
+                      DELETE FROM vt_razas WHERE id_especie = 3 AND RTRIM(des_raza) = @Desc;
+                  END"),
             ["categorias-ingreso"] = new("Categorías de ingreso",
-                "SELECT id AS Id, RTRIM(ingreso) AS Descripcion, estado AS Estado FROM vt_ingreso ORDER BY ingreso",
+                "SELECT id AS Id, RTRIM(ingreso) AS Descripcion, ISNULL(estado, 'A') AS Estado FROM vt_ingreso ORDER BY ingreso",
                 "INSERT INTO vt_ingreso (ingreso, estado) VALUES (@Descripcion, @Estado)",
-                "UPDATE vt_ingreso SET ingreso=@Descripcion, estado=@Estado WHERE id=@Id")
+                "UPDATE vt_ingreso SET ingreso=@Descripcion, estado=@Estado WHERE id=@Id",
+                "UPDATE vt_ingreso SET estado=@Estado WHERE id=@Id",
+                "SELECT COUNT(1) FROM vt_pacientes WHERE ISNULL(tue_categoria,0) = @Id",
+                "DELETE FROM vt_ingreso WHERE id = @Id")
         };
 
     public AdministracionClinicaService(ISqlDataService db) => _db = db;
+
+    public static bool EsPredeterminado(string tipo, int id) => (tipo ?? string.Empty).ToLowerInvariant() switch
+    {
+        "especies" => id <= 4,
+        "clases" => id <= 5,
+        "categorias-ingreso" => id <= 6,
+        "especialidades" => id <= 24,
+        "razas" => id <= 378,
+        _ => false
+    };
 
     public IReadOnlyList<TipoCatalogoAdministrativo> ObtenerTiposCatalogo() => Catalogos
         .Select(x => new TipoCatalogoAdministrativo(x.Key, x.Value.Nombre, x.Value.RequierePadre))
@@ -106,7 +152,12 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
     public async Task<List<CatalogoAdministrativoDto>> ObtenerCatalogoAsync(string tipo)
     {
         var config = ObtenerConfiguracion(tipo);
-        return (await _db.QueryAsync<CatalogoAdministrativoDto>(config.SelectSql)).ToList();
+        var items = (await _db.QueryAsync<CatalogoAdministrativoDto>(config.SelectSql)).ToList();
+        foreach (var item in items)
+        {
+            item.EsPredeterminado = EsPredeterminado(tipo, item.Id);
+        }
+        return items;
     }
 
     public async Task<(bool Exito, string Mensaje)> GuardarCatalogoAsync(string tipo, CatalogoAdministrativoDto item, int idUsuario)
@@ -120,11 +171,49 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
 
         item.Descripcion = item.Descripcion.Trim();
         item.Estado = item.Estado == "I" ? "I" : "A";
-        int filas = await _db.ExecuteAsync(item.Id > 0 ? config.UpdateSql : config.InsertSql, item);
-        if (filas <= 0) return (false, "No se pudo guardar el registro en la base de datos.");
 
-        await _db.RegistrarBitacoraAsync($"{(item.Id > 0 ? "Actualización" : "Creación")} de {config.Nombre}: {item.Descripcion}", idUsuario);
-        return (true, "Registro guardado correctamente.");
+        bool esPredeterminado = item.Id > 0 && EsPredeterminado(tipo, item.Id);
+        string sql = item.Id == 0
+            ? config.InsertSql
+            : (esPredeterminado ? config.UpdateEstadoPredeterminadoSql : config.UpdateSql);
+
+        try
+        {
+            await _db.ExecuteAsync(sql, item);
+            string accion = item.Id == 0 ? "Creación" : (esPredeterminado ? "Cambio de estado" : "Actualización");
+            await _db.RegistrarBitacoraAsync($"{accion} de {config.Nombre}: {item.Descripcion}", idUsuario);
+            return (true, "Registro guardado correctamente.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Error al guardar el registro: {ex.Message}");
+        }
+    }
+
+    public async Task<(bool Exito, string Mensaje)> EliminarCatalogoAsync(string tipo, int id, int idUsuario)
+    {
+        if (EsPredeterminado(tipo, id))
+        {
+            return (false, "Los registros predeterminados del sistema no se pueden eliminar. Puede desactivarlos si no desea utilizarlos.");
+        }
+
+        var config = ObtenerConfiguracion(tipo);
+        try
+        {
+            int uso = await _db.ExecuteScalarAsync<int>(config.ContarUsoSql, new { Id = id });
+            if (uso > 0)
+            {
+                return (false, $"No se puede eliminar porque este registro está siendo utilizado por {uso} elemento(s) en el sistema (pacientes, citas u otros registros vinculados). Puede desactivarlo en su lugar.");
+            }
+
+            await _db.ExecuteAsync(config.DeleteSql, new { Id = id });
+            await _db.RegistrarBitacoraAsync($"Eliminación de {config.Nombre} (ID: {id})", idUsuario);
+            return (true, "Registro eliminado correctamente.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Error al eliminar el registro: {ex.Message}");
+        }
     }
 
     public async Task<List<RecordatorioVacunaDto>> ObtenerRecordatoriosAsync(DateTime desde, DateTime hasta, bool porFechaRevision)

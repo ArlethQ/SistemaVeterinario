@@ -9,64 +9,236 @@
 {
     <div class="catalog-page">
         <SecurityNav />
-        <header><div><span>Administración</span><h1>Catálogos clínicos</h1><p>Configura los catálogos maestros usados por admisión y la historia clínica.</p></div><button @onclick="Nuevo">+ Nuevo registro</button></header>
+        <header>
+            <div>
+                <span>Administración</span>
+                <h1>Catálogos clínicos</h1>
+                <p>Configura los catálogos maestros usados por admisión y la historia clínica.</p>
+            </div>
+            <button class="btn btn-primary" @onclick="Nuevo">+ Nuevo registro</button>
+        </header>
+
         @if (!string.IsNullOrWhiteSpace(_mensaje))
         {
             <div class="message @(_error ? "error" : "success")">@_mensaje</div>
         }
-        <div class="mb-3"><label class="form-label fw-semibold">Catálogo</label><select class="form-select" style="max-width:360px" @bind="_tipo" @bind:after="CambiarTipoAsync">@foreach (var tipo in _tipos) {
-            <option value="@tipo.Clave">@tipo.Nombre</option>
-        }
-    </select></div>
-    <div class="catalog-layout">
-        <section>
-            <h2>@TipoActual.Nombre</h2>
-            @if (_cargando)
-            {
-                <p>Cargando...</p>
-            }
-            else if (_items.Count == 0)
-            {
 
-                <p>No existen registros.</p>
-            }
-            else
-            {
-                @foreach (var item in _items)
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Catálogo</label>
+            <select class="form-select" style="max-width:360px" @bind="_tipo" @bind:after="CambiarTipoAsync">
+                @foreach (var tipo in _tipos)
                 {
-                    <button class="catalog-row @(item.Id == _edit.Id ? "active" : "")" @onclick="() => Editar(item)"><span><strong>@item.Descripcion</strong><small>@(item.Estado == "A" ? "Activo" : "Inactivo") @(string.IsNullOrWhiteSpace(item.PadreDescripcion) ? "" : $" · {item.PadreDescripcion}")</small></span><i>Editar</i></button>
+                    <option value="@tipo.Clave">@tipo.Nombre</option>
                 }
-            }
-        </section><aside>
-        <h2>@(_edit.Id > 0 ? "Editar registro" : "Nuevo registro")</h2><label>Descripción<input maxlength="150" @bind="_edit.Descripcion" /></label>
-        @if (TipoActual.RequierePadre)
-        {
-            <label>Especie<select @bind="_edit.IdPadre"><option value="">Seleccione</option>@foreach (var especie in _especies.Where(x => x.Estado == "A")) {
-                <option value="@especie.Id">@especie.Descripcion</option>
-            }
-        </select></label>
-    }
-    <label class="check"><input type="checkbox" checked="@(_edit.Estado == "A")" @onchange="CambiarEstado" /> Registro activo</label>
-    <button class="save" disabled="@_guardando" @onclick="GuardarAsync">@(_guardando ? "Guardando..." : "Guardar")</button>
-</aside>
-</div>
-</div>
+            </select>
+        </div>
+
+        <div class="catalog-layout">
+            <section>
+                <h2>@TipoActual.Nombre (@_items.Count)</h2>
+                @if (_cargando)
+                {
+                    <p>Cargando...</p>
+                }
+                else if (_items.Count == 0)
+                {
+                    <p>No existen registros.</p>
+                }
+                else
+                {
+                    @foreach (var item in _items)
+                    {
+                        <button class="catalog-row @(item.Id == _edit.Id ? "active" : "")" @onclick="() => Editar(item)">
+                            <span>
+                                <strong>
+                                    @item.Descripcion
+                                    @if (item.EsPredeterminado)
+                                    {
+                                        <span class="badge bg-secondary ms-1 fw-normal" style="font-size:0.65rem">Predeterminado</span>
+                                    }
+                                </strong>
+                                <small>@(item.Estado == "A" ? "Activo" : "Inactivo") @(string.IsNullOrWhiteSpace(item.PadreDescripcion) ? "" : $" · {item.PadreDescripcion}")</small>
+                            </span>
+                            <i>@(item.EsPredeterminado ? "Configurar" : "Editar")</i>
+                        </button>
+                    }
+                }
+            </section>
+            <aside>
+                <h2>@(_edit.Id > 0 ? (_edit.EsPredeterminado ? "Configurar registro" : "Editar registro") : "Nuevo registro")</h2>
+
+                @if (_edit.Id > 0 && _edit.EsPredeterminado)
+                {
+                    <div class="alert alert-info py-2 px-3 small mb-3">
+                        <strong>Registro predeterminado del sistema:</strong> No se puede modificar el nombre ni eliminar, pero puedes activarlo o desactivarlo.
+                    </div>
+                }
+
+                <label>
+                    Descripción
+                    <input maxlength="150" @bind="_edit.Descripcion" disabled="@_edit.EsPredeterminado" readonly="@_edit.EsPredeterminado" class="@(_edit.EsPredeterminado ? "bg-light" : "")" placeholder="Descripción del registro" />
+                </label>
+
+                @if (TipoActual.RequierePadre)
+                {
+                    <label>
+                        Especie
+                        <select @bind="_edit.IdPadre" disabled="@_edit.EsPredeterminado" class="@(_edit.EsPredeterminado ? "bg-light" : "")">
+                            <option value="">Seleccione</option>
+                            @foreach (var especie in _especies.Where(x => x.Estado == "A"))
+                            {
+                                <option value="@especie.Id">@especie.Descripcion</option>
+                            }
+                        </select>
+                    </label>
+                }
+
+                <label class="check">
+                    <input type="checkbox" checked="@(_edit.Estado == "A")" @onchange="CambiarEstado" />
+                    Registro activo
+                </label>
+
+                <div class="d-flex align-items-center gap-2 mt-3">
+                    <button class="save" disabled="@_guardando" @onclick="GuardarAsync">
+                        @(_guardando ? "Guardando..." : (_edit.Id > 0 ? "Actualizar" : "Guardar"))
+                    </button>
+
+                    @if (_edit.Id > 0 && !_edit.EsPredeterminado)
+                    {
+                        @if (!_confirmandoEliminar)
+                        {
+                            <button type="button" class="btn btn-outline-danger" disabled="@_guardando" @onclick="() => _confirmandoEliminar = true">
+                                Eliminar
+                            </button>
+                        }
+                        else
+                        {
+                            <div class="d-flex align-items-center gap-1">
+                                <button type="button" class="btn btn-danger btn-sm" disabled="@_guardando" @onclick="EliminarAsync">
+                                    ¿Confirmar?
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _confirmandoEliminar = false">
+                                    Cancelar
+                                </button>
+                            </div>
+                        }
+                    }
+                </div>
+            </aside>
+        </div>
+    </div>
 }
 
 @code {
-    private bool _autorizado, _cargando = true, _guardando, _error;
+    private bool _autorizado, _cargando = true, _guardando, _error, _confirmandoEliminar;
     private string _tipo = "especies", _mensaje = "";
     private IReadOnlyList<TipoCatalogoAdministrativo> _tipos = [];
     private List<CatalogoAdministrativoDto> _items = [], _especies = [];
     private CatalogoAdministrativoDto _edit = new();
     private TipoCatalogoAdministrativo TipoActual => _tipos.First(x => x.Clave == _tipo);
 
-    protected override async Task OnInitializedAsync() { if (!Session.IsAuthenticated || Session.TipoUser != 1) { Nav.NavigateTo("/dashboard"); return; } _autorizado = true; _tipos = AdminService.ObtenerTiposCatalogo(); await CargarAsync(); }
-    private async Task CambiarTipoAsync() { Nuevo(); await CargarAsync(); }
-    private async Task CargarAsync() { _cargando = true; try { var tarea = AdminService.ObtenerCatalogoAsync(_tipo); if (TipoActual.RequierePadre || _especies.Count == 0) _especies = await AdminService.ObtenerCatalogoAsync("especies"); _items = await tarea; _error = false; } catch (Exception) { _items = []; _error = true; _mensaje = "No se pudo cargar el catálogo desde la base de datos."; } _cargando = false; }
-    private void Nuevo() { _edit = new() { Estado = "A" }; _mensaje = ""; }
-    private void Editar(CatalogoAdministrativoDto item) => _edit = new() { Id = item.Id, Descripcion = item.Descripcion, Estado = item.Estado, IdPadre = item.IdPadre, PadreDescripcion = item.PadreDescripcion };
-    private void CambiarEstado(ChangeEventArgs e) => _edit.Estado = e.Value is true ? "A" : "I";
-    private async Task GuardarAsync() { _guardando = true; var r = await AdminService.GuardarCatalogoAsync(_tipo, _edit, Session.IdUser); _guardando = false; _error = !r.Exito; _mensaje = r.Mensaje; if (r.Exito) { Nuevo(); _mensaje = r.Mensaje; await CargarAsync(); } }
-}
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated || Session.TipoUser != 1)
+        {
+            Nav.NavigateTo("/dashboard");
+            return;
+        }
+        _autorizado = true;
+        _tipos = AdminService.ObtenerTiposCatalogo();
+        await CargarAsync();
+    }
 
+    private async Task CambiarTipoAsync()
+    {
+        Nuevo();
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        _cargando = true;
+        try
+        {
+            var tarea = AdminService.ObtenerCatalogoAsync(_tipo);
+            if (TipoActual.RequierePadre || _especies.Count == 0)
+                _especies = await AdminService.ObtenerCatalogoAsync("especies");
+            _items = await tarea;
+            _error = false;
+        }
+        catch (Exception)
+        {
+            _items = [];
+            _error = true;
+            _mensaje = "No se pudo cargar el catálogo desde la base de datos.";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private void Nuevo()
+    {
+        _edit = new()
+        {
+            Id = 0,
+            Estado = "A",
+            Descripcion = "",
+            IdPadre = TipoActual.RequierePadre && _especies.Count > 0 ? _especies[0].Id : null,
+            EsPredeterminado = false
+        };
+        _confirmandoEliminar = false;
+        _mensaje = "";
+    }
+
+    private void Editar(CatalogoAdministrativoDto item)
+    {
+        _edit = new()
+        {
+            Id = item.Id,
+            Descripcion = item.Descripcion,
+            Estado = item.Estado,
+            IdPadre = item.IdPadre,
+            PadreDescripcion = item.PadreDescripcion,
+            EsPredeterminado = item.EsPredeterminado
+        };
+        _confirmandoEliminar = false;
+        _mensaje = "";
+    }
+
+    private void CambiarEstado(ChangeEventArgs e) => _edit.Estado = e.Value is true ? "A" : "I";
+
+    private async Task GuardarAsync()
+    {
+        _guardando = true;
+        var r = await AdminService.GuardarCatalogoAsync(_tipo, _edit, Session.IdUser);
+        _guardando = false;
+        _error = !r.Exito;
+        _mensaje = r.Mensaje;
+        if (r.Exito)
+        {
+            Nuevo();
+            _mensaje = r.Mensaje;
+            await CargarAsync();
+        }
+    }
+
+    private async Task EliminarAsync()
+    {
+        if (_edit.Id <= 0 || _edit.EsPredeterminado) return;
+
+        _guardando = true;
+        var r = await AdminService.EliminarCatalogoAsync(_tipo, _edit.Id, Session.IdUser);
+        _guardando = false;
+        _error = !r.Exito;
+        _mensaje = r.Mensaje;
+        _confirmandoEliminar = false;
+        if (r.Exito)
+        {
+            Nuevo();
+            _mensaje = r.Mensaje;
+            await CargarAsync();
+        }
+    }
+}

@@ -7,6 +7,7 @@ public sealed class CatalogoAdministrativoDto
     public string Estado { get; set; } = "A";
     public int? IdPadre { get; set; }
     public string PadreDescripcion { get; set; } = string.Empty;
+    public bool EsPredeterminado { get; set; }
 }
 
 public sealed record TipoCatalogoAdministrativo(string Clave, string Nombre, bool RequierePadre = false);
