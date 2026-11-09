@@ -48,6 +48,7 @@
                                         Identificador #@rol.Id · @(rol.EsPredeterminado ? "Predeterminado" : "Eliminable")
                                         @(rol.Id == 1 ? " · Acceso total" : "")
                                         @(rol.Id == 2 ? " · Con especialidad médica" : "")
+                                        @(rol.Id == 11 || rol.Descripcion.Contains("Enfermer", StringComparison.OrdinalIgnoreCase) ? " · Rol clínico predeterminado" : "")
                                     </small>
                                 </span>
                                 <i>@(rol.Id == _edit.Id ? "Seleccionado" : "Configurar")</i>
@@ -120,6 +121,12 @@
                 {
                     <div class="role-info-note">
                         El rol <strong>Médico</strong> es predeterminado del sistema (habilita la selección de especialidad médica en los usuarios): su nombre viene predefinido y no se puede eliminar, pero puedes configurar sus permisos por módulo predeterminados.
+                    </div>
+                }
+                else if (_edit.Id == 11 || _edit.Descripcion.Contains("Enfermer", StringComparison.OrdinalIgnoreCase))
+                {
+                    <div class="role-info-note">
+                        El rol <strong>Enfermería</strong> es predeterminado del sistema (responsable de monitoreo hospitalario, fichas y apoyo quirúrgico): su nombre viene predefinido y no se puede eliminar, pero puedes configurar sus permisos por módulo predeterminados.
                     </div>
                 }
                 else
