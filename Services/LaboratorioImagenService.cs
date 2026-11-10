@@ -60,20 +60,24 @@ public class LaboratorioImagenService : ILaboratorioImagenService
         try
         {
             const string sql = @"
-                SELECT TOP 80
-                    CAST(lab_id AS VARCHAR(30)) AS CodigoProd,
-                    RTRIM(ISNULL(NULLIF(RTRIM(lab_fenix), ''), CAST(lab_id AS VARCHAR(30)))) AS IdEfact,
-                    RTRIM(ISNULL(lab_descripcion, 'Prueba de Laboratorio')) AS Descripcion,
-                    CAST(ISNULL(lab_grupo, 1) AS INT) AS GrupoId,
+                SELECT TOP 150
+                    CAST(p.CODIGO AS VARCHAR(30)) AS CodigoProd,
+                    RTRIM(ISNULL(NULLIF(RTRIM(p.CODIGO_PRINCIPAL), ''), CAST(p.CODIGO AS VARCHAR(30)))) AS IdEfact,
+                    RTRIM(ISNULL(p.NOMBRE, 'Prueba de Laboratorio')) AS Descripcion,
+                    CAST(ISNULL(g.grupo_id, 1) AS INT) AS GrupoId,
                     'LAB' AS Categoria,
                     'UND' AS UnidadMedida,
-                    'IVA0' AS GrupoIva,
-                    CAST(15.00 AS DECIMAL(18,2)) AS PrecioUnitario
-                FROM vt_pruebas_laboratorio
-                WHERE ISNULL(estado, 'A') = 'A'
-                  AND (@GrupoId = 0 OR CAST(ISNULL(lab_grupo, 0) AS INT) = @GrupoId)
-                  AND (@Filtro = '' OR lab_descripcion LIKE '%' + @Filtro + '%' OR CAST(lab_id AS VARCHAR(30)) LIKE '%' + @Filtro + '%' OR ISNULL(lab_fenix, '') LIKE '%' + @Filtro + '%')
-                ORDER BY lab_descripcion ASC";
+                    CASE WHEN p.CODIGOIMPUESTO = '2' THEN 'IVA' ELSE 'IVA0' END AS GrupoIva,
+                    CAST(ISNULL(p.VALOR_UNITARIO, 0.00) AS DECIMAL(18,2)) AS PrecioUnitario
+                FROM VeterinariaFacturacion.dbo.PRODUCTO p
+                INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+                LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
+                LEFT JOIN vt_grupos_laboratorio g ON UPPER(LTRIM(RTRIM(g.grupo_descripcion))) COLLATE DATABASE_DEFAULT = UPPER(LTRIM(RTRIM(s.DESCRIPCION))) COLLATE DATABASE_DEFAULT
+                WHERE ISNULL(p.ESTADO, 1) = 1
+                  AND UPPER(LTRIM(RTRIM(t.DESCRIPCION))) = 'LABORATORIO'
+                  AND (@GrupoId = 0 OR CAST(ISNULL(g.grupo_id, 0) AS INT) = @GrupoId)
+                  AND (@Filtro = '' OR p.NOMBRE LIKE '%' + @Filtro + '%' OR CAST(p.CODIGO AS VARCHAR(30)) LIKE '%' + @Filtro + '%' OR ISNULL(p.CODIGO_PRINCIPAL, '') LIKE '%' + @Filtro + '%')
+                ORDER BY p.NOMBRE ASC";
 
             var locales = await _db.QueryAsync<PruebaCatalogoDto>(sql, new
             {
@@ -98,19 +102,22 @@ public class LaboratorioImagenService : ILaboratorioImagenService
         try
         {
             const string sql = @"
-                SELECT TOP 60
-                    CAST(prod_id AS VARCHAR(50)) AS CodigoProd,
-                    RTRIM(ISNULL(NULLIF(RTRIM(prod_fenix), ''), CAST(prod_id AS VARCHAR(50)))) AS IdEfact,
-                    RTRIM(ISNULL(prod_descripcion, 'Estudio de Imagen')) AS Descripcion,
+                SELECT TOP 150
+                    CAST(p.CODIGO AS VARCHAR(50)) AS CodigoProd,
+                    RTRIM(ISNULL(NULLIF(RTRIM(p.CODIGO_PRINCIPAL), ''), CAST(p.CODIGO AS VARCHAR(50)))) AS IdEfact,
+                    RTRIM(ISNULL(p.NOMBRE, 'Estudio de Imagen')) AS Descripcion,
                     0 AS GrupoId,
-                    CASE WHEN prod_descripcion LIKE '%ECO%' THEN 'ECOS' ELSE 'RX' END AS Categoria,
+                    CASE WHEN UPPER(ISNULL(s.DESCRIPCION, '')) LIKE '%ECO%' OR UPPER(ISNULL(p.NOMBRE, '')) LIKE '%ECO%' THEN 'ECOS' ELSE 'RX' END AS Categoria,
                     'UND' AS UnidadMedida,
-                    'IVA0' AS GrupoIva,
-                    CAST(35.00 AS DECIMAL(18,2)) AS PrecioUnitario
-                FROM vt_productos
-                WHERE ISNULL(prod_estado, 'A') = 'A'
-                  AND (prod_descripcion LIKE '%RADIO%' OR prod_descripcion LIKE '%RX%' OR prod_descripcion LIKE '%ECO%' OR prod_descripcion LIKE '%TOMO%' OR prod_descripcion LIKE '%ENDO%')
-                  AND (@Filtro = '' OR prod_descripcion LIKE '%' + @Filtro + '%')";
+                    CASE WHEN p.CODIGOIMPUESTO = '2' THEN 'IVA' ELSE 'IVA0' END AS GrupoIva,
+                    CAST(ISNULL(p.VALOR_UNITARIO, 0.00) AS DECIMAL(18,2)) AS PrecioUnitario
+                FROM VeterinariaFacturacion.dbo.PRODUCTO p
+                INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+                LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
+                WHERE ISNULL(p.ESTADO, 1) = 1
+                  AND UPPER(LTRIM(RTRIM(t.DESCRIPCION))) LIKE 'IMAGENOLOG%'
+                  AND (@Filtro = '' OR p.NOMBRE LIKE '%' + @Filtro + '%' OR CAST(p.CODIGO AS VARCHAR(50)) LIKE '%' + @Filtro + '%' OR ISNULL(p.CODIGO_PRINCIPAL, '') LIKE '%' + @Filtro + '%')
+                ORDER BY p.NOMBRE ASC";
 
             var locales = await _db.QueryAsync<PruebaCatalogoDto>(sql, new { Filtro = filtroTexto?.Trim() ?? "" });
             if (modalidad == "RX") locales = locales.Where(x => x.Categoria == "RX");
@@ -145,19 +152,23 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 ISNULL(l.labO_id_orden, @IdOrden) AS IdOrden,
                 ISNULL(l.labO_nhcl, @Nhcl) AS Nhcl,
                 RTRIM(CAST(ISNULL(l.labO_idProdu, 0) AS VARCHAR(50))) AS CodigoProd,
-                RTRIM(ISNULL(pl.lab_descripcion, ISNULL(NULLIF(RTRIM(l.labO_observaciones), ''), 'Examen Laboratorio #' + CAST(ISNULL(l.labO_idProdu, 0) AS VARCHAR(20))))) AS DescripcionExamen,
+                RTRIM(COALESCE(p.NOMBRE COLLATE DATABASE_DEFAULT, pl.lab_descripcion, NULLIF(RTRIM(l.labO_observaciones), ''), 'Examen Laboratorio #' + CAST(ISNULL(l.labO_idProdu, 0) AS VARCHAR(20)))) AS DescripcionExamen,
                 RTRIM(ISNULL(l.labO_observaciones, '')) AS Observaciones,
                 ISNULL(l.labO_cantidad, 1) AS Cantidad,
                 RTRIM(ISNULL(l.labO_estado, 'POR REALIZAR')) AS Estado,
                 RTRIM(ISNULL(l.labO_tipo, 'Rutina')) AS Prioridad,
                 ISNULL(l.labO_fecha, GETDATE()) AS Fecha,
-                'IVA0' AS Iva,
-                RTRIM(ISNULL(pl.lab_fenix, CAST(ISNULL(l.labO_idProdu, 0) AS VARCHAR(50)))) AS IdEfact,
+                CASE WHEN COALESCE(p.CODIGOIMPUESTO, p2.CODIGOIMPUESTO) = '2' THEN 'IVA' ELSE 'IVA0' END AS Iva,
+                RTRIM(COALESCE(p.CODIGO_PRINCIPAL COLLATE DATABASE_DEFAULT, pl.lab_fenix, CAST(ISNULL(l.labO_idProdu, 0) AS VARCHAR(50)))) AS IdEfact,
                 'UND' AS Medida,
-                CAST(15.00 AS DECIMAL(18,2)) AS Precio,
+                CAST(COALESCE(p.VALOR_UNITARIO, p2.VALOR_UNITARIO, 0.00) AS DECIMAL(18,2)) AS Precio,
                 l.labO_evolucion AS IdEvolucion
             FROM vt_labOrdenes l
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON p.CODIGO = l.labO_idProdu
             LEFT JOIN vt_pruebas_laboratorio pl ON l.labO_idProdu = pl.lab_id
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p2 ON p.CODIGO IS NULL
+                AND UPPER(LTRIM(RTRIM(p2.NOMBRE))) COLLATE DATABASE_DEFAULT = UPPER(LTRIM(RTRIM(pl.lab_descripcion))) COLLATE DATABASE_DEFAULT
+                AND p2.IDUSUARIO = 1000001
             WHERE l.labO_id_orden = @IdOrden AND (@Nhcl <= 0 OR l.labO_nhcl = @Nhcl)
             ORDER BY l.sec ASC";
 
@@ -243,18 +254,22 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 ISNULL(r.rxO_id_orden, @IdOrden) AS IdOrden,
                 CAST(ISNULL(r.rxO_nhcl, @Nhcl) AS INT) AS Nhcl,
                 RTRIM(CAST(CAST(ISNULL(r.rxO_idProdu, 0) AS INT) AS VARCHAR(50))) AS CodigoProd,
-                RTRIM(ISNULL(pr.prod_descripcion, ISNULL(NULLIF(RTRIM(r.rxO_observaciones), ''), 'Estudio de Imagen #' + CAST(CAST(ISNULL(r.rxO_idProdu, 0) AS INT) AS VARCHAR(20))))) AS DescripcionEstudio,
+                RTRIM(COALESCE(p.NOMBRE COLLATE DATABASE_DEFAULT, pr.prod_descripcion, NULLIF(RTRIM(r.rxO_observaciones), ''), 'Estudio de Imagen #' + CAST(CAST(ISNULL(r.rxO_idProdu, 0) AS INT) AS VARCHAR(20)))) AS DescripcionEstudio,
                 RTRIM(ISNULL(r.rxO_observaciones, '')) AS Observaciones,
                 ISNULL(r.rxO_cantidad, 1) AS Cantidad,
                 RTRIM(ISNULL(r.rxO_estado, 'Por Facturar')) AS Estado,
                 ISNULL(r.rxO_fecha, GETDATE()) AS Fecha,
-                'IVA0' AS Iva,
-                RTRIM(ISNULL(pr.prod_fenix, CAST(CAST(ISNULL(r.rxO_idProdu, 0) AS INT) AS VARCHAR(50)))) AS IdEfact,
+                CASE WHEN COALESCE(p.CODIGOIMPUESTO, p2.CODIGOIMPUESTO) = '2' THEN 'IVA' ELSE 'IVA0' END AS Iva,
+                RTRIM(COALESCE(p.CODIGO_PRINCIPAL COLLATE DATABASE_DEFAULT, pr.prod_fenix, CAST(CAST(ISNULL(r.rxO_idProdu, 0) AS INT) AS VARCHAR(50)))) AS IdEfact,
                 'UND' AS Medida,
-                CAST(35.00 AS DECIMAL(18,2)) AS Precio,
+                CAST(COALESCE(p.VALOR_UNITARIO, p2.VALOR_UNITARIO, 0.00) AS DECIMAL(18,2)) AS Precio,
                 r.rxO_evolucion AS IdEvolucion
             FROM vt_rxOrdenes r
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON p.CODIGO = r.rxO_idProdu
             LEFT JOIN vt_productos pr ON r.rxO_idProdu = pr.prod_id
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p2 ON p.CODIGO IS NULL
+                AND UPPER(LTRIM(RTRIM(p2.NOMBRE))) COLLATE DATABASE_DEFAULT = UPPER(LTRIM(RTRIM(pr.prod_descripcion))) COLLATE DATABASE_DEFAULT
+                AND p2.IDUSUARIO = 1000001
             WHERE r.rxO_id_orden = @IdOrden AND (@Nhcl <= 0 OR r.rxO_nhcl = @Nhcl)
             ORDER BY r.sec ASC";
 

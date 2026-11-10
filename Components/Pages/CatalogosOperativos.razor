@@ -13,43 +13,237 @@
 {
     <div class="container-fluid py-3">
         <h2>@TituloSeccion</h2>
-        <div class="row g-3 my-1">
-            <div class="col-md-4">
-                <select class="form-select" @bind="_tipo" @bind:after="Cargar">
-                    @if (_seccion != "productos")
-                    {
-                        <optgroup label="Diagnósticos">
-                            <option value="diagnosticos">Diagnósticos CIE-10</option>
-                            <option value="grupos-diagnosticos">Grupos diagnósticos</option>
-                        </optgroup>
-                    }
-                    @if (_seccion != "diagnosticos")
-                    {
-                        <optgroup label="Productos de la veterinaria">
-                            <option value="productos">Productos e insumos</option>
-                            <option value="grupos-productos">Categorías de productos</option>
-                            <option value="subgrupos-productos">Subcategorías de productos</option>
-                        </optgroup>
-                    }
-                </select>
+        <div class="card mb-3 shadow-sm">
+            <div class="card-body py-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Catálogo</label>
+                        <select class="form-select form-select-sm" @bind="_tipo" @bind:after="AlCambiarCatalogo">
+                            @if (_seccion != "productos")
+                            {
+                                <optgroup label="Diagnósticos">
+                                    <option value="diagnosticos">Diagnósticos CIE-10</option>
+                                    <option value="grupos-diagnosticos">Grupos diagnósticos</option>
+                                </optgroup>
+                            }
+                            @if (_seccion != "diagnosticos")
+                            {
+                                <optgroup label="Productos de la veterinaria">
+                                    <option value="productos">Productos e insumos</option>
+                                    <option value="grupos-productos">Categorías de productos</option>
+                                    <option value="subgrupos-productos">Subcategorías de productos</option>
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">Buscar por nombre o código</label>
+                        <input class="form-control form-control-sm" placeholder="Ej. nombre, código, categoría..." @bind="_filtro" @bind:event="oninput" @bind:after="ReiniciarPagina" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">Estado</label>
+                        <select class="form-select form-select-sm" @bind="_filtroEstado" @bind:after="ReiniciarPagina">
+                            <option value="">Todos los estados</option>
+                            <option value="A">Solo Activos</option>
+                            <option value="I">Solo Inactivos</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex gap-2 justify-content-end">
+                        @if (TieneFiltrosActivos)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="LimpiarFiltros">Limpiar filtros</button>
+                        }
+                        <button class="btn btn-sm btn-primary" @onclick="Nuevo">+ Nuevo registro</button>
+                    </div>
+                </div>
+
+                @if (_tipo is "productos" or "grupos-productos" or "subgrupos-productos" or "diagnosticos")
+                {
+                    <div class="row g-2 mt-1 pt-2 border-top align-items-end">
+                        @if (_tipo is "productos" or "grupos-productos")
+                        {
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">Bien / Servicio</label>
+                                <select class="form-select form-select-sm" @bind="_filtroTipo" @bind:after="AlCambiarFiltroTipo">
+                                    <option value="">Todos (B y S)</option>
+                                    <option value="B">Solo Bienes (B)</option>
+                                    <option value="S">Solo Servicios (S)</option>
+                                </select>
+                            </div>
+                        }
+                        @if (MuestraGrupo)
+                        {
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">@EtiquetaGrupo</label>
+                                <select class="form-select form-select-sm" @bind="_filtroGrupo" @bind:after="AlCambiarFiltroGrupo">
+                                    <option value="">Todas (@EtiquetaGrupo.ToLower())</option>
+                                    <option value="-1">Sin @EtiquetaGrupo.ToLower()</option>
+                                    @foreach (var g in GruposParaFiltro)
+                                    {
+                                        <option value="@g.Id">@g.Descripcion</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                        @if (_tipo == "productos")
+                        {
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Subcategoría</label>
+                                <select class="form-select form-select-sm" @bind="_filtroSubgrupo" @bind:after="ReiniciarPagina">
+                                    <option value="">Todas las subcategorías</option>
+                                    <option value="-1">Sin subcategoría</option>
+                                    @foreach (var s in SubgruposParaFiltro)
+                                    {
+                                        <option value="@s.Id">@s.Descripcion</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">Inventario</label>
+                                <select class="form-select form-select-sm" @bind="_filtroInventario" @bind:after="ReiniciarPagina">
+                                    <option value="">Todos</option>
+                                    <option value="1">Va al inventario</option>
+                                    <option value="0">Sin inventario</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted mb-1">Impuesto (IVA)</label>
+                                <select class="form-select form-select-sm" @bind="_filtroIva" @bind:after="ReiniciarPagina">
+                                    <option value="">Todos</option>
+                                    <option value="CON">Con IVA</option>
+                                    <option value="SIN">Sin IVA</option>
+                                </select>
+                            </div>
+                        }
+                    </div>
+                }
             </div>
-            <div class="col-md-5"><input class="form-control" placeholder="Filtrar catálogo" @bind="_filtro" @bind:event="oninput" /></div>
-            <div class="col-md-2"><button class="btn btn-outline-primary" @onclick="Nuevo">Nuevo registro</button></div>
         </div>
         @if (!string.IsNullOrEmpty(_mensaje)) { <div class="alert @(_error ? "alert-danger" : "alert-success")">@_mensaje</div> }
         @if (_pendienteEliminar is not null) { <div class="alert alert-warning d-flex align-items-center justify-content-between"><span>¿Desactivar <strong>@_pendienteEliminar.Descripcion</strong> del catálogo local?</span><span><button class="btn btn-sm btn-danger me-2" @onclick="ConfirmarEliminar">Sí, desactivar</button><button class="btn btn-sm btn-outline-secondary" @onclick="CancelarEliminar">Cancelar</button></span></div> }
         <div class="row g-3">
-            <div class="col-lg-8"><div class="table-responsive card"><table class="table table-hover mb-0">
-                <thead><tr><th>Código</th><th>Descripción</th>@if (MuestraGrupo){<th>@EtiquetaGrupo</th>}@if (_tipo == "grupos-productos"){<th>Aplica para</th>}@if (_tipo == "productos"){<th>Subcategoría</th><th>Tipo</th><th>IVA</th><th class="text-end">Precio</th>}<th>Estado</th><th>Acciones</th></tr></thead>
-                <tbody>@foreach (var x in Filtrados) { <tr><td>@(_tipo == "productos" && !string.IsNullOrWhiteSpace(x.Codigo) ? x.Codigo : x.Id)</td><td>@x.Descripcion</td>@if (MuestraGrupo){<td>@(string.IsNullOrWhiteSpace(x.Grupo) ? "Sin categoría" : x.Grupo)</td>}@if (_tipo == "grupos-productos"){<td>@if (x.Tipo == "S"){<span class="badge text-bg-secondary">Servicios (0)</span>}else{<span class="badge text-bg-primary">Bienes (1)</span>}</td>}@if (_tipo == "productos"){<td>@(string.IsNullOrWhiteSpace(x.Subgrupo) ? "Sin subcategoría" : x.Subgrupo)</td><td>@if (x.Tipo == "S" || x.Tipo == "SERVICIO"){<span class="badge text-bg-secondary">Servicio (S)</span>}else{<span class="badge text-bg-primary">Bien (B)</span>@if (x.Inventario){<span class="badge text-bg-info ms-1" title="Va al inventario">Inventario</span>}else{<span class="badge text-bg-light border ms-1" title="No va al inventario">Sin inv.</span>}}</td><td>@TarifaDescripcion(x)</td><td class="text-end">@x.Precio?.ToString("C2")</td>}<td>@(x.Estado == "I" ? "Inactivo" : "Activo")</td><td><div class="btn-group btn-group-sm">@if (_tipo == "productos"){<button class="btn btn-outline-info" title="Ver" @onclick="() => Ver(x)">Ver</button>}<button class="btn btn-outline-primary" title="Editar" @onclick="() => Editar(x)">Editar</button>@if (_tipo == "productos"){<button class="btn btn-outline-danger" title="Eliminar" @onclick="() => PrepararEliminar(x)">Eliminar</button>}</div></td></tr> }</tbody>
-            </table></div></div>
+            <div class="col-lg-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <span class="small text-muted">
+                            @if (TotalFiltrados == 0)
+                            {
+                                <span>No se encontraron registros</span>
+                            }
+                            else
+                            {
+                                <span>Mostrando <strong>@IndiceInicio</strong> a <strong>@IndiceFin</strong> de <strong>@TotalFiltrados</strong> registros @(TotalFiltrados != _items.Count ? $"(filtrado de {_items.Count} totales)" : "")</span>
+                            }
+                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="small text-muted mb-0">Mostrar:</label>
+                            <select class="form-select form-select-sm" style="width: auto;" @bind="_tamanoPagina" @bind:after="ReiniciarPagina">
+                                <option value="20">20 por pág.</option>
+                                <option value="30">30 por pág.</option>
+                                <option value="50">50 por pág.</option>
+                                <option value="100">100 por pág.</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead><tr><th>Código</th><th>Descripción</th>@if (MuestraGrupo){<th>@EtiquetaGrupo</th>}@if (_tipo == "grupos-productos"){<th>Aplica para</th>}@if (_tipo == "productos"){<th>Subcategoría</th><th>Tipo</th><th>IVA</th><th class="text-end">Precio</th>}<th>Estado</th><th>Acciones</th></tr></thead>
+                            <tbody>
+                                @if (Paginados.Any())
+                                {
+                                    @foreach (var x in Paginados)
+                                    {
+                                        <tr>
+                                            <td>@(_tipo == "productos" && !string.IsNullOrWhiteSpace(x.Codigo) ? x.Codigo : x.Id)</td>
+                                            <td>@x.Descripcion</td>
+                                            @if (MuestraGrupo)
+                                            {
+                                                <td>@(string.IsNullOrWhiteSpace(x.Grupo) ? "Sin categoría" : x.Grupo)</td>
+                                            }
+                                            @if (_tipo == "grupos-productos")
+                                            {
+                                                <td>
+                                                    @if (x.Tipo == "S")
+                                                    {
+                                                        <span class="badge text-bg-secondary">Servicios (0)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge text-bg-primary">Bienes (1)</span>
+                                                    }
+                                                </td>
+                                            }
+                                            @if (_tipo == "productos")
+                                            {
+                                                <td>@(string.IsNullOrWhiteSpace(x.Subgrupo) ? "Sin subcategoría" : x.Subgrupo)</td>
+                                                <td>
+                                                    @if (x.Tipo == "S" || x.Tipo == "SERVICIO")
+                                                    {
+                                                        <span class="badge text-bg-secondary">Servicio (S)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge text-bg-primary">Bien (B)</span>
+                                                        @if (x.Inventario)
+                                                        {
+                                                            <span class="badge text-bg-info ms-1" title="Va al inventario">Inventario</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge text-bg-light border ms-1" title="No va al inventario">Sin inv.</span>
+                                                        }
+                                                    }
+                                                </td>
+                                                <td>@TarifaDescripcion(x)</td>
+                                                <td class="text-end">@x.Precio?.ToString("C2")</td>
+                                            }
+                                            <td>@(x.Estado == "I" ? "Inactivo" : "Activo")</td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm">
+                                                    @if (_tipo == "productos")
+                                                    {
+                                                        <button class="btn btn-outline-info" title="Ver" @onclick="() => Ver(x)">Ver</button>
+                                                    }
+                                                    <button class="btn btn-outline-primary" title="Editar" @onclick="() => Editar(x)">Editar</button>
+                                                    @if (_tipo == "productos")
+                                                    {
+                                                        <button class="btn btn-outline-danger" title="Eliminar" @onclick="() => PrepararEliminar(x)">Eliminar</button>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="9" class="text-center text-muted py-4">No hay registros que coincidan con los filtros seleccionados.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (TotalPaginas > 1)
+                    {
+                        <div class="card-footer bg-light py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <span class="small text-muted">Página <strong>@_paginaActual</strong> de <strong>@TotalPaginas</strong></span>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-secondary" disabled="@(_paginaActual <= 1)" @onclick="() => IrAPagina(1)" title="Primera página">«</button>
+                                <button class="btn btn-outline-secondary" disabled="@(_paginaActual <= 1)" @onclick="() => IrAPagina(_paginaActual - 1)" title="Anterior">‹ Anterior</button>
+                                @foreach (var p in PaginasVisibles)
+                                {
+                                    <button class="btn @(p == _paginaActual ? "btn-primary" : "btn-outline-secondary")" @onclick="() => IrAPagina(p)">@p</button>
+                                }
+                                <button class="btn btn-outline-secondary" disabled="@(_paginaActual >= TotalPaginas)" @onclick="() => IrAPagina(_paginaActual + 1)" title="Siguiente">Siguiente ›</button>
+                                <button class="btn btn-outline-secondary" disabled="@(_paginaActual >= TotalPaginas)" @onclick="() => IrAPagina(TotalPaginas)" title="Última página">»</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
             <div class="col-lg-4"><div class="card"><div class="card-body">
                 <h5>@(_edit.Id > 0 ? "Editar" : "Nuevo")</h5>
                 <label>Descripción</label><input class="form-control mb-2" maxlength="300" @bind="_edit.Descripcion" />
-                @if (MuestraGrupo)
-                {
-                    <label>@EtiquetaGrupo</label><select class="form-select mb-2" @bind="_edit.IdGrupo" @bind:after="CambiarCategoria"><option value="">Seleccione</option>@foreach (var g in CategoriasDisponibles) { <option value="@g.Id">@g.Descripcion</option> }</select>
-                }
                 @if (_tipo == "productos")
                 {
                     <label>Tipo</label><select class="form-select mb-2" @bind="_edit.Tipo" @bind:after="CambiarTipoProducto"><option value="B">Bien (B)</option><option value="S">Servicio (S)</option></select>
@@ -57,6 +251,14 @@
                     {
                         <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="checkInventario" @bind="_edit.Inventario" /><label class="form-check-label" for="checkInventario">Va al inventario</label></div>
                     }
+                }
+                @if (MuestraGrupo)
+                {
+                    <label>@EtiquetaGrupo</label><select class="form-select mb-2" @bind="_edit.IdGrupo" @bind:after="CambiarCategoria"><option value="">Seleccione</option>@foreach (var g in CategoriasDisponibles) { <option value="@g.Id">@g.Descripcion</option> }</select>
+                }
+                @if (_tipo == "productos")
+                {
+                    <label>Subcategoría</label><select class="form-select mb-2" @bind="_edit.IdSubgrupo"><option value="">Sin subcategoría</option>@foreach (var s in SubcategoriasDisponibles) { <option value="@s.Id">@s.Descripcion</option> }</select>
                     <label>Código (opcional)</label><input class="form-control mb-2" maxlength="50" @bind="_edit.Codigo" />
                     <label>Precio base</label><input class="form-control mb-2" type="number" min="0" max="99999999.99" step="0.01" @bind="_edit.Precio" />
                     <div class="row g-2"><div class="col-6"><label>Precio 2 (opcional)</label><input class="form-control mb-2" type="number" min="0" max="99999999.99" step="0.01" @bind="_edit.Precio2" /></div><div class="col-6"><label>Precio 3 (opcional)</label><input class="form-control mb-2" type="number" min="0" max="99999999.99" step="0.01" @bind="_edit.Precio3" /></div></div>
@@ -65,7 +267,6 @@
                     {
                         <label>Tarifa IVA</label><select class="form-select mb-2" @bind="_edit.PorcentajeImpuesto"><option value="">Seleccione</option>@foreach (var tarifa in _tarifas) { <option value="@tarifa.Codigo">@tarifa.Descripcion</option> }</select>
                     }
-                    <label>Subcategoría</label><select class="form-select mb-2" @bind="_edit.IdSubgrupo"><option value="">Sin subcategoría</option>@foreach (var s in SubcategoriasDisponibles) { <option value="@s.Id">@s.Descripcion</option> }</select>
                 }
                 else if (_tipo == "grupos-productos")
                 {
@@ -93,6 +294,9 @@
 @code {
     private bool _autorizado, _error, _aplicaIva;
     private string _tipo = "diagnosticos", _filtro = "", _mensaje = "", _seccion = "general";
+    private string _filtroTipo = "", _filtroGrupo = "", _filtroSubgrupo = "", _filtroInventario = "", _filtroIva = "", _filtroEstado = "";
+    private int _paginaActual = 1, _tamanoPagina = 20;
+
     private string TituloSeccion => _seccion switch
     {
         "diagnosticos" => "Diagnósticos CIE-10",
@@ -108,12 +312,182 @@
     private bool MuestraGrupo => !EsGrupo && _tipo != "grupos-productos";
     private string EtiquetaGrupo => _tipo is "productos" or "subgrupos-productos" ? "Categoría" : "Grupo";
     private string TipoGrupo => _tipo switch { "diagnosticos" => "grupos-diagnosticos", "productos" or "subgrupos-productos" => "grupos-productos", "laboratorio" => "grupos-laboratorio", _ => "" };
+
+    private bool TieneFiltrosActivos =>
+        !string.IsNullOrWhiteSpace(_filtro) ||
+        !string.IsNullOrWhiteSpace(_filtroTipo) ||
+        !string.IsNullOrWhiteSpace(_filtroGrupo) ||
+        !string.IsNullOrWhiteSpace(_filtroSubgrupo) ||
+        !string.IsNullOrWhiteSpace(_filtroInventario) ||
+        !string.IsNullOrWhiteSpace(_filtroIva) ||
+        !string.IsNullOrWhiteSpace(_filtroEstado);
+
+    private IEnumerable<CatalogoOperativoDto> GruposParaFiltro =>
+        _tipo == "productos" && !string.IsNullOrWhiteSpace(_filtroTipo)
+            ? _grupos.Where(g => _filtroTipo == "S" ? g.Tipo == "S" : (g.Tipo == "B" || string.IsNullOrEmpty(g.Tipo)))
+            : _grupos;
+
+    private IEnumerable<CatalogoOperativoDto> SubgruposParaFiltro
+    {
+        get
+        {
+            if (int.TryParse(_filtroGrupo, out var idGrupo) && idGrupo > 0)
+                return _subgrupos.Where(s => s.IdGrupo == idGrupo);
+            if (!string.IsNullOrWhiteSpace(_filtroTipo))
+            {
+                var idsCategorias = GruposParaFiltro.Select(g => g.Id).ToHashSet();
+                return _subgrupos.Where(s => s.IdGrupo.HasValue && idsCategorias.Contains(s.IdGrupo.Value));
+            }
+            return _subgrupos;
+        }
+    }
+
     private IEnumerable<CatalogoOperativoDto> CategoriasDisponibles =>
         _tipo == "productos"
             ? _grupos.Where(g => _edit.Tipo == "S" ? (g.Tipo == "S") : (g.Tipo == "B" || string.IsNullOrEmpty(g.Tipo)))
             : _grupos;
     private IEnumerable<CatalogoOperativoDto> SubcategoriasDisponibles => _subgrupos.Where(x => x.IdGrupo == _edit.IdGrupo);
-    private IEnumerable<CatalogoOperativoDto> Filtrados => string.IsNullOrWhiteSpace(_filtro) ? _items : _items.Where(x => x.Descripcion.Contains(_filtro, StringComparison.OrdinalIgnoreCase) || x.Grupo.Contains(_filtro, StringComparison.OrdinalIgnoreCase) || x.Subgrupo.Contains(_filtro, StringComparison.OrdinalIgnoreCase));
+
+    private List<CatalogoOperativoDto> Filtrados
+    {
+        get
+        {
+            IEnumerable<CatalogoOperativoDto> query = _items;
+
+            if (!string.IsNullOrWhiteSpace(_filtro))
+            {
+                var f = _filtro.Trim();
+                query = query.Where(x =>
+                    x.Descripcion.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                    x.Codigo.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                    x.Id.ToString().Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                    x.Grupo.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                    x.Subgrupo.Contains(f, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!string.IsNullOrWhiteSpace(_filtroEstado))
+            {
+                query = query.Where(x => (x.Estado == "I" ? "I" : "A") == _filtroEstado);
+            }
+
+            if (_tipo is "productos" or "grupos-productos" && !string.IsNullOrWhiteSpace(_filtroTipo))
+            {
+                query = query.Where(x =>
+                    _filtroTipo == "S"
+                        ? (x.Tipo == "S" || x.Tipo == "SERVICIO")
+                        : (x.Tipo != "S" && x.Tipo != "SERVICIO"));
+            }
+
+            if (MuestraGrupo && int.TryParse(_filtroGrupo, out var idGrupo))
+            {
+                if (idGrupo == -1)
+                    query = query.Where(x => !x.IdGrupo.HasValue || x.IdGrupo.Value <= 0 || string.IsNullOrWhiteSpace(x.Grupo));
+                else if (idGrupo > 0)
+                    query = query.Where(x => x.IdGrupo == idGrupo);
+            }
+
+            if (_tipo == "productos" && int.TryParse(_filtroSubgrupo, out var idSubgrupo))
+            {
+                if (idSubgrupo == -1)
+                    query = query.Where(x => !x.IdSubgrupo.HasValue || x.IdSubgrupo.Value <= 0 || string.IsNullOrWhiteSpace(x.Subgrupo));
+                else if (idSubgrupo > 0)
+                    query = query.Where(x => x.IdSubgrupo == idSubgrupo);
+            }
+
+            if (_tipo == "productos" && !string.IsNullOrWhiteSpace(_filtroInventario))
+            {
+                var conInv = _filtroInventario == "1";
+                query = query.Where(x =>
+                {
+                    var esServ = x.Tipo == "S" || x.Tipo == "SERVICIO";
+                    var vaInv = !esServ && x.Inventario;
+                    return vaInv == conInv;
+                });
+            }
+
+            if (_tipo == "productos" && !string.IsNullOrWhiteSpace(_filtroIva))
+            {
+                var conIva = _filtroIva == "CON";
+                query = query.Where(x => (x.CodigoImpuesto == "2") == conIva);
+            }
+
+            return query.ToList();
+        }
+    }
+
+    private int TotalFiltrados => Filtrados.Count;
+    private int TotalPaginas => Math.Max(1, (int)Math.Ceiling(TotalFiltrados / (double)_tamanoPagina));
+    private int IndiceInicio => TotalFiltrados == 0 ? 0 : ((_paginaActual - 1) * _tamanoPagina) + 1;
+    private int IndiceFin => Math.Min(_paginaActual * _tamanoPagina, TotalFiltrados);
+
+    private IEnumerable<CatalogoOperativoDto> Paginados =>
+        Filtrados
+            .Skip((Math.Clamp(_paginaActual, 1, TotalPaginas) - 1) * _tamanoPagina)
+            .Take(_tamanoPagina);
+
+    private IEnumerable<int> PaginasVisibles
+    {
+        get
+        {
+            var total = TotalPaginas;
+            var actual = Math.Clamp(_paginaActual, 1, total);
+            var inicio = Math.Max(1, actual - 2);
+            var fin = Math.Min(total, inicio + 4);
+            if (fin - inicio < 4)
+                inicio = Math.Max(1, fin - 4);
+            return Enumerable.Range(inicio, fin - inicio + 1);
+        }
+    }
+
+    private void ReiniciarPagina() => _paginaActual = 1;
+
+    private void IrAPagina(int pagina)
+    {
+        _paginaActual = Math.Clamp(pagina, 1, TotalPaginas);
+    }
+
+    private void AlCambiarFiltroTipo()
+    {
+        if (int.TryParse(_filtroGrupo, out var idGrupo) && idGrupo > 0)
+        {
+            if (!GruposParaFiltro.Any(g => g.Id == idGrupo))
+            {
+                _filtroGrupo = "";
+                _filtroSubgrupo = "";
+            }
+        }
+        _paginaActual = 1;
+    }
+
+    private void AlCambiarFiltroGrupo()
+    {
+        if (int.TryParse(_filtroSubgrupo, out var idSub) && idSub > 0)
+        {
+            if (!SubgruposParaFiltro.Any(s => s.Id == idSub))
+            {
+                _filtroSubgrupo = "";
+            }
+        }
+        _paginaActual = 1;
+    }
+
+    private void LimpiarFiltros()
+    {
+        _filtro = "";
+        _filtroTipo = "";
+        _filtroGrupo = "";
+        _filtroSubgrupo = "";
+        _filtroInventario = "";
+        _filtroIva = "";
+        _filtroEstado = "";
+        _paginaActual = 1;
+    }
+
+    private async Task AlCambiarCatalogo()
+    {
+        LimpiarFiltros();
+        await Cargar();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -130,6 +504,7 @@
         ActualizarSeccionDesdeRuta();
         if (seccionAnterior != _seccion)
         {
+            LimpiarFiltros();
             await Cargar();
         }
     }
@@ -155,8 +530,63 @@
             _seccion = "general";
         }
     }
-    private async Task Cargar() { _items = await Service.ObtenerCatalogoAsync(_tipo); _grupos = MuestraGrupo ? await Service.ObtenerCatalogoAsync(TipoGrupo) : []; _subgrupos = _tipo == "productos" ? await Service.ObtenerCatalogoAsync("subgrupos-productos") : []; _tarifas = _tipo == "productos" ? await EFactCatalog.ObtenerTarifasIvaAsync() : []; Nuevo(); }
-    private void Nuevo() { _edit = new() { Tipo = _tipo is "productos" or "grupos-productos" ? "B" : "", Inventario = true, Estado = "A" }; _aplicaIva = false; }
+    private async Task Cargar()
+    {
+        _items = await Service.ObtenerCatalogoAsync(_tipo);
+        _grupos = MuestraGrupo ? await Service.ObtenerCatalogoAsync(TipoGrupo) : [];
+        _subgrupos = _tipo == "productos" ? await Service.ObtenerCatalogoAsync("subgrupos-productos") : [];
+        _tarifas = _tipo == "productos" ? await EFactCatalog.ObtenerTarifasIvaAsync() : [];
+        _paginaActual = Math.Clamp(_paginaActual, 1, TotalPaginas);
+        Nuevo();
+    }
+    private void Nuevo()
+    {
+        var tipoInicial = _tipo is "productos" or "grupos-productos"
+            ? (!string.IsNullOrWhiteSpace(_filtroTipo) ? _filtroTipo : "B")
+            : "";
+        int? idGrupoInicial = null;
+        int? idSubgrupoInicial = null;
+
+        if (MuestraGrupo && int.TryParse(_filtroGrupo, out var fg) && fg > 0)
+        {
+            var cat = _grupos.FirstOrDefault(g => g.Id == fg);
+            if (cat != null)
+            {
+                idGrupoInicial = fg;
+                if (_tipo == "productos")
+                {
+                    tipoInicial = cat.Tipo == "S" ? "S" : "B";
+                }
+            }
+        }
+
+        if (_tipo == "productos" && int.TryParse(_filtroSubgrupo, out var fs) && fs > 0)
+        {
+            var sub = _subgrupos.FirstOrDefault(s => s.Id == fs);
+            if (sub != null && (!idGrupoInicial.HasValue || sub.IdGrupo == idGrupoInicial))
+            {
+                idSubgrupoInicial = fs;
+                if (!idGrupoInicial.HasValue && sub.IdGrupo.HasValue)
+                {
+                    idGrupoInicial = sub.IdGrupo;
+                    var cat = _grupos.FirstOrDefault(g => g.Id == idGrupoInicial.Value);
+                    if (cat != null)
+                        tipoInicial = cat.Tipo == "S" ? "S" : "B";
+                }
+            }
+        }
+
+        _edit = new()
+        {
+            Tipo = tipoInicial,
+            Inventario = tipoInicial != "S",
+            IdGrupo = idGrupoInicial,
+            IdSubgrupo = idSubgrupoInicial,
+            Precio = _tipo == "productos" ? 0m : null,
+            Estado = "A"
+        };
+        _aplicaIva = false;
+    }
     private void CambiarCategoria() => _edit.IdSubgrupo = null;
     private void CambiarTipoProducto()
     {

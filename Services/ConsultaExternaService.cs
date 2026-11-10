@@ -632,15 +632,19 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(l.labO_nhcl, 0) AS Nhcl,
                 ISNULL(l.labO_evolucion, 0) AS IdEvolucion,
                 CAST(ISNULL(l.labO_idProdu, 0) AS VARCHAR(50)) AS CodigoProd,
-                ISNULL(pl.lab_descripcion, ISNULL(l.labO_observaciones, 'Examen Laboratorio')) AS DescripcionExamen,
+                COALESCE(p.NOMBRE COLLATE DATABASE_DEFAULT, pl.lab_descripcion, l.labO_observaciones, 'Examen Laboratorio') AS DescripcionExamen,
                 ISNULL(l.labO_observaciones, '') AS Observaciones,
                 ISNULL(l.labO_cantidad, 1) AS Cantidad,
-                CAST(15.00 AS DECIMAL(18,2)) AS Precio,
+                CAST(COALESCE(p.VALOR_UNITARIO, p2.VALOR_UNITARIO, 0.00) AS DECIMAL(18,2)) AS Precio,
                 ISNULL(l.labO_estado, 'Por Facturar') AS Estado,
                 ISNULL(l.labO_fecha, GETDATE()) AS Fecha,
                 'LAB' AS TipoCategoria
             FROM vt_labOrdenes l
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON p.CODIGO = l.labO_idProdu
             LEFT JOIN vt_pruebas_laboratorio pl ON l.labO_idProdu = pl.lab_id
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p2 ON p.CODIGO IS NULL
+                AND UPPER(LTRIM(RTRIM(p2.NOMBRE))) COLLATE DATABASE_DEFAULT = UPPER(LTRIM(RTRIM(pl.lab_descripcion))) COLLATE DATABASE_DEFAULT
+                AND p2.IDUSUARIO = 1000001
             WHERE l.labO_id_orden = @IdOrden
               AND (@IdEvolucion IS NULL OR ISNULL(l.labO_evolucion, 0) = @IdEvolucion)";
 
@@ -651,15 +655,19 @@ public class ConsultaExternaService : IConsultaExternaService
                 CAST(ISNULL(r.rxO_nhcl, 0) AS INT) AS Nhcl,
                 ISNULL(r.rxO_evolucion, 0) AS IdEvolucion,
                 CAST(CAST(ISNULL(r.rxO_idProdu, 0) AS INT) AS VARCHAR(50)) AS CodigoProd,
-                ISNULL(pr.prod_descripcion, ISNULL(r.rxO_observaciones, 'Estudio Imagen')) AS DescripcionExamen,
+                COALESCE(p.NOMBRE COLLATE DATABASE_DEFAULT, pr.prod_descripcion, r.rxO_observaciones, 'Estudio Imagen') AS DescripcionExamen,
                 ISNULL(r.rxO_observaciones, '') AS Observaciones,
                 ISNULL(r.rxO_cantidad, 1) AS Cantidad,
-                CAST(35.00 AS DECIMAL(18,2)) AS Precio,
+                CAST(COALESCE(p.VALOR_UNITARIO, p2.VALOR_UNITARIO, 0.00) AS DECIMAL(18,2)) AS Precio,
                 ISNULL(r.rxO_estado, 'Por Facturar') AS Estado,
                 ISNULL(r.rxO_fecha, GETDATE()) AS Fecha,
                 'RX' AS TipoCategoria
             FROM vt_rxOrdenes r
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON p.CODIGO = r.rxO_idProdu
             LEFT JOIN vt_productos pr ON r.rxO_idProdu = pr.prod_id
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p2 ON p.CODIGO IS NULL
+                AND UPPER(LTRIM(RTRIM(p2.NOMBRE))) COLLATE DATABASE_DEFAULT = UPPER(LTRIM(RTRIM(pr.prod_descripcion))) COLLATE DATABASE_DEFAULT
+                AND p2.IDUSUARIO = 1000001
             WHERE r.rxO_id_orden = @IdOrden
               AND (@IdEvolucion IS NULL OR ISNULL(r.rxO_evolucion, 0) = @IdEvolucion)";
 
