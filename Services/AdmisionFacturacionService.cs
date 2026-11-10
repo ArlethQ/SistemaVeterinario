@@ -31,6 +31,7 @@ public interface IAdmisionFacturacionService
     Task<bool> TieneOrdenActivaHoyAsync(int nhcl, int idEspecialidad, DateTime fecha);
     Task<int> CrearOrdenAtencionAsync(NuevaOrdenAtencionDto orden, int idUsuario, string ipOrigen);
     Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "");
+    Task<List<OrdenAtencionResumenDto>> ObtenerColaClinicaAsync(bool triaje, int? idOrden = null);
     Task<bool> CambiarEstadoOrdenAsync(int idOrden, string nuevoEstado, string nuevaEtapa);
     Task<bool> CambiarAsignacionOrdenAsync(int idOrden, int idMedico, int idEspecialidad, int idUsuario);
     Task<bool> AnularOrdenAsync(int idOrden, int idUsuario);
@@ -59,13 +60,21 @@ public interface IAdmisionFacturacionService
 public class AdmisionFacturacionService : IAdmisionFacturacionService
 {
     private readonly ISqlDataService _db;
+    private readonly SessionStateService _session;
+    private const string PrefijoAsignacion = "Asignación de orden #";
+    private const string PermisoEditarCita = @" AND EXISTS (
+        SELECT 1 FROM vt_usuarios actor
+        WHERE actor.user_numero = @UsuarioSesion AND actor.user_estado = 'A'
+          AND (actor.user_tipouser_numero <> 2 OR (vt_citas.ci_usuario = @UsuarioSesion
+               AND (@MedicoDestino IS NULL OR @MedicoDestino = @UsuarioSesion))))";
     private readonly ILogger<AdmisionFacturacionService> _logger;
     private readonly Dictionary<string, HashSet<string>> _columnCache = new(StringComparer.OrdinalIgnoreCase);
 
-    public AdmisionFacturacionService(ISqlDataService db, ILogger<AdmisionFacturacionService> logger)
+    public AdmisionFacturacionService(ISqlDataService db, ILogger<AdmisionFacturacionService> logger, SessionStateService session)
     {
         _db = db;
         _logger = logger;
+        _session = session;
     }
 
     private async Task<HashSet<string>> ObtenerColumnasTablaAsync(string tableName)
@@ -917,6 +926,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         try
         {
             const string insertSql = @"
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+
                 IF @ColorTriaje IS NOT NULL AND RTRIM(@ColorTriaje) <> ''
                     UPDATE vt_pacientes SET mas_colortriaje = @ColorTriaje WHERE mas_nhcl = @Nhcl;
 
@@ -974,10 +986,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     @TipoOrigen, @TipoDespacho, @TurnoCodigo, @Consultorio,
                     @EsProcedimiento, @IdEnfermero, @TriajeMedico
                 );
-                SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                DECLARE @NuevaOrden INT = CAST(SCOPE_IDENTITY() AS INT);
+                INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
+                VALUES (CONCAT(@PrefijoAsignacion, @NuevaOrden), @IdUsuario, DATEADD(hour, -5, SYSUTCDATETIME()), @IpOrigen, 'BlazorClient');
+                COMMIT TRANSACTION;
+                SELECT @NuevaOrden;";
 
             int idNueva = await _db.ExecuteScalarAsync<int>(insertSql, new
             {
+                PrefijoAsignacion,
                 orden.ColorTriaje,
                 orden.Nhcl,
                 orden.NombrePropietario,
@@ -1070,6 +1087,61 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
     }
 
+    public async Task<List<OrdenAtencionResumenDto>> ObtenerColaClinicaAsync(bool triaje, int? idOrden = null)
+    {
+        if (!_session.IsAuthenticated) return [];
+
+        const string sql = @"
+            SELECT o.ordenAten_id AS IdOrden,
+                   o.ordenAten_nhcl AS Nhcl,
+                   ISNULL(o.ordenAten_turno, '') AS Turno,
+                   ISNULL(p.mas_nombre, '') AS Mascota,
+                   ISNULL(u.user_nombre, '') AS Medico,
+                   ISNULL(enf.user_nombre, '') AS Enfermero,
+                   ISNULL(o.ordenAten_estado, 'A') AS Estado,
+                   COALESCE(asignacion.Fecha, historica.Fecha,
+                       DATEADD(second, DATEDIFF(second, CAST('00:00' AS time),
+                           COALESCE(TRY_CONVERT(time, o.ordenAten_hora), CAST('00:00' AS time))),
+                           CAST(CAST(o.ordenAten_fecha AS date) AS datetime))) AS FechaAsignacion
+            FROM vt_ordenAtencion o
+            LEFT JOIN vt_pacientes p ON p.mas_nhcl = o.ordenAten_nhcl
+            LEFT JOIN vt_usuarios u ON u.user_numero = o.ordenAten_idMedico
+            LEFT JOIN vt_usuarios enf ON enf.user_numero = o.ordenAten_idEnfermero
+            OUTER APPLY (
+                SELECT MAX(v.vit_idFechaMod) AS Fecha
+                FROM vt_vitacora v
+                WHERE v.vit_detalle LIKE CONCAT(@PrefijoAsignacion, o.ordenAten_id)
+            ) asignacion
+            OUTER APPLY (
+                SELECT MAX(v.vit_idFechaMod) AS Fecha
+                FROM vt_vitacora v
+                WHERE asignacion.Fecha IS NULL
+                  AND v.vit_detalle LIKE CONCAT('Cambio de médico/especialidad en orden #', o.ordenAten_id, ': médico %, especialidad %')
+            ) historica
+            WHERE ((@IdOrden IS NOT NULL AND o.ordenAten_id = @IdOrden)
+                OR (@IdOrden IS NULL AND o.ordenAten_fecha >= @Hoy AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
+                    AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')))
+              AND (
+                   (@Triaje = 0 AND (@Rol <> 2 OR o.ordenAten_idMedico = @Usuario))
+                   OR (@Triaje = 1 AND (
+                        (@Rol = 1)
+                        OR (o.ordenAten_esProcedimiento = 1 AND o.ordenAten_idEnfermero = @Usuario)
+                        OR (ISNULL(o.ordenAten_esProcedimiento, 0) = 0 AND o.ordenAten_triajeMedico = 1 AND o.ordenAten_idMedico = @Usuario)
+                   ))
+              )
+            ORDER BY FechaAsignacion, o.ordenAten_id;";
+
+        return (await _db.QueryAsync<OrdenAtencionResumenDto>(sql, new
+        {
+            Hoy = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Date,
+            Triaje = triaje,
+            IdOrden = idOrden,
+            Rol = _session.TipoUser,
+            Usuario = _session.IdUser,
+            PrefijoAsignacion
+        })).ToList();
+    }
+
     public async Task<bool> CambiarEstadoOrdenAsync(int idOrden, string nuevoEstado, string nuevaEtapa)
     {
         try
@@ -1119,10 +1191,21 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 SET @NuevoTurno = @Pref + '-' + RIGHT('00' + CAST(@Sig AS VARCHAR(10)), CASE WHEN @Sig < 100 THEN 2 ELSE LEN(CAST(@Sig AS VARCHAR(10))) END);
             END
         ";
-        int rows = await _db.ExecuteAsync($@"{updateTurnoSql}
+        int rows = await _db.ExecuteScalarAsync<int>($@"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+            {updateTurnoSql}
+            DECLARE @Cambios TABLE (MedicoAnterior INT);
             UPDATE vt_ordenAtencion SET {anterior}
-            ordenAten_idMedico=@IdMedico, ordenAten_esp_numero=@IdEspecialidad, ordenAten_turno=@NuevoTurno
-            WHERE ordenAten_id=@IdOrden", new { IdOrden = idOrden, IdMedico = idMedico, IdEspecialidad = idEspecialidad });
+                ordenAten_idMedico=@IdMedico, ordenAten_esp_numero=@IdEspecialidad, ordenAten_turno=@NuevoTurno
+            OUTPUT deleted.ordenAten_idMedico INTO @Cambios
+            WHERE ordenAten_id=@IdOrden;
+
+            INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
+            SELECT CONCAT(@PrefijoAsignacion, @IdOrden), @IdUsuario, DATEADD(hour, -5, SYSUTCDATETIME()), '127.0.0.1', 'BlazorClient'
+            FROM @Cambios WHERE ISNULL(MedicoAnterior, 0) <> @IdMedico;
+            COMMIT TRANSACTION;
+            SELECT COUNT(*) FROM @Cambios;", new { IdOrden = idOrden, IdMedico = idMedico, IdEspecialidad = idEspecialidad, IdUsuario = idUsuario, PrefijoAsignacion });
         if (rows > 0) await _db.RegistrarBitacoraAsync($"Cambio de médico/especialidad en orden #{idOrden}: médico {idMedico}, especialidad {idEspecialidad}", idUsuario);
         return rows > 0;
     }
@@ -1282,7 +1365,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             FROM vt_citas c
             LEFT JOIN vt_usuarios u ON c.ci_usuario = u.user_numero
             LEFT JOIN vt_especialidades e ON {colEspExpr} = e.es_id
-            WHERE c.ci_fecha BETWEEN @Desde AND @Hasta
+            WHERE c.ci_fecha >= @Desde AND c.ci_fecha < DATEADD(day, 1, @Hasta)
               AND (@IdMedico = 0 OR c.ci_usuario = @IdMedico)
             ORDER BY c.ci_fecha, c.ci_hora;";
 
@@ -1378,6 +1461,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<bool> ActualizarEstadoCitaAsync(int idCita, string nuevoEstado)
     {
+        if (!_session.IsAuthenticated) return false;
         try
         {
             var columnas = await ObtenerColumnasTablaAsync("vt_citas");
@@ -1396,8 +1480,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             }
 
             int rows = await _db.ExecuteAsync(
-                $"UPDATE vt_citas SET {string.Join(", ", cambios)} WHERE ci_id = @IdCita",
-                new { IdCita = idCita, Estado = nuevoEstado });
+                $"UPDATE vt_citas SET {string.Join(", ", cambios)} WHERE ci_id = @IdCita{PermisoEditarCita}",
+                new { IdCita = idCita, Estado = nuevoEstado, MedicoDestino = (int?)null, UsuarioSesion = _session.IdUser });
             return rows > 0;
         }
         catch (Exception ex)
@@ -1409,6 +1493,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<bool> ReagendarCitaAsync(int idCita, DateTime fecha, string hora, int idMedico, int idLocalidad, int idUsuario)
     {
+        if (!_session.IsAuthenticated || (_session.TipoUser == 2 && idMedico != _session.IdUser)) return false;
         if (idCita <= 0 || idMedico <= 0 || idLocalidad <= 0 || !TimeSpan.TryParse(hora, out var horaNueva)) return false;
         string horaNormalizada = $"{horaNueva.Hours:D2}:{horaNueva.Minutes:D2}";
         int cruces = await _db.ExecuteScalarAsync<int>(@"SELECT COUNT(1) FROM vt_citas
@@ -1422,8 +1507,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         if (columnas.Contains("ci_usuarioPrincipal")) adicionales.Add("ci_usuarioPrincipal=@IdUsuario");
         string extra = "," + string.Join(',', adicionales);
         int rows = await _db.ExecuteAsync($@"UPDATE vt_citas SET ci_fecha=@Fecha,ci_hora=@Hora,ci_usuario=@IdMedico,
-            ci_localidad=@IdLocalidad,ci_estado='A'{extra} WHERE ci_id=@IdCita AND ISNULL(ci_estado,'A')='A'",
-            new { IdCita = idCita, Fecha = fecha.Date, Hora = horaNormalizada, IdMedico = idMedico, IdLocalidad = idLocalidad, IdUsuario = idUsuario });
+            ci_localidad=@IdLocalidad,ci_estado='A'{extra} WHERE ci_id=@IdCita AND ISNULL(ci_estado,'A')='A'{PermisoEditarCita}",
+            new { IdCita = idCita, Fecha = fecha.Date, Hora = horaNormalizada, IdMedico = idMedico, IdLocalidad = idLocalidad, IdUsuario = idUsuario, MedicoDestino = idMedico, UsuarioSesion = _session.IdUser });
         if (rows <= 0) return false;
 
         var confirmacion = await _db.QueryFirstOrDefaultAsync<CitaMedicaDto>(@"
@@ -1449,7 +1534,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<bool> CancelarCitaAsync(int idCita, string motivo, int idUsuario)
     {
-        if (idCita <= 0) return false;
+        if (!_session.IsAuthenticated || idCita <= 0) return false;
         string motivoNormalizado = string.IsNullOrWhiteSpace(motivo) ? "Cancelada por el usuario" : motivo.Trim();
         int usuarioAuditoria = idUsuario > 0 ? idUsuario : 1;
         try
@@ -1459,7 +1544,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             if (columnas.Contains("ci_refeliminacion")) cambios.Add("ci_refeliminacion=@Motivo");
             if (columnas.Contains("ci_delete")) cambios.Add("ci_delete=@IdUsuario");
             if (columnas.Contains("ci_HoraModificacion")) cambios.Add("ci_HoraModificacion=GETDATE()");
-            int rows = await _db.ExecuteAsync($"UPDATE vt_citas SET {string.Join(',', cambios)} WHERE ci_id=@IdCita", new { IdCita = idCita, Motivo = motivoNormalizado, IdUsuario = usuarioAuditoria });
+            int rows = await _db.ExecuteAsync($"UPDATE vt_citas SET {string.Join(',', cambios)} WHERE ci_id=@IdCita{PermisoEditarCita}", new { IdCita = idCita, Motivo = motivoNormalizado, IdUsuario = usuarioAuditoria, MedicoDestino = (int?)null, UsuarioSesion = _session.IdUser });
             if (rows > 0)
             {
                 try

@@ -153,11 +153,11 @@
                                 <td><span class="table-status @ClaseEstadoCita(cita.CiEstadoCita)">@TextoEstadoCita(cita.CiEstadoCita)</span></td>
                                 <td class="text-end">
                                     <button class="btn btn-info btn-sm" @onclick="() => VerDetalleCita(cita)">Ver</button>
-                                    @if (Permisos.Permite("admision/ordenes"))
+                                    @if (PuedeEditar(cita) && Permisos.Permite("admision/ordenes"))
                                     {
                                         <button class="btn btn-primary btn-sm" title="Mandar a Recepción de Órdenes" @onclick="() => EnviarARecepcionOrdenes(cita)"><i class="bi bi-clipboard2-pulse"></i> Orden</button>
                                     }
-                                    @if (cita.CiEstadoCita != "X")
+                                    @if (PuedeEditar(cita) && cita.CiEstadoCita != "X")
                                     {
                                         <button class="btn btn-outline-primary btn-sm" @onclick="() => AbrirReagendar(cita)">Reagendar</button>
                                         @if (cita.CiEstadoCita != "C")
@@ -195,7 +195,25 @@
                 <div class="col-md-2 align-self-end"><button class="btn btn-primary w-100" @onclick="CargarHistorialAsync">Consultar</button></div>
             </div>
             <div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Fecha/hora</th><th>Paciente</th><th>Propietario</th><th>Médico</th><th>Estado</th><th>Motivo cancelación</th><th></th></tr></thead><tbody>
-                @foreach(var c in HistorialFiltrado){<tr><td>@c.CiFecha.ToString("dd/MM/yyyy") @c.CiHora</td><td>@c.CiNombreMas <small>#@c.CiNhcl</small></td><td>@c.CiNombre</td><td>@c.NombreMedico</td><td>@TextoEstadoCita(c.CiEstadoCita)</td><td>@c.CiMotivoCancelacion</td><td><button class="btn btn-sm btn-outline-primary" @onclick="()=>AbrirReagendar(c)">Reagendar</button> <button class="btn btn-sm btn-outline-danger" disabled="@(c.CiEstadoCita=="X")" @onclick="()=>AbrirCancelar(c)">Cancelar</button></td></tr>}
+                @foreach (var cita in HistorialFiltrado)
+                {
+                    <tr>
+                        <td>@cita.CiFecha.ToString("dd/MM/yyyy") @cita.CiHora</td>
+                        <td>@cita.CiNombreMas <small>#@cita.CiNhcl</small></td>
+                        <td>@cita.CiNombre</td>
+                        <td>@cita.NombreMedico</td>
+                        <td>@TextoEstadoCita(cita.CiEstadoCita)</td>
+                        <td>@cita.CiMotivoCancelacion</td>
+                        <td>
+                            <button class="btn btn-sm btn-info" @onclick="() => VerDetalleCita(cita)">Ver</button>
+                            @if (PuedeEditar(cita))
+                            {
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => AbrirReagendar(cita)">Reagendar</button>
+                                <button class="btn btn-sm btn-outline-danger" disabled="@(cita.CiEstadoCita == "X")" @onclick="() => AbrirCancelar(cita)">Cancelar</button>
+                            }
+                        </td>
+                    </tr>
+                }
             </tbody></table></div>
         </section>
     }
@@ -355,7 +373,7 @@
                     <button type="button" class="btn btn-secondary" @onclick="CerrarDetalleCita">Cerrar</button>
                 </div>
                 <div class="d-flex gap-2 align-items-center flex-wrap">
-                    @if (_citaDetalle.CiEstadoCita != "X")
+                    @if (PuedeEditar(_citaDetalle) && _citaDetalle.CiEstadoCita != "X")
                     {
                         <button type="button" class="btn btn-outline-danger" @onclick="() => AbrirCancelarDesdeDetalle(_citaDetalle)">
                             <i class="bi bi-x-circle me-1"></i>Cancelar cita
@@ -364,13 +382,13 @@
                             <i class="bi bi-calendar2-range me-1"></i>Reagendar
                         </button>
                     }
-                    @if (_citaDetalle.CiEstadoCita != "C" && _citaDetalle.CiEstadoCita != "X")
+                    @if (PuedeEditar(_citaDetalle) && _citaDetalle.CiEstadoCita != "C" && _citaDetalle.CiEstadoCita != "X")
                     {
                         <button type="button" class="btn btn-success fw-semibold" @onclick="() => ConfirmarCitaDetalleAsync(_citaDetalle.CiId)">
                             <i class="bi bi-check2-circle me-1"></i>Confirmar cita
                         </button>
                     }
-                    else if (_citaDetalle.CiEstadoCita == "C")
+                    else if (PuedeEditar(_citaDetalle) && _citaDetalle.CiEstadoCita == "C")
                     {
                         <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-semibold">
                             <i class="bi bi-check-circle-fill me-1"></i>Confirmada
@@ -379,7 +397,7 @@
                             <i class="bi bi-arrow-counterclockwise me-1"></i>Por confirmar
                         </button>
                     }
-                    @if (Permisos.Permite("admision/ordenes"))
+                    @if (PuedeEditar(_citaDetalle) && Permisos.Permite("admision/ordenes"))
                     {
                         <button type="button" class="btn btn-primary fw-bold" @onclick="() => EnviarARecepcionOrdenes(_citaDetalle)" title="Crear Orden de Atención en Recepción con los datos de esta cita">
                             <i class="bi bi-clipboard2-pulse-fill me-1"></i>Recepción / Crear Orden
@@ -416,7 +434,7 @@
                 </div>
                 <div class="detail-observation">
                     <label class="small text-muted fw-bold mb-1">Médico Veterinario</label>
-                    <select class="form-select" @bind="_reagendaMedico">
+                    <select class="form-select" @bind="_reagendaMedico" disabled="@(SessionState.TipoUser == 2)">
                         @foreach (var m in _medicos)
                         {
                             <option value="@m.Id">@m.Descripcion</option>
@@ -675,16 +693,19 @@
                                             }
                                         </td>
                                         <td class="text-end">
-                                            <div class="btn-group btn-group-sm">
-                                                <button class="btn btn-outline-success py-0 px-2" title="Confirmar Asistencia"
-                                                        @onclick='() => CambiarEstadoCitaAsync(c.CiId, "C")'>
-                                                    <i class="bi bi-check-lg"></i>
-                                                </button>
-                                                <button class="btn btn-outline-danger py-0 px-2" title="Cancelar Cita"
-                                                        @onclick='() => CambiarEstadoCitaAsync(c.CiId, "X")'>
-                                                    <i class="bi bi-x-lg"></i>
-                                                </button>
-                                            </div>
+                                            @if (PuedeEditar(c))
+                                            {
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-outline-success py-0 px-2" title="Confirmar Asistencia"
+                                                            @onclick='() => CambiarEstadoCitaAsync(c.CiId, "C")'>
+                                                        <i class="bi bi-check-lg"></i>
+                                                    </button>
+                                                    <button class="btn btn-outline-danger py-0 px-2" title="Cancelar Cita"
+                                                            @onclick='() => CambiarEstadoCitaAsync(c.CiId, "X")'>
+                                                        <i class="bi bi-x-lg"></i>
+                                                    </button>
+                                                </div>
+                                            }
                                         </td>
                                     </tr>
                                 }
@@ -726,6 +747,7 @@
     private int _reagendaMedico;
     private string _vistaAgenda = "agenda";
     private IEnumerable<CitaMedicaDto> HistorialFiltrado => _historial.Where(c => _historialMedico == 0 || c.CiUsuario == _historialMedico).Where(c => string.IsNullOrWhiteSpace(_historialTexto) || c.CiNombre.Contains(_historialTexto, StringComparison.OrdinalIgnoreCase) || c.CiNombreMas.Contains(_historialTexto, StringComparison.OrdinalIgnoreCase) || c.CiNhcl.ToString().Contains(_historialTexto));
+    private bool PuedeEditar(CitaMedicaDto cita) => SessionState.TipoUser != 2 || cita.CiUsuario == SessionState.IdUser;
     private int CitasConfirmadas => _citas.Count(c => c.CiEstadoCita == "C");
     private int CitasCanceladas => _citas.Count(c => c.CiEstadoCita == "X");
     private int CitasPendientes => _citas.Count(c => c.CiEstadoCita is not ("C" or "X" or "A"));
@@ -996,6 +1018,8 @@
     }
     private void EnviarARecepcionOrdenes(CitaMedicaDto cita)
     {
+        if (!PuedeEditar(cita)) return;
+
         if (cita.CiNhcl <= 0)
         {
             MostrarErrorCita($"La cita de {cita.CiNombreMas} no tiene un paciente (NHCL) asignado. Primero vincule o registre el paciente en 'Clientes, tutores y mascotas'.");
@@ -1019,14 +1043,7 @@
         _citaDetalle = null;
         AbrirReagendar(cita);
     }
-    private async Task ConfirmarCitaDetalleAsync(int idCita)
-    {
-        await CambiarEstadoCitaAsync(idCita, "C");
-        if (_citaDetalle != null && _citaDetalle.CiId == idCita)
-        {
-            _citaDetalle.CiEstadoCita = "C";
-        }
-    }
+    private Task ConfirmarCitaDetalleAsync(int idCita) => CambiarEstadoCitaAsync(idCita, "C");
     private async Task AbrirHistorialAsync(){_vistaAgenda="historial";if(_historial.Count==0)await CargarHistorialAsync();}
     private async Task CargarHistorialAsync(){if(_historialHasta<_historialDesde){_mensaje="El rango de historial no es válido.";return;}_historial=await AdmisionService.ObtenerCitasPorFechaAsync(_historialDesde,_historialHasta,0);}
     private void AbrirReagendar(CitaMedicaDto c){_mensajeModal="";_citaReagendar=c;_reagendaFecha=c.CiFecha;_reagendaHora=c.CiHora;_reagendaMedico=c.CiUsuario;}

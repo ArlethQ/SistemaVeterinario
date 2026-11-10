@@ -185,6 +185,7 @@ public class OrdenAtencionResumenDto
     public string Enfermero { get; set; } = string.Empty;
     public DateTime Fecha { get; set; }
     public string Hora { get; set; } = string.Empty;
+    public DateTime FechaAsignacion { get; set; }
     public string Estado { get; set; } = "A"; // A=Activa/Espera, T=Terminada, P=Pre-alta, I=Anulada
     public string Etapa { get; set; } = "Consulta";
     public string TipoOrigen { get; set; } = "M";

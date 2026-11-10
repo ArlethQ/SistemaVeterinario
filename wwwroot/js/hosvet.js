@@ -721,3 +721,35 @@ window.hosvetEditor = {
         printWindow.document.close();
     }
 };
+
+window.hosvetColaClinica = (() => {
+    let audio;
+
+    return {
+        async activar() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return false;
+
+            audio ??= new AudioContext();
+            if (audio.state !== 'running') await audio.resume();
+            return audio.state === 'running';
+        },
+
+        sonar() {
+            if (audio?.state !== 'running') return;
+
+            const tono = audio.createOscillator();
+            const volumen = audio.createGain();
+            const ahora = audio.currentTime;
+
+            tono.frequency.setValueAtTime(660, ahora);
+            tono.frequency.setValueAtTime(880, ahora + 0.13);
+            volumen.gain.setValueAtTime(0.14, ahora);
+            volumen.gain.exponentialRampToValueAtTime(0.001, ahora + 0.35);
+            tono.connect(volumen);
+            volumen.connect(audio.destination);
+            tono.start(ahora);
+            tono.stop(ahora + 0.35);
+        }
+    };
+})();

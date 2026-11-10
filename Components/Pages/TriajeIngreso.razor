@@ -25,21 +25,11 @@
                         </div>
                     </div>
 
-                    <!-- Selector de Órdenes Activas de la Clínica -->
-                    <div class="col-md-7">
-                        <select class="form-select form-select-sm" value="@(IdOrden ?? 0)" @onchange="OnOrdenSelectChangedAsync">
-                            <option value="0">-- Seleccionar Orden de Atención Activa --</option>
-                            @foreach (var ord in _ordenesActivas)
-                            {
-                                <option value="@ord.IdOrdenAtencion">
-                                    #@ord.IdOrdenAtencion | NHCL:@ord.Nhcl — @ord.Paciente (@ord.Cliente)
-                                </option>
-                            }
-                        </select>
-                    </div>
                 </div>
             </div>
         </div>
+
+        <ColaOrdenesClinicas Triaje="true" OrdenSeleccionada="@(IdOrden ?? 0)" />
 
         <!-- Mensajes de feedback -->
         @if (!string.IsNullOrEmpty(_mensajeAlerta))
@@ -64,19 +54,8 @@
                     <span class="fs-1 d-block mb-2 text-secondary">🐾</span>
                     <h5>Ningún paciente seleccionado para triaje</h5>
                     <p class="small text-muted mb-3">
-                        Selecciona una orden activa del menú superior para cargar o ingresar sus constantes vitales.
+                        Selecciona una orden en la cola para cargar o ingresar sus constantes vitales.
                     </p>
-                    @if (_ordenesActivas.Count > 0)
-                    {
-                        <div class="d-inline-flex flex-wrap gap-2 justify-content-center" style="max-width: 600px;">
-                            @foreach (var o in _ordenesActivas.Take(5))
-                            {
-                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => SeleccionarOrdenDirecta(o.IdOrdenAtencion, o.Nhcl)">
-                                    Orden #@o.IdOrdenAtencion — @o.Paciente
-                                </button>
-                            }
-                        </div>
-                    }
                 </div>
             </div>
         }
@@ -278,112 +257,23 @@ else
     private string? _mensajeAlerta;
     private bool _esError;
 
-    private List<OrdenActivaResumenDto> _ordenesActivas = [];
     private PacienteHeaderDto? _paciente;
     private FichaMedicaCompletaDto _ficha = new();
 
-    protected override async Task OnInitializedAsync()
-    {
-        _cargando = true;
-        await Task.Yield();
-
-        if (!ModoModal)
-        {
-            try
-            {
-                _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(top: 50);
-                _ordenesActivas = _ordenesActivas
-                    .Where(o => (o.EsProcedimiento && o.IdEnfermero == Session.IdUser)
-                             || (!o.EsProcedimiento && o.TriajeMedico && o.IdMedico == Session.IdUser))
-                    .ToList();
-            }
-            catch
-            {
-                _ordenesActivas = [];
-            }
-
-            int ordTarget = IdOrden ?? Session.OrdenActiva ?? 0;
-            int nhclTarget = Nhcl ?? Session.NhclActivo ?? 0;
-
-            if (ordTarget > 0 && !_ordenesActivas.Any(o => o.IdOrdenAtencion == ordTarget))
-            {
-                ordTarget = 0;
-                nhclTarget = 0;
-                IdOrden = null;
-                Nhcl = null;
-                _esError = true;
-                _mensajeAlerta = "Esta orden de triaje fue asignada a otro profesional o no requiere triaje.";
-            }
-
-            if (ordTarget <= 0 && _ordenesActivas.Count > 0)
-            {
-                ordTarget = _ordenesActivas[0].IdOrdenAtencion;
-                nhclTarget = _ordenesActivas[0].Nhcl;
-            }
-
-            if (ordTarget > 0 || nhclTarget > 0)
-            {
-                IdOrden = ordTarget;
-                Nhcl = nhclTarget;
-                await CargarDatosAsync();
-            }
-        }
-        else
-        {
-            if ((IdOrden ?? 0) > 0 || (Nhcl ?? 0) > 0)
-            {
-                await CargarDatosAsync();
-            }
-        }
-
-        _cargando = false;
-    }
+    private (int? Orden, int? Paciente, bool Modal)? _parametrosCargados;
 
     protected override async Task OnParametersSetAsync()
     {
-        int ord = IdOrden ?? 0;
-        int nh = Nhcl ?? 0;
-
-        if (ord > 0 && (ord != _ficha.MedOrden || (nh > 0 && nh != _ficha.MedNhcl)))
-        {
-            _cargando = true;
-            await CargarDatosAsync();
-            _cargando = false;
-        }
-    }
-
-    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out int idOrd) && idOrd > 0)
-        {
-            var ord = _ordenesActivas.FirstOrDefault(o => o.IdOrdenAtencion == idOrd);
-            IdOrden = idOrd;
-            Nhcl = ord?.Nhcl ?? 0;
-
-            _cargando = true;
-            await Task.Yield();
-            await CargarDatosAsync();
-            _cargando = false;
-            if (!ModoModal)
-            {
-                Nav.NavigateTo($"/admision/triaje/{IdOrden}/{Nhcl}", replace: true);
-            }
-        }
-    }
-
-    private async Task SeleccionarOrdenDirecta(int idOrd, int nhcl)
-    {
-        IdOrden = idOrd;
-        Nhcl = nhcl;
+        var parametros = (IdOrden, Nhcl, ModoModal);
+        if (_parametrosCargados == parametros) return;
+        _parametrosCargados = parametros;
 
         _cargando = true;
-        await Task.Yield();
-        await CargarDatosAsync();
+        _paciente = null;
+        _mensajeAlerta = null;
+        if ((IdOrden ?? 0) > 0 || (ModoModal && (Nhcl ?? 0) > 0))
+            await CargarDatosAsync();
         _cargando = false;
-        if (!ModoModal)
-        {
-            Nav.NavigateTo($"/admision/triaje/{IdOrden}/{Nhcl}", replace: true);
-        }
     }
 
     private async Task CargarDatosAsync()
@@ -393,6 +283,18 @@ else
 
         int ord = IdOrden ?? 0;
         int nh = Nhcl ?? 0;
+
+        if (!ModoModal)
+        {
+            var orden = (await AdmisionService.ObtenerColaClinicaAsync(triaje: true, idOrden: ord)).FirstOrDefault();
+            if (orden is null)
+            {
+                _esError = true;
+                _mensajeAlerta = "Esta orden de triaje fue asignada a otro profesional o no requiere triaje.";
+                return;
+            }
+            Nhcl = nh = orden.Nhcl;
+        }
 
         _paciente = await KardexService.ObtenerEncabezadoPacienteAsync(ord, nh);
         if (_paciente != null && nh <= 0)
