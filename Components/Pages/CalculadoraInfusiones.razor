@@ -5,7 +5,10 @@
 <div class="container-fluid py-3 infusion-page">
     <div class="infusion-titlebar shadow-sm mb-3">
         <div><div class="clinical-kicker">HOSPITALIZACIÓN 24 HORAS</div><h4 class="mb-1 fw-bold">💧 Calculadora de infusiones</h4><div class="small opacity-75">Preparación matemática con conversión explícita de unidades y doble verificación.</div></div>
-        <a href="/hospitalizacion/ficha" class="btn btn-sm btn-light fw-semibold">🏥 Volver a hospitalización</a>
+        @if (Permisos.Permite("hospitalizacion/ficha"))
+        {
+            <a href="/hospitalizacion/ficha" class="btn btn-sm btn-light fw-semibold">🏥 Volver a hospitalización</a>
+        }
     </div>
     <div class="card border-0 shadow-sm mb-3 overflow-hidden">
         <div class="card-header infusion-section"><span class="section-index">1</span><span><strong>DATOS DE LA PRESCRIPCIÓN Y PREPARACIÓN</strong><small>Complete únicamente valores confirmados por el médico prescriptor.</small></span></div>
@@ -59,6 +62,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     private string Paciente="",Farmaco="",Diluyente="",Prescriptor="",UnidadDosis="mcg/kg/h",UnidadConcentracion="mcg/ml",Error="";
     private decimal PesoKg,VolumenFinalMl,VelocidadMlHora,Dosis,Concentracion; private bool VerificacionIndependiente; private CalculoResultado? Resultado;
     private sealed record CalculoResultado(decimal DuracionHoras,decimal CantidadActiva,string UnidadActiva,decimal VolumenFarmacoMl,decimal VolumenDiluyenteMl);

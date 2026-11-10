@@ -50,8 +50,14 @@
                 @(guardando ? "Guardando..." : "Guardar Evaluación")
             </button>
             <button class="btn btn-sm btn-danger" @onclick="ExportarPdfAsync">Exportar PDF</button>
-            <a class="btn btn-sm btn-outline-primary" href="/quirofano/anestesia/@IdOrden/@Nhcl">Ir a Hoja Anestesia</a>
-            <a class="btn btn-sm btn-outline-secondary" href="/quirofano/protocolo/@IdOrden/@Nhcl">Protocolo</a>
+            @if (Permisos.Permite("quirofano/anestesia"))
+            {
+                <a class="btn btn-sm btn-outline-primary" href="/quirofano/anestesia/@IdOrden/@Nhcl">Ir a Hoja Anestesia</a>
+            }
+            @if (Permisos.Permite("quirofano/protocolo"))
+            {
+                <a class="btn btn-sm btn-outline-secondary" href="/quirofano/protocolo/@IdOrden/@Nhcl">Protocolo</a>
+            }
         }
     </div>
 </div>
@@ -361,6 +367,7 @@ else
 }
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
 

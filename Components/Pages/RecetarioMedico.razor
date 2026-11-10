@@ -19,7 +19,10 @@
             <small class="text-muted">Emisión de recetas médicas veterinarias, posología e indicaciones generales para el propietario.</small>
         </div>
         <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
-            <a class="btn btn-sm btn-outline-success" href="/consulta/recetario/sin-orden">Receta sin orden</a>
+            @if (Permisos.Permite("consulta/recetario/sin-orden"))
+            {
+                <a class="btn btn-sm btn-outline-success" href="/consulta/recetario/sin-orden">Receta sin orden</a>
+            }
             <select class="form-select form-select-sm" style="width: 280px;" value="@IdOrden" @onchange="SeleccionarOrdenActivaAsync">
                 <option value="0">-- Seleccionar paciente / orden --</option>
                 @foreach (var orden in OrdenesActivas)
@@ -245,6 +248,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
 

@@ -55,12 +55,18 @@
                     <i class="bi bi-printer me-1"></i>Imprimir Curva
                 </button>
             }
-            <a class="btn btn-outline-danger btn-sm" href="/consulta/imprimir-fichas/@Nhcl">
+            @if (Permisos.Permite("consulta/imprimir-fichas"))
+            {
+                <a class="btn btn-outline-danger btn-sm" href="/consulta/imprimir-fichas/@Nhcl">
                 <i class="bi bi-file-earmark-pdf-fill me-1"></i>Expediente Seguros / Fichas
             </a>
-            <a class="btn btn-outline-primary btn-sm" href="/admision/clientes-pacientes">
+            }
+            @if (Permisos.Permite("admision/clientes-pacientes"))
+            {
+                <a class="btn btn-outline-primary btn-sm" href="/admision/clientes-pacientes">
                 <i class="bi bi-arrow-left me-1"></i>Volver a Pacientes
             </a>
+            }
         </div>
     </div>
 
@@ -610,9 +616,12 @@
                                 <td class="text-end">
                                     @if (x.IdOrden > 0)
                                     {
-                                        <a href="/consulta/fichamedica/@x.IdOrden/@Nhcl" class="btn btn-xs btn-outline-primary py-0 px-2" title="Abrir Historia Clínica SOAP de esta orden">
+                                        @if (Permisos.Permite("consulta/fichamedica"))
+                                        {
+                                            <a href="/consulta/fichamedica/@x.IdOrden/@Nhcl" class="btn btn-xs btn-outline-primary py-0 px-2" title="Abrir Historia Clínica SOAP de esta orden">
                                             Ver Ficha
                                         </a>
+                                        }
                                     }
                                 </td>
                             </tr>
@@ -928,6 +937,7 @@
 }
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int Nhcl { get; set; }
     [Parameter] public string? TabInicial { get; set; }
 

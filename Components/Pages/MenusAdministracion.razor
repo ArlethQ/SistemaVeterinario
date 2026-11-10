@@ -1,9 +1,88 @@
 @page "/administracion/menus"
-@inject NavigationManager Nav
+@inject SessionStateService Session
+@inject IAuthService AuthService
+
+<PageTitle>Organización de menús | e-ForVets</PageTitle>
+
+@if (Session.IsAuthenticated && Session.TipoUser == 1)
+{
+    <div class="container-fluid py-3">
+        <h1>Organización de menús</h1>
+        <p>Organiza los accesos del menú lateral y cambia los nombres que ven los usuarios.</p>
+        @if (!string.IsNullOrWhiteSpace(_mensaje))
+        {
+            <div class="alert @(_error ? "alert-danger" : "alert-success")" role="status">@_mensaje</div>
+        }
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <div class="list-group">
+                    @foreach (var menu in _menus.Where(m => m.Habilitado).OrderBy(m => int.TryParse(m.SecNuevoMenu, out var orden) ? orden : int.MaxValue))
+                    {
+                        <button type="button" class="list-group-item list-group-item-action @(menu.Id == _edit?.Id ? "active" : "")" @onclick="() => Editar(menu)">
+                            <strong>@menu.Descripcion</strong><small class="d-block">@(menu.Url ?? "Grupo")</small>
+                        </button>
+                    }
+                </div>
+            </div>
+            <div class="col-lg-7">
+                @if (_edit is not null)
+                {
+                    <div class="card"><div class="card-body">
+                        <h2 class="h5">Editar menú</h2>
+                        <label class="form-label" for="menu-nombre">Nombre visible</label>
+                        <input id="menu-nombre" class="form-control mb-3" @bind="_edit.Descripcion" />
+                        <label class="form-label" for="menu-padre">Menú padre</label>
+                        <select id="menu-padre" class="form-select mb-3" @bind="_edit.PadreNuevoMenu">
+                            <option value="0">Sin padre</option>
+                            @foreach (var padre in _menus.Where(m => m.Id != _edit.Id && m.Habilitado))
+                            {
+                                <option value="@padre.SecNuevoMenu">@padre.Descripcion</option>
+                            }
+                        </select>
+                        <label class="form-label" for="menu-orden">Orden</label>
+                        <input id="menu-orden" class="form-control mb-3" type="number" @bind="_edit.SecNuevoMenu" />
+                        <button type="button" class="btn btn-primary" disabled="@_guardando" @onclick="GuardarAsync">Guardar organización</button>
+                    </div></div>
+                }
+            </div>
+        </div>
+    </div>
+}
 
 @code {
-    protected override void OnInitialized()
+    private List<MenuItemModel> _menus = [];
+    private MenuItemModel? _edit;
+    private string _mensaje = string.Empty;
+    private bool _error;
+    private bool _guardando;
+
+    protected override async Task OnInitializedAsync()
     {
-        Nav.NavigateTo("/administracion/roles", replace: true);
+        if (Session.IsAuthenticated && Session.TipoUser == 1)
+            _menus = await AuthService.ObtenerMenusAdministracionAsync();
+    }
+
+    private void Editar(MenuItemModel menu)
+    {
+        _edit = new MenuItemModel { Id = menu.Id, SecNuevoMenu = menu.SecNuevoMenu, PadreNuevoMenu = menu.PadreNuevoMenu, Descripcion = menu.Descripcion, Url = menu.Url, Habilitado = menu.Habilitado };
+        _mensaje = string.Empty;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (_edit is null) return;
+        _guardando = true;
+        try
+        {
+            _error = !await AuthService.GuardarMenuAsync(_edit, Session.IdUser);
+            _mensaje = _error ? "No se pudo guardar el menú." : "Menú actualizado correctamente.";
+            if (!_error) _menus = await AuthService.ObtenerMenusAdministracionAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _mensaje = ex.Message;
+        }
+        finally { _guardando = false; }
     }
 }

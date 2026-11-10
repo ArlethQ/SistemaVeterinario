@@ -16,8 +16,14 @@
         @if (_paciente is not null)
         {
             <div class="d-flex gap-2 flex-wrap justify-content-end">
-                <a href="/hospitalizacion/ficha/@IdOrden/@Nhcl" class="btn btn-sm btn-light fw-semibold">🏥 Ficha 24h</a>
-                <a href="/hospitalizacion/monitoreo/@IdOrden/@Nhcl" class="btn btn-sm btn-warning fw-semibold">🩺 Monitoreo</a>
+                @if (Permisos.Permite("hospitalizacion/ficha"))
+                {
+                    <a href="/hospitalizacion/ficha/@IdOrden/@Nhcl" class="btn btn-sm btn-light fw-semibold">🏥 Ficha 24h</a>
+                }
+                @if (Permisos.Permite("hospitalizacion/monitoreo"))
+                {
+                    <a href="/hospitalizacion/monitoreo/@IdOrden/@Nhcl" class="btn btn-sm btn-warning fw-semibold">🩺 Monitoreo</a>
+                }
             </div>
         }
     </div>
@@ -169,6 +175,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
     private string _tab="turno", _filtro="", _mensaje=""; private bool _error;

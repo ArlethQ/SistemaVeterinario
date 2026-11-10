@@ -15,7 +15,10 @@
         </div>
         @if (paciente is not null)
         {
-            <a class="btn btn-outline-primary btn-sm" href="/consulta/historial/@paciente.Nhcl">Ver historia completa</a>
+            @if (Permisos.Permite("consulta/historial"))
+            {
+                <a class="btn btn-outline-primary btn-sm" href="/consulta/historial/@paciente.Nhcl">Ver historia completa</a>
+            }
         }
     </div>
 
@@ -193,6 +196,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int Nhcl { get; set; }
 
     private const int TamanoPaginaResultados = 8;

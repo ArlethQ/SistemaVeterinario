@@ -17,7 +17,10 @@
             <p class="text-muted mb-0">Emite una receta directamente desde la historia del paciente, sin crear una orden de atención.</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a class="btn btn-sm btn-outline-primary" href="/consulta/recetario">Recetas con orden</a>
+            @if (Permisos.Permite("consulta/recetario"))
+            {
+                <a class="btn btn-sm btn-outline-primary" href="/consulta/recetario">Recetas con orden</a>
+            }
             <button class="btn btn-sm btn-outline-success" @onclick="NuevaRecetaAsync">Nueva receta</button>
             <button class="btn btn-sm btn-danger" disabled="@(cabecera.IdFicha <= 0 || medicamentos.Count == 0 || diagnosticos.Count == 0)" @onclick="DescargarPdfAsync">Descargar PDF</button>
         </div>
@@ -175,7 +178,10 @@
                                 </div>
                             </div>
                             <div class="card-footer bg-white d-flex justify-content-between">
-                                <a class="btn btn-sm btn-outline-secondary" href="/facturacion/proformas">Ir a proformas y facturación</a>
+                                @if (Permisos.Permite("facturacion/proformas"))
+                                {
+                                    <a class="btn btn-sm btn-outline-secondary" href="/facturacion/proformas">Ir a proformas y facturación</a>
+                                }
                                 <button class="btn btn-sm btn-danger" disabled="@(medicamentos.Count == 0 || diagnosticos.Count == 0)" @onclick="DescargarPdfAsync">Generar receta PDF</button>
                             </div>
                         </div>
@@ -187,6 +193,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdFicha { get; set; }
     [Parameter] public int Nhcl { get; set; }
 

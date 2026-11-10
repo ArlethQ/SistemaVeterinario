@@ -28,12 +28,18 @@
             <button class="btn btn-outline-danger btn-sm" @onclick="ExportarPdfAsync">PDF</button>
             <button class="btn btn-outline-success btn-sm" @onclick="ExportarExcelAsync">Excel</button>
             <button type="button" class="btn btn-success btn-sm" @onclick="AbrirFormularioOrden">+ Nueva orden</button>
-            <a href="/admision/clientes-pacientes" class="btn btn-outline-primary btn-sm">
+            @if (Permisos.Permite("admision/clientes-pacientes"))
+            {
+                <a href="/admision/clientes-pacientes" class="btn btn-outline-primary btn-sm">
                 <i class="bi bi-people me-1"></i>Clientes / Mascotas
             </a>
-            <a href="/admision/citas" class="btn btn-outline-dark btn-sm">
+            }
+            @if (Permisos.Permite("admision/citas"))
+            {
+                <a href="/admision/citas" class="btn btn-outline-dark btn-sm">
                 <i class="bi bi-calendar-week me-1"></i>Agenda de Citas
             </a>
+            }
         </div>
     </div>
 
@@ -556,6 +562,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     private int? NhclPreseleccionado { get; set; }
     private int? MedicoPreseleccionado { get; set; }
     private int? EspecialidadPreseleccionada { get; set; }

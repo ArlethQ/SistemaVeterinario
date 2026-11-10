@@ -252,9 +252,12 @@ else
 
             <!-- Botones de Acción -->
             <div class="d-flex justify-content-between align-items-center mt-4 pt-2 border-top">
-                <a href="/consulta/fichamedica/@_ficha.MedOrden/@_ficha.MedNhcl" class="btn btn-sm btn-outline-primary fw-semibold">
+                @if (Permisos.Permite("consulta/fichamedica"))
+                {
+                    <a href="/consulta/fichamedica/@_ficha.MedOrden/@_ficha.MedNhcl" class="btn btn-sm btn-outline-primary fw-semibold">
                     <i class="bi bi-file-medical me-1"></i>Ver en SOAP
                 </a>
+                }
                 <button type="button" class="btn btn-success fw-bold px-4" @onclick="GuardarTriajeAsync" disabled="@_guardando">
                     <i class="bi bi-floppy-fill me-1"></i>@(_guardando ? "Guardando..." : "Guardar Constantes")
                 </button>
@@ -264,6 +267,7 @@ else
 }
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int? IdOrden { get; set; }
     [Parameter] public int? Nhcl { get; set; }
     [Parameter] public bool ModoModal { get; set; }

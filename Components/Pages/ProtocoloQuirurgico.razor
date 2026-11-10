@@ -39,8 +39,14 @@
                 @(guardando ? "Guardando..." : "Guardar Protocolo")
             </button>
             <button class="btn btn-sm btn-danger" @onclick="ExportarPdfAsync">Exportar PDF</button>
-            <a class="btn btn-sm btn-outline-warning" href="/quirofano/pausa-seguridad/@IdOrden/@Nhcl">Pausa Seguridad</a>
-            <a class="btn btn-sm btn-outline-primary" href="/quirofano/recuperacion/@IdOrden/@Nhcl">Ir a Recuperación</a>
+            @if (Permisos.Permite("quirofano/pausa-seguridad"))
+            {
+                <a class="btn btn-sm btn-outline-warning" href="/quirofano/pausa-seguridad/@IdOrden/@Nhcl">Pausa Seguridad</a>
+            }
+            @if (Permisos.Permite("quirofano/recuperacion"))
+            {
+                <a class="btn btn-sm btn-outline-primary" href="/quirofano/recuperacion/@IdOrden/@Nhcl">Ir a Recuperación</a>
+            }
         }
     </div>
 </div>
@@ -481,6 +487,7 @@ else if (paciente != null)
 }
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
 

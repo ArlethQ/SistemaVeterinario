@@ -421,9 +421,9 @@ public class AuthService : IAuthService
                 (1205, 'BitÃ¡cora de auditorÃ­a', 12, 'administracion/bitacora');
 
             UPDATE dest
-            SET dest.descripcion = src.Descripcion,
-                dest.secNuevoMenu = src.Sec,
-                dest.padreNuevoMenu = src.Padre
+            SET dest.descripcion = CASE WHEN NULLIF(LTRIM(RTRIM(dest.descripcion)), '') IS NULL THEN src.Descripcion ELSE dest.descripcion END,
+                dest.secNuevoMenu = CASE WHEN ISNULL(dest.secNuevoMenu, 0) = 0 THEN src.Sec ELSE dest.secNuevoMenu END,
+                dest.padreNuevoMenu = CASE WHEN ISNULL(dest.padreNuevoMenu, 0) = 0 THEN src.Padre ELSE dest.padreNuevoMenu END
             FROM vt_menuDinamico dest
             INNER JOIN @Modulos src
                 ON LOWER(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(dest.url, ''))), '~/', ''), '/', '')) = LOWER(REPLACE(src.Url, '/', ''));
@@ -950,7 +950,13 @@ public class AuthService : IAuthService
                     padreNuevoMenu = TRY_CAST(@Padre AS INT), habilitado = @Habilitado, url = @Url WHERE id = @Id"
             : @"INSERT INTO vt_menuDinamico (secNuevoMenu, descripcion, padreNuevoMenu, habilitado, url)
                 VALUES (TRY_CAST(@Seccion AS INT), @Descripcion, TRY_CAST(@Padre AS INT), @Habilitado, @Url)";
-        var result = await _sql.ExecuteAsync(sql, new { menu.Id, Seccion = menu.SecNuevoMenu?.Trim() ?? string.Empty, Descripcion = menu.Descripcion.Trim(), Padre = menu.PadreNuevoMenu?.Trim() ?? string.Empty, Habilitado = menu.Habilitado ? 1 : 0, Url = menu.Url?.Trim() ?? string.Empty });
+        if (!int.TryParse(menu.SecNuevoMenu, out var seccion) || seccion <= 0 ||
+            !int.TryParse(menu.PadreNuevoMenu, out var padre) || padre < 0 ||
+            menu.Id > 0 && await _sql.ExecuteScalarAsync<int>(
+                "SELECT COUNT(1) FROM vt_menuDinamico WHERE id <> @Id AND secNuevoMenu = @Seccion",
+                new { menu.Id, Seccion = seccion }) > 0)
+            return false;
+        var result = await _sql.ExecuteAsync(sql, new { menu.Id, Seccion = seccion, Descripcion = menu.Descripcion.Trim(), Padre = padre, Habilitado = menu.Habilitado ? 1 : 0, Url = menu.Url?.Trim() ?? string.Empty });
         if (result < 0) return false;
         await _sql.RegistrarBitacoraAsync($"{(menu.Id > 0 ? "Actualiza" : "Crea")} menÃº: {menu.Descripcion.Trim()}", adminId);
         return true;

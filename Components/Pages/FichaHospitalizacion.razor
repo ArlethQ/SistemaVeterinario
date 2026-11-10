@@ -105,9 +105,12 @@
                                 <option value="@h">Hoja #@h</option>
                             }
                         </select>
-                        <a href="/hospitalizacion/monitoreo/@IdOrden/@Nhcl" class="btn btn-sm btn-warning fw-semibold no-print">
+                        @if (Permisos.Permite("hospitalizacion/monitoreo"))
+                        {
+                            <a href="/hospitalizacion/monitoreo/@IdOrden/@Nhcl" class="btn btn-sm btn-warning fw-semibold no-print">
                             🩺 Ir a Monitoreo 24h
                         </a>
+                        }
                     </div>
                 </div>
                 <div class="card-body py-2 px-3">
@@ -488,6 +491,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
 

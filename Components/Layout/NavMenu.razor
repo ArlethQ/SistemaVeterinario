@@ -1,9 +1,41 @@
 
+@inject IAuthService AuthService
+@inject SessionStateService Session
+
 <div class="nav-shell">
     <input id="menu-toggle" type="checkbox" class="menu-toggle" />
     <label for="menu-toggle" class="menu-toggle-label" aria-label="Abrir o cerrar menú">☰ <span>Menú</span></label>
     <div class="nav-scrollable">
         <nav class="menu-tree" aria-label="Navegación del sistema">
+            @if (_menusPersonalizados.Count > 0)
+            {
+                @foreach (var grupo in _menusPersonalizados.Where(m => !TienePadreVisible(m)))
+                {
+                    var hijos = _menusPersonalizados.Where(m => m.PadreNuevoMenu == grupo.SecNuevoMenu).ToList();
+                    @if (hijos.Count > 0)
+                    {
+                        <details>
+                            <summary><span>@grupo.Descripcion</span><i>⌄</i></summary>
+                            <div class="submenu">
+                                @if (!string.IsNullOrWhiteSpace(grupo.Url))
+                                {
+                                    <NavLink href="@grupo.Url">@grupo.Descripcion</NavLink>
+                                }
+                                @foreach (var hijo in hijos)
+                                {
+                                    <NavLink href="@hijo.Url">@hijo.Descripcion</NavLink>
+                                }
+                            </div>
+                        </details>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(grupo.Url))
+                    {
+                        <NavLink class="menu-link" href="@grupo.Url">@grupo.Descripcion</NavLink>
+                    }
+                }
+            }
+            else
+            {
             @if (TieneAlguno("dashboard", "suscripciones"))
             {
                 <span class="menu-section-label">General</span>
@@ -135,7 +167,7 @@
                             {
                                 <NavLink href="consulta/fichamedica">Historia clínica SOAP</NavLink>
                             }
-                            @if (TienePermiso("consulta/historial/apuntes"))
+                        @if (TienePermiso("consulta/historial/apuntes"))
                             {
                                 <NavLink href="consulta/historial/apuntes">Apuntes a historias</NavLink>
                             }
@@ -412,11 +444,24 @@
                     </details>
                 }
             }
+            }
         </nav>
     </div>
 </div>
 
 @code {
+    private List<MenuItemModel> _menusPersonalizados = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Session.IsAuthenticated)
+            _menusPersonalizados = (await AuthService.ObtenerMenuUsuarioAsync(Session.IdUser, Session.TipoUser))
+                .Where(m => m.Habilitado && !string.IsNullOrWhiteSpace(m.Url))
+                .OrderBy(m => int.TryParse(m.SecNuevoMenu, out var orden) ? orden : int.MaxValue).ToList();
+    }
+
+    private bool TienePadreVisible(MenuItemModel menu) =>
+        _menusPersonalizados.Any(padre => padre.SecNuevoMenu == menu.PadreNuevoMenu && padre.Id != menu.Id);
     private static readonly string[] RutasAdmision =
     [
         "admision/clientes-pacientes",

@@ -36,8 +36,14 @@
         @if (paciente != null)
         {
             <button class="btn btn-sm btn-danger" @onclick="ExportarPdfAsync">Exportar PDF</button>
-            <a class="btn btn-sm btn-outline-primary" href="/hospitalizacion/ficha/@IdOrden/@Nhcl">Pasar a Hospitalización 24h</a>
-            <a class="btn btn-sm btn-outline-secondary" href="/kardex/enfermeria/@IdOrden/@Nhcl">Kardex Enfermería</a>
+            @if (Permisos.Permite("hospitalizacion/ficha"))
+            {
+                <a class="btn btn-sm btn-outline-primary" href="/hospitalizacion/ficha/@IdOrden/@Nhcl">Pasar a Hospitalización 24h</a>
+            }
+            @if (Permisos.Permite("kardex/enfermeria"))
+            {
+                <a class="btn btn-sm btn-outline-secondary" href="/kardex/enfermeria/@IdOrden/@Nhcl">Kardex Enfermería</a>
+            }
         }
     </div>
 </div>
@@ -491,6 +497,7 @@ else if (paciente != null)
 }
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
 

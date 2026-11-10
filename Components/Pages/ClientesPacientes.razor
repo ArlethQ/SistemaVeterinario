@@ -30,9 +30,12 @@
             <button class="btn btn-sm action-register-all" @onclick="IniciarRegistroCompleto">
                 <i class="bi bi-person-plus-fill me-1"></i>+ Registrar
             </button>
-            <a href="/admision/ordenes" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-clipboard2-plus me-1"></i>Ir a Recepción / Órdenes
-            </a>
+            @if (Permisos.Permite("admision/ordenes"))
+            {
+                <a href="/admision/ordenes" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-clipboard2-plus me-1"></i>Ir a Recepción / Órdenes
+                </a>
+            }
         </div>
     </div>
 
@@ -182,8 +185,14 @@
                                 </div>
                                 <div class="pet-card-actions">
                                     <button class="btn btn-sm action-record" @onclick="() => EditarMascotaAsync(mas)">Ver y editar ficha</button>
-                                    <button class="btn btn-sm action-history" @onclick='() => NavManager.NavigateTo($"/consulta/historial/{mas.MasNhcl}")'>Historia</button>
-                                    <button class="btn btn-sm action-order" @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>Orden</button>
+                                    @if (Permisos.Permite("consulta/historial"))
+                                    {
+                                        <button class="btn btn-sm action-history" @onclick='() => NavManager.NavigateTo($"/consulta/historial/{mas.MasNhcl}")'>Historia</button>
+                                    }
+                                    @if (Permisos.Permite("admision/ordenes"))
+                                    {
+                                        <button class="btn btn-sm action-order" @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>Orden</button>
+                                    }
                                     <button class="btn btn-sm action-summary" @onclick="() => AbrirModalResumen(mas)">Resumen</button>
                                 </div>
                             </article>
@@ -922,6 +931,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [SupplyParameterFromQuery(Name = "accion")]
     public string? AccionParam { get; set; }
 

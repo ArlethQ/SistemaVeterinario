@@ -36,10 +36,22 @@
             <button class="btn btn-sm btn-success fw-semibold" @onclick="GuardarPausaAsync" disabled="@guardando">
                 @(guardando ? "Guardando..." : "Guardar Pausa de Seguridad")
             </button>
-            <a class="btn btn-sm btn-outline-primary" href="/quirofano/preanestesia/checklist/@IdOrden/@Nhcl">Checklist preoperatorio</a>
-            <a class="btn btn-sm btn-outline-primary" href="/quirofano/anestesia/@IdOrden/@Nhcl">Hoja Anestesia</a>
-            <a class="btn btn-sm btn-outline-info" href="/quirofano/protocolo/@IdOrden/@Nhcl">Protocolo</a>
-            <a class="btn btn-sm btn-outline-secondary" href="/quirofano/recuperacion/@IdOrden/@Nhcl">Recuperación</a>
+            @if (Permisos.Permite("quirofano/preanestesia/checklist"))
+            {
+                <a class="btn btn-sm btn-outline-primary" href="/quirofano/preanestesia/checklist/@IdOrden/@Nhcl">Checklist preoperatorio</a>
+            }
+            @if (Permisos.Permite("quirofano/anestesia"))
+            {
+                <a class="btn btn-sm btn-outline-primary" href="/quirofano/anestesia/@IdOrden/@Nhcl">Hoja Anestesia</a>
+            }
+            @if (Permisos.Permite("quirofano/protocolo"))
+            {
+                <a class="btn btn-sm btn-outline-info" href="/quirofano/protocolo/@IdOrden/@Nhcl">Protocolo</a>
+            }
+            @if (Permisos.Permite("quirofano/recuperacion"))
+            {
+                <a class="btn btn-sm btn-outline-secondary" href="/quirofano/recuperacion/@IdOrden/@Nhcl">Recuperación</a>
+            }
         }
     </div>
 </div>
@@ -321,6 +333,7 @@ else if (paciente != null)
 }
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
 

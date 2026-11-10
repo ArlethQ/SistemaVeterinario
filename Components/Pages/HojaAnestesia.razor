@@ -62,7 +62,10 @@
             </button>
             <button class="btn btn-sm btn-danger" @onclick="ExportarPdfAsync">PDF</button>
             <button class="btn btn-sm btn-outline-success" @onclick="ExportarExcelAsync">Excel</button>
-            <a class="btn btn-sm btn-outline-secondary" href="/quirofano/recuperacion/@IdOrden/@Nhcl">Ir a Recuperación</a>
+            @if (Permisos.Permite("quirofano/recuperacion"))
+            {
+                <a class="btn btn-sm btn-outline-secondary" href="/quirofano/recuperacion/@IdOrden/@Nhcl">Ir a Recuperación</a>
+            }
         }
     </div>
 </div>
@@ -569,6 +572,7 @@ else
 }
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
 

@@ -4,15 +4,7 @@
 @inject NavigationManager Navigation
 @inject ILogger<AuthorizedRouteView> Logger
 
-@if (_evaluando)
-{
-    <CascadingValue Value="_permisos">
-        <LayoutView Layout="typeof(Layout.MainLayout)">
-            <p class="p-4 text-muted" role="status">Verificando acceso...</p>
-        </LayoutView>
-    </CascadingValue>
-}
-else if (_esPublica || _autorizado)
+@if (_esPublica || _autorizado)
 {
     <CascadingValue Value="_permisos">
         <RouteView RouteData="RouteData" DefaultLayout="typeof(Layout.MainLayout)" />
@@ -38,7 +30,6 @@ else
     public RouteData RouteData { get; set; } = default!;
 
     private int _revision;
-    private bool _evaluando = true;
     private bool _esPublica;
     private bool _autenticado;
     private bool _autorizado;
@@ -48,7 +39,6 @@ else
     protected override async Task OnParametersSetAsync()
     {
         var revision = ++_revision;
-        // Mantiene el layout montado mientras se verifica la nueva ruta.
         var esPublica = EsPaginaPublica(RouteData.PageType);
         var ruta = RutaDePermiso();
         if (!esPublica)
@@ -56,7 +46,15 @@ else
 
         if (revision != _revision) return;
 
-        var autenticado = esPublica || Session.ValidateAndTouch();
+        _esPublica = esPublica;
+        _autenticado = esPublica || Session.ValidateAndTouch();
+        if (!_esPublica && !_autenticado)
+        {
+            _autorizado = false;
+            return;
+        }
+
+        var autenticado = _autenticado;
         var permisos = new PermisosNavegacion(0, []);
         var errorPermisos = false;
         if (!esPublica && autenticado)
@@ -79,7 +77,6 @@ else
         _permisos = permisos;
         _errorPermisos = errorPermisos;
         _autorizado = esPublica || permisos.Permite(ruta);
-        _evaluando = false;
     }
 
     private string RutaDePermiso()
