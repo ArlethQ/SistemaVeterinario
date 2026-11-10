@@ -5,11 +5,11 @@ namespace HosvetKardex.Web.Services;
 
 public interface IConsultaExternaService
 {
-    // 1. Ficha MÃ©dica / Historia ClÃ­nica SOAP (vt_fichamedica)
+    // 1. Ficha Médica / Historia Clínica SOAP (vt_fichamedica)
     Task<FichaMedicaCompletaDto> ObtenerFichaMedicaAsync(int idOrden, int nhcl);
     Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario);
 
-    // 2. DiagnÃ³sticos CIE-10 (vt_diagnosticos + vt_cie10)
+    // 2. Diagnósticos CIE-10 (vt_diagnosticos + vt_cie10)
     Task<List<CatalogoCie10ItemDto>> BuscarCatalogoCie10Async(string filtro);
     Task<List<DiagnosticoCie10Dto>> ObtenerDiagnosticosOrdenAsync(int idOrden);
     Task<bool> AgregarDiagnosticoOrdenAsync(DiagnosticoCie10Dto diag);
@@ -23,7 +23,7 @@ public interface IConsultaExternaService
     Task<bool> AgregarVacunaAsync(VacunaPacienteDto dto, int idUsuario, int idCliente);
     Task<bool> EliminarVacunaAsync(int vacunaId, int idUsuario);
 
-    // 4. EvoluciÃ³n MÃ©dica y Ã“rdenes Asociadas (vt_EvolucionMedico + vt_labOrdenes + vt_rxOrdenes)
+    // 4. Evolución Médica y Órdenes Asociadas (vt_EvolucionMedico + vt_labOrdenes + vt_rxOrdenes)
     Task<List<EvolucionMedicaDto>> ObtenerEvolucionesPacienteAsync(int nhcl, int? idOrdenFiltro = null);
     Task<int> GuardarEvolucionMedicaAsync(EvolucionMedicaDto dto, int idUsuario);
     Task<bool> EliminarEvolucionMedicaAsync(int idEvolucion);
@@ -31,7 +31,7 @@ public interface IConsultaExternaService
     Task<bool> AgregarOrdenExamenAsync(OrdenExamenEvolucionDto orden);
     Task<bool> EliminarOrdenExamenAsync(int sec, string tipoCategoria);
 
-    // 5. Recetario MÃ©dico e Indicaciones Generales (vt_medicinas + vt_IndicacionesGenerales)
+    // 5. Recetario Médico e Indicaciones Generales (vt_medicinas + vt_IndicacionesGenerales)
     Task<List<RecetaMedicamentoItemDto>> ObtenerRecetaOrdenAsync(int idOrden);
     Task<string> ObtenerIndicacionesGeneralesAsync(int idOrden);
     Task<bool> AgregarMedicamentoRecetaAsync(RecetaMedicamentoItemDto item, int idUsuario, int idLocalidad);
@@ -47,7 +47,7 @@ public interface IConsultaExternaService
     Task<(bool Ok, string? Mensaje)> AgregarMedicamentoRecetaExternaAsync(int idFicha, RecetaMedicamentoItemDto item, string serial);
     Task<bool> EliminarMedicamentoRecetaExternaAsync(int sec);
 
-    // 6. Autorizaciones / Consentimientos y Alta MÃ©dica (vt_autorizaciones + vt_formatos + qvt_formulario_alta)
+    // 6. Autorizaciones / Consentimientos y Alta Médica (vt_autorizaciones + vt_formatos + qvt_formulario_alta)
     Task<List<FormatoPlantillaDto>> ObtenerPlantillasFormatosAsync(string? tipo = null);
     Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl);
     Task<bool> GuardarPlantillaFormatoAsync(int formId, string nombre, string html);
@@ -82,7 +82,7 @@ public class ConsultaExternaService : IConsultaExternaService
     }
 
     // ========================================================================
-    // 1. FICHA MÃ‰DICA / HISTORIA CLÃNICA SOAP (Reemplaza vt_hisDatMedicos.aspx)
+    // 1. FICHA MÉDICA / HISTORIA CLÍNICA SOAP (Reemplaza vt_hisDatMedicos.aspx)
     // ========================================================================
     public async Task<FichaMedicaCompletaDto> ObtenerFichaMedicaAsync(int idOrden, int nhcl)
     {
@@ -176,7 +176,7 @@ public class ConsultaExternaService : IConsultaExternaService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Aviso al obtener Ficha MÃ©dica para Orden {IdOrden}", idOrden);
+            _logger.LogWarning(ex, "Aviso al obtener Ficha Médica para Orden {IdOrden}", idOrden);
         }
 
         return dto;
@@ -318,18 +318,18 @@ public class ConsultaExternaService : IConsultaExternaService
             // Actualizar indicaciones generales de receta siempre
             await GuardarIndicacionesGeneralesAsync(dto.MedOrden, dto.MedNhcl, dto.IndicacionesGeneralesReceta ?? "");
 
-            await _db.RegistrarBitacoraAsync($"Ficha MÃ©dica SOAP guardada Orden #{dto.MedOrden} NHCL #{dto.MedNhcl}", idUsuario);
+            await _db.RegistrarBitacoraAsync($"Ficha Médica SOAP guardada Orden #{dto.MedOrden} NHCL #{dto.MedNhcl}", idUsuario);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al guardar Ficha MÃ©dica para Orden {MedOrden}", dto.MedOrden);
+            _logger.LogError(ex, "Error al guardar Ficha Médica para Orden {MedOrden}", dto.MedOrden);
             return false;
         }
     }
 
     // ========================================================================
-    // 2. DIAGNÃ“STICOS CIE-10 (vt_diagnosticos + vt_cie10)
+    // 2. DIAGNÓSTICOS CIE-10 (vt_diagnosticos + vt_cie10)
     // ========================================================================
     public async Task<List<CatalogoCie10ItemDto>> BuscarCatalogoCie10Async(string filtro)
     {
@@ -428,7 +428,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(a.antecedente_descripcion, '') AS Descripcion,
                 ISNULL(a.alimentacion, '') AS Alimentacion,
                 ISNULL(a.cuales_mascotas, '') AS ContactoMascotas,
-                ISNULL(u.user_nombre, 'MÃ©dico') AS NombreMedico
+                ISNULL(u.user_nombre, 'Médico') AS NombreMedico
             FROM vt_antecedentes a
             LEFT JOIN vt_usuarios u ON a.antecedente_iduser = u.user_numero
             WHERE a.antecedente_nhcl = @Nhcl AND ISNULL(a.antecedente_estado, 'A') = 'A'
@@ -474,8 +474,8 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(v.vacuna_idprod, 0) AS IdProducto,
                 ISNULL(p.prod_descripcion, '') AS NombreVacuna,
                 ISNULL(v.vacuna_observacion, '') AS ObservacionVacuna,
-                ISNULL(v.vacuna_tipo, 'VacunaciÃ³n') AS Tipo,
-                ISNULL(u.user_nombre, 'MÃ©dico') AS NombreMedico
+                ISNULL(v.vacuna_tipo, 'Vacunación') AS Tipo,
+                ISNULL(u.user_nombre, 'Médico') AS NombreMedico
             FROM vt_vacunas v
             LEFT JOIN vt_productos p ON v.vacuna_idprod = p.prod_id
             LEFT JOIN vt_usuarios u ON v.vacuna_iduser = u.user_numero
@@ -541,7 +541,7 @@ public class ConsultaExternaService : IConsultaExternaService
     }
 
     // ========================================================================
-    // 4. EVOLUCIONES MÃ‰DICAS Y Ã“RDENES ASOCIADAS (vt_EvolucionMedico)
+    // 4. EVOLUCIONES MÉDICAS Y ÓRDENES ASOCIADAS (vt_EvolucionMedico)
     // ========================================================================
     public async Task<List<EvolucionMedicaDto>> ObtenerEvolucionesPacienteAsync(int nhcl, int? idOrdenFiltro = null)
     {
@@ -556,7 +556,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(e.descripcion, '') AS Descripcion,
                 ISNULL(e.idEscogido, 0) AS IdEscogido,
                 ISNULL(e.idUser, 0) AS IdUser,
-                ISNULL(u.user_nombre, 'MÃ©dico Tratante') AS NombreMedico,
+                ISNULL(u.user_nombre, 'Médico Tratante') AS NombreMedico,
                 ISNULL(e.estadoEvolucion, 'A') AS EstadoEvolucion
             FROM vt_EvolucionMedico e
             LEFT JOIN vt_usuarios u ON ISNULL(e.idEscogido, e.idUser) = u.user_numero
@@ -592,7 +592,7 @@ public class ConsultaExternaService : IConsultaExternaService
             int filas = await _db.ExecuteAsync(sqlUpdate, dto);
             if (filas > 0)
             {
-                await _db.RegistrarBitacoraAsync($"EvoluciÃ³n MÃ©dica #{dto.IdEvolucion} actualizada Orden #{dto.IdOrden}", idUsuario);
+                await _db.RegistrarBitacoraAsync($"Evolución Médica #{dto.IdEvolucion} actualizada Orden #{dto.IdOrden}", idUsuario);
                 return dto.IdEvolucion;
             }
             return 0;
@@ -608,7 +608,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
             int idCreado = await _db.ExecuteScalarAsync<int>(sqlInsert, dto);
-            await _db.RegistrarBitacoraAsync($"Nueva EvoluciÃ³n MÃ©dica #{idCreado} Orden #{dto.IdOrden}", idUsuario);
+            await _db.RegistrarBitacoraAsync($"Nueva Evolución Médica #{idCreado} Orden #{dto.IdOrden}", idUsuario);
             return idCreado;
         }
     }
@@ -728,7 +728,7 @@ public class ConsultaExternaService : IConsultaExternaService
     }
 
     // ========================================================================
-    // 5. RECETARIO MÃ‰DICO E INDICACIONES GENERALES (vt_medicinas + vt_IndicacionesGenerales)
+    // 5. RECETARIO MÉDICO E INDICACIONES GENERALES (vt_medicinas + vt_IndicacionesGenerales)
     // ========================================================================
     public async Task<List<RecetaMedicamentoItemDto>> ObtenerRecetaOrdenAsync(int idOrden)
     {
@@ -1059,7 +1059,7 @@ public class ConsultaExternaService : IConsultaExternaService
         => await _db.ExecuteAsync("DELETE FROM vt_medicinasexterno WHERE sec=@Sec", new { Sec = sec }) > 0;
 
     // ========================================================================
-    // 6. AUTORIZACIONES / CONSENTIMIENTOS Y ALTA MÃ‰DICA (vt_autorizaciones + qvt_formulario_alta)
+    // 6. AUTORIZACIONES / CONSENTIMIENTOS Y ALTA MÉDICA (vt_autorizaciones + qvt_formulario_alta)
     // ========================================================================
     public async Task<List<FormatoPlantillaDto>> ObtenerPlantillasFormatosAsync(string? tipo = null)
     {
@@ -1154,44 +1154,8 @@ public class ConsultaExternaService : IConsultaExternaService
         if (string.IsNullOrEmpty(texto)) return string.Empty;
 
         return texto
-            .Replace("cÃ©dula", "cédula")
-            .Replace("CÃ©dula", "Cédula")
-            .Replace("cÃ‰dula", "cédula")
-            .Replace("mÃ©dico", "médico")
-            .Replace("MÃ©dico", "Médico")
-            .Replace("mÃ‰dico", "médico")
-            .Replace("realizaciÃ³n", "realización")
-            .Replace("RealizaciÃ³n", "Realización")
-            .Replace("diagnÃ³sticos", "diagnósticos")
-            .Replace("DiagnÃ³sticos", "Diagnósticos")
-            .Replace("anestÃ©sicos", "anestésicos")
-            .Replace("AnestÃ©sicos", "Anestésicos")
-            .Replace("quirÃºrgicos", "quirúrgicos")
-            .Replace("QuirÃºrgicos", "Quirúrgicos")
-            .Replace("terapÃ©uticos", "terapéuticos")
-            .Replace("TerapÃ©uticos", "Terapéuticos")
-            .Replace("TelÃ©fono", "Teléfono")
-            .Replace("telÃ©fono", "teléfono")
-            .Replace("NumÃ©rica", "Numérica")
-            .Replace("NUMÃ‰RICA", "NUMÉRICA")
             .Replace("Numrica", "Numérica")
-            .Replace("NUMRICA", "NUMÉRICA")
-            .Replace("NÂ°", "N°")
-            .Replace("Â°", "°")
-            .Replace("Â¿", "¿")
-            .Replace("Â¡", "¡")
-            .Replace("Ã¡", "á")
-            .Replace("Ã©", "é")
-            .Replace("Ã­", "í")
-            .Replace("Ã³", "ó")
-            .Replace("Ãº", "ú")
-            .Replace("Ã±", "ñ")
-            .Replace("Ã ", "Á")
-            .Replace("Ã‰", "É")
-            .Replace("Ã ", "Í")
-            .Replace("Ã“", "Ó")
-            .Replace("Ãš", "Ú")
-            .Replace("Ã‘", "Ñ");
+            .Replace("NUMRICA", "NUMÉRICA");
     }
 
     public async Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl)

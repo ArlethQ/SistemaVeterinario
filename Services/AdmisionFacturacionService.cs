@@ -1585,7 +1585,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     WHERE ordenAten_id = @IdOrden",
                     new { IdOrden = idOrden, NumFac = numeroGenerado });
                 if (actualizados == 0)
-                    return (false, string.Empty, "No se encontrÃ³ la orden para emitir la proforma.");
+                    return (false, string.Empty, "No se encontró la orden para emitir la proforma.");
             }
             else
             {

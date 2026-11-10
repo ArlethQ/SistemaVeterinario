@@ -158,6 +158,7 @@ public interface IAuthService
     Task<List<RolUsuarioModel>> ObtenerRolesAsync();
     Task<List<UsuarioModel>> ObtenerUsuariosParaPermisosAsync();
     Task<List<MenuItemModel>> ObtenerMenusAdministracionAsync();
+    Task<List<MenuItemModel>> ObtenerGruposMenuAsync();
     Task<HashSet<int>> ObtenerAccesosUsuarioAsync(int idUser);
     Task<HashSet<int>> ObtenerAccesosRolAsync(int idRol);
     Task<bool> GuardarRolConPermisosAsync(RolUsuarioModel rol, IReadOnlyCollection<int> menuIds, int adminId);
@@ -167,6 +168,8 @@ public interface IAuthService
     Task<(bool Exito, string Mensaje)> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId);
     Task<bool> GuardarRolAsync(RolUsuarioModel rol, int adminId);
     Task<bool> GuardarMenuAsync(MenuItemModel menu, int adminId);
+    Task<bool> GuardarOrdenMenusAsync(IReadOnlyCollection<MenuItemModel> menus, int adminId);
+    Task<(bool Exito, string Mensaje)> EliminarMenuAsync(int menuId, int adminId);
     Task<List<UsuarioAdministracionModel>> ObtenerUsuariosAdministracionAsync();
     Task<List<CatalogoItemGenericoDto>> ObtenerEspecialidadesUsuarioAsync();
     Task<List<CatalogoItemGenericoDto>> ObtenerLocalidadesUsuarioAsync();
@@ -194,14 +197,14 @@ public class AuthService : IAuthService
     public async Task<(bool Exito, string Mensaje, UsuarioModel? Usuario, bool RequiereCambioClave)> LoginAsync(string username, string password, int localidad = 1)
     {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
-            return (false, "Los datos introducidos no son vÃ¡lidos.", null, false);
+            return (false, "Los datos introducidos no son válidos.", null, false);
 
         string loginKey = username.Trim().ToUpperInvariant();
         if (LoginAttempts.TryGetValue(loginKey, out var attempt) &&
             attempt.WindowStartedUtc.Add(LoginWindow) > DateTimeOffset.UtcNow &&
             attempt.Count >= MaxLoginAttempts)
         {
-            return (false, "No fue posible iniciar sesiÃ³n. IntÃ©ntalo nuevamente mÃ¡s tarde.", null, false);
+            return (false, "No fue posible iniciar sesión. Inténtalo nuevamente más tarde.", null, false);
         }
 
         string claveHash = _sql.HashPasswordSha1(password);
@@ -232,8 +235,8 @@ public class AuthService : IAuthService
                 (_, current) => current.WindowStartedUtc.Add(LoginWindow) <= DateTimeOffset.UtcNow
                     ? new LoginAttempt(1, DateTimeOffset.UtcNow)
                     : current with { Count = current.Count + 1 });
-            await _sql.RegistrarBitacoraAsync($"Datos introducidos no vÃ¡lidos: {username}", 0);
-            return (false, "Los datos introducidos no son vÃ¡lidos.", null, false);
+            await _sql.RegistrarBitacoraAsync($"Datos introducidos no válidos: {username}", 0);
+            return (false, "Los datos introducidos no son válidos.", null, false);
         }
 
         const string localidadQuery = @"
@@ -296,6 +299,17 @@ public class AuthService : IAuthService
 
     private static bool _modulosSincronizados;
 
+    private async Task AsegurarEstructuraMenuAsync()
+    {
+        const string crearColumnas = @"
+            IF COL_LENGTH('vt_menuDinamico', 'organizacionPersonalizada') IS NULL
+                ALTER TABLE vt_menuDinamico ADD organizacionPersonalizada BIT NOT NULL CONSTRAINT DF_vt_menuDinamico_organizacionPersonalizada DEFAULT (0);
+            IF COL_LENGTH('vt_menuDinamico', 'ordenMenu') IS NULL
+                ALTER TABLE vt_menuDinamico ADD ordenMenu INT NULL;";
+        await _sql.ExecuteAsync(crearColumnas);
+        await _sql.ExecuteAsync("UPDATE vt_menuDinamico SET ordenMenu = secNuevoMenu WHERE ordenMenu IS NULL OR ordenMenu = 0;");
+    }
+
     private async Task AsegurarCatalogoModulosCompletoAsync()
     {
         if (_modulosSincronizados) return;
@@ -307,72 +321,82 @@ public class AuthService : IAuthService
                 Url VARCHAR(150)
             );
 
+            INSERT INTO vt_menuDinamico (secNuevoMenu, descripcion, padreNuevoMenu, habilitado, url)
+            SELECT grupos.Sec, grupos.Descripcion, 0, 1, ''
+            FROM (VALUES (1, 'General'), (2, 'Admisión'), (3, 'Kardex clínico'),
+                         (4, 'Hospitalización 24h'), (5, 'Quirófano y anestesia'),
+                         (6, 'Consulta e historia'), (8, 'Laboratorio e imagen'),
+                         (9, 'Facturación'), (10, 'Contabilidad'),
+                         (11, 'Configuración clínica'), (12, 'Seguridad'), (13, 'Enfermería')) grupos(Sec, Descripcion)
+            WHERE NOT EXISTS (SELECT 1 FROM vt_menuDinamico m
+                              WHERE m.secNuevoMenu = grupos.Sec AND ISNULL(LTRIM(RTRIM(m.url)), '') = '');
+
             INSERT INTO @Modulos (Sec, Descripcion, Padre, Url) VALUES
                 (101, 'Dashboard', 1, 'dashboard'),
                 (102, 'Planes y suscripciones', 1, 'suscripciones'),
                 (201, 'Clientes, tutores y mascotas', 2, 'admision/clientes-pacientes'),
-                (202, 'RecepciÃ³n de Ã³rdenes', 2, 'admision/ordenes'),
+                (202, 'Recepción de órdenes', 2, 'admision/ordenes'),
                 (203, 'Agenda de citas', 2, 'admision/citas'),
-                (204, 'Triaje de ingreso', 2, 'admision/triaje'),
-                (301, 'Bandeja de Ã³rdenes', 3, 'kardex/ordenes'),
-                (302, 'Kardex enfermerÃ­a', 3, 'kardex/enfermeria'),
-                (303, 'Signos y balance hÃ­drico', 3, 'kardex/signos'),
-                (401, 'Ficha de hospitalizaciÃ³n', 4, 'hospitalizacion/ficha'),
+                (204, 'Triaje de ingreso', 13, 'admision/triaje'),
+                (301, 'Bandeja de órdenes', 3, 'kardex/ordenes'),
+                (302, 'Kardex enfermería', 3, 'kardex/enfermeria'),
+                (303, 'Signos y balance hídrico', 3, 'kardex/signos'),
+                (401, 'Ficha de hospitalización', 4, 'hospitalizacion/ficha'),
                 (402, 'Monitoreo 24 horas', 4, 'hospitalizacion/monitoreo'),
-                (403, 'Turnos, exÃ¡menes y transfusiÃ³n', 4, 'hospitalizacion/fichas-complementarias'),
+                (403, 'Turnos, exámenes y transfusión', 4, 'hospitalizacion/fichas-complementarias'),
                 (404, 'Calculadora de infusiones', 4, 'hospitalizacion/calculadora-infusiones'),
                 (501, 'Pre-anestesia', 5, 'quirofano/preanestesia'),
                 (502, 'Checklist preoperatorio', 5, 'quirofano/preanestesia/checklist'),
                 (503, 'Pausa de seguridad', 5, 'quirofano/pausa-seguridad'),
                 (504, 'Hoja de anestesia', 5, 'quirofano/anestesia'),
-                (505, 'Protocolo quirÃºrgico', 5, 'quirofano/protocolo'),
-                (506, 'Sala de recuperaciÃ³n', 5, 'quirofano/recuperacion'),
-                (601, 'Historia clÃ­nica SOAP', 6, 'consulta/fichamedica'),
+                (505, 'Protocolo quirúrgico', 5, 'quirofano/protocolo'),
+                (506, 'Sala de recuperación', 5, 'quirofano/recuperacion'),
+                (601, 'Historia clínica SOAP', 6, 'consulta/fichamedica'),
                 (602, 'Apuntes a historias', 6, 'consulta/historial/apuntes'),
-                (603, 'VacunaciÃ³n', 6, 'consulta/vacunas'),
-                (604, 'EvoluciÃ³n mÃ©dica', 6, 'consulta/evoluciones'),
-                (605, 'Recetario mÃ©dico', 6, 'consulta/recetario'),
+                (603, 'Vacunación', 6, 'consulta/vacunas'),
+                (604, 'Evolución médica', 6, 'consulta/evoluciones'),
+                (605, 'Recetario médico', 6, 'consulta/recetario'),
                 (606, 'Recetas sin orden', 6, 'consulta/recetario/sin-orden'),
                 (607, 'Consentimientos y alta', 6, 'consulta/autorizaciones'),
-                (608, 'Seguimiento clÃ­nico', 6, 'seguimiento/clinico'),
+                (608, 'Seguimiento clínico', 6, 'seguimiento/clinico'),
                 (609, 'Expediente / Lotes fichas', 6, 'consulta/imprimir-fichas'),
                 (610, 'Historial del paciente', 6, 'consulta/historial'),
-                (701, 'Operaciones clÃ­nicas', 7, 'operaciones/clinicas'),
-                (702, 'ProgramaciÃ³n clÃ­nica', 7, 'programacion/clinica'),
+                (701, 'Operaciones clínicas', 7, 'operaciones/clinicas'),
+                (702, 'Programación clínica', 7, 'programacion/clinica'),
                 (703, 'Pisos y consultorios', 7, 'programacion/consultorios'),
-                (801, 'Ã“rdenes de laboratorio', 8, 'diagnostico/laboratorio'),
-                (802, 'Rayos X y ecografÃ­a', 8, 'diagnostico/imagenologia'),
+                (801, 'Órdenes de laboratorio', 8, 'diagnostico/laboratorio'),
+                (802, 'Rayos X y ecografía', 8, 'diagnostico/imagenologia'),
                 (803, 'Bandeja de resultados', 8, 'diagnostico/bandeja'),
-                (901, 'Pre-facturaciÃ³n veterinaria', 9, 'facturacion/proformas'),
+                (901, 'Pre-facturación veterinaria', 9, 'facturacion/proformas'),
                 (902, 'Productos y servicios', 9, 'facturacion/productos'),
-                (903, 'Nueva factura electrÃ³nica', 9, 'facturacion/nueva'),
+                (903, 'Nueva factura electrónica', 9, 'facturacion/nueva'),
                 (904, 'Facturas emitidas', 9, 'facturas'),
-                (905, 'Nota de crÃ©dito', 9, 'facturacion/nota-credito'),
-                (906, 'Notas de crÃ©dito emitidas', 9, 'facturacion/notas-credito-generadas'),
-                (907, 'Nota de dÃ©bito', 9, 'facturacion/nota-debito'),
-                (908, 'Notas de dÃ©bito emitidas', 9, 'facturacion/notas-debito-generadas'),
-                (909, 'GuÃ­a de remisiÃ³n', 9, 'facturacion/guia-remision'),
-                (910, 'GuÃ­as emitidas', 9, 'facturacion/guias-remision-generadas'),
-                (911, 'Importar compra / retenciÃ³n', 9, 'compras/importar-xml'),
+                (905, 'Nota de crédito', 9, 'facturacion/nota-credito'),
+                (906, 'Notas de crédito emitidas', 9, 'facturacion/notas-credito-generadas'),
+                (907, 'Nota de débito', 9, 'facturacion/nota-debito'),
+                (908, 'Notas de débito emitidas', 9, 'facturacion/notas-debito-generadas'),
+                (909, 'Guía de remisión', 9, 'facturacion/guia-remision'),
+                (910, 'Guías emitidas', 9, 'facturacion/guias-remision-generadas'),
+                (911, 'Importar compra / retención', 9, 'compras/importar-xml'),
                 (912, 'Retenciones', 9, 'facturacion/retenciones-generadas'),
                 (913, 'Recargar documentos', 9, 'contabilidad/compra-documentos'),
-                (914, 'LiquidaciÃ³n de compra', 9, 'compras/nueva-liquidacion'),
+                (914, 'Liquidación de compra', 9, 'compras/nueva-liquidacion'),
                 (915, 'Liquidaciones emitidas', 9, 'compras/liquidaciones-generadas'),
                 (916, 'Configurar emisor', 9, 'facturacion/configuracion/emisor'),
-                (917, 'Firma electrÃ³nica', 9, 'facturacion/configuracion/firma'),
+                (917, 'Firma electrónica', 9, 'facturacion/configuracion/firma'),
                 (918, 'Caja y secuenciales', 9, 'facturacion/configuracion/caja'),
                 (1001, 'Inicio contable', 10, 'contabilidad'),
                 (1002, 'Cuentas por cobrar y abonos', 10, 'contabilidad/cuentas-por-cobrar'),
                 (1003, 'Clientes contables', 10, 'contabilidad/clientes'),
                 (1004, 'Proveedores', 10, 'contabilidad/proveedores'),
                 (1005, 'Importar compras', 10, 'contabilidad/compras/importar-xml'),
-                (1006, 'Ã“rdenes de compra', 10, 'contabilidad/compras/ordenes'),
+                (1006, 'Órdenes de compra', 10, 'contabilidad/compras/ordenes'),
                 (1007, 'Recepciones de compra', 10, 'contabilidad/compras/recepciones'),
                 (1008, 'Inventario y kardex', 10, 'contabilidad/inventarios'),
                 (1009, 'Bodegas', 10, 'contabilidad/inventarios/bodegas'),
                 (1010, 'Reportes contables', 10, 'contabilidad/reportes/documentos'),
-                (1011, 'ParametrizaciÃ³n', 10, 'contabilidad/parametrizacion'),
-                (1012, 'ConfiguraciÃ³n contable', 10, 'contabilidad/configuracion/general'),
+                (1011, 'Parametrización', 10, 'contabilidad/parametrizacion'),
+                (1012, 'Configuración contable', 10, 'contabilidad/configuracion/general'),
                 (1013, 'Usuarios contables', 10, 'contabilidad/administracion/usuarios'),
                 (1014, 'Roles y permisos contables', 10, 'contabilidad/administracion/roles'),
                 (1016, 'Nueva factura contable', 10, 'contabilidad/facturacion/nueva'),
@@ -410,23 +434,33 @@ public class AuthService : IAuthService
                 (1048, 'Seguridad contable', 10, 'contabilidad/configuracion/seguridad'),
                 (1049, 'Tipos de cliente', 10, 'contabilidad/configuracion/tipos-cliente'),
                 (1050, 'Usuarios de la empresa', 10, 'contabilidad/usuarios'),
-                (1015, 'Reportes clÃ­nicos', 10, 'reportes/clinicos'),
-                (1101, 'CatÃ¡logos clÃ­nicos', 11, 'administracion/catalogos'),
-                (1102, 'DiagnÃ³sticos y laboratorio', 11, 'administracion/catalogos-operativos'),
+                (1015, 'Reportes clínicos', 10, 'reportes/clinicos'),
+                (1101, 'Catálogos clínicos', 11, 'administracion/catalogos'),
+                (1102, 'Diagnósticos y laboratorio', 11, 'administracion/catalogos-operativos'),
                 (1103, 'Localidades y especialidades', 11, 'administracion/localidades'),
+                (1104, 'Organización de menús', 11, 'administracion/menus'),
                 (1201, 'Usuarios', 12, 'administracion/usuarios'),
                 (1202, 'Roles', 12, 'administracion/roles'),
                 
                 (1204, 'Asignar permisos', 12, 'administracion/roles-permisos'),
-                (1205, 'BitÃ¡cora de auditorÃ­a', 12, 'administracion/bitacora');
+                (1205, 'Bitácora de auditoría', 12, 'administracion/bitacora');
 
             UPDATE dest
-            SET dest.descripcion = CASE WHEN NULLIF(LTRIM(RTRIM(dest.descripcion)), '') IS NULL THEN src.Descripcion ELSE dest.descripcion END,
-                dest.secNuevoMenu = CASE WHEN ISNULL(dest.secNuevoMenu, 0) = 0 THEN src.Sec ELSE dest.secNuevoMenu END,
-                dest.padreNuevoMenu = CASE WHEN ISNULL(dest.padreNuevoMenu, 0) = 0 THEN src.Padre ELSE dest.padreNuevoMenu END
+            SET dest.descripcion = CASE WHEN NULLIF(LTRIM(RTRIM(dest.descripcion)), '') IS NULL
+                                         OR dest.descripcion LIKE '%Ã%'
+                                         OR dest.descripcion LIKE '%Â%'
+                                    THEN src.Descripcion ELSE dest.descripcion END,
+                dest.secNuevoMenu = CASE WHEN ISNULL(dest.secNuevoMenu, 0) = 0 THEN src.Sec ELSE dest.secNuevoMenu END
             FROM vt_menuDinamico dest
             INNER JOIN @Modulos src
                 ON LOWER(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(dest.url, ''))), '~/', ''), '/', '')) = LOWER(REPLACE(src.Url, '/', ''));
+
+            UPDATE dest
+            SET dest.padreNuevoMenu = src.Padre
+            FROM vt_menuDinamico dest
+            INNER JOIN @Modulos src
+                ON LOWER(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(dest.url, ''))), '~/', ''), '/', '')) = LOWER(REPLACE(src.Url, '/', ''))
+            WHERE ISNULL(dest.organizacionPersonalizada, 0) = 0;
 
             INSERT INTO vt_menuDinamico (secNuevoMenu, descripcion, padreNuevoMenu, habilitado, url)
             SELECT src.Sec, src.Descripcion, src.Padre, 1, src.Url
@@ -522,17 +556,47 @@ public class AuthService : IAuthService
 
     public async Task<List<MenuItemModel>> ObtenerMenusAdministracionAsync()
     {
+        await AsegurarEstructuraMenuAsync();
         await AsegurarCatalogoModulosCompletoAsync();
         const string sql = @"SELECT id AS Id,
                                     RTRIM(CAST(ISNULL(secNuevoMenu, 0) AS VARCHAR(50))) AS SecNuevoMenu,
                                     RTRIM(ISNULL(descripcion, '')) AS Descripcion,
                                     RTRIM(CAST(ISNULL(padreNuevoMenu, 0) AS VARCHAR(50))) AS PadreNuevoMenu,
                                     CAST(CASE WHEN ISNULL(habilitado, 0) = 1 THEN 1 ELSE 0 END AS BIT) AS Habilitado,
-                                    RTRIM(ISNULL(url, '')) AS Url
+                                    ISNULL(ordenMenu, secNuevoMenu) AS OrdenMenu,
+                                    RTRIM(ISNULL(url, '')) AS Url,
+                                    CAST(ISNULL(organizacionPersonalizada, 0) AS BIT) AS OrganizacionPersonalizada
                              FROM vt_menuDinamico
                              ORDER BY ISNULL(secNuevoMenu, 999999), Descripcion";
-        try { return (await _sql.QueryAsync<MenuItemModel>(sql)).ToList(); }
+        try
+        {
+            var menus = (await _sql.QueryAsync<MenuItemModel>(sql)).ToList();
+            foreach (var menu in menus.Where(m => !m.OrganizacionPersonalizada))
+                menu.PadreNuevoMenu = PadrePredeterminado(menu);
+            return menus;
+        }
         catch { return []; }
+    }
+
+    private static string PadrePredeterminado(MenuItemModel menu)
+    {
+        if (string.IsNullOrWhiteSpace(menu.Url) || !int.TryParse(menu.SecNuevoMenu, out var seccion)) return "0";
+        if (menu.Url.Equals("admision/triaje", StringComparison.OrdinalIgnoreCase)) return "13";
+        if (seccion is >= 700 and < 800) return "0";
+        var padre = seccion / 100;
+        return padre is >= 1 and <= 12 ? padre.ToString() : "0";
+    }
+
+    public async Task<List<MenuItemModel>> ObtenerGruposMenuAsync()
+    {
+        const string sql = @"SELECT id AS Id, RTRIM(CAST(secNuevoMenu AS VARCHAR(50))) AS SecNuevoMenu,
+                                    RTRIM(descripcion) AS Descripcion,
+                                    RTRIM(CAST(ISNULL(padreNuevoMenu, 0) AS VARCHAR(50))) AS PadreNuevoMenu,
+                                    CAST(ISNULL(habilitado, 0) AS BIT) AS Habilitado, RTRIM(ISNULL(url, '')) AS Url
+                             FROM vt_menuDinamico
+                             WHERE ISNULL(habilitado, 0) = 1 AND ISNULL(LTRIM(RTRIM(url)), '') = ''
+                             ORDER BY secNuevoMenu, id";
+        return (await _sql.QueryAsync<MenuItemModel>(sql)).ToList();
     }
 
     private async Task AsegurarTablaRolesAccesosAsync()
@@ -668,7 +732,7 @@ public class AuthService : IAuthService
             var nuevoId = await _sql.ExecuteScalarAsync<int>(sql, new { rol.Id, Descripcion = rol.Descripcion.Trim(), MenuIds = ids });
             if (nuevoId <= 0) return false;
             rol.Id = nuevoId;
-            await _sql.RegistrarBitacoraAsync($"{(esEdicion ? "Actualiza" : "Crea")} rol y permisos predeterminados: {rol.Descripcion.Trim()} ({ids.Length} mÃ³dulos)", adminId);
+            await _sql.RegistrarBitacoraAsync($"{(esEdicion ? "Actualiza" : "Crea")} rol y permisos predeterminados: {rol.Descripcion.Trim()} ({ids.Length} módulos)", adminId);
             return true;
         }
         catch
@@ -735,7 +799,7 @@ public class AuthService : IAuthService
         int usuario = _session.IdUser;
         int rol = await ObtenerRolActivoAsync(usuario);
         var menus = rol > 1 ? await ObtenerMenuUsuarioAsync(usuario, rol) : [];
-        var permisos = new PermisosNavegacion(rol, menus.Select(menu => menu.Url).OfType<string>());
+        var permisos = new PermisosNavegacion(rol, menus);
         if (!permisos.Permite(ruta))
             await _sql.RegistrarBitacoraAsync($"Acceso denegado a ruta: {ruta}", usuario);
         return permisos;
@@ -947,19 +1011,68 @@ public class AuthService : IAuthService
         if (!await EsAdministradorValidoAsync(adminId) || string.IsNullOrWhiteSpace(menu.Descripcion)) return false;
         var sql = menu.Id > 0
             ? @"UPDATE vt_menuDinamico SET secNuevoMenu = TRY_CAST(@Seccion AS INT), descripcion = @Descripcion,
-                    padreNuevoMenu = TRY_CAST(@Padre AS INT), habilitado = @Habilitado, url = @Url WHERE id = @Id"
-            : @"INSERT INTO vt_menuDinamico (secNuevoMenu, descripcion, padreNuevoMenu, habilitado, url)
-                VALUES (TRY_CAST(@Seccion AS INT), @Descripcion, TRY_CAST(@Padre AS INT), @Habilitado, @Url)";
+                    padreNuevoMenu = TRY_CAST(@Padre AS INT), habilitado = @Habilitado, url = @Url,
+                    ordenMenu = @Orden, organizacionPersonalizada = 1 WHERE id = @Id"
+            : @"INSERT INTO vt_menuDinamico (secNuevoMenu, descripcion, padreNuevoMenu, habilitado, url, ordenMenu, organizacionPersonalizada)
+                VALUES (TRY_CAST(@Seccion AS INT), @Descripcion, TRY_CAST(@Padre AS INT), @Habilitado, @Url, @Orden, 1)";
         if (!int.TryParse(menu.SecNuevoMenu, out var seccion) || seccion <= 0 ||
             !int.TryParse(menu.PadreNuevoMenu, out var padre) || padre < 0 ||
+            padre == seccion ||
             menu.Id > 0 && await _sql.ExecuteScalarAsync<int>(
                 "SELECT COUNT(1) FROM vt_menuDinamico WHERE id <> @Id AND secNuevoMenu = @Seccion",
                 new { menu.Id, Seccion = seccion }) > 0)
             return false;
-        var result = await _sql.ExecuteAsync(sql, new { menu.Id, Seccion = seccion, Descripcion = menu.Descripcion.Trim(), Padre = padre, Habilitado = menu.Habilitado ? 1 : 0, Url = menu.Url?.Trim() ?? string.Empty });
+        var existentes = await ObtenerMenusAdministracionAsync();
+        var visitados = new HashSet<int> { seccion };
+        var actual = padre;
+        while (actual > 0)
+        {
+            if (!visitados.Add(actual)) return false;
+            var siguiente = existentes.FirstOrDefault(m => m.SecNuevoMenu == actual.ToString());
+            if (siguiente is null || !int.TryParse(siguiente.PadreNuevoMenu, out actual)) return false;
+        }
+        if (menu.OrdenMenu <= 0) menu.OrdenMenu = seccion;
+        var result = await _sql.ExecuteAsync(sql, new { menu.Id, Seccion = seccion, Descripcion = menu.Descripcion.Trim(), Padre = padre, Habilitado = menu.Habilitado ? 1 : 0, Url = menu.Url?.Trim() ?? string.Empty, Orden = menu.OrdenMenu });
         if (result < 0) return false;
-        await _sql.RegistrarBitacoraAsync($"{(menu.Id > 0 ? "Actualiza" : "Crea")} menÃº: {menu.Descripcion.Trim()}", adminId);
+        await _sql.RegistrarBitacoraAsync($"{(menu.Id > 0 ? "Actualiza" : "Crea")} menú: {menu.Descripcion.Trim()}", adminId);
         return true;
+    }
+
+    public async Task<bool> GuardarOrdenMenusAsync(IReadOnlyCollection<MenuItemModel> menus, int adminId)
+    {
+        if (!await EsAdministradorValidoAsync(adminId)) return false;
+        try
+        {
+            foreach (var menu in menus.Where(m => m.Id > 0))
+            {
+                await _sql.ExecuteAsync("UPDATE vt_menuDinamico SET ordenMenu = @Orden WHERE id = @Id", new { menu.Id, Orden = menu.OrdenMenu });
+            }
+            await _sql.RegistrarBitacoraAsync("Actualiza el orden de los menús", adminId);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    public async Task<(bool Exito, string Mensaje)> EliminarMenuAsync(int menuId, int adminId)
+    {
+        if (!await EsAdministradorValidoAsync(adminId)) return (false, "No autorizado.");
+
+        var menu = await _sql.QueryFirstOrDefaultAsync<MenuItemModel>(@"
+            SELECT id AS Id, RTRIM(ISNULL(url, '')) AS Url,
+                   RTRIM(CAST(ISNULL(secNuevoMenu, 0) AS VARCHAR(50))) AS SecNuevoMenu
+            FROM vt_menuDinamico WHERE id = @MenuId", new { MenuId = menuId });
+        if (menu is null) return (false, "El menú ya no existe.");
+        if (!string.IsNullOrWhiteSpace(menu.Url)) return (false, "Solo se pueden eliminar menús padre creados desde esta sección.");
+
+        var tieneHijos = await _sql.ExecuteScalarAsync<int>(
+            "SELECT COUNT(1) FROM vt_menuDinamico WHERE padreNuevoMenu = TRY_CAST(@Seccion AS INT)",
+            new { Seccion = menu.SecNuevoMenu });
+        if (tieneHijos > 0) return (false, "Primero cambia o elimina los menús que pertenecen a este menú padre.");
+
+        var eliminados = await _sql.ExecuteAsync("DELETE FROM vt_menuDinamico WHERE id = @MenuId", new { MenuId = menuId });
+        if (eliminados <= 0) return (false, "No se pudo eliminar el menú.");
+        await _sql.RegistrarBitacoraAsync($"Elimina menú padre: {menu.SecNuevoMenu}", adminId);
+        return (true, "Menú eliminado correctamente.");
     }
 
     public async Task<List<UsuarioAdministracionModel>> ObtenerUsuariosAdministracionAsync()
@@ -1057,11 +1170,11 @@ public class AuthService : IAuthService
             if (!valRol.Puede) return (false, valRol.Motivo);
         }
         var duplicado = await _sql.ExecuteScalarAsync<int>("SELECT COUNT(1) FROM vt_usuarios WHERE user_login = @Login AND user_numero <> @Id", new { Login = usuario.Login.Trim(), usuario.Id });
-        if (duplicado > 0) return (false, "El nombre de usuario ya estÃ¡ registrado.");
+        if (duplicado > 0) return (false, "El nombre de usuario ya está registrado.");
         if (usuario.Id == _session.IdUser && usuario.RolId != 1) return (false, "No puedes quitarte tu propio rol de administrador.");
-        if (usuario.Id > 0 && usuario.RolId != 1 && !await PuedeReducirAdministradoresAsync(usuario.Id)) return (false, "No se puede cambiar el rol del Ãºltimo administrador activo.");
+        if (usuario.Id > 0 && usuario.RolId != 1 && !await PuedeReducirAdministradoresAsync(usuario.Id)) return (false, "No se puede cambiar el rol del último administrador activo.");
 
-        if (usuario.Id == 0 && (string.IsNullOrWhiteSpace(claveTemporal) || claveTemporal.Length < 8)) return (false, "La contraseÃ±a temporal debe tener al menos 8 caracteres.");
+        if (usuario.Id == 0 && (string.IsNullOrWhiteSpace(claveTemporal) || claveTemporal.Length < 8)) return (false, "La contraseña temporal debe tener al menos 8 caracteres.");
         int rolAnterior = usuario.Id > 0 ? await _sql.ExecuteScalarAsync<int>("SELECT ISNULL(user_tipouser_numero, 0) FROM vt_usuarios WHERE user_numero=@Id", new { usuario.Id }) : 0;
         var sql = usuario.Id > 0
             ? @"UPDATE vt_usuarios SET user_nombre=@Nombre, user_login=@Login, user_iniciales=@Iniciales,
@@ -1120,7 +1233,7 @@ public class AuthService : IAuthService
             if (userLogin != null && userLogin.Equals("admin", StringComparison.OrdinalIgnoreCase))
                 return (false, "El usuario admin principal no puede ser desactivado.");
         }
-        if (!activo && !await PuedeReducirAdministradoresAsync(idUser)) return (false, "No se puede desactivar al Ãºltimo administrador activo.");
+        if (!activo && !await PuedeReducirAdministradoresAsync(idUser)) return (false, "No se puede desactivar al último administrador activo.");
         var result = await _sql.ExecuteAsync("UPDATE vt_usuarios SET user_estado=@Estado WHERE user_numero=@IdUser", new { Estado=activo?"A":"I", IdUser=idUser });
         if (result < 0) return (false, "No se pudo actualizar el estado.");
         await _sql.RegistrarBitacoraAsync($"{(activo ? "Activa" : "Desactiva")} usuario {idUser}", adminId);
@@ -1131,16 +1244,16 @@ public class AuthService : IAuthService
     private async Task<(bool Exito, string Mensaje)> SafeRestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId)
     {
         try { return await DoRestablecerClaveUsuarioAsync(idUser, nuevaClave, adminId); }
-        catch (Exception ex) { return (false, $"Error al restablecer contraseÃ±a: {ex.Message}"); }
+        catch (Exception ex) { return (false, $"Error al restablecer contraseña: {ex.Message}"); }
     }
     private async Task<(bool Exito, string Mensaje)> DoRestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId)
     {
         if (!await EsAdministradorValidoAsync(adminId)) return (false, "No autorizado.");
-        if (string.IsNullOrWhiteSpace(nuevaClave) || nuevaClave.Length < 8) return (false, "La contraseÃ±a debe tener al menos 8 caracteres.");
+        if (string.IsNullOrWhiteSpace(nuevaClave) || nuevaClave.Length < 8) return (false, "La contraseña debe tener al menos 8 caracteres.");
         var result = await _sql.ExecuteAsync("UPDATE vt_usuarios SET user_clave=@Clave,user_fechacambio=GETDATE() WHERE user_numero=@IdUser", new { Clave=_sql.HashPasswordSha1(nuevaClave), IdUser=idUser });
-        if (result < 0) return (false, "No se pudo restablecer la contraseÃ±a.");
-        await _sql.RegistrarBitacoraAsync($"Restablece contraseÃ±a del usuario {idUser}", adminId);
-        return (true, "ContraseÃ±a restablecida correctamente.");
+        if (result < 0) return (false, "No se pudo restablecer la contraseña.");
+        await _sql.RegistrarBitacoraAsync($"Restablece contraseña del usuario {idUser}", adminId);
+        return (true, "Contraseña restablecida correctamente.");
     }
 
     private async Task<bool> EsAdministradorValidoAsync(int adminId) =>

@@ -23,6 +23,8 @@ public class MenuItemModel
     public string Descripcion { get; set; } = string.Empty;
     public string? PadreNuevoMenu { get; set; }
     public bool Habilitado { get; set; }
+    public int OrdenMenu { get; set; }
+    public bool OrganizacionPersonalizada { get; set; }
     public string? Url { get; set; }
     public List<MenuItemModel> Children { get; set; } = [];
 }

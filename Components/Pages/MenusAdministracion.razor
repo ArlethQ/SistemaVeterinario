@@ -15,17 +15,37 @@
         }
         <div class="row g-3">
             <div class="col-lg-5">
+                <div class="d-flex gap-2 mb-3">
+                    <button type="button" class="btn btn-primary" @onclick="MostrarNuevoPadre">+ Crear ítem</button>
+                    <button type="button" class="btn btn-outline-primary" @onclick="AbrirOrden">Ordenar menú</button>
+                </div>
                 <div class="list-group">
-                    @foreach (var menu in _menus.Where(m => m.Habilitado).OrderBy(m => int.TryParse(m.SecNuevoMenu, out var orden) ? orden : int.MaxValue))
+                    @foreach (var menu in MenusRaiz)
                     {
-                        <button type="button" class="list-group-item list-group-item-action @(menu.Id == _edit?.Id ? "active" : "")" @onclick="() => Editar(menu)">
-                            <strong>@menu.Descripcion</strong><small class="d-block">@(menu.Url ?? "Grupo")</small>
-                        </button>
+                        @DibujarMenu(menu)
                     }
                 </div>
             </div>
             <div class="col-lg-7">
-                @if (_edit is not null)
+                @if (_creandoPadre)
+                {
+                    <div class="card"><div class="card-body">
+                        <h2 class="h5">Crear menú padre</h2>
+                        <p class="text-muted small">Escribe el nombre y elige el menú existente que quedará dentro.</p>
+                        <label class="form-label" for="nuevo-padre-nombre">Nombre del menú padre</label>
+                        <input id="nuevo-padre-nombre" class="form-control mb-3" @bind="_nombreNuevoPadre" />
+                        <label class="form-label" for="nuevo-padre-hijo">Menú que será submenú</label>
+                        <select id="nuevo-padre-hijo" class="form-select mb-3" @bind="_hijoNuevoPadre">
+                            <option value="0">Selecciona un menú</option>
+                            @foreach (var menu in _menus.Where(m => m.Habilitado && !string.IsNullOrWhiteSpace(m.Url)).OrderBy(m => m.Descripcion))
+                            {
+                                <option value="@menu.Id">@menu.Descripcion</option>
+                            }
+                        </select>
+                        <button type="button" class="btn btn-primary" disabled="@_guardando" @onclick="CrearPadreAsync">Crear menú y asignar submenú</button>
+                    </div></div>
+                }
+                else if (_edit is not null)
                 {
                     <div class="card"><div class="card-body">
                         <h2 class="h5">Editar menú</h2>
@@ -34,17 +54,45 @@
                         <label class="form-label" for="menu-padre">Menú padre</label>
                         <select id="menu-padre" class="form-select mb-3" @bind="_edit.PadreNuevoMenu">
                             <option value="0">Sin padre</option>
-                            @foreach (var padre in _menus.Where(m => m.Id != _edit.Id && m.Habilitado))
+                            @foreach (var padre in _menus.Where(m => m.Id != _edit.Id && m.Habilitado && m.PadreNuevoMenu != _edit.SecNuevoMenu))
                             {
                                 <option value="@padre.SecNuevoMenu">@padre.Descripcion</option>
                             }
                         </select>
                         <label class="form-label" for="menu-orden">Orden</label>
-                        <input id="menu-orden" class="form-control mb-3" type="number" @bind="_edit.SecNuevoMenu" />
+                        <input id="menu-orden" class="form-control mb-3" type="number" @bind="_edit.SecNuevoMenu" disabled="@(_edit.Id > 0 && _menus.Any(m => m.PadreNuevoMenu == _edit.SecNuevoMenu))" />
                         <button type="button" class="btn btn-primary" disabled="@_guardando" @onclick="GuardarAsync">Guardar organización</button>
+                        @if (_edit.Id > 0 && string.IsNullOrWhiteSpace(_edit.Url))
+                        {
+                            <button type="button" class="btn btn-outline-danger ms-2" disabled="@_guardando" @onclick="EliminarAsync">Eliminar menú padre</button>
+                        }
                     </div></div>
                 }
             </div>
+        </div>
+    </div>
+}
+
+@if (_ordenando)
+{
+    <div class="menu-modal-backdrop"></div>
+    <div class="menu-modal" role="dialog" aria-modal="true">
+        <div class="menu-modal-card menu-order-card">
+            <header><div><small>NAVEGACIÓN DEL PORTAL</small><h2>Ordenar menú de servicios</h2></div><button type="button" @onclick="CerrarOrden" aria-label="Cerrar">×</button></header>
+            <div class="p-4"><p>Usa las flechas para ordenar cómo aparecerán los menús y sus submenús.</p>
+                <div class="row g-3">
+                    <div class="col-md-6"><section class="order-panel"><h3>Módulos principales <span>@PadresOrdenables.Count()</span></h3>
+                        @foreach (var item in PadresOrdenables)
+                        { <div class="order-row @(_padreOrdenId == item.Id ? "selected" : "")" @onclick="() => _padreOrdenId = item.Id"><strong>@item.Descripcion</strong><div><button type="button" @onclick:stopPropagation="true" @onclick="() => Mover(item.Id, -1)">↑</button><button type="button" @onclick:stopPropagation="true" @onclick="() => Mover(item.Id, 1)">↓</button></div></div> }
+                    </section></div>
+                    <div class="col-md-6"><section class="order-panel"><h3>Submenús de: <span>@NombrePadreOrden</span></h3>
+                        @if (!HijosOrdenables.Any()) { <p class="text-muted text-center py-5">Este módulo no tiene submenús.</p> }
+                        @foreach (var item in HijosOrdenables)
+                        { <div class="order-row"><strong>@item.Descripcion</strong><div><button type="button" @onclick="() => Mover(item.Id, -1)">↑</button><button type="button" @onclick="() => Mover(item.Id, 1)">↓</button></div></div> }
+                    </section></div>
+                </div>
+            </div>
+            <footer><button type="button" class="btn btn-light" @onclick="CerrarOrden">Cerrar</button><button type="button" class="btn btn-primary" @onclick="GuardarOrdenAsync" disabled="@_guardando">Guardar orden</button></footer>
         </div>
     </div>
 }
@@ -55,6 +103,42 @@
     private string _mensaje = string.Empty;
     private bool _error;
     private bool _guardando;
+    private bool _creandoPadre;
+    private string _nombreNuevoPadre = string.Empty;
+    private int _hijoNuevoPadre;
+    private bool _ordenando;
+    private List<MenuItemModel> _ordenTemporal = [];
+    private int _padreOrdenId;
+
+    private List<MenuItemModel> MenusDelLateral => _menus
+        .Where(m => m.Habilitado || _menus.Any(hijo => hijo.Habilitado && hijo.PadreNuevoMenu == m.SecNuevoMenu))
+        .ToList();
+
+    private IEnumerable<MenuItemModel> MenusRaiz => MenusDelLateral
+        .Where(m => !MenusDelLateral.Any(padre => padre.SecNuevoMenu == m.PadreNuevoMenu && padre.Id != m.Id))
+        .OrderBy(OrdenMenu);
+
+    private IEnumerable<MenuItemModel> Hijos(MenuItemModel padre) => MenusDelLateral
+        .Where(m => m.PadreNuevoMenu == padre.SecNuevoMenu && m.Id != padre.Id)
+        .OrderBy(OrdenMenu);
+
+    private static int OrdenMenu(MenuItemModel menu) => menu.OrdenMenu > 0 ? menu.OrdenMenu : int.TryParse(menu.SecNuevoMenu, out var orden) ? orden : int.MaxValue;
+
+    private IEnumerable<MenuItemModel> PadresOrdenables => _ordenTemporal.Where(m => m.PadreNuevoMenu is null or "0").OrderBy(OrdenMenu);
+    private IEnumerable<MenuItemModel> HijosOrdenables => _ordenTemporal.Where(m => m.PadreNuevoMenu == PadreSeleccionado?.SecNuevoMenu).OrderBy(OrdenMenu);
+    private MenuItemModel? PadreSeleccionado => _ordenTemporal.FirstOrDefault(m => m.Id == _padreOrdenId);
+    private string NombrePadreOrden => PadreSeleccionado?.Descripcion ?? "Selecciona un módulo";
+
+    private RenderFragment DibujarMenu(MenuItemModel menu, int nivel = 0) => @<div>
+        <button type="button" class="list-group-item list-group-item-action @(menu.Id == _edit?.Id ? "active" : "")" style="padding-left:@($"{1 + nivel * 1.25}rem")" @onclick="() => Editar(menu)">
+            <strong>@(nivel > 0 ? "↳ " : "")@menu.Descripcion</strong>
+            <small class="d-block">@(string.IsNullOrWhiteSpace(menu.Url) ? "Menú padre" : menu.Url)</small>
+        </button>
+        @foreach (var hijo in Hijos(menu))
+        {
+            @DibujarMenu(hijo, nivel + 1)
+        }
+    </div>;
 
     protected override async Task OnInitializedAsync()
     {
@@ -68,6 +152,105 @@
         _mensaje = string.Empty;
     }
 
+    private void MostrarNuevoPadre()
+    {
+        _edit = null;
+        _creandoPadre = true;
+        _nombreNuevoPadre = string.Empty;
+        _hijoNuevoPadre = 0;
+        _mensaje = string.Empty;
+    }
+
+    private void AbrirOrden()
+    {
+        _ordenTemporal = _menus.Select(m => new MenuItemModel { Id = m.Id, SecNuevoMenu = m.SecNuevoMenu, PadreNuevoMenu = m.PadreNuevoMenu, Descripcion = m.Descripcion, OrdenMenu = m.OrdenMenu }).ToList();
+        NormalizarOrden(_ordenTemporal.Where(m => m.PadreNuevoMenu is null or "0"));
+        foreach (var grupo in _ordenTemporal.Where(m => m.PadreNuevoMenu is not null and not "0").GroupBy(m => m.PadreNuevoMenu)) NormalizarOrden(grupo);
+        _padreOrdenId = PadresOrdenables.FirstOrDefault()?.Id ?? 0;
+        _ordenando = true;
+    }
+
+    private void CerrarOrden() { _ordenando = false; _ordenTemporal = []; }
+
+    private void Mover(int id, int desplazamiento)
+    {
+        var actual = _ordenTemporal.FirstOrDefault(m => m.Id == id);
+        if (actual is null) return;
+        var grupo = _ordenTemporal.Where(m => m.PadreNuevoMenu == actual.PadreNuevoMenu).OrderBy(OrdenMenu).ToList();
+        var indice = grupo.FindIndex(m => m.Id == id);
+        var destino = indice + desplazamiento;
+        if (destino < 0 || destino >= grupo.Count) return;
+        (grupo[indice].OrdenMenu, grupo[destino].OrdenMenu) = (grupo[destino].OrdenMenu, grupo[indice].OrdenMenu);
+    }
+
+    private static void NormalizarOrden(IEnumerable<MenuItemModel> menus)
+    {
+        var orden = 1;
+        foreach (var menu in menus.OrderBy(OrdenMenu)) menu.OrdenMenu = orden++;
+    }
+
+    private async Task GuardarOrdenAsync()
+    {
+        _guardando = true;
+        try
+        {
+            _error = !await AuthService.GuardarOrdenMenusAsync(_ordenTemporal, Session.IdUser);
+            _mensaje = _error ? "No se pudo guardar el orden." : "Orden actualizado correctamente.";
+            if (!_error) { _menus = await AuthService.ObtenerMenusAdministracionAsync(); CerrarOrden(); }
+        }
+        finally { _guardando = false; }
+    }
+
+    private async Task CrearPadreAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nombreNuevoPadre) || _hijoNuevoPadre <= 0)
+        {
+            _error = true;
+            _mensaje = "Indica el nombre del menú padre y el menú que será submenú.";
+            return;
+        }
+
+        _guardando = true;
+        try
+        {
+            var seccion = (_menus.Select(m => int.TryParse(m.SecNuevoMenu, out var numero) ? numero : 0).DefaultIfEmpty().Max() + 1).ToString();
+            var padre = new MenuItemModel { SecNuevoMenu = seccion, PadreNuevoMenu = "0", Descripcion = _nombreNuevoPadre.Trim(), Habilitado = true, Url = string.Empty };
+            if (!await AuthService.GuardarMenuAsync(padre, Session.IdUser))
+            {
+                _error = true;
+                _mensaje = "No se pudo crear el menú padre.";
+                return;
+            }
+
+            _menus = await AuthService.ObtenerMenusAdministracionAsync();
+            var hijo = _menus.FirstOrDefault(m => m.Id == _hijoNuevoPadre);
+            if (hijo is null)
+            {
+                _error = true;
+                _mensaje = "El menú padre fue creado, pero no se encontró el submenú seleccionado.";
+                return;
+            }
+            hijo.PadreNuevoMenu = seccion;
+            if (!await AuthService.GuardarMenuAsync(hijo, Session.IdUser))
+            {
+                _error = true;
+                _mensaje = "El menú padre fue creado, pero no se pudo asignar el submenú.";
+                return;
+            }
+
+            _menus = await AuthService.ObtenerMenusAdministracionAsync();
+            _creandoPadre = false;
+            _error = false;
+            _mensaje = "Menú padre creado y submenú asignado correctamente.";
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _mensaje = ex.Message;
+        }
+        finally { _guardando = false; }
+    }
+
     private async Task GuardarAsync()
     {
         if (_edit is null) return;
@@ -77,6 +260,29 @@
             _error = !await AuthService.GuardarMenuAsync(_edit, Session.IdUser);
             _mensaje = _error ? "No se pudo guardar el menú." : "Menú actualizado correctamente.";
             if (!_error) _menus = await AuthService.ObtenerMenusAdministracionAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _mensaje = ex.Message;
+        }
+        finally { _guardando = false; }
+    }
+
+    private async Task EliminarAsync()
+    {
+        if (_edit is null || _edit.Id <= 0) return;
+        _guardando = true;
+        try
+        {
+            var resultado = await AuthService.EliminarMenuAsync(_edit.Id, Session.IdUser);
+            _error = !resultado.Exito;
+            _mensaje = resultado.Mensaje;
+            if (resultado.Exito)
+            {
+                _edit = null;
+                _menus = await AuthService.ObtenerMenusAdministracionAsync();
+            }
         }
         catch (Exception ex)
         {

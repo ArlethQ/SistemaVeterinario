@@ -1,8 +1,11 @@
+using HosvetKardex.Web.Models;
+
 namespace HosvetKardex.Web.Services;
 
-public sealed class PermisosNavegacion(int rol, IEnumerable<string> rutas)
+public sealed class PermisosNavegacion(int rol, IEnumerable<MenuItemModel> menus)
 {
-    private readonly HashSet<string> _rutas = rutas.Select(Normalizar).ToHashSet();
+    public IReadOnlyList<MenuItemModel> Menus { get; } = menus.ToList();
+    private readonly HashSet<string> _rutas = menus.Select(m => Normalizar(m.Url ?? "")).ToHashSet();
 
     public bool Permite(string ruta)
     {

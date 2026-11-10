@@ -67,12 +67,15 @@
                         {
                             <NavLink href="admision/citas">Agenda de citas</NavLink>
                         }
-                        @if (TienePermiso("admision/triaje"))
-                        {
-                            <NavLink href="admision/triaje">Triaje de ingreso</NavLink>
-                        }
                     </div>
                 </details>
+                @if (TienePermiso("admision/triaje"))
+                {
+                    <details>
+                        <summary><MenuIcon Name="kardex" /><span>Enfermería</span><i>⌄</i></summary>
+                        <div class="submenu"><NavLink href="admision/triaje">Triaje de ingreso</NavLink></div>
+                    </details>
+                }
             }
 
             @if (TieneAlguno(RutasAtencionClinica))
@@ -413,6 +416,10 @@
                             {
                                 <NavLink href="administracion/localidades">Localidades y especialidades</NavLink>
                             }
+                            @if (TienePermiso("administracion/menus"))
+                            {
+                                <NavLink href="administracion/menus">Organización de menús</NavLink>
+                            }
                         </div>
                     </details>
                 }
@@ -452,12 +459,10 @@
 @code {
     private List<MenuItemModel> _menusPersonalizados = [];
 
-    protected override async Task OnParametersSetAsync()
+    protected override Task OnParametersSetAsync()
     {
-        if (Session.IsAuthenticated)
-            _menusPersonalizados = (await AuthService.ObtenerMenuUsuarioAsync(Session.IdUser, Session.TipoUser))
-                .Where(m => m.Habilitado && !string.IsNullOrWhiteSpace(m.Url))
-                .OrderBy(m => int.TryParse(m.SecNuevoMenu, out var orden) ? orden : int.MaxValue).ToList();
+        _menusPersonalizados = [];
+        return Task.CompletedTask;
     }
 
     private bool TienePadreVisible(MenuItemModel menu) =>
@@ -578,7 +583,8 @@
     [
         "administracion/catalogos",
         "administracion/catalogos-operativos",
-        "administracion/localidades"
+        "administracion/localidades",
+        "administracion/menus"
     ];
 
     private static readonly string[] RutasSeguridad =
