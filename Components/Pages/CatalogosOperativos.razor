@@ -174,7 +174,14 @@
                 }
             }
         }
-        if (_edit.Tipo == "S") _edit.Inventario = false;
+        if (_edit.Tipo == "S")
+        {
+            _edit.Inventario = false;
+        }
+        else if (_edit.Tipo == "B")
+        {
+            _edit.Inventario = true;
+        }
     }
     private void CambiarIva() { _edit.CodigoImpuesto = _aplicaIva ? "2" : ""; if (!_aplicaIva) _edit.PorcentajeImpuesto = ""; }
     private string TarifaDescripcion(CatalogoOperativoDto x) => x.CodigoImpuesto == "2" ? _tarifas.FirstOrDefault(t => t.Codigo == x.PorcentajeImpuesto)?.Descripcion ?? "IVA" : "Sin IVA";
