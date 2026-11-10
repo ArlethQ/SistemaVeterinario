@@ -71,7 +71,7 @@ public class KardexService : IKardexService
                     CAST(ISNULL(o.ordenAten_triajeMedico,0) AS BIT) AS TriajeMedico,
                     CAST(ISNULL(o.ordenAten_esProcedimiento,0) AS BIT) AS EsProcedimiento,
                     o.ordenAten_idEnfermero AS IdEnfermero,
-                    RTRIM(ISNULL(esp.es_descripcion, '')) AS Especialidad,
+                    CASE WHEN ISNULL(o.ordenAten_esProcedimiento,0) = 1 THEN 'Procedimiento' ELSE RTRIM(ISNULL(esp.es_descripcion, '')) END AS Especialidad,
                     ISNULL(o.ordenAten_fecha, GETDATE()) AS FechaOrden,
                     RTRIM(ISNULL(o.ordenAten_estado, 'A')) AS Estado,
                     RTRIM(ISNULL(o.ordenAten_etapa, 'Consulta')) AS Etapa

@@ -897,13 +897,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
             orden.IdMedico = 0;
             orden.TriajeMedico = false;
+            orden.IdEspecialidad = 0;
+            orden.TipoDespacho = 0;
         }
         else if (orden.IdMedico <= 0)
         {
             throw new InvalidOperationException("La consulta requiere un médico tratante.");
         }
 
-        string etapaInicial = orden.TipoDespacho switch
+        string etapaInicial = orden.EsProcedimiento ? "Consulta" : orden.TipoDespacho switch
         {
             1 => "Imagenología",
             2 => "Laboratorio",
@@ -919,27 +921,44 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     UPDATE vt_pacientes SET mas_colortriaje = @ColorTriaje WHERE mas_nhcl = @Nhcl;
 
                 DECLARE @Prefijo VARCHAR(10);
-                SELECT @Prefijo = ISNULL(NULLIF(RTRIM(es_codigo), ''), LEFT(UPPER(LTRIM(RTRIM(ISNULL(es_descripcion, 'GEN')))), 3))
-                FROM vt_especialidades WHERE es_id = @IdEspecialidad;
-                IF @Prefijo IS NULL OR @Prefijo = '' SET @Prefijo = 'GEN';
-
-                DECLARE @SiguienteNum INT;
-                SELECT @SiguienteNum = COUNT(1) + 1
-                FROM vt_ordenAtencion
-                WHERE CAST(ordenAten_fecha AS DATE) = CAST(@FechaOrden AS DATE)
-                  AND ordenAten_esp_numero = @IdEspecialidad;
-
                 DECLARE @TurnoCodigo VARCHAR(20);
-                SET @TurnoCodigo = @Prefijo + '-' + RIGHT('00' + CAST(@SiguienteNum AS VARCHAR(10)), CASE WHEN @SiguienteNum < 100 THEN 2 ELSE LEN(CAST(@SiguienteNum AS VARCHAR(10))) END);
+                DECLARE @SiguienteNum INT;
+
+                IF @EsProcedimiento = 1
+                BEGIN
+                    SET @Prefijo = 'PROC';
+                    SELECT @SiguienteNum = COUNT(1) + 1
+                    FROM vt_ordenAtencion
+                    WHERE CAST(ordenAten_fecha AS DATE) = CAST(@FechaOrden AS DATE)
+                      AND ISNULL(ordenAten_esProcedimiento, 0) = 1;
+
+                    SET @TurnoCodigo = @Prefijo + '-' + RIGHT('00' + CAST(@SiguienteNum AS VARCHAR(10)), CASE WHEN @SiguienteNum < 100 THEN 2 ELSE LEN(CAST(@SiguienteNum AS VARCHAR(10))) END);
+                END
+                ELSE
+                BEGIN
+                    SELECT @Prefijo = ISNULL(NULLIF(RTRIM(es_codigo), ''), LEFT(UPPER(LTRIM(RTRIM(ISNULL(es_descripcion, 'GEN')))), 3))
+                    FROM vt_especialidades WHERE es_id = @IdEspecialidad;
+                    IF @Prefijo IS NULL OR @Prefijo = '' SET @Prefijo = 'GEN';
+
+                    SELECT @SiguienteNum = COUNT(1) + 1
+                    FROM vt_ordenAtencion
+                    WHERE CAST(ordenAten_fecha AS DATE) = CAST(@FechaOrden AS DATE)
+                      AND ordenAten_esp_numero = @IdEspecialidad;
+
+                    SET @TurnoCodigo = @Prefijo + '-' + RIGHT('00' + CAST(@SiguienteNum AS VARCHAR(10)), CASE WHEN @SiguienteNum < 100 THEN 2 ELSE LEN(CAST(@SiguienteNum AS VARCHAR(10))) END);
+                END
 
                 DECLARE @Consultorio NVARCHAR(100);
-                SELECT TOP 1 @Consultorio = CONCAT('Piso ', NULLIF(RTRIM(hr_piso), ''), ' · ', RTRIM(hr_consultorio))
-                FROM vt_horariosMedicos
-                WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad
-                  AND UPPER(RTRIM(hr_dia2)) IN (UPPER(@DiaIngles), UPPER(@DiaEspanol))
-                  AND CAST(hr_desde AS time)<=CAST(@HoraOrden AS time) AND CAST(hr_hasta AS time)>CAST(@HoraOrden AS time)
-                  AND (hr_vigencia_desde IS NULL OR hr_vigencia_desde<=@FechaOrden)
-                  AND (hr_vigencia_hasta IS NULL OR hr_vigencia_hasta>=@FechaOrden);
+                IF @EsProcedimiento = 0
+                BEGIN
+                    SELECT TOP 1 @Consultorio = CONCAT('Piso ', NULLIF(RTRIM(hr_piso), ''), ' · ', RTRIM(hr_consultorio))
+                    FROM vt_horariosMedicos
+                    WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad
+                      AND UPPER(RTRIM(hr_dia2)) IN (UPPER(@DiaIngles), UPPER(@DiaEspanol))
+                      AND CAST(hr_desde AS time)<=CAST(@HoraOrden AS time) AND CAST(hr_hasta AS time)>CAST(@HoraOrden AS time)
+                      AND (hr_vigencia_desde IS NULL OR hr_vigencia_desde<=@FechaOrden)
+                      AND (hr_vigencia_hasta IS NULL OR hr_vigencia_hasta>=@FechaOrden);
+                END
 
                 INSERT INTO vt_ordenAtencion (
                     ordenAten_nombre, ordenAten_idcliente, ordenAten_nhcl, ordenAten_idMedico,
@@ -1004,8 +1023,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(p.mas_nombre, '') AS Mascota,
                 ISNULL(esp.especie_descripcion, '') AS Especie,
                 ISNULL(o.ordenAten_esp_numero, 0) AS IdEspecialidad,
-                ISNULL(NULLIF(RTRIM(es.es_codigo), ''), 'GEN') AS CodigoEspecialidad,
-                ISNULL(es.es_descripcion, '') AS Especialidad,
+                CASE WHEN ISNULL(o.ordenAten_esProcedimiento,0) = 1 THEN 'PROC' ELSE ISNULL(NULLIF(RTRIM(es.es_codigo), ''), 'GEN') END AS CodigoEspecialidad,
+                CASE WHEN ISNULL(o.ordenAten_esProcedimiento,0) = 1 THEN 'Procedimiento' ELSE ISNULL(es.es_descripcion, '') END AS Especialidad,
                 o.ordenAten_idMedico AS IdMedico,
                 ISNULL(u.user_nombre, '') AS Medico,
                 CAST(ISNULL(o.ordenAten_triajeMedico,0) AS BIT) AS TriajeMedico,

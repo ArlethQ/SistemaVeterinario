@@ -189,28 +189,31 @@
                         </div>
 
                         <div class="row g-2">
-                            <div class="col-md-12">
-                                <label class="form-label small fw-bold">2. Tipo de consulta</label>
-                                <select class="form-select form-select-sm" value="@_tipoConsulta" @onchange="OnTipoConsultaChangedAsync">
-                                    <option value="1">Consulta General</option>
-                                    <option value="2">Especialidad</option>
-                                    <option value="3">Cirugía Programada</option>
-                                    <option value="4">Control / Revisión</option>
-                                    <option value="5">Imagen / Ecografía</option>
-                                </select>
-                            </div>
-
-                            @if (EsTipoConsultaEspecialidad)
+                            @if (!_nuevaOrden.EsProcedimiento)
                             {
                                 <div class="col-md-12">
-                                    <label class="form-label small fw-bold text-primary"><i class="bi bi-award-fill me-1"></i>3. Especialidad requerida</label>
-                                    <select class="form-select form-select-sm border-primary" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync">
-                                        @foreach (var esp in _especialidades)
-                                        {
-                                            <option value="@esp.Id">[@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)] @esp.Descripcion</option>
-                                        }
+                                    <label class="form-label small fw-bold">2. Tipo de consulta</label>
+                                    <select class="form-select form-select-sm" value="@_tipoConsulta" @onchange="OnTipoConsultaChangedAsync">
+                                        <option value="1">Consulta General</option>
+                                        <option value="2">Especialidad</option>
+                                        <option value="3">Cirugía Programada</option>
+                                        <option value="4">Control / Revisión</option>
+                                        <option value="5">Imagen / Ecografía</option>
                                     </select>
                                 </div>
+
+                                @if (EsTipoConsultaEspecialidad)
+                                {
+                                    <div class="col-md-12">
+                                        <label class="form-label small fw-bold text-primary"><i class="bi bi-award-fill me-1"></i>3. Especialidad requerida</label>
+                                        <select class="form-select form-select-sm border-primary" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync">
+                                            @foreach (var esp in _especialidades)
+                                            {
+                                                <option value="@esp.Id">[@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)] @esp.Descripcion</option>
+                                            }
+                                        </select>
+                                    </div>
+                                }
                             }
 
                             <div class="col-md-12 d-flex align-items-end">
@@ -219,7 +222,7 @@
                             @if (_nuevaOrden.EsProcedimiento)
                             {
                                 <div class="col-md-12">
-                                    <label class="form-label small fw-bold">Enfermero responsable *</label>
+                                    <label class="form-label small fw-bold">2. Enfermero responsable *</label>
                                     <select class="form-select form-select-sm" @bind="_nuevaOrden.IdEnfermero">
                                         <option value="">Seleccione un enfermero</option>
                                         @foreach (var enfermero in _enfermeros)
@@ -249,7 +252,7 @@
                             @if (_nuevaOrden.EsProcedimiento || _nuevaOrden.TriajeMedico)
                             {
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold">@(EsTipoConsultaEspecialidad ? "5. Semáforo Triaje" : "4. Semáforo Triaje")</label>
+                                    <label class="form-label small fw-bold">@(_nuevaOrden.EsProcedimiento ? "3. Semáforo Triaje" : (EsTipoConsultaEspecialidad ? "5. Semáforo Triaje" : "4. Semáforo Triaje"))</label>
                                     <select class="form-select form-select-sm" @bind="_nuevaOrden.ColorTriaje">
                                         <option value="green">🟢 Verde — Estándar</option>
                                         <option value="yellow">🟡 Amarillo — Prioritario</option>
@@ -361,21 +364,30 @@
                                             <small class="text-muted">@o.Cedula</small>
                                         </td>
                                         <td>
-                                            <div class="fw-bold text-dark">
-                                                <i class="bi bi-person-badge-fill text-primary me-1"></i>Dr(a). @o.Medico
-                                            </div>
-                                            <div class="d-flex align-items-center gap-1 mt-1">
-                                                <span class="badge bg-light text-primary border font-monospace" style="font-size:0.7rem;">@(string.IsNullOrWhiteSpace(o.CodigoEspecialidad) ? "GEN" : o.CodigoEspecialidad)</span>
-                                                <small class="text-muted">@o.Especialidad</small>
-                                                @if (!string.IsNullOrWhiteSpace(o.Consultorio))
-                                                {
-                                                    <span class="badge bg-info text-dark ms-1" style="font-size:0.7rem;"><i class="bi bi-door-open-fill me-1"></i>@o.Consultorio</span>
-                                                }
-                                                @if (o.EsProcedimiento)
-                                                {
-                                                    <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">Procedimiento · @o.Enfermero</span>
-                                                }
-                                            </div>
+                                            @if (o.EsProcedimiento)
+                                            {
+                                                <div class="fw-bold text-dark">
+                                                    <i class="bi bi-person-heart text-success me-1"></i>Enf. @(string.IsNullOrWhiteSpace(o.Enfermero) ? "Sin asignar" : o.Enfermero)
+                                                </div>
+                                                <div class="d-flex align-items-center gap-1 mt-1">
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace" style="font-size:0.7rem;">PROC</span>
+                                                    <small class="text-success fw-semibold">Procedimiento de Enfermería</small>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="fw-bold text-dark">
+                                                    <i class="bi bi-person-badge-fill text-primary me-1"></i>Dr(a). @o.Medico
+                                                </div>
+                                                <div class="d-flex align-items-center gap-1 mt-1">
+                                                    <span class="badge bg-light text-primary border font-monospace" style="font-size:0.7rem;">@(string.IsNullOrWhiteSpace(o.CodigoEspecialidad) ? "GEN" : o.CodigoEspecialidad)</span>
+                                                    <small class="text-muted">@o.Especialidad</small>
+                                                    @if (!string.IsNullOrWhiteSpace(o.Consultorio))
+                                                    {
+                                                        <span class="badge bg-info text-dark ms-1" style="font-size:0.7rem;"><i class="bi bi-door-open-fill me-1"></i>@o.Consultorio</span>
+                                                    }
+                                                </div>
+                                            }
                                         </td>
                                         <td>
                                             <div class="d-flex flex-column align-items-start gap-1">
@@ -487,7 +499,7 @@
                             <span class="stage-pet-avatar">@if (!string.IsNullOrEmpty(ObtenerFotoPaciente(orden.Nhcl))) { <img src="@ObtenerFotoPaciente(orden.Nhcl)" alt="Foto de @orden.Mascota" /> } else { <span>@InicialPaciente(orden.Mascota)</span> }</span>
                             <div>
                                 <strong><span class="badge bg-primary font-monospace me-1" style="font-size:0.58rem;">#@orden.IdOrden</span>@orden.Mascota</strong>
-                                <small>Dr(a). @orden.Medico</small>
+                                <small>@(orden.EsProcedimiento ? $"Enf. {orden.Enfermero}" : $"Dr(a). {orden.Medico}")</small>
                             </div>
                             <div class="text-end">
                                 <time class="d-block">@orden.Hora</time>
@@ -525,8 +537,8 @@
                     <span class="badge bg-primary mt-1">@_ordenTicket.Especialidad</span>
                 </div>
                 <div class="p-2 rounded-3 bg-light border text-start">
-                    <div class="small text-muted">Médico con el que se va a atender:</div>
-                    <div class="fw-bold text-dark fs-6"><i class="bi bi-person-badge-fill text-primary me-1"></i>Dr(a). @_ordenTicket.Medico</div>
+                    <div class="small text-muted">@(_ordenTicket.EsProcedimiento ? "Enfermero(a) responsable:" : "Médico con el que se va a atender:")</div>
+                    <div class="fw-bold text-dark fs-6"><i class="bi @(_ordenTicket.EsProcedimiento ? "bi-person-heart text-success" : "bi-person-badge-fill text-primary") me-1"></i>@(_ordenTicket.EsProcedimiento ? $"Enf. {_ordenTicket.Enfermero}" : $"Dr(a). {_ordenTicket.Medico}")</div>
                     @if (!string.IsNullOrWhiteSpace(_ordenTicket.Consultorio))
                     {
                         <div class="small fw-semibold text-info mt-1"><i class="bi bi-door-open-fill me-1"></i>Consultorio / Habitación: @_ordenTicket.Consultorio</div>
@@ -587,10 +599,15 @@
 
     private string ObtenerSiguienteTurnoPreview()
     {
+        if (_nuevaOrden.EsProcedimiento)
+        {
+            int existentes = _ordenes.Count(o => o.EsProcedimiento && o.Fecha.Date == _nuevaOrden.FechaOrden.Date);
+            return $"PROC-{(existentes + 1):D2}";
+        }
         var esp = _especialidades.FirstOrDefault(e => e.Id == _nuevaOrden.IdEspecialidad);
         string prefijo = !string.IsNullOrWhiteSpace(esp?.Codigo) ? esp.Codigo : "GEN";
-        int existentes = _ordenes.Count(o => o.IdEspecialidad == _nuevaOrden.IdEspecialidad && o.Fecha.Date == _nuevaOrden.FechaOrden.Date);
-        int sig = existentes + 1;
+        int existentesEsp = _ordenes.Count(o => o.IdEspecialidad == _nuevaOrden.IdEspecialidad && o.Fecha.Date == _nuevaOrden.FechaOrden.Date);
+        int sig = existentesEsp + 1;
         return $"{prefijo}-{sig:D2}";
     }
 
@@ -722,6 +739,10 @@
         string consultorioHtml = !string.IsNullOrWhiteSpace(t.Consultorio)
             ? $"<div style='margin-top:4px;color:#0284c7;font-weight:600;font-size:12px;'>Consultorio / Habitación: {System.Net.WebUtility.HtmlEncode(t.Consultorio)}</div>"
             : "";
+        string profesionalLbl = t.EsProcedimiento ? "Enfermero(a) responsable:" : "Médico con el que se va a atender:";
+        string profesionalNom = t.EsProcedimiento
+            ? $"Enf. {System.Net.WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(t.Enfermero) ? "Sin asignar" : t.Enfermero)}"
+            : $"Dr(a). {System.Net.WebUtility.HtmlEncode(t.Medico)}";
 
         string html = $@"<!DOCTYPE html>
 <html lang='es'>
@@ -756,8 +777,8 @@
       <span class='esp-badge'>{System.Net.WebUtility.HtmlEncode(t.Especialidad)}</span>
     </div>
     <div class='doc-box'>
-      <div class='doc-lbl'>Médico con el que se va a atender:</div>
-      <div class='doc-name'>Dr(a). {System.Net.WebUtility.HtmlEncode(t.Medico)}</div>
+      <div class='doc-lbl'>{profesionalLbl}</div>
+      <div class='doc-name'>{profesionalNom}</div>
       {consultorioHtml}
     </div>
     <div class='row-item'><span class='muted'>Paciente:</span><strong>{System.Net.WebUtility.HtmlEncode(t.Mascota)} (NHCL #{t.Nhcl})</strong></div>
@@ -1169,51 +1190,65 @@
             _mensajeAlerta = "Seleccione primero un paciente (NHCL) de la lista.";
             return;
         }
-        if (EsTipoConsultaEspecialidad && _nuevaOrden.IdEspecialidad <= 0)
-        {
-            _esError = true;
-            _mensajeAlerta = "Seleccione una especialidad requerida.";
-            return;
-        }
-        if (_nuevaOrden.EsProcedimiento && !_nuevaOrden.IdEnfermero.HasValue)
-        {
-            _esError = true;
-            _mensajeAlerta = "Seleccione el enfermero responsable del procedimiento.";
-            return;
-        }
+
         if (_nuevaOrden.EsProcedimiento)
         {
+            if (!_nuevaOrden.IdEnfermero.HasValue || _nuevaOrden.IdEnfermero.Value <= 0)
+            {
+                _esError = true;
+                _mensajeAlerta = "Seleccione el enfermero responsable del procedimiento.";
+                return;
+            }
+
             _nuevaOrden.IdMedico = 0;
             _nuevaOrden.TriajeMedico = false;
+            _nuevaOrden.IdEspecialidad = 0;
+            _nuevaOrden.TipoConsulta = 0;
+            _nuevaOrden.TipoDespacho = 0;
         }
         else
         {
-            _nuevaOrden.IdEnfermero = null;
+            if (EsTipoConsultaEspecialidad && _nuevaOrden.IdEspecialidad <= 0)
+            {
+                _esError = true;
+                _mensajeAlerta = "Seleccione una especialidad requerida.";
+                return;
+            }
+
             if (_nuevaOrden.IdMedico <= 0)
             {
                 _esError = true;
                 _mensajeAlerta = "Seleccione el médico tratante.";
                 return;
             }
+
+            _nuevaOrden.IdEnfermero = null;
+
+            if (!EsTipoConsultaEspecialidad && _nuevaOrden.IdEspecialidad <= 0)
+            {
+                _nuevaOrden.IdEspecialidad = ResolverEspecialidadPorTipo(_tipoConsulta, _nuevaOrden.IdMedico);
+            }
+
+            var medicosEnHorario = EsTipoConsultaEspecialidad && _nuevaOrden.IdEspecialidad > 0
+                ? await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad)
+                : await ObtenerMedicosEnHorarioAsync(0);
+
+            if (medicosEnHorario.Count > 0 && !medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
+            {
+                _esError = true;
+                _mensajeAlerta = "El médico seleccionado no tiene un horario de atención disponible en la fecha indicada.";
+                return;
+            }
         }
 
-        if (!EsTipoConsultaEspecialidad && _nuevaOrden.IdEspecialidad <= 0)
+        if (_nuevaOrden.EsProcedimiento)
         {
-            _nuevaOrden.IdEspecialidad = ResolverEspecialidadPorTipo(_tipoConsulta, _nuevaOrden.IdMedico);
+            if (string.IsNullOrWhiteSpace(_nuevaOrden.ColorTriaje))
+            {
+                _nuevaOrden.ColorTriaje = "green";
+            }
         }
-
-        var medicosEnHorario = EsTipoConsultaEspecialidad && _nuevaOrden.IdEspecialidad > 0
-            ? await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad)
-            : await ObtenerMedicosEnHorarioAsync(0);
-
-        if (!_nuevaOrden.EsProcedimiento && medicosEnHorario.Count > 0 && !medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
-        {
-            _esError = true;
-            _mensajeAlerta = "El médico seleccionado no tiene un horario de atención disponible en la fecha indicada.";
-            return;
-        }
-
-        if (!EspecialidadRequiereTriaje)
+        else if (!EspecialidadRequiereTriaje && !_nuevaOrden.TriajeMedico)
         {
             _nuevaOrden.ColorTriaje = string.Empty;
         }
@@ -1241,7 +1276,11 @@
         await CargarOrdenesAsync();
 
         var ordenRecienCreada = _ordenes.FirstOrDefault(o => o.IdOrden == idCreada);
-        string asignacionTexto = ordenRecienCreada != null ? $" — Atiende: Dr(a). {ordenRecienCreada.Medico}" : "";
+        string asignacionTexto = ordenRecienCreada != null
+            ? (ordenRecienCreada.EsProcedimiento
+                ? $" — Procedimiento (Enfermero: {ordenRecienCreada.Enfermero})"
+                : $" — Atiende: Dr(a). {ordenRecienCreada.Medico}")
+            : "";
 
         _esError = false;
         string vinculoCita = (CitaOrigenId.HasValue && CitaOrigenId.Value > 0) ? $" (Vinculada a Cita #{CitaOrigenId.Value})" : "";
