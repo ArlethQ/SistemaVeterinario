@@ -38,6 +38,7 @@ public sealed class EFactCatalogService(
             {
                 Id = x.Idtipoproducto,
                 Descripcion = x.Descripcion ?? string.Empty,
+                Tipo = x.Perecible == false ? "S" : "B",
                 Estado = x.Estado == false ? "I" : "A"
             })
             .ToListAsync();
@@ -78,7 +79,8 @@ public sealed class EFactCatalogService(
                 Grupo = x.TipoProductoNavigation != null ? x.TipoProductoNavigation.Descripcion ?? string.Empty : string.Empty,
                 IdSubgrupo = x.Idsubtipo,
                 Subgrupo = x.IdsubtipoNavigation != null ? x.IdsubtipoNavigation.Descripcion ?? string.Empty : string.Empty,
-                Tipo = x.Tipocompravena ?? "PRODUCTO",
+                Tipo = (x.Tipocompravena == "S" || x.Tipocompravena == "SERVICIO") ? "S" : "B",
+                Inventario = x.Inventario ?? true,
                 CodigoImpuesto = x.Codigoimpuesto ?? string.Empty,
                 PorcentajeImpuesto = x.Porcentajeimpuesto ?? string.Empty,
                 Estado = x.Estado == false ? "I" : "A"
@@ -122,6 +124,10 @@ public sealed class EFactCatalogService(
             }
 
             entity.Descripcion = descripcion;
+            if (item.Id <= 0)
+            {
+                entity.Perecible = item.Tipo != "S";
+            }
             entity.Estado = item.Estado != "I";
             await db.SaveChangesAsync();
             item.Id = entity.Idtipoproducto;
@@ -195,9 +201,27 @@ public sealed class EFactCatalogService(
             entity.ValorUnitario = item.Precio;
             entity.Precio2 = item.Precio2;
             entity.Precio3 = item.Precio3;
+            bool esServicio = item.Tipo == "S" || string.Equals(item.Tipo, "SERVICIO", StringComparison.OrdinalIgnoreCase);
+
+            if (item.IdGrupo.HasValue && item.IdGrupo.Value > 0)
+            {
+                var cat = await db.Productotipos.AsNoTracking().FirstOrDefaultAsync(c =>
+                    c.Idtipoproducto == item.IdGrupo.Value && c.Idusuario == UsuarioFacturacion);
+                if (cat != null)
+                {
+                    bool catEsServicio = cat.Perecible == false;
+                    if (catEsServicio != esServicio)
+                    {
+                        item.IdGrupo = null;
+                        item.IdSubgrupo = null;
+                    }
+                }
+            }
+
             entity.TipoProducto = item.IdGrupo;
             entity.Idsubtipo = item.IdSubgrupo;
-            entity.Tipocompravena = item.Tipo == "SERVICIO" ? "SERVICIO" : "PRODUCTO";
+            entity.Tipocompravena = esServicio ? "S" : "B";
+            entity.Inventario = esServicio ? false : item.Inventario;
             entity.Codigoimpuesto = item.CodigoImpuesto == "2" ? "2" : null;
             entity.Porcentajeimpuesto = entity.Codigoimpuesto == "2" ? item.PorcentajeImpuesto : null;
             entity.Estado = item.Estado != "I";

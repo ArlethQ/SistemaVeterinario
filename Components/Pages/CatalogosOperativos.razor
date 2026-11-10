@@ -20,18 +20,23 @@
         @if (_pendienteEliminar is not null) { <div class="alert alert-warning d-flex align-items-center justify-content-between"><span>¿Desactivar <strong>@_pendienteEliminar.Descripcion</strong> del catálogo local?</span><span><button class="btn btn-sm btn-danger me-2" @onclick="ConfirmarEliminar">Sí, desactivar</button><button class="btn btn-sm btn-outline-secondary" @onclick="CancelarEliminar">Cancelar</button></span></div> }
         <div class="row g-3">
             <div class="col-lg-8"><div class="table-responsive card"><table class="table table-hover mb-0">
-                <thead><tr><th>Código</th><th>Descripción</th>@if (MuestraGrupo){<th>@EtiquetaGrupo</th>}@if (_tipo == "productos"){<th>Subcategoría</th><th>Tipo</th><th>IVA</th><th class="text-end">Precio</th>}<th>Estado</th><th>Acciones</th></tr></thead>
-                <tbody>@foreach (var x in Filtrados) { <tr><td>@(_tipo == "productos" && !string.IsNullOrWhiteSpace(x.Codigo) ? x.Codigo : x.Id)</td><td>@x.Descripcion</td>@if (MuestraGrupo){<td>@(string.IsNullOrWhiteSpace(x.Grupo) ? "Sin categoría" : x.Grupo)</td>}@if (_tipo == "productos"){<td>@(string.IsNullOrWhiteSpace(x.Subgrupo) ? "Sin subcategoría" : x.Subgrupo)</td><td>@x.Tipo</td><td>@TarifaDescripcion(x)</td><td class="text-end">@x.Precio?.ToString("C2")</td>}<td>@x.Estado</td><td><div class="btn-group btn-group-sm">@if (_tipo == "productos"){<button class="btn btn-outline-info" title="Ver" @onclick="() => Ver(x)">Ver</button>}<button class="btn btn-outline-primary" title="Editar" @onclick="() => Editar(x)">Editar</button>@if (_tipo == "productos"){<button class="btn btn-outline-danger" title="Eliminar" @onclick="() => PrepararEliminar(x)">Eliminar</button>}</div></td></tr> }</tbody>
+                <thead><tr><th>Código</th><th>Descripción</th>@if (MuestraGrupo){<th>@EtiquetaGrupo</th>}@if (_tipo == "grupos-productos"){<th>Aplica para</th>}@if (_tipo == "productos"){<th>Subcategoría</th><th>Tipo</th><th>IVA</th><th class="text-end">Precio</th>}<th>Estado</th><th>Acciones</th></tr></thead>
+                <tbody>@foreach (var x in Filtrados) { <tr><td>@(_tipo == "productos" && !string.IsNullOrWhiteSpace(x.Codigo) ? x.Codigo : x.Id)</td><td>@x.Descripcion</td>@if (MuestraGrupo){<td>@(string.IsNullOrWhiteSpace(x.Grupo) ? "Sin categoría" : x.Grupo)</td>}@if (_tipo == "grupos-productos"){<td>@if (x.Tipo == "S"){<span class="badge text-bg-secondary">Servicios (0)</span>}else{<span class="badge text-bg-primary">Bienes (1)</span>}</td>}@if (_tipo == "productos"){<td>@(string.IsNullOrWhiteSpace(x.Subgrupo) ? "Sin subcategoría" : x.Subgrupo)</td><td>@if (x.Tipo == "S" || x.Tipo == "SERVICIO"){<span class="badge text-bg-secondary">Servicio (S)</span>}else{<span class="badge text-bg-primary">Bien (B)</span>@if (x.Inventario){<span class="badge text-bg-info ms-1" title="Va al inventario">Inventario</span>}else{<span class="badge text-bg-light border ms-1" title="No va al inventario">Sin inv.</span>}}</td><td>@TarifaDescripcion(x)</td><td class="text-end">@x.Precio?.ToString("C2")</td>}<td>@(x.Estado == "I" ? "Inactivo" : "Activo")</td><td><div class="btn-group btn-group-sm">@if (_tipo == "productos"){<button class="btn btn-outline-info" title="Ver" @onclick="() => Ver(x)">Ver</button>}<button class="btn btn-outline-primary" title="Editar" @onclick="() => Editar(x)">Editar</button>@if (_tipo == "productos"){<button class="btn btn-outline-danger" title="Eliminar" @onclick="() => PrepararEliminar(x)">Eliminar</button>}</div></td></tr> }</tbody>
             </table></div></div>
             <div class="col-lg-4"><div class="card"><div class="card-body">
                 <h5>@(_edit.Id > 0 ? "Editar" : "Nuevo")</h5>
                 <label>Descripción</label><input class="form-control mb-2" maxlength="300" @bind="_edit.Descripcion" />
                 @if (MuestraGrupo)
                 {
-                    <label>@EtiquetaGrupo</label><select class="form-select mb-2" @bind="_edit.IdGrupo" @bind:after="CambiarCategoria"><option value="">Seleccione</option>@foreach (var g in _grupos) { <option value="@g.Id">@g.Descripcion</option> }</select>
+                    <label>@EtiquetaGrupo</label><select class="form-select mb-2" @bind="_edit.IdGrupo" @bind:after="CambiarCategoria"><option value="">Seleccione</option>@foreach (var g in CategoriasDisponibles) { <option value="@g.Id">@g.Descripcion</option> }</select>
                 }
                 @if (_tipo == "productos")
                 {
+                    <label>Tipo</label><select class="form-select mb-2" @bind="_edit.Tipo" @bind:after="CambiarTipoProducto"><option value="B">Bien (B)</option><option value="S">Servicio (S)</option></select>
+                    @if (_edit.Tipo == "B")
+                    {
+                        <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="checkInventario" @bind="_edit.Inventario" /><label class="form-check-label" for="checkInventario">Va al inventario</label></div>
+                    }
                     <label>Código (opcional)</label><input class="form-control mb-2" maxlength="50" @bind="_edit.Codigo" />
                     <label>Precio base</label><input class="form-control mb-2" type="number" min="0" max="99999999.99" step="0.01" @bind="_edit.Precio" />
                     <div class="row g-2"><div class="col-6"><label>Precio 2 (opcional)</label><input class="form-control mb-2" type="number" min="0" max="99999999.99" step="0.01" @bind="_edit.Precio2" /></div><div class="col-6"><label>Precio 3 (opcional)</label><input class="form-control mb-2" type="number" min="0" max="99999999.99" step="0.01" @bind="_edit.Precio3" /></div></div>
@@ -41,7 +46,14 @@
                         <label>Tarifa IVA</label><select class="form-select mb-2" @bind="_edit.PorcentajeImpuesto"><option value="">Seleccione</option>@foreach (var tarifa in _tarifas) { <option value="@tarifa.Codigo">@tarifa.Descripcion</option> }</select>
                     }
                     <label>Subcategoría</label><select class="form-select mb-2" @bind="_edit.IdSubgrupo"><option value="">Sin subcategoría</option>@foreach (var s in SubcategoriasDisponibles) { <option value="@s.Id">@s.Descripcion</option> }</select>
-                    <label>Tipo</label><select class="form-select mb-2" @bind="_edit.Tipo"><option value="PRODUCTO">Producto</option><option value="SERVICIO">Servicio</option></select>
+                }
+                else if (_tipo == "grupos-productos")
+                {
+                    <label>Aplica para</label><select class="form-select mb-2" @bind="_edit.Tipo" disabled="@(_edit.Id > 0)"><option value="B">Bienes (1)</option><option value="S">Servicios (0)</option></select>
+                    @if (_edit.Id > 0)
+                    {
+                        <small class="text-muted d-block mt-n1 mb-2">No se puede cambiar el tipo una vez creada la categoría para evitar inconsistencias con los productos asignados.</small>
+                    }
                 }
                 else if (!EsGrupo && _tipo != "laboratorio" && _tipo != "subgrupos-productos")
                 {
@@ -53,7 +65,7 @@
         </div>
         @if (_vista is not null)
         {
-            <div class="card mt-3 border-info"><div class="card-header d-flex justify-content-between"><strong>Detalle del producto</strong><button class="btn-close" @onclick="CerrarVista"></button></div><div class="card-body"><div class="row g-3"><div class="col-md-4"><small class="text-muted d-block">Nombre</small><strong>@_vista.Descripcion</strong></div><div class="col-md-2"><small class="text-muted d-block">Código</small><strong>@(string.IsNullOrWhiteSpace(_vista.Codigo) ? $"#{_vista.Id}" : _vista.Codigo)</strong></div><div class="col-md-2"><small class="text-muted d-block">Tipo</small><strong>@_vista.Tipo</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio base</small><strong>@_vista.Precio?.ToString("C2")</strong></div><div class="col-md-2"><small class="text-muted d-block">IVA</small><strong>@TarifaDescripcion(_vista)</strong></div><div class="col-md-4"><small class="text-muted d-block">Categoría</small><strong>@(string.IsNullOrWhiteSpace(_vista.Grupo) ? "Sin categoría" : _vista.Grupo)</strong></div><div class="col-md-4"><small class="text-muted d-block">Subcategoría</small><strong>@(string.IsNullOrWhiteSpace(_vista.Subgrupo) ? "Sin subcategoría" : _vista.Subgrupo)</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio 2</small><strong>@(_vista.Precio2?.ToString("C2") ?? "—")</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio 3</small><strong>@(_vista.Precio3?.ToString("C2") ?? "—")</strong></div></div></div></div>
+            <div class="card mt-3 border-info"><div class="card-header d-flex justify-content-between"><strong>Detalle del producto</strong><button class="btn-close" @onclick="CerrarVista"></button></div><div class="card-body"><div class="row g-3"><div class="col-md-4"><small class="text-muted d-block">Nombre</small><strong>@_vista.Descripcion</strong></div><div class="col-md-2"><small class="text-muted d-block">Código</small><strong>@(string.IsNullOrWhiteSpace(_vista.Codigo) ? $"#{_vista.Id}" : _vista.Codigo)</strong></div><div class="col-md-2"><small class="text-muted d-block">Tipo</small><strong>@(_vista.Tipo == "S" || _vista.Tipo == "SERVICIO" ? "Servicio (S)" : "Bien (B)")</strong></div>@if (_vista.Tipo != "S" && _vista.Tipo != "SERVICIO"){<div class="col-md-2"><small class="text-muted d-block">Inventario</small><strong>@(_vista.Inventario ? "Sí va al inventario" : "No va al inventario")</strong></div>}<div class="col-md-2"><small class="text-muted d-block">Precio base</small><strong>@_vista.Precio?.ToString("C2")</strong></div><div class="col-md-2"><small class="text-muted d-block">IVA</small><strong>@TarifaDescripcion(_vista)</strong></div><div class="col-md-4"><small class="text-muted d-block">Categoría</small><strong>@(string.IsNullOrWhiteSpace(_vista.Grupo) ? "Sin categoría" : _vista.Grupo)</strong></div><div class="col-md-4"><small class="text-muted d-block">Subcategoría</small><strong>@(string.IsNullOrWhiteSpace(_vista.Subgrupo) ? "Sin subcategoría" : _vista.Subgrupo)</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio 2</small><strong>@(_vista.Precio2?.ToString("C2") ?? "—")</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio 3</small><strong>@(_vista.Precio3?.ToString("C2") ?? "—")</strong></div><div class="col-md-2"><small class="text-muted d-block">Estado</small><strong>@(_vista.Estado == "I" ? "Inactivo" : "Activo")</strong></div></div></div></div>
         }
     </div>
 }
@@ -70,16 +82,76 @@
     private bool MuestraGrupo => !EsGrupo && _tipo != "grupos-productos";
     private string EtiquetaGrupo => _tipo is "productos" or "subgrupos-productos" ? "Categoría" : "Grupo";
     private string TipoGrupo => _tipo switch { "diagnosticos" => "grupos-diagnosticos", "productos" or "subgrupos-productos" => "grupos-productos", "laboratorio" => "grupos-laboratorio", _ => "" };
+    private IEnumerable<CatalogoOperativoDto> CategoriasDisponibles =>
+        _tipo == "productos"
+            ? _grupos.Where(g => _edit.Tipo == "S" ? (g.Tipo == "S") : (g.Tipo == "B" || string.IsNullOrEmpty(g.Tipo)))
+            : _grupos;
     private IEnumerable<CatalogoOperativoDto> SubcategoriasDisponibles => _subgrupos.Where(x => x.IdGrupo == _edit.IdGrupo);
     private IEnumerable<CatalogoOperativoDto> Filtrados => string.IsNullOrWhiteSpace(_filtro) ? _items : _items.Where(x => x.Descripcion.Contains(_filtro, StringComparison.OrdinalIgnoreCase) || x.Grupo.Contains(_filtro, StringComparison.OrdinalIgnoreCase) || x.Subgrupo.Contains(_filtro, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync() { if (!Session.IsAuthenticated || Session.TipoUser != 1) { Nav.NavigateTo("/dashboard"); return; } _autorizado = true; if (Nav.Uri.Contains("/facturacion/productos", StringComparison.OrdinalIgnoreCase)) _tipo = "productos"; await Cargar(); }
     private async Task Cargar() { _items = await Service.ObtenerCatalogoAsync(_tipo); _grupos = MuestraGrupo ? await Service.ObtenerCatalogoAsync(TipoGrupo) : []; _subgrupos = _tipo == "productos" ? await Service.ObtenerCatalogoAsync("subgrupos-productos") : []; _tarifas = _tipo == "productos" ? await EFactCatalog.ObtenerTarifasIvaAsync() : []; Nuevo(); }
-    private void Nuevo() { _edit = new() { Tipo = _tipo == "productos" ? "PRODUCTO" : "" }; _aplicaIva = false; }
+    private void Nuevo() { _edit = new() { Tipo = _tipo is "productos" or "grupos-productos" ? "B" : "", Inventario = true, Estado = "A" }; _aplicaIva = false; }
     private void CambiarCategoria() => _edit.IdSubgrupo = null;
+    private void CambiarTipoProducto()
+    {
+        if (_edit.IdGrupo.HasValue)
+        {
+            var cat = _grupos.FirstOrDefault(g => g.Id == _edit.IdGrupo.Value);
+            if (cat != null)
+            {
+                var catEsServicio = cat.Tipo == "S";
+                var prodEsServicio = _edit.Tipo == "S";
+                if (catEsServicio != prodEsServicio)
+                {
+                    _edit.IdGrupo = null;
+                    _edit.IdSubgrupo = null;
+                }
+            }
+        }
+        if (_edit.Tipo == "S") _edit.Inventario = false;
+    }
     private void CambiarIva() { _edit.CodigoImpuesto = _aplicaIva ? "2" : ""; if (!_aplicaIva) _edit.PorcentajeImpuesto = ""; }
     private string TarifaDescripcion(CatalogoOperativoDto x) => x.CodigoImpuesto == "2" ? _tarifas.FirstOrDefault(t => t.Codigo == x.PorcentajeImpuesto)?.Descripcion ?? "IVA" : "Sin IVA";
-    private void Editar(CatalogoOperativoDto x) { _edit = new() { Id = x.Id, Descripcion = x.Descripcion, Codigo = x.Codigo, Precio = x.Precio, Precio2 = x.Precio2, Precio3 = x.Precio3, IdGrupo = x.IdGrupo, Grupo = x.Grupo, IdSubgrupo = x.IdSubgrupo, Subgrupo = x.Subgrupo, Tipo = x.Tipo, CodigoImpuesto = x.CodigoImpuesto, PorcentajeImpuesto = x.PorcentajeImpuesto, Estado = x.Estado }; _aplicaIva = x.CodigoImpuesto == "2"; }
+    private void Editar(CatalogoOperativoDto x)
+    {
+        var tipoNorm = _tipo is "productos" or "grupos-productos" ? (x.Tipo == "S" || x.Tipo == "SERVICIO" ? "S" : "B") : x.Tipo;
+        int? idGrupoValido = x.IdGrupo;
+        int? idSubgrupoValido = x.IdSubgrupo;
+        if (_tipo == "productos" && idGrupoValido.HasValue && _grupos.Count > 0)
+        {
+            var cat = _grupos.FirstOrDefault(g => g.Id == idGrupoValido.Value);
+            if (cat != null)
+            {
+                var catEsServicio = cat.Tipo == "S";
+                var prodEsServicio = tipoNorm == "S";
+                if (catEsServicio != prodEsServicio)
+                {
+                    idGrupoValido = null;
+                    idSubgrupoValido = null;
+                }
+            }
+        }
+        _edit = new()
+        {
+            Id = x.Id,
+            Descripcion = x.Descripcion,
+            Codigo = x.Codigo,
+            Precio = x.Precio,
+            Precio2 = x.Precio2,
+            Precio3 = x.Precio3,
+            IdGrupo = idGrupoValido,
+            Grupo = idGrupoValido.HasValue ? x.Grupo : string.Empty,
+            IdSubgrupo = idSubgrupoValido,
+            Subgrupo = idSubgrupoValido.HasValue ? x.Subgrupo : string.Empty,
+            Tipo = tipoNorm,
+            Inventario = x.Inventario,
+            CodigoImpuesto = x.CodigoImpuesto,
+            PorcentajeImpuesto = x.PorcentajeImpuesto,
+            Estado = x.Estado
+        };
+        _aplicaIva = x.CodigoImpuesto == "2";
+    }
     private void Ver(CatalogoOperativoDto x) => _vista = x;
     private void CerrarVista() => _vista = null;
     private void PrepararEliminar(CatalogoOperativoDto x) => _pendienteEliminar = x;

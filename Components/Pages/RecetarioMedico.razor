@@ -293,7 +293,7 @@
         try
         {
             var prods = await EFactCatalog.ObtenerProductosAsync();
-            _catalogoEFact = prods.Where(p => p.Estado == "A" && p.Tipo != "SERVICIO").ToList();
+            _catalogoEFact = prods.Where(p => p.Estado == "A" && !p.EsServicio).ToList();
         }
         catch { }
         var tBuscar = BuscarRecetasEmitidasAsync();

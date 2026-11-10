@@ -880,7 +880,6 @@
         await Task.WhenAll(tEsp, tMedicosTodos, tEnfermeros, tPac, tOrd);
 
         _especialidades = await tEsp;
-        _especialidades = await FiltrarEspecialidadesEnHorarioAsync(_especialidades);
         if (SessionState.TipoUser == 2 && SessionState.EspUser > 0)
         {
             _especialidades = _especialidades.Where(e => e.Id == SessionState.EspUser).ToList();
@@ -978,7 +977,43 @@
         _pacientesEncontrados = await AdmisionService.BuscarMascotasAsync(_filtroPaciente);
     }
 
-    private void AbrirFormularioOrden() => _mostrarFormularioOrden = true;
+    private async Task AbrirFormularioOrden()
+    {
+        if (_especialidades.Count == 0)
+        {
+            _especialidades = await AdmisionService.ObtenerEspecialidadesAsync();
+            if (SessionState.TipoUser == 2 && SessionState.EspUser > 0)
+            {
+                _especialidades = _especialidades.Where(e => e.Id == SessionState.EspUser).ToList();
+            }
+        }
+
+        if (EsTipoConsultaEspecialidad)
+        {
+            if (_nuevaOrden.IdEspecialidad <= 0)
+            {
+                _nuevaOrden.IdEspecialidad = _especialidades.FirstOrDefault()?.Id ?? 0;
+            }
+            _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad);
+            if (!_medicosDisponibles.Any(m => m.Id == _nuevaOrden.IdMedico))
+            {
+                _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
+            }
+        }
+        else
+        {
+            if (_medicosDisponibles.Count == 0)
+            {
+                _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad > 0 ? _nuevaOrden.IdEspecialidad : 0);
+                if (!_medicosDisponibles.Any(m => m.Id == _nuevaOrden.IdMedico))
+                {
+                    _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
+                }
+            }
+        }
+
+        _mostrarFormularioOrden = true;
+    }
     private void CerrarFormularioOrden() => _mostrarFormularioOrden = false;
 
     private void SeleccionarPacienteParaOrden(PacienteMascotaDto pac)
@@ -1083,7 +1118,7 @@
             if (_medicosDisponibles.Count == 0)
             {
                 _esError = true;
-                _mensajeAlerta = "No existen médicos con horario de atención activo para esta especialidad y fecha.";
+                _mensajeAlerta = "No existen médicos registrados para esta especialidad.";
             }
             else
             {
@@ -1096,6 +1131,8 @@
     private async Task<List<CatalogoItemGenericoDto>> ObtenerMedicosEnHorarioAsync(int idEspecialidad)
     {
         var medicos = await AdmisionService.ObtenerMedicosPorEspecialidadAsync(idEspecialidad);
+        if (medicos.Count == 0) return [];
+
         var disponibles = new List<CatalogoItemGenericoDto>();
         foreach (var medico in medicos)
         {
@@ -1105,7 +1142,7 @@
                 disponibles.Add(medico);
             }
         }
-        return disponibles;
+        return disponibles.Count > 0 ? disponibles : medicos;
     }
 
     private async Task<List<CatalogoItemGenericoDto>> FiltrarEspecialidadesEnHorarioAsync(IEnumerable<CatalogoItemGenericoDto> especialidades)

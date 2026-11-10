@@ -43,7 +43,8 @@ public class InventarioService : IInventarioService
             var productosEFact = await ObtenerCatalogoEFactCacheAsync();
             resultados.AddRange(productosEFact
                 .Where(x => x.Estado == "A" &&
-                    (string.Equals(x.Tipo, "PRODUCTO", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(x.Tipo) || !string.Equals(x.Tipo, "SERVICIO", StringComparison.OrdinalIgnoreCase)) &&
+                    !x.EsServicio &&
+                    x.Inventario &&
                     (NormalizarTexto(x.Descripcion).Contains(terminoNorm) ||
                      NormalizarTexto(x.Codigo).Contains(terminoNorm)))
                 .Take(40)

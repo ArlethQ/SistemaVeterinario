@@ -224,7 +224,7 @@
             if (catalogoProductos.Count == 0)
             {
                 catalogoProductos = (await EFactCatalog.ObtenerProductosAsync())
-                    .Where(x => x.Estado == "A" && x.Tipo != "SERVICIO").ToList();
+                    .Where(x => x.Estado == "A" && !x.EsServicio).ToList();
             }
             if (IdFicha > 0) await CargarRecetaAsync(IdFicha);
             else
