@@ -1,0 +1,152 @@
+@implements IDisposable
+@inject IAdmisionFacturacionService AdmisionService
+@inject IJSRuntime JS
+@inject ILogger<ColaOrdenesClinicas> Logger
+
+<section class="card shadow-sm border-0 mb-3" aria-label="Cola de órdenes del día">
+    <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
+        <h5 class="mb-0">Cola de órdenes del día <span class="badge text-bg-secondary">@_ordenes.Count</span></h5>
+        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="CambiarSonidoAsync" aria-pressed="@(_sonidoActivo ? "true" : "false")">
+            @(_sonidoActivo ? "Silenciar avisos" : "Activar avisos sonoros")
+        </button>
+    </div>
+    @if (_error is not null)
+    {
+        <p class="text-danger small p-3 mb-0" role="status">@_error</p>
+    }
+    @if (_ordenes.Count == 0)
+    {
+        <p class="text-muted p-3 mb-0">@(_cargada ? "No hay órdenes en cola para hoy." : "Cargando órdenes del día…")</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                    <tr><th scope="col">Hora de asignación</th><th scope="col">Orden</th><th scope="col">Paciente</th><th scope="col">Asignado a</th><th scope="col">Estado</th><th scope="col">Acción</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var orden in _ordenes)
+                    {
+                        <tr @key="orden.IdOrden" class="@(OrdenSeleccionada == orden.IdOrden ? "table-active" : null)">
+                            <td>@orden.FechaAsignacion.ToString("HH:mm:ss")</td>
+                            <td>#@orden.IdOrden @orden.Turno</td>
+                            <td>@orden.Mascota <small class="text-muted">NHCL #@orden.Nhcl</small></td>
+                            <td>@(Triaje && string.IsNullOrWhiteSpace(orden.Medico) ? orden.Enfermero : orden.Medico)</td>
+                            <td>@(orden.Estado.Trim() == "E" ? "En atención" : "En espera")</td>
+                            <td>
+                                <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">Abrir <span class="visually-hidden">orden #@orden.IdOrden</span></a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public bool Triaje { get; set; }
+    [Parameter] public int OrdenSeleccionada { get; set; }
+
+    private readonly CancellationTokenSource _cancelacion = new();
+    private readonly HashSet<(int Id, DateTime Asignacion)> _vistas = [];
+    private List<OrdenAtencionResumenDto> _ordenes = [];
+    private DateTime _dia;
+    private bool _cargada;
+    private bool _sonidoActivo;
+    private string? _error;
+
+    private string RutaOrden(OrdenAtencionResumenDto orden) =>
+        $"{(Triaje ? "/admision/triaje" : "/consulta/fichamedica")}/{orden.IdOrden}/{orden.Nhcl}";
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) _ = ActualizarPeriodicamenteAsync(_cancelacion.Token);
+        return Task.CompletedTask;
+    }
+
+    private async Task ActualizarPeriodicamenteAsync(CancellationToken token)
+    {
+        using var reloj = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        try
+        {
+            do
+            {
+                await ActualizarAsync(token);
+            }
+            while (await reloj.WaitForNextTickAsync(token));
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ActualizarAsync(CancellationToken token)
+    {
+        bool hayNuevas = false;
+        try
+        {
+            var dia = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Date;
+            var ordenes = await AdmisionService.ObtenerColaClinicaAsync(Triaje);
+            token.ThrowIfCancellationRequested();
+            if (dia != _dia)
+            {
+                _vistas.Clear();
+                _dia = dia;
+            }
+
+            foreach (var orden in ordenes)
+                hayNuevas |= _vistas.Add((orden.IdOrden, orden.FechaAsignacion));
+
+            _ordenes = ordenes;
+            hayNuevas &= _cargada;
+            _cargada = true;
+            _error = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogWarning(ex, "No se pudo actualizar la cola clínica.");
+            _error = "No se pudo actualizar la cola. Se volverá a intentar.";
+        }
+
+        token.ThrowIfCancellationRequested();
+        StateHasChanged();
+        if (hayNuevas && _sonidoActivo)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("hosvetColaClinica.sonar", token);
+            }
+            catch (JSException ex)
+            {
+                Logger.LogDebug(ex, "No se pudo reproducir el aviso de la cola clínica.");
+                _sonidoActivo = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task CambiarSonidoAsync()
+    {
+        if (_sonidoActivo)
+        {
+            _sonidoActivo = false;
+            return;
+        }
+
+        try
+        {
+            _sonidoActivo = await JS.InvokeAsync<bool>("hosvetColaClinica.activar");
+        }
+        catch (JSException ex)
+        {
+            Logger.LogDebug(ex, "No se pudo activar el sonido de la cola clínica.");
+        }
+    }
+
+    public void Dispose()
+    {
+        _cancelacion.Cancel();
+        _cancelacion.Dispose();
+    }
+}
