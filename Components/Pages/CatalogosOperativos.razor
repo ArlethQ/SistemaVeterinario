@@ -1,18 +1,38 @@
 @page "/administracion/catalogos-operativos"
+@page "/administracion/diagnosticos"
+@page "/administracion/productos"
 @page "/facturacion/productos"
 @inject IGestionMigradaService Service
 @inject IEFactCatalogService EFactCatalog
 @inject SessionStateService Session
 @inject NavigationManager Nav
 
-<PageTitle>Catálogos operativos | e-ForVets</PageTitle>
+<PageTitle>@(TituloSeccion) | e-ForVets</PageTitle>
 
 @if (_autorizado)
 {
     <div class="container-fluid py-3">
-        <h2>Diagnósticos, productos y pruebas de laboratorio</h2>
+        <h2>@TituloSeccion</h2>
         <div class="row g-3 my-1">
-            <div class="col-md-4"><select class="form-select" @bind="_tipo" @bind:after="Cargar"><optgroup label="Diagnósticos"><option value="diagnosticos">Diagnósticos CIE-10</option><option value="grupos-diagnosticos">Grupos diagnósticos</option></optgroup><optgroup label="Productos de la veterinaria"><option value="productos">Productos e insumos</option><option value="grupos-productos">Categorías de productos</option><option value="subgrupos-productos">Subcategorías de productos</option></optgroup><optgroup label="Laboratorio"><option value="laboratorio">Pruebas de laboratorio</option><option value="grupos-laboratorio">Perfiles de laboratorio</option></optgroup></select></div>
+            <div class="col-md-4">
+                <select class="form-select" @bind="_tipo" @bind:after="Cargar">
+                    @if (_seccion != "productos")
+                    {
+                        <optgroup label="Diagnósticos">
+                            <option value="diagnosticos">Diagnósticos CIE-10</option>
+                            <option value="grupos-diagnosticos">Grupos diagnósticos</option>
+                        </optgroup>
+                    }
+                    @if (_seccion != "diagnosticos")
+                    {
+                        <optgroup label="Productos de la veterinaria">
+                            <option value="productos">Productos e insumos</option>
+                            <option value="grupos-productos">Categorías de productos</option>
+                            <option value="subgrupos-productos">Subcategorías de productos</option>
+                        </optgroup>
+                    }
+                </select>
+            </div>
             <div class="col-md-5"><input class="form-control" placeholder="Filtrar catálogo" @bind="_filtro" @bind:event="oninput" /></div>
             <div class="col-md-2"><button class="btn btn-outline-primary" @onclick="Nuevo">Nuevo registro</button></div>
         </div>
@@ -72,7 +92,13 @@
 
 @code {
     private bool _autorizado, _error, _aplicaIva;
-    private string _tipo = "diagnosticos", _filtro = "", _mensaje = "";
+    private string _tipo = "diagnosticos", _filtro = "", _mensaje = "", _seccion = "general";
+    private string TituloSeccion => _seccion switch
+    {
+        "diagnosticos" => "Diagnósticos CIE-10",
+        "productos" => "Productos y servicios de la veterinaria",
+        _ => "Diagnósticos y productos"
+    };
     private List<CatalogoOperativoDto> _items = [], _grupos = [], _subgrupos = [];
     private List<TarifaIvaDto> _tarifas = [];
     private CatalogoOperativoDto _edit = new();
@@ -89,7 +115,46 @@
     private IEnumerable<CatalogoOperativoDto> SubcategoriasDisponibles => _subgrupos.Where(x => x.IdGrupo == _edit.IdGrupo);
     private IEnumerable<CatalogoOperativoDto> Filtrados => string.IsNullOrWhiteSpace(_filtro) ? _items : _items.Where(x => x.Descripcion.Contains(_filtro, StringComparison.OrdinalIgnoreCase) || x.Grupo.Contains(_filtro, StringComparison.OrdinalIgnoreCase) || x.Subgrupo.Contains(_filtro, StringComparison.OrdinalIgnoreCase));
 
-    protected override async Task OnInitializedAsync() { if (!Session.IsAuthenticated || Session.TipoUser != 1) { Nav.NavigateTo("/dashboard"); return; } _autorizado = true; if (Nav.Uri.Contains("/facturacion/productos", StringComparison.OrdinalIgnoreCase)) _tipo = "productos"; await Cargar(); }
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated || Session.TipoUser != 1) { Nav.NavigateTo("/dashboard"); return; }
+        _autorizado = true;
+        ActualizarSeccionDesdeRuta();
+        await Cargar();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_autorizado) return;
+        var seccionAnterior = _seccion;
+        ActualizarSeccionDesdeRuta();
+        if (seccionAnterior != _seccion)
+        {
+            await Cargar();
+        }
+    }
+
+    private void ActualizarSeccionDesdeRuta()
+    {
+        var uri = Nav.Uri;
+        if (uri.Contains("/administracion/diagnosticos", StringComparison.OrdinalIgnoreCase))
+        {
+            _seccion = "diagnosticos";
+            if (_tipo is not ("diagnosticos" or "grupos-diagnosticos"))
+                _tipo = "diagnosticos";
+        }
+        else if (uri.Contains("/administracion/productos", StringComparison.OrdinalIgnoreCase) ||
+                 uri.Contains("/facturacion/productos", StringComparison.OrdinalIgnoreCase))
+        {
+            _seccion = "productos";
+            if (_tipo is not ("productos" or "grupos-productos" or "subgrupos-productos"))
+                _tipo = "productos";
+        }
+        else
+        {
+            _seccion = "general";
+        }
+    }
     private async Task Cargar() { _items = await Service.ObtenerCatalogoAsync(_tipo); _grupos = MuestraGrupo ? await Service.ObtenerCatalogoAsync(TipoGrupo) : []; _subgrupos = _tipo == "productos" ? await Service.ObtenerCatalogoAsync("subgrupos-productos") : []; _tarifas = _tipo == "productos" ? await EFactCatalog.ObtenerTarifasIvaAsync() : []; Nuevo(); }
     private void Nuevo() { _edit = new() { Tipo = _tipo is "productos" or "grupos-productos" ? "B" : "", Inventario = true, Estado = "A" }; _aplicaIva = false; }
     private void CambiarCategoria() => _edit.IdSubgrupo = null;

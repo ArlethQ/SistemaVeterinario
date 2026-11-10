@@ -40,6 +40,8 @@ public sealed class PermisosNavegacion(int rol, IEnumerable<MenuItemModel> menus
             "contabilidad/compras/recepciones/nueva" => "contabilidad/compras/recepciones",
             "consulta/fichamedica/paciente" => "consulta/fichamedica",
             "consulta/curvacrecimiento" => "consulta/historial",
+            "administracion/diagnosticos" => "administracion/catalogos-operativos",
+            "administracion/productos" => "administracion/catalogos-operativos",
             _ => clave
         };
     }
