@@ -304,10 +304,8 @@ public class AuthService : IAuthService
         const string crearColumnas = @"
             IF COL_LENGTH('vt_menuDinamico', 'organizacionPersonalizada') IS NULL
                 ALTER TABLE vt_menuDinamico ADD organizacionPersonalizada BIT NOT NULL CONSTRAINT DF_vt_menuDinamico_organizacionPersonalizada DEFAULT (0);
-            IF COL_LENGTH('vt_menuDinamico', 'ordenMenu') IS NULL
-                ALTER TABLE vt_menuDinamico ADD ordenMenu INT NULL;";
+                ;";
         await _sql.ExecuteAsync(crearColumnas);
-        await _sql.ExecuteAsync("UPDATE vt_menuDinamico SET ordenMenu = secNuevoMenu WHERE ordenMenu IS NULL OR ordenMenu = 0;");
     }
 
     private async Task AsegurarCatalogoModulosCompletoAsync()
@@ -563,7 +561,6 @@ public class AuthService : IAuthService
                                     RTRIM(ISNULL(descripcion, '')) AS Descripcion,
                                     RTRIM(CAST(ISNULL(padreNuevoMenu, 0) AS VARCHAR(50))) AS PadreNuevoMenu,
                                     CAST(CASE WHEN ISNULL(habilitado, 0) = 1 THEN 1 ELSE 0 END AS BIT) AS Habilitado,
-                                    ISNULL(ordenMenu, secNuevoMenu) AS OrdenMenu,
                                     RTRIM(ISNULL(url, '')) AS Url,
                                     CAST(ISNULL(organizacionPersonalizada, 0) AS BIT) AS OrganizacionPersonalizada
                              FROM vt_menuDinamico
@@ -1012,9 +1009,9 @@ public class AuthService : IAuthService
         var sql = menu.Id > 0
             ? @"UPDATE vt_menuDinamico SET secNuevoMenu = TRY_CAST(@Seccion AS INT), descripcion = @Descripcion,
                     padreNuevoMenu = TRY_CAST(@Padre AS INT), habilitado = @Habilitado, url = @Url,
-                    ordenMenu = @Orden, organizacionPersonalizada = 1 WHERE id = @Id"
-            : @"INSERT INTO vt_menuDinamico (secNuevoMenu, descripcion, padreNuevoMenu, habilitado, url, ordenMenu, organizacionPersonalizada)
-                VALUES (TRY_CAST(@Seccion AS INT), @Descripcion, TRY_CAST(@Padre AS INT), @Habilitado, @Url, @Orden, 1)";
+                    organizacionPersonalizada = 1 WHERE id = @Id"
+            : @"INSERT INTO vt_menuDinamico (secNuevoMenu, descripcion, padreNuevoMenu, habilitado, url, organizacionPersonalizada)
+                VALUES (TRY_CAST(@Seccion AS INT), @Descripcion, TRY_CAST(@Padre AS INT), @Habilitado, @Url, 1)";
         if (!int.TryParse(menu.SecNuevoMenu, out var seccion) || seccion <= 0 ||
             !int.TryParse(menu.PadreNuevoMenu, out var padre) || padre < 0 ||
             padre == seccion ||
@@ -1031,8 +1028,7 @@ public class AuthService : IAuthService
             var siguiente = existentes.FirstOrDefault(m => m.SecNuevoMenu == actual.ToString());
             if (siguiente is null || !int.TryParse(siguiente.PadreNuevoMenu, out actual)) return false;
         }
-        if (menu.OrdenMenu <= 0) menu.OrdenMenu = seccion;
-        var result = await _sql.ExecuteAsync(sql, new { menu.Id, Seccion = seccion, Descripcion = menu.Descripcion.Trim(), Padre = padre, Habilitado = menu.Habilitado ? 1 : 0, Url = menu.Url?.Trim() ?? string.Empty, Orden = menu.OrdenMenu });
+        var result = await _sql.ExecuteAsync(sql, new { menu.Id, Seccion = seccion, Descripcion = menu.Descripcion.Trim(), Padre = padre, Habilitado = menu.Habilitado ? 1 : 0, Url = menu.Url?.Trim() ?? string.Empty });
         if (result < 0) return false;
         await _sql.RegistrarBitacoraAsync($"{(menu.Id > 0 ? "Actualiza" : "Crea")} menú: {menu.Descripcion.Trim()}", adminId);
         return true;
@@ -1040,17 +1036,7 @@ public class AuthService : IAuthService
 
     public async Task<bool> GuardarOrdenMenusAsync(IReadOnlyCollection<MenuItemModel> menus, int adminId)
     {
-        if (!await EsAdministradorValidoAsync(adminId)) return false;
-        try
-        {
-            foreach (var menu in menus.Where(m => m.Id > 0))
-            {
-                await _sql.ExecuteAsync("UPDATE vt_menuDinamico SET ordenMenu = @Orden WHERE id = @Id", new { menu.Id, Orden = menu.OrdenMenu });
-            }
-            await _sql.RegistrarBitacoraAsync("Actualiza el orden de los menús", adminId);
-            return true;
-        }
-        catch { return false; }
+        return false;
     }
 
     public async Task<(bool Exito, string Mensaje)> EliminarMenuAsync(int menuId, int adminId)

@@ -49,26 +49,29 @@
                 }
             }
 
-            @if (TieneAlguno(RutasAdmision))
+            @if (TieneAlguno(RutasAdmision) || TienePermiso("admision/triaje"))
             {
                 <span class="menu-section-label">Gestión</span>
-                <details open>
-                    <summary><MenuIcon Name="admission" /><span>Admisión</span><i>⌄</i></summary>
-                    <div class="submenu">
-                        @if (TienePermiso("admision/clientes-pacientes"))
-                        {
-                            <NavLink href="admision/clientes-pacientes">Clientes, tutores y mascotas</NavLink>
-                        }
-                        @if (TienePermiso("admision/ordenes"))
-                        {
-                            <NavLink href="admision/ordenes">Recepción de órdenes</NavLink>
-                        }
-                        @if (TienePermiso("admision/citas"))
-                        {
-                            <NavLink href="admision/citas">Agenda de citas</NavLink>
-                        }
-                    </div>
-                </details>
+                @if (TieneAlguno(RutasAdmision))
+                {
+                    <details open>
+                        <summary><MenuIcon Name="admission" /><span>Admisión</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("admision/clientes-pacientes"))
+                            {
+                                <NavLink href="admision/clientes-pacientes">Clientes, tutores y mascotas</NavLink>
+                            }
+                            @if (TienePermiso("admision/ordenes"))
+                            {
+                                <NavLink href="admision/ordenes">Recepción de órdenes</NavLink>
+                            }
+                            @if (TienePermiso("admision/citas"))
+                            {
+                                <NavLink href="admision/citas">Agenda de citas</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
                 @if (TienePermiso("admision/triaje"))
                 {
                     <details>
@@ -471,8 +474,7 @@
     [
         "admision/clientes-pacientes",
         "admision/ordenes",
-        "admision/citas",
-        "admision/triaje"
+        "admision/citas"
     ];
 
     private static readonly string[] RutasKardex =

@@ -18,6 +18,11 @@ public sealed class PermisosNavegacion(int rol, IEnumerable<MenuItemModel> menus
             or "administracion/catalogos-operativos" or "administracion/localidades" or "facturacion/productos")
             return false;
 
+        // El triaje forma parte del flujo de recepción de órdenes. Quien puede
+        // revisar órdenes debe poder abrir la bandeja de triaje correspondiente.
+        if (clave == "admision/triaje" && _rutas.Contains("admision/ordenes"))
+            return true;
+
         return clave == "dashboard" || _rutas.Contains(clave);
     }
 
