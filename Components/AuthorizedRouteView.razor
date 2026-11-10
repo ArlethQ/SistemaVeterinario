@@ -4,10 +4,14 @@
 @inject NavigationManager Navigation
 @inject ILogger<AuthorizedRouteView> Logger
 
-@if (_esPublica || _autorizado)
+@if (_verificacionInicial)
+{
+    <p class="m-4 text-muted" role="status">Verificando sesión…</p>
+}
+else if (_rutaVisible is { } rutaVisible)
 {
     <CascadingValue Value="_permisos">
-        <RouteView RouteData="RouteData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <RouteView RouteData="rutaVisible" DefaultLayout="typeof(Layout.MainLayout)" />
     </CascadingValue>
 }
 else if (!_autenticado)
@@ -30,31 +34,46 @@ else
     public RouteData RouteData { get; set; } = default!;
 
     private int _revision;
-    private bool _esPublica;
+    private bool _navegadorDisponible;
+    private bool _verificacionInicial = true;
+    private RouteData? _rutaVisible;
     private bool _autenticado;
-    private bool _autorizado;
     private bool _errorPermisos;
     private PermisosNavegacion _permisos = new(0, []);
 
-    protected override async Task OnParametersSetAsync()
+    protected override Task OnParametersSetAsync() =>
+        _navegadorDisponible || EsPaginaPublica(RouteData.PageType) ? VerificarRutaAsync() : Task.CompletedTask;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _navegadorDisponible = true;
+        if (_verificacionInicial)
+        {
+            await VerificarRutaAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task VerificarRutaAsync()
     {
         var revision = ++_revision;
-        var esPublica = EsPaginaPublica(RouteData.PageType);
+        var destino = RouteData;
+        var esPublica = EsPaginaPublica(destino.PageType);
         var ruta = RutaDePermiso();
-        if (!esPublica)
-            await Session.RestoreAsync();
+        var autenticado = esPublica || (await Session.RestoreAsync() && await Session.ValidateAndTouchAsync());
 
         if (revision != _revision) return;
 
-        _esPublica = esPublica;
-        _autenticado = esPublica || Session.ValidateAndTouch();
-        if (!_esPublica && !_autenticado)
+        if (!autenticado)
         {
-            _autorizado = false;
+            _autenticado = false;
+            _rutaVisible = null;
+            _verificacionInicial = false;
             return;
         }
 
-        var autenticado = _autenticado;
         var permisos = new PermisosNavegacion(0, []);
         var errorPermisos = false;
         if (!esPublica && autenticado)
@@ -72,11 +91,11 @@ else
 
         if (revision != _revision) return;
 
-        _esPublica = esPublica;
         _autenticado = autenticado;
         _permisos = permisos;
         _errorPermisos = errorPermisos;
-        _autorizado = esPublica || permisos.Permite(ruta);
+        _rutaVisible = esPublica || permisos.Permite(ruta) ? destino : null;
+        _verificacionInicial = false;
     }
 
     private string RutaDePermiso()

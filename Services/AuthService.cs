@@ -93,18 +93,18 @@ public class SessionStateService
             LoginUser = saved.LoginUser;
             NombreUsuario = saved.NombreUsuario;
             Iniciales = saved.Iniciales;
-            _lastActivityUtc = DateTimeOffset.UtcNow;
-            await SaveAsync();
+            _lastActivityUtc = saved.ExpiresUtc - SessionTimeout;
             NotifyStateChanged();
             return true;
         }
-        catch (InvalidOperationException)
+        catch (System.Security.Cryptography.CryptographicException)
         {
+            await _storage.DeleteAsync(StorageKey);
             return false;
         }
     }
 
-    public bool ValidateAndTouch()
+    public async Task<bool> ValidateAndTouchAsync()
     {
         if (!IsAuthenticated)
         {
@@ -113,6 +113,7 @@ public class SessionStateService
         }
 
         _lastActivityUtc = DateTimeOffset.UtcNow;
+        await SaveAsync();
         return true;
     }
 

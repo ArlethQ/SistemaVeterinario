@@ -1,5 +1,4 @@
 @page "/contabilidad/clientes"
-@page "/contabilidad/proveedores"
 
 @using System.Net.Http.Json
 @using System.Text
@@ -26,7 +25,7 @@
 @{
     var filteredClientes = ClientesFiltrados.ToList();
     var clientesPaginados = ClientesPaginados.ToList();
-    var clientesReales = clientes.Where(c => !EsConsumidorFinal(c)).ToList();
+    var clientesReales = RegistrosDelModulo.Where(c => !EsConsumidorFinal(c)).ToList();
     var totalActivos = clientesReales.Count(c => c.Estado == true);
     var totalConCorreo = clientesReales.Count(c => !string.IsNullOrWhiteSpace(c.Correo));
     var totalTipos = tiposCliente.Count;
@@ -36,10 +35,10 @@
     var ultimoRegistroVista = Math.Min(paginaActualVista * registrosPorPagina, TotalRegistrosFiltrados);
 }
 
-<PageTitle>@(EsModoProveedores ? "Proveedores" : "Clientes / Proveedores") | @PageBrandTitle</PageTitle>
+<PageTitle>@(EsModoProveedores ? "Proveedores" : "Clientes contables") | @PageBrandTitle</PageTitle>
 
 <div class="entity-shell @(EsModoCrudEmbebido ? "entity-shell-embedded-form" : null)" data-tour="clientes.page">
-    @if (MostrarVolverInicioOnboarding)
+    @if (!EsModoProveedores && MostrarVolverInicioOnboarding)
     {
         <div class="breadcrumb-container">
             <button type="button" class="breadcrumb-home-btn" @onclick='() => NavManager.NavigateTo("/contabilidad")'>
@@ -51,7 +50,7 @@
     <section class="entity-hero" data-tour="clientes.hero">
         <div class="hero-copy">
             <span class="hero-eyebrow">Catálogo comercial</span>
-            <h2>Gestión de clientes / proveedores</h2>
+            <h2>Gestión de @(EsModoProveedores ? "proveedores" : "clientes contables")</h2>
             <p>
                 Centraliza la cartera comercial y mantén el registro de clientes alineado
                 con el mismo patrón visual y operativo de Productos.
@@ -83,7 +82,7 @@
         <button type="button" class="quick-action-card quick-action-primary" @onclick="AbrirBotAsync">
             <span class="quick-action-icon"><i class="bi bi-stars"></i></span>
             <span>
-                <strong>@(EsModoProveedores ? "Crear proveedor con IA" : "Crear cliente / proveedor con IA")</strong>
+                <strong>@(EsModoProveedores ? "Crear proveedor con IA" : "Crear cliente con IA")</strong>
                 <small>Abre el bot para asistirte</small>
             </span>
         </button>
@@ -137,7 +136,7 @@
 
         <div class="toolbar-copy">
             <span class="toolbar-kicker">Búsqueda y control</span>
-            <h3>Consulta y administra tus @(EsModoProveedores ? "proveedores" : "clientes / proveedores")</h3>
+            <h3>Consulta y administra tus @(EsModoProveedores ? "proveedores" : "clientes contables")</h3>
             <p>Gestiona la información comercial que utilizarás en la operación diaria.</p>
         </div>
 
@@ -191,13 +190,13 @@
             <div class="table-card-head">
                 <div>
                     <span class="table-kicker">Listado activo</span>
-                    <h3>@(EsModoProveedores ? "Proveedores registrados" : "Clientes / proveedores registrados")</h3>
+                    <h3>@(EsModoProveedores ? "Proveedores registrados" : "Clientes contables registrados")</h3>
                 </div>
                 <div class="table-head-actions">
                     <span class="table-badge">@filteredClientes.Count registros</span>
                 <button type="button" class="primary-btn" data-no-auto-loading="true" @onclick="AbrirNuevoClienteModal">
                         <i class="bi bi-plus-lg"></i>
-                        <span>Nuevo @(EsModoProveedores ? "proveedor" : "cliente / proveedor")</span>
+                        <span>Nuevo @(EsModoProveedores ? "proveedor" : "cliente")</span>
                     </button>
                 </div>
             </div>
@@ -309,8 +308,12 @@
                                         }
                                         else
                                         {
+                                            @if (EsModoProveedores)
+                                            {
+                                                <button type="button" class="secondary-btn" @onclick="() => VerCliente(c)">Productos y precios</button>
+                                            }
                                             <div class="action-group">
-                                                <button type="button" class="action-btn action-view" title="Ver"
+                                                <button type="button" class="action-btn action-view" title="@(EsModoProveedores ? "Registrar productos y precios" : "Ver")"
                                                         @onclick="() => VerCliente(c)">
                                                     <i class="bi bi-eye"></i>
                                                 </button>
@@ -376,7 +379,7 @@
                     <div class="detail-modal-content" @onclick:stopPropagation="true">
                         <div class="detail-modal-header">
                             <div>
-                                <span class="detail-kicker">Vista de cliente</span>
+                                <span class="detail-kicker">@(EsModoProveedores ? "Vista de proveedor" : "Vista de cliente")</span>
                                 <h3 id="clienteDetalleTitulo">@GetNombreCompletoCliente(clienteEnVista)</h3>
                                 <p>@GetTipoClienteDescripcion(clienteEnVista.TipoCliente) - @GetTipoIdentificacionDescripcion(clienteEnVista.Tipoidentificacion)</p>
                             </div>
@@ -458,6 +461,11 @@
                                     </div>
                                 </section>
 
+                                @if (EsModoProveedores)
+                                {
+                                    <ProductosDelProveedor @key="clienteEnVista.Codcliente" ProveedorId="clienteEnVista.Codcliente" UsuarioId="usuarioLogueadoId" />
+                                }
+
                                 @if (!string.IsNullOrWhiteSpace(GetCorreosAdicionalesTexto(clienteEnVista)))
                                 {
                                     <div class="detail-note">
@@ -495,7 +503,7 @@
             <div class="editor-head">
                 <div>
 
-                    <h3>@(editando ? "Editar cliente" : "Registrar cliente")</h3>
+                    <h3>@(editando ? "Editar" : "Registrar") @(EsModoProveedores ? "proveedor" : "cliente")</h3>
                     <p>Complete los datos comerciales, de contacto y ubicación del cliente.</p>
                 </div>
 
@@ -608,28 +616,31 @@
                             </div>
                             </details>
 
-                            <details class="form-accordion client-provider-accordion" open>
-                            <summary class="form-section-heading">
-                                <span>2</span>
-                                <strong>Proveedor</strong>
-                                <i class="bi bi-chevron-down"></i>
-                            </summary>
-                            <div class="form-accordion-body">
-                                <div class="client-provider-toggle-grid client-provider-toggle-grid-single">
-                                    <label class="client-provider-toggle-card">
-                                        <input type="checkbox"
-                                               class="client-provider-switch-input"
-                                               checked="@model.EsProveedor"
-                                               @onchange="OnEsProveedorChanged" />
-                                        <span class="client-provider-switch"></span>
-                                        <span>
-                                            <strong>Es proveedor</strong>
-                                            <small>Tambien se registra para compras, retenciones y liquidaciones.</small>
-                                        </span>
-                                    </label>
+                            @if (EsModoProveedores)
+                            {
+                                <details class="form-accordion client-provider-accordion" open>
+                                <summary class="form-section-heading">
+                                    <span>2</span>
+                                    <strong>Proveedor</strong>
+                                    <i class="bi bi-chevron-down"></i>
+                                </summary>
+                                <div class="form-accordion-body">
+                                    <div class="client-provider-toggle-grid client-provider-toggle-grid-single">
+                                        <label class="client-provider-toggle-card">
+                                            <input type="checkbox"
+                                                   class="client-provider-switch-input"
+                                                   checked="@model.EsProveedor"
+                                                   @onchange="OnEsProveedorChanged" />
+                                            <span class="client-provider-switch"></span>
+                                            <span>
+                                                <strong>Es proveedor</strong>
+                                                <small>Tambien se registra para compras, retenciones y liquidaciones.</small>
+                                            </span>
+                                        </label>
+                                    </div>
                                 </div>
-                            </div>
-                            </details>
+                                </details>
+                            }
 
                             <details class="form-accordion">
                             <summary class="form-section-heading">
@@ -881,7 +892,7 @@
                                 {
                                     <i class="bi bi-save me-1"></i>
                                 }
-                                @(isDemoMode ? "Guardar bloqueado" : (guardandoCliente ? "Guardando..." : (editando ? "Guardar cambios" : "Crear cliente / proveedor")))
+                                @(isDemoMode ? "Guardar bloqueado" : (guardandoCliente ? "Guardando..." : (editando ? "Guardar cambios" : (EsModoProveedores ? "Crear proveedor" : "Crear cliente"))))
                             </button>
                             <button type="button" class="secondary-btn clear-action-btn" @onclick="Nuevo">
                                 <i class="bi bi-eraser"></i>
@@ -902,7 +913,7 @@
                     <div class="detail-modal-header">
                         <div>
                             <span class="detail-kicker">Catálogo comercial</span>
-                            <h3 id="clienteFormularioTitulo">@(editando ? "Editar cliente / proveedor" : "Registrar cliente / proveedor")</h3>
+                            <h3 id="clienteFormularioTitulo">@(editando ? "Editar" : "Registrar") @(EsModoProveedores ? "proveedor" : "cliente")</h3>
                         </div>
                         <button type="button" class="detail-close" @onclick="CerrarModalFormularioCliente" aria-label="Cerrar formulario" title="Cerrar">
                             <span aria-hidden="true">&times;</span>
@@ -1017,28 +1028,31 @@
                                             </div>
                                             </details>
 
-                                            <details class="form-accordion client-provider-accordion" open>
-                                            <summary class="form-section-heading">
-                                                <span>2</span>
-                                                <strong>Proveedor</strong>
-                                                <i class="bi bi-chevron-down"></i>
-                                            </summary>
-                                            <div class="form-accordion-body">
-                                                <div class="client-provider-toggle-grid client-provider-toggle-grid-single">
-                                                    <label class="client-provider-toggle-card">
-                                                        <input type="checkbox"
-                                                               class="client-provider-switch-input"
-                                                               checked="@model.EsProveedor"
-                                                               @onchange="OnEsProveedorChanged" />
-                                                        <span class="client-provider-switch"></span>
-                                                        <span>
-                                                            <strong>Es proveedor</strong>
-                                                            <small>Tambien se registra para compras, retenciones y liquidaciones.</small>
-                                                        </span>
-                                                    </label>
+                                            @if (EsModoProveedores)
+                                            {
+                                                <details class="form-accordion client-provider-accordion" open>
+                                                <summary class="form-section-heading">
+                                                    <span>2</span>
+                                                    <strong>Proveedor</strong>
+                                                    <i class="bi bi-chevron-down"></i>
+                                                </summary>
+                                                <div class="form-accordion-body">
+                                                    <div class="client-provider-toggle-grid client-provider-toggle-grid-single">
+                                                        <label class="client-provider-toggle-card">
+                                                            <input type="checkbox"
+                                                                   class="client-provider-switch-input"
+                                                                   checked="@model.EsProveedor"
+                                                                   @onchange="OnEsProveedorChanged" />
+                                                            <span class="client-provider-switch"></span>
+                                                            <span>
+                                                                <strong>Es proveedor</strong>
+                                                                <small>Tambien se registra para compras, retenciones y liquidaciones.</small>
+                                                            </span>
+                                                        </label>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            </details>
+                                                </details>
+                                            }
 
                                             <details class="form-accordion">
                                             <summary class="form-section-heading">
@@ -1310,7 +1324,7 @@
                                                 {
                                                     <i class="bi bi-save me-1"></i>
                                                 }
-                                                @(isDemoMode ? "Guardar bloqueado" : (guardandoCliente ? "Guardando..." : (editando ? "Guardar cambios" : "Crear cliente / proveedor")))
+                                                @(isDemoMode ? "Guardar bloqueado" : (guardandoCliente ? "Guardando..." : (editando ? "Guardar cambios" : (EsModoProveedores ? "Crear proveedor" : "Crear cliente"))))
                                             </button>
                                             <button type="button" class="secondary-btn clear-action-btn" @onclick="Nuevo">
                                                 <i class="bi bi-eraser"></i>
@@ -1477,11 +1491,7 @@
     private int usuarioLogueadoId = 0;
     private bool isDemoMode;
     private string PageBrandTitle => "Numerica E-Contax";
-    private bool EsModoProveedores =>
-        NavManager.ToBaseRelativePath(NavManager.Uri)
-            .Split('?', '#')[0]
-            .TrimEnd('/')
-            .Equals("contabilidad/proveedores", StringComparison.OrdinalIgnoreCase);
+    [Parameter] public bool EsModoProveedores { get; set; }
 
     private bool mostrarImportacion = false;
     private bool importandoClientes = false;
@@ -1898,7 +1908,7 @@
         model.EsProveedor = e.Value is bool value ? value : string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
         if (model.EsProveedor)
         {
-            AsegurarDatosProveedorPorDefecto();
+            AsegurarDatosProveedorPorDefecto(model);
         }
         else
         {
@@ -1984,16 +1994,14 @@
         !isDemoMode &&
         (EmisorOnboardingService.RequiresInitialSetup || emisionEstado?.PuedeEmitir == false);
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnInitializedAsync()
     {
-        if (!firstRender) return;
         model.Parent = this;
         isDemoMode = EsRutaDemoClientes();
 
         if (isDemoMode)
         {
             CargarDemoClientes();
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -2006,7 +2014,6 @@
         {
             mensaje = "Sesión no válida (no se pudo obtener IdUsuario). Vuelve a iniciar sesión.";
             cargando = false;
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -2018,7 +2025,7 @@
     {
         try
         {
-            var respLook = await Http.GetAsync("api/e-contax/clientes/lookups");
+            var respLook = await Http.GetAsync($"api/e-contax/clientes/lookups?userId={usuarioLogueadoId}");
             var bodyLook = await respLook.Content.ReadAsStringAsync();
 
             if (!respLook.IsSuccessStatusCode)
@@ -2101,7 +2108,7 @@
                 return;
             }
 
-            var resp = await Http.GetAsync("api/e-contax/clientes/lookups");
+            var resp = await Http.GetAsync($"api/e-contax/clientes/lookups?userId={usuarioLogueadoId}");
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
                 throw new Exception($"PAISES -> HTTP {(int)resp.StatusCode}: {body}");
@@ -2144,7 +2151,7 @@
             if (ecuadorPaisId is null || ecuadorPaisId <= 0)
                 return;
 
-            var resp = await Http.GetAsync("api/e-contax/clientes/ubicacion-ecuador");
+            var resp = await Http.GetAsync($"api/e-contax/clientes/ubicacion-ecuador?userId={usuarioLogueadoId}");
             var body = await resp.Content.ReadAsStringAsync();
 
             if (!resp.IsSuccessStatusCode)
@@ -2260,7 +2267,7 @@
             if (provincias.Any(p => p.IdPais == paisId))
                 return;
 
-            var resp = await Http.GetAsync($"api/e-contax/clientes/provincias?paisId={paisId}");
+            var resp = await Http.GetAsync($"api/e-contax/clientes/provincias?paisId={paisId}&userId={usuarioLogueadoId}");
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
                 throw new Exception($"PROVINCIAS -> HTTP {(int)resp.StatusCode}: {body}");
@@ -2290,7 +2297,7 @@
             if (ciudades.Any(c => c.IdProvincia == provinciaId))
                 return;
 
-            var resp = await Http.GetAsync($"api/e-contax/clientes/ciudades?provinciaId={provinciaId}");
+            var resp = await Http.GetAsync($"api/e-contax/clientes/ciudades?provinciaId={provinciaId}&userId={usuarioLogueadoId}");
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
                 throw new Exception($"CIUDADES -> HTTP {(int)resp.StatusCode}: {body}");
@@ -2349,7 +2356,6 @@
             CargarDemoClientes();
             if (esRefresco)
                 mensaje = "Datos demo recargados correctamente.";
-            StateHasChanged();
             return;
         }
 
@@ -2394,7 +2400,6 @@
         finally
         {
             cargando = false;
-            StateHasChanged();
         }
     }
 
@@ -2545,14 +2550,13 @@
         paginaActual = Math.Clamp(nuevaPagina, 1, TotalPaginasClientes);
     }
 
+    private IEnumerable<ClienteDto> RegistrosDelModulo => clientes.Where(c => c.EsProveedor == EsModoProveedores);
+
     private IEnumerable<ClienteDto> ClientesFiltrados
     {
         get
         {
-            var query = clientes.AsEnumerable();
-
-            if (EsModoProveedores)
-                query = query.Where(c => c.EsProveedor);
+            var query = RegistrosDelModulo;
 
             if (filtroTipoCliente != 0)
                 query = query.Where(c => c.TipoCliente == filtroTipoCliente);
@@ -3074,6 +3078,12 @@
                         Estado = true
                     };
 
+                    if (EsModoProveedores)
+                    {
+                        dto.EsProveedor = true;
+                        AsegurarDatosProveedorPorDefecto(dto);
+                    }
+
                     dtoList.Add(dto);
                 }
             }
@@ -3253,6 +3263,12 @@
                         Observaciones = obs,
                         Estado = true
                     };
+
+                    if (EsModoProveedores)
+                    {
+                        dto.EsProveedor = true;
+                        AsegurarDatosProveedorPorDefecto(dto);
+                    }
 
                     dtoList.Add(dto);
                 }
@@ -3484,7 +3500,7 @@
         if (EsModoProveedores)
         {
             model.EsProveedor = true;
-            AsegurarDatosProveedorPorDefecto();
+            AsegurarDatosProveedorPorDefecto(model);
         }
 
         estadoAux = true;
@@ -3529,11 +3545,11 @@
             Provincia = ClientePrefill.Provincia,
             Ciudad = ClientePrefill.Ciudad,
             EsTipoEmpresa = EsTipoClienteEmpresa(ClientePrefill.TipoCliente ?? 0),
-            EsProveedor = ClientePrefill.Retenciones == true || ClientePrefill.Retiva == true || ClientePrefill.Retfuente == true
+            EsProveedor = EsModoProveedores
         };
 
         if (model.EsProveedor)
-            AsegurarDatosProveedorPorDefecto();
+            AsegurarDatosProveedorPorDefecto(model);
 
         estadoAux = model.Estado ?? true;
         ActualizarTipoClienteForm();
@@ -3546,7 +3562,6 @@
         if (model.Provincia.HasValue)
             await CargarCiudades(model.Provincia.Value);
 
-        await InvokeAsync(StateHasChanged);
     }
 
     private async Task Editar(int id)
@@ -3710,7 +3725,7 @@
         return null;
     }
 
-    private void AsegurarDatosProveedorPorDefecto()
+    private static void AsegurarDatosProveedorPorDefecto(ClienteUpsertDto model)
     {
         model.EsCliente = true;
         model.CuentaContableProveedor = string.IsNullOrWhiteSpace(model.CuentaContableProveedor)
@@ -4069,7 +4084,7 @@
         try
         {
             using var response = await Http.GetAsync(
-                $"api/e-contax/clientes/consulta-identificacion?identificacion={identificacion}",
+                $"api/e-contax/clientes/consulta-identificacion?identificacion={identificacion}&userId={usuarioLogueadoId}",
                 cancellationToken);
             response.EnsureSuccessStatusCode();
 
