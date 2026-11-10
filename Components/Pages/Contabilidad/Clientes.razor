@@ -1,6 +1,8 @@
 @page "/contabilidad/clientes"
 
 @using System.Net.Http.Json
+@using Simetric.DTOs.EContax
+@inject Simetric.Services.EContax.EContaxCatalogService CatalogoProveedor
 @using System.Text
 @inject HttpClient Http
 @using Microsoft.AspNetCore.Authorization
@@ -308,12 +310,8 @@
                                         }
                                         else
                                         {
-                                            @if (EsModoProveedores)
-                                            {
-                                                <button type="button" class="secondary-btn" @onclick="() => VerCliente(c)">Productos y precios</button>
-                                            }
                                             <div class="action-group">
-                                                <button type="button" class="action-btn action-view" title="@(EsModoProveedores ? "Registrar productos y precios" : "Ver")"
+                                                <button type="button" class="action-btn action-view" title="Ver"
                                                         @onclick="() => VerCliente(c)">
                                                     <i class="bi bi-eye"></i>
                                                 </button>
@@ -460,11 +458,6 @@
                                         </div>
                                     </div>
                                 </section>
-
-                                @if (EsModoProveedores)
-                                {
-                                    <ProductosDelProveedor @key="clienteEnVista.Codcliente" ProveedorId="clienteEnVista.Codcliente" UsuarioId="usuarioLogueadoId" />
-                                }
 
                                 @if (!string.IsNullOrWhiteSpace(GetCorreosAdicionalesTexto(clienteEnVista)))
                                 {
@@ -640,6 +633,10 @@
                                     </div>
                                 </div>
                                 </details>
+                                @if (model.EsProveedor && model.ProductosProveedor is not null)
+                                {
+                                    <HosvetKardex.Web.Components.Pages.Contabilidad.ProductosDelProveedor @key="model" Items="model.ProductosProveedor" UsuarioId="usuarioLogueadoId" Deshabilitado="guardandoCliente" />
+                                }
                             }
 
                             <details class="form-accordion">
@@ -1052,6 +1049,10 @@
                                                     </div>
                                                 </div>
                                                 </details>
+                                                @if (model.EsProveedor && model.ProductosProveedor is not null)
+                                                {
+                                                    <HosvetKardex.Web.Components.Pages.Contabilidad.ProductosDelProveedor @key="model" Items="model.ProductosProveedor" UsuarioId="usuarioLogueadoId" Deshabilitado="guardandoCliente" />
+                                                }
                                             }
 
                                             <details class="form-accordion">
@@ -1629,6 +1630,7 @@
         public bool EsCliente { get; set; } = true;
 
         public bool EsProveedor { get; set; }
+        public List<EContaxProductoOfrecidoDto>? ProductosProveedor { get; set; }
 
         public string? CuentaContableProveedor { get; set; } = "21311 - Proveedores";
 
@@ -3690,6 +3692,18 @@
                 NumeroCuentaProveedor = item.NumeroCuentaProveedor
             };
 
+            if (EsModoProveedores)
+            {
+                var productos = await CatalogoProveedor.ObtenerProductosDelProveedorAsync(usuarioLogueadoId, item.Codcliente, CancellationToken.None);
+                model.ProductosProveedor = productos.Select(p => new EContaxProductoOfrecidoDto
+                {
+                    ProductoId = p.ProductoId,
+                    Nombre = p.Nombre,
+                    CodigoProveedor = p.Codigo,
+                    PrecioCompra = p.PrecioCompra
+                }).ToList();
+            }
+
             await PrepararLookupsUbicacionFormularioAsync();
             ActualizarTipoClienteForm();
             PrepararTipoContactoTelefonico();
@@ -3722,12 +3736,23 @@
         if (string.IsNullOrWhiteSpace(model.CuentaContableProveedor))
             return "La cuenta contable del proveedor es obligatoria.";
 
+        var productos = (model.ProductosProveedor ?? [])
+            .Where(p => p.ProductoId != 0 || p.PrecioCompra != 0 || !string.IsNullOrWhiteSpace(p.CodigoProveedor)).ToList();
+        if (productos.Any(p => p.ProductoId <= 0))
+            return "Seleccione el producto en cada fila que tenga código o precio.";
+        if (productos.Select(p => p.ProductoId).Distinct().Count() != productos.Count)
+            return "El mismo producto no puede repetirse para este proveedor.";
+        if (productos.Any(p => p.PrecioCompra < 0 || p.PrecioCompra > 99999999999999.9999m ||
+            decimal.Round(p.PrecioCompra, 4) != p.PrecioCompra))
+            return "Ingrese precios válidos, con hasta cuatro decimales.";
+
         return null;
     }
 
     private static void AsegurarDatosProveedorPorDefecto(ClienteUpsertDto model)
     {
         model.EsCliente = true;
+        model.ProductosProveedor ??= [];
         model.CuentaContableProveedor = string.IsNullOrWhiteSpace(model.CuentaContableProveedor)
             ? "21311 - Proveedores"
             : model.CuentaContableProveedor.Trim();
@@ -3782,7 +3807,6 @@
             return;
         }
 
-        guardandoCliente = true;
         SetMensajeFormularioOListado("Guardando...");
         model.Estado = estadoAux;
         ActualizarTipoClienteForm();
@@ -3823,6 +3847,7 @@
             model.Nombrerazonsocial = null;
         }
 
+        guardandoCliente = true;
         try
         {
             var identificacionGuardada = model.Numeroidentificacion?.Trim() ?? string.Empty;

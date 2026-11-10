@@ -38,6 +38,7 @@ public sealed class EContaxClienteDto
 
 public sealed class EContaxClienteUpsertDto
 {
+    public List<EContaxProductoOfrecidoDto>? ProductosProveedor { get; set; }
     public int Codcliente { get; set; }
     public string? Apellidos { get; set; }
     public string? Nombres { get; set; }
@@ -67,4 +68,12 @@ public sealed class EContaxClienteUpsertDto
     public string? BancoProveedor { get; set; }
     public string? TipoCuentaProveedor { get; set; }
     public string? NumeroCuentaProveedor { get; set; }
+}
+
+public sealed class EContaxProductoOfrecidoDto
+{
+    public int ProductoId { get; set; }
+    public string? Nombre { get; set; }
+    public string? CodigoProveedor { get; set; }
+    public decimal PrecioCompra { get; set; }
 }

@@ -1,211 +1,109 @@
 @using Simetric.Services.EContax
 @using Simetric.DTOs
+@using Simetric.DTOs.EContax
 @inject EContaxCatalogService Catalogo
 @inject ILogger<ProductosDelProveedor> Logger
 @implements IDisposable
 
-<section class="detail-section">
-    <h4 class="detail-section-title">Productos y precios de compra</h4>
+<section class="border rounded p-3 my-3">
+    <h5>Productos que vende el proveedor</h5>
+    <div class="row g-2 mb-3">
+        <div class="col-md-8">
+            <label class="form-label">Buscar producto del catálogo</label>
+            <input class="form-control" @bind="_busqueda" @bind:event="oninput" disabled="@Deshabilitado" placeholder="Nombre, código interno o código comercial" />
+        </div>
+        <div class="col-md-4 d-flex align-items-end">
+            <button type="button" class="btn btn-outline-primary" disabled="@(_buscando || Deshabilitado)" @onclick="BuscarAsync">
+                @(_buscando ? "Buscando…" : "Buscar")
+            </button>
+        </div>
+    </div>
     @if (_mensaje is not null)
     {
-        <p class="@(_esError ? "text-danger" : "text-success")" role="status">@_mensaje</p>
+        <p class="@(_error ? "text-danger" : "text-muted")" role="status">@_mensaje</p>
     }
-    @if (_productos is null)
+    @foreach (var item in Items)
     {
-        @if (_esError)
-        {
-            <button type="button" class="btn btn-outline-primary" @onclick="CargarAsync">Reintentar</button>
-        }
-        else
-        {
-            <p role="status">Cargando productos…</p>
-        }
-    }
-    else
-    {
-        <div class="border rounded p-3 mb-3">
-            <h5>@(_editando ? "Editar producto y precio" : "Registrar producto del proveedor")</h5>
-            <div class="row g-2">
-                @if (!_editando)
-                {
-                    <div class="col-md-8">
-                        <label class="form-label">Buscar producto del catálogo</label>
-                        <input class="form-control" @bind="_busqueda" disabled="@_ocupado" />
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <button type="button" class="btn btn-outline-primary" disabled="@_ocupado" @onclick="BuscarAsync">Buscar</button>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Producto</label>
-                        <select class="form-select" @bind="_productoId" disabled="@_ocupado">
-                            <option value="0">Seleccione un producto</option>
-                            @foreach (var producto in _resultados)
-                            {
-                                <option value="@producto.Codproducto">@producto.Codprincipal — @producto.Descripcion</option>
-                            }
-                        </select>
-                    </div>
-                }
-                else
-                {
-                    <div class="col-12"><strong>@_nombreProducto</strong></div>
-                }
-                <div class="col-md-6">
-                    <label class="form-label">Código del proveedor</label>
-                    <input class="form-control" maxlength="100" @bind="_codigo" disabled="@_ocupado" />
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Precio de compra (USD)</label>
-                    <input type="number" class="form-control" min="0" max="99999999999999.9999" step="0.0001" @bind="_precio" disabled="@_ocupado" />
-                </div>
-                <div class="col-12 d-flex gap-2">
-                    <button type="button" class="btn btn-primary" disabled="@(_ocupado || _productoId <= 0)" @onclick="GuardarAsync">
-                        @(_ocupado ? "Procesando…" : "Guardar producto y precio")
-                    </button>
-                    @if (_editando)
+        <div @key="item" class="row g-2 border rounded p-2 mb-2">
+            <div class="col-12">
+                <label class="form-label">Producto</label>
+                <select class="form-select" @bind="item.ProductoId" @bind:after="() => Seleccionar(item)" disabled="@Deshabilitado">
+                    <option value="0">Seleccione un producto</option>
+                    @if (item.ProductoId > 0 && !_resultados.Any(p => p.Codproducto == item.ProductoId))
                     {
-                        <button type="button" class="btn btn-outline-secondary" disabled="@_ocupado" @onclick="Limpiar">Cancelar edición</button>
+                        <option value="@item.ProductoId">#@item.ProductoId — @item.Nombre</option>
                     }
-                </div>
+                    @foreach (var producto in _resultados)
+                    {
+                        <option value="@producto.Codproducto">#@producto.Codproducto · @producto.Codprincipal — @producto.Descripcion</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">Código del proveedor</label>
+                <input class="form-control" maxlength="100" @bind="item.CodigoProveedor" disabled="@Deshabilitado" />
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">Precio de compra (USD)</label>
+                <input type="number" class="form-control" min="0" max="99999999999999.9999" step="0.0001" @bind="item.PrecioCompra" disabled="@Deshabilitado" />
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="button" class="btn btn-outline-danger" disabled="@Deshabilitado" @onclick="() => Items.Remove(item)">Quitar</button>
             </div>
         </div>
-        @if (_productos.Count == 0)
-        {
-            <p>Este proveedor aún no tiene productos vinculados.</p>
-        }
-        else
-        {
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead>
-                        <tr><th scope="col">Producto</th><th scope="col">Código del proveedor</th><th scope="col" class="text-end">Precio de compra (USD)</th><th scope="col">Acciones</th></tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var producto in _productos)
-                        {
-                            <tr @key="producto.ProductoId">
-                                <td>@producto.Nombre</td>
-                                <td>@producto.Codigo</td>
-                                <td class="text-end">@producto.PrecioCompra.ToString("0.00##")</td>
-                                <td><button type="button" class="btn btn-sm btn-outline-primary" disabled="@_ocupado" @onclick="() => Editar(producto)">Editar precio</button></td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
     }
+    <button type="button" class="btn btn-outline-primary" disabled="@Deshabilitado" @onclick="Agregar">Agregar otro producto</button>
+    <p class="small text-muted mt-2 mb-0">Los productos y precios se guardan al guardar el proveedor.</p>
 </section>
 
 @code {
-    [Parameter, EditorRequired] public int ProveedorId { get; set; }
+    [Parameter, EditorRequired] public List<EContaxProductoOfrecidoDto> Items { get; set; } = default!;
     [Parameter, EditorRequired] public int UsuarioId { get; set; }
+    [Parameter] public bool Deshabilitado { get; set; }
 
-    private readonly CancellationTokenSource _cancelacion = new();
-    private List<EContaxCatalogService.ProductoDelProveedor>? _productos;
     private List<ProductoLookupDetalleDto> _resultados = [];
     private string _busqueda = "";
-    private string? _codigo;
-    private string? _nombreProducto;
-    private int _productoId;
-    private decimal _precio;
-    private bool _editando;
-    private bool _ocupado;
+    private bool _buscando;
+    private bool _error;
+    private bool _disposed;
     private string? _mensaje;
-    private bool _esError;
 
-    protected override Task OnInitializedAsync() => CargarAsync();
-
-    private async Task CargarAsync()
+    protected override async Task OnInitializedAsync()
     {
-        _esError = false;
-        _mensaje = null;
-        try
-        {
-            _productos = await Catalogo.ObtenerProductosDelProveedorAsync(UsuarioId, ProveedorId, _cancelacion.Token);
-        }
-        catch (OperationCanceledException) when (_cancelacion.IsCancellationRequested) { }
-        catch (Exception ex)
-        {
-            MostrarError(ex, "No se pudieron cargar los productos del proveedor.");
-        }
+        if (Items.Count == 0) Agregar();
+        await BuscarAsync();
+    }
+
+    private void Agregar() => Items.Add(new EContaxProductoOfrecidoDto());
+
+    private void Seleccionar(EContaxProductoOfrecidoDto item)
+    {
+        item.Nombre = _resultados.FirstOrDefault(p => p.Codproducto == item.ProductoId)?.Descripcion;
     }
 
     private async Task BuscarAsync()
     {
-        _ocupado = true;
-        _esError = false;
+        _buscando = true;
+        _error = false;
         _mensaje = null;
         try
         {
-            _resultados = await Catalogo.BuscarProductosFiltroAsync(UsuarioId, _busqueda);
-            _productoId = 0;
-            if (_resultados.Count == 0)
-                _mensaje = "No se encontraron productos en el catálogo.";
+            var resultados = await Catalogo.BuscarProductosFiltroAsync(UsuarioId, _busqueda.Trim());
+            if (_disposed) return;
+            _resultados = resultados;
+            _mensaje = resultados.Count == 0
+                ? "No se encontraron productos. Revise el nombre o código y que el producto esté activo en el catálogo de esta empresa."
+                : null;
         }
         catch (Exception ex)
         {
-            MostrarError(ex, "No se pudo buscar el producto.");
+            if (_disposed) return;
+            Logger.LogWarning(ex, "No se pudo buscar el catálogo de productos del proveedor.");
+            _error = true;
+            _mensaje = "No se pudo cargar el catálogo. Vuelva a pulsar Buscar.";
         }
-        finally { _ocupado = false; }
+        finally { _buscando = false; }
     }
 
-    private void Editar(EContaxCatalogService.ProductoDelProveedor producto)
-    {
-        _editando = true;
-        _productoId = producto.ProductoId;
-        _nombreProducto = producto.Nombre;
-        _codigo = producto.Codigo;
-        _precio = producto.PrecioCompra;
-        _mensaje = null;
-    }
-
-    private async Task GuardarAsync()
-    {
-        _ocupado = true;
-        _esError = false;
-        _mensaje = null;
-        try
-        {
-            await Catalogo.GuardarProductoDelProveedorAsync(UsuarioId, ProveedorId, _productoId, _codigo, _precio, _cancelacion.Token);
-            _productos = await Catalogo.ObtenerProductosDelProveedorAsync(UsuarioId, ProveedorId, _cancelacion.Token);
-            Limpiar();
-            _esError = false;
-            _mensaje = "Producto y precio guardados.";
-        }
-        catch (OperationCanceledException) when (_cancelacion.IsCancellationRequested) { }
-        catch (InvalidOperationException ex)
-        {
-            _esError = true;
-            _mensaje = ex.Message;
-        }
-        catch (Exception ex)
-        {
-            MostrarError(ex, "No se pudo guardar el producto y su precio.");
-        }
-        finally { _ocupado = false; }
-    }
-
-    private void Limpiar()
-    {
-        _editando = false;
-        _productoId = 0;
-        _nombreProducto = null;
-        _codigo = null;
-        _precio = 0;
-        _mensaje = null;
-    }
-
-    private void MostrarError(Exception ex, string mensaje)
-    {
-        Logger.LogWarning(ex, "Error en productos del proveedor {ProveedorId}", ProveedorId);
-        _esError = true;
-        _mensaje = mensaje;
-    }
-
-    public void Dispose()
-    {
-        _cancelacion.Cancel();
-        _cancelacion.Dispose();
-    }
+    public void Dispose() => _disposed = true;
 }

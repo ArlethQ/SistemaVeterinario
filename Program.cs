@@ -177,7 +177,12 @@ builder.Services.AddScoped<EContaxAdministracionService>();
 builder.Services.AddScoped<EContaxFacturacionService>();
 builder.Services.AddScoped<EContaxOrganizacionService>();
 builder.Services.AddScoped<EContaxBodegaService>();
-builder.Services.AddScoped<EContaxCatalogService>();
+// La veterinaria conserva un catálogo compartido anterior a la asignación por empresa.
+builder.Services.AddScoped(sp => new EContaxCatalogService(
+    sp.GetRequiredService<IDbContextFactory<AppDbContext>>(),
+    sp.GetRequiredService<EContaxTenantService>(),
+    sp.GetRequiredService<EContaxSeguridadService>(),
+    incluirProductosSinEmpresa: true));
 builder.Services.AddScoped<IEContaxInventarioReportePdfService, EContaxInventarioReportePdfService>();
 builder.Services.AddScoped<EContaxOrdenCompraService>();
 builder.Services.AddScoped<EContaxRecepcionCompraService>();

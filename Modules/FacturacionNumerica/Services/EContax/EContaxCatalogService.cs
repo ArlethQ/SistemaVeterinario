@@ -15,14 +15,16 @@ public sealed class EContaxCatalogService
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
     private readonly EContaxTenantService _tenantService;
     private readonly EContaxSeguridadService _seguridad;
+    private readonly bool _incluirProductosSinEmpresa;
 
     public EContaxCatalogService(
         IDbContextFactory<AppDbContext> dbFactory,
-        EContaxTenantService tenantService, EContaxSeguridadService seguridad)
+        EContaxTenantService tenantService, EContaxSeguridadService seguridad, bool incluirProductosSinEmpresa = false)
     {
         _dbFactory = dbFactory;
         _tenantService = tenantService;
         _seguridad = seguridad;
+        _incluirProductosSinEmpresa = incluirProductosSinEmpresa;
     }
 
     public async Task<List<EContaxClienteDto>> GetClientesAsync(int userId, bool incluirInactivos = false)
@@ -170,6 +172,7 @@ public sealed class EContaxCatalogService
             context.Clientes.Add(entity);
             await context.SaveChangesAsync();
             await SincronizarProveedorAsync(context, entity, dto, codigoIdentificacion);
+            await SincronizarProductosOfrecidosAsync(context, userContext, entity.Codcliente, dto);
             await GuardarCorreosClienteAsync(context, entity.Codcliente, dto.CorreosAdicionales);
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
@@ -225,6 +228,7 @@ public sealed class EContaxCatalogService
                 cliente.Estado = dto.Estado;
 
             await SincronizarProveedorAsync(context, cliente, dto, codigoIdentificacion);
+            await SincronizarProductosOfrecidosAsync(context, userContext, cliente.Codcliente, dto);
             await GuardarCorreosClienteAsync(context, cliente.Codcliente, dto.CorreosAdicionales);
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
@@ -256,7 +260,7 @@ public sealed class EContaxCatalogService
         return await (from relacion in relaciones
                       join producto in productos on relacion.CodigoProducto equals producto.Codigo
                       where relacion.IdEmpresa == usuario.IdEmpresa && relacion.IdProveedorCliente == proveedorId
-                            && relacion.Activo && producto.Estado == true
+                            && relacion.Activo
                       orderby producto.Nombre, producto.Codigo
                       select new ProductoDelProveedor(producto.Codigo, producto.Nombre ?? string.Empty,
                           relacion.CodigoProductoProveedor ?? string.Empty, relacion.PrecioCompra))
@@ -265,55 +269,54 @@ public sealed class EContaxCatalogService
 
     public sealed record ProductoDelProveedor(int ProductoId, string Nombre, string Codigo, decimal PrecioCompra);
 
-    public async Task GuardarProductoDelProveedorAsync(int userId, int proveedorId, int productoId,
-        string? codigoProveedor, decimal precioCompra, CancellationToken cancellationToken)
+    private async Task SincronizarProductosOfrecidosAsync(AppDbContext context, EContaxUserContext usuario,
+        int proveedorId, EContaxClienteUpsertDto dto)
     {
-        if (precioCompra < 0 || precioCompra > 99999999999999.9999m || decimal.Round(precioCompra, 4) != precioCompra)
-            throw new InvalidOperationException("Ingrese un precio válido, con hasta cuatro decimales.");
-        codigoProveedor = codigoProveedor?.Trim();
-        if (codigoProveedor?.Length > 100)
-            throw new InvalidOperationException("El código del proveedor admite hasta 100 caracteres.");
+        if (dto.ProductosProveedor is null || dto.EsProveedor != true) return;
 
-        await using var context = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var usuario = await _tenantService.GetContextAsync(context, userId);
-        var proveedorValido = await BuildClientesEmpresaQuery(context, usuario)
-            .AnyAsync(c => c.Codcliente == proveedorId && c.Estado == true &&
-                context.Proveedores.Any(p => p.ruc == c.Numeroidentificacion && p.estado != false), cancellationToken);
-        var productoValido = await BuildProductosPermitidosQuery(context, usuario, null)
-            .AnyAsync(p => p.Codigo == productoId && p.Estado == true, cancellationToken);
-        if (!proveedorValido || !productoValido)
-            throw new InvalidOperationException("Seleccione un proveedor y un producto activos de su empresa.");
+        var items = dto.ProductosProveedor
+            .Where(x => x.ProductoId != 0 || x.PrecioCompra != 0 || !string.IsNullOrWhiteSpace(x.CodigoProveedor))
+            .ToList();
+        var ids = items.Select(x => x.ProductoId).ToList();
+        if (ids.Any(id => id <= 0) || ids.Distinct().Count() != ids.Count)
+            throw new InvalidOperationException("Seleccione productos válidos y sin repetir.");
+        if (items.Any(x => x.PrecioCompra < 0 || x.PrecioCompra > 99999999999999.9999m ||
+            decimal.Round(x.PrecioCompra, 4) != x.PrecioCompra || x.CodigoProveedor?.Trim().Length > 100))
+            throw new InvalidOperationException("Revise los precios (hasta cuatro decimales) y los códigos (hasta 100 caracteres).");
 
-        var relaciones = context.EContaxProductosProveedores.Where(x =>
-            x.IdEmpresa == usuario.IdEmpresa && x.IdProveedorCliente == proveedorId && x.CodigoProducto == productoId);
-        var relacion = await relaciones.SingleOrDefaultAsync(cancellationToken);
-        if (relacion is null)
+        var relaciones = await context.EContaxProductosProveedores
+            .Where(x => x.IdEmpresa == usuario.IdEmpresa && x.IdProveedorCliente == proveedorId).ToListAsync();
+        var existentes = relaciones.Where(x => x.Activo).Select(x => x.CodigoProducto).ToList();
+        var validos = await BuildProductosPermitidosQuery(context, usuario, null)
+            .Where(p => ids.Contains(p.Codigo) && (p.Estado == true || existentes.Contains(p.Codigo)))
+            .Select(p => p.Codigo).ToListAsync();
+        if (validos.Count != ids.Count)
+            throw new InvalidOperationException("Uno o más productos no están disponibles para su empresa.");
+
+        // Se actualiza solo el catálogo visible para este usuario.
+        var codigosVisibles = await BuildProductosPermitidosQuery(context, usuario, null)
+            .Where(p => existentes.Contains(p.Codigo)).Select(p => p.Codigo).ToListAsync();
+        foreach (var relacion in relaciones.Where(x => codigosVisibles.Contains(x.CodigoProducto) && !ids.Contains(x.CodigoProducto)))
+            relacion.Activo = false;
+
+        foreach (var item in items)
         {
-            relacion = new EContaxProductoProveedor
+            var relacion = relaciones.FirstOrDefault(x => x.CodigoProducto == item.ProductoId);
+            if (relacion is null)
             {
-                IdEmpresa = usuario.IdEmpresa,
-                IdProveedorCliente = proveedorId,
-                CodigoProducto = productoId
-            };
-            context.EContaxProductosProveedores.Add(relacion);
-        }
+                relacion = new EContaxProductoProveedor
+                {
+                    IdEmpresa = usuario.IdEmpresa,
+                    IdProveedorCliente = proveedorId,
+                    CodigoProducto = item.ProductoId
+                };
+                context.EContaxProductosProveedores.Add(relacion);
+            }
 
-        relacion.CodigoProductoProveedor = string.IsNullOrWhiteSpace(codigoProveedor) ? null : codigoProveedor;
-        relacion.PrecioCompra = precioCompra;
-        relacion.Activo = true;
-        relacion.FechaActualizacion = DateTime.Now;
-        try
-        {
-            await context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 })
-        {
-            context.Entry(relacion).State = EntityState.Detached;
-            await relaciones.ExecuteUpdateAsync(updates => updates
-                .SetProperty(x => x.CodigoProductoProveedor, relacion.CodigoProductoProveedor)
-                .SetProperty(x => x.PrecioCompra, precioCompra)
-                .SetProperty(x => x.Activo, true)
-                .SetProperty(x => x.FechaActualizacion, relacion.FechaActualizacion), cancellationToken);
+            relacion.CodigoProductoProveedor = string.IsNullOrWhiteSpace(item.CodigoProveedor) ? null : item.CodigoProveedor.Trim();
+            relacion.PrecioCompra = item.PrecioCompra;
+            relacion.Activo = true;
+            relacion.FechaActualizacion = DateTime.Now;
         }
     }
 
@@ -322,6 +325,7 @@ public sealed class EContaxCatalogService
         await using var context = await _dbFactory.CreateDbContextAsync();
         var userContext = await _tenantService.GetContextAsync(context, userId);
         var filtroLower = (filtro ?? string.Empty).Trim().ToLowerInvariant();
+        int.TryParse(filtroLower, out var codigoInterno);
 
         var query = BuildProductosPermitidosQuery(context, userContext, null)
             .Include(p => p.TipoProductoNavigation)
@@ -335,6 +339,7 @@ public sealed class EContaxCatalogService
         {
             query = query.Where(p =>
                 (
+                    p.Codigo == codigoInterno ||
                     (p.Nombre ?? "").ToLower().Contains(filtroLower) ||
                     (p.CodigoPrincipal ?? "").ToLower().Contains(filtroLower) ||
                     (p.CodAuxiliar ?? "").ToLower().Contains(filtroLower) ||
@@ -354,7 +359,9 @@ public sealed class EContaxCatalogService
         }
 
         var productos = await query
-            .OrderBy(p => p.Nombre)
+            .OrderByDescending(p => p.Codigo == codigoInterno)
+            .ThenByDescending(p => p.CodigoPrincipal == filtroLower || p.CodAuxiliar == filtroLower)
+            .ThenBy(p => p.Nombre)
             .Take(15)
             .ToListAsync();
 
@@ -978,7 +985,7 @@ public sealed class EContaxCatalogService
     private IQueryable<Producto> BuildProductosPermitidosQuery(AppDbContext context, EContaxUserContext userContext, int? sucursalId)
     {
         var query = context.Productos
-            .Where(p => p.Idempresa == userContext.IdEmpresa);
+            .Where(p => p.Idempresa == userContext.IdEmpresa || (_incluirProductosSinEmpresa && p.Idempresa == null));
 
         if (userContext.EsJefeEmpresa)
         {
