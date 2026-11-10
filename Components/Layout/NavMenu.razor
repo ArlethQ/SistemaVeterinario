@@ -1,6 +1,3 @@
-@implements IDisposable
-@inject SessionStateService Session
-@inject IAuthService AuthService
 
 <div class="nav-shell">
     <input id="menu-toggle" type="checkbox" class="menu-toggle" />
@@ -481,6 +478,7 @@
         ..RutasConsulta,
         "operaciones/clinicas",
         "programacion/clinica",
+        "programacion/consultorios",
         ..RutasLaboratorio
     ];
 
@@ -553,81 +551,10 @@
         ..RutasSeguridad
     ];
 
-    private HashSet<string> _rutasPermitidas = new(StringComparer.OrdinalIgnoreCase);
-    private int _ultimoUsuarioId = -1;
-    private int _ultimoTipoUser = -1;
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
 
-    protected override async Task OnInitializedAsync()
-    {
-        Session.OnChange += HandleSessionChanged;
-        await CargarPermisosMenuAsync(forzar: true);
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        if (_ultimoUsuarioId != Session.IdUser || _ultimoTipoUser != Session.TipoUser)
-        {
-            await CargarPermisosMenuAsync(forzar: true);
-        }
-    }
-
-    private async void HandleSessionChanged()
-    {
-        try
-        {
-            await CargarPermisosMenuAsync(forzar: true);
-            await InvokeAsync(StateHasChanged);
-        }
-        catch { }
-    }
-
-    private async Task CargarPermisosMenuAsync(bool forzar = false)
-    {
-        if (!forzar && _ultimoUsuarioId == Session.IdUser && _ultimoTipoUser == Session.TipoUser)
-            return;
-
-        _ultimoUsuarioId = Session.IdUser;
-        _ultimoTipoUser = Session.TipoUser;
-
-        if (!Session.IsAuthenticated || Session.IdUser <= 0)
-        {
-            _rutasPermitidas.Clear();
-            return;
-        }
-
-        if (Session.TipoUser == 1)
-        {
-            _rutasPermitidas.Clear();
-            return;
-        }
-
-        var items = await AuthService.ObtenerMenuUsuarioAsync(Session.IdUser, Session.TipoUser);
-        _rutasPermitidas = items
-            .Select(m => NormalizarRuta(m.Url))
-            .Where(r => !string.IsNullOrWhiteSpace(r))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-    }
-
-    private bool TienePermiso(string ruta)
-    {
-        if (Session.TipoUser == 1) return true;
-        if (!Session.IsAuthenticated) return false;
-        string normalizada = NormalizarRuta(ruta);
-        if (normalizada == "dashboard") return true;
-        return _rutasPermitidas.Contains(normalizada);
-    }
+    private bool TienePermiso(string ruta) => Permisos.Permite(ruta);
 
     private bool TieneAlguno(params string[] rutas) =>
         rutas.Any(TienePermiso);
-
-    private static string NormalizarRuta(string? ruta)
-    {
-        if (string.IsNullOrWhiteSpace(ruta)) return string.Empty;
-        return ruta.Trim().Replace('\\', '/').TrimStart('~').Trim('/').ToLowerInvariant();
-    }
-
-    public void Dispose()
-    {
-        Session.OnChange -= HandleSessionChanged;
-    }
 }

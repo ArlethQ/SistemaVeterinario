@@ -95,6 +95,7 @@ public class FuncionEnfermeriaDto
 
 public class FuncionarioDto
 {
+    public bool EsExterno { get; set; }
     public int UserNumero { get; set; }
     public string UserNombre { get; set; } = string.Empty;
     public string UserIniciales { get; set; } = string.Empty;

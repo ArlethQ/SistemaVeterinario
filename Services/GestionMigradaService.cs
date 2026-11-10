@@ -267,7 +267,7 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
           AND (
               ISNULL(user_tipouser_numero,0)=2
               OR ISNULL(user_esp_numero,0)>0
-              OR UPPER(LTRIM(RTRIM(ISNULL(user_tipomedico,'')))) IN ('P','L')
+              OR UPPER(LTRIM(RTRIM(ISNULL(user_tipomedico,'')))) IN ('P','L','E')
           )
         ORDER BY user_nombre")).ToList();
     public async Task<List<SelectorClinicoDto>> ObtenerLocalidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,loc_id) Id,RTRIM(loc_descripcion) Descripcion FROM vt_localidades WHERE loc_estado='A' ORDER BY loc_descripcion")).ToList();

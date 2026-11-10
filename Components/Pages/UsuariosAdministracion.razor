@@ -19,7 +19,7 @@
         <div class="users-table"><div class="table-head"><span>Usuario</span><span>Rol</span><span>Contacto</span><span>Estado</span><span>Acciones</span></div>
         @foreach (var u in Filtrados)
         {
-            <div class="table-row"><span class="person"><b>@Iniciales(u)</b><span><strong>@u.Nombre</strong><small>@@@u.Login</small></span></span><span><em>@Rol(u.RolId)</em>@if(u.RolId == 2 && !string.IsNullOrWhiteSpace(u.Especialidad) && !u.Especialidad.Equals("NINGUNA", StringComparison.OrdinalIgnoreCase)){<small>@u.Especialidad</small>}else if(u.RolId == 2){<small class="text-muted">Sin especialidad</small>}</span><span><strong class="contact">@u.Email</strong><small>@u.Celular</small></span><span><i class="status-dot @(u.Estado == "A" ? "active" : "inactive")"></i>@(u.Estado == "A" ? "Activo" : "Inactivo")</span><span class="actions"><button title="Editar usuario" @onclick="() => Editar(u)">Editar</button><a href="@($"/administracion/roles-permisos?usuario={u.Id}")">Permisos</a><button title="Restablecer contraseña" @onclick="() => PrepararClave(u)">Contraseña</button>@if (!u.Login.Equals("admin", StringComparison.OrdinalIgnoreCase)) { <button class="danger" @onclick="() => CambiarEstado(u)">@(u.Estado == "A" ? "Desactivar" : "Activar")</button> }</span></div>
+            <div class="table-row"><span class="person"><b>@Iniciales(u)</b><span><strong>@u.Nombre</strong><small>@@@u.Login</small></span></span><span><em>@Rol(u.RolId)</em>@if (u.RolId == 2) { <small>@(u.TipoMedico switch { "E" => "Externo", "P" or "L" => "Interno", _ => "Tipo pendiente" })</small> }@if(u.RolId == 2 && !string.IsNullOrWhiteSpace(u.Especialidad) && !u.Especialidad.Equals("NINGUNA", StringComparison.OrdinalIgnoreCase)){<small>@u.Especialidad</small>}else if(u.RolId == 2){<small class="text-muted">Sin especialidad</small>}</span><span><strong class="contact">@u.Email</strong><small>@u.Celular</small></span><span><i class="status-dot @(u.Estado == "A" ? "active" : "inactive")"></i>@(u.Estado == "A" ? "Activo" : "Inactivo")</span><span class="actions"><button title="Editar usuario" @onclick="() => Editar(u)">Editar</button><a href="@($"/administracion/roles-permisos?usuario={u.Id}")">Permisos</a><button title="Restablecer contraseña" @onclick="() => PrepararClave(u)">Contraseña</button>@if (!u.Login.Equals("admin", StringComparison.OrdinalIgnoreCase)) { <button class="danger" @onclick="() => CambiarEstado(u)">@(u.Estado == "A" ? "Desactivar" : "Activar")</button> }</span></div>
         }
         </div>
     }
@@ -39,9 +39,10 @@
             {
                 <label>Tipo de médico
                     <select @bind="_edit.TipoMedico">
-                        <option value="P">Médico de planta</option>
-                        <option value="L">Médico a llamada</option>
-                        <option value="N">No aplica</option>
+                        <option value="">Seleccione el tipo</option>
+                        <option value="P">Interno · Médico de planta</option>
+                        <option value="L">Interno · Médico a llamada</option>
+                        <option value="E">Externo</option>
                     </select>
                 </label>
                 <div class="wide specialty-picker-container">
@@ -159,7 +160,7 @@
             RolId = _roles.FirstOrDefault(r => r.Id != 1)?.Id ?? 2,
             EspecialidadId = 0,
             EspecialidadesIds = new List<int>(),
-            TipoMedico = "P",
+            TipoMedico = "",
             Estado = "A"
         };
         _claveTemporal = "";
@@ -188,7 +189,7 @@
             RolId = u.RolId,
             EspecialidadId = u.EspecialidadId,
             Especialidad = u.Especialidad,
-            TipoMedico = u.TipoMedico,
+            TipoMedico = u.TipoMedico is "P" or "L" or "E" ? u.TipoMedico : "",
             Observaciones = u.Observaciones,
             Estado = u.Estado,
             LocalidadesIds = localTask.Result,

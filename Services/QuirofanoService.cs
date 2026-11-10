@@ -1092,24 +1092,21 @@ public class QuirofanoService : IQuirofanoService
     {
         try
         {
-            const string sql = @"
+            const string sql = """
                 INSERT INTO qvt_team (
                     idOrden, idUsuario, fecha, estado, principal, observacion, tipo,
                     esExterno, nombreExterno, cedula
-                ) VALUES (
-                    @IdOrden,
-                    CASE WHEN @EsExterno = 1 THEN NULL ELSE @IdUsuario END,
-                    GETDATE(),
-                    'A',
-                    @Principal,
-                    @RolFuncion,
-                    @RolFuncion,
-                    @EsExterno,
-                    @NombreProfesional,
-                    @Cedula
-                )";
-            await _db.ExecuteAsync(sql, miembro);
-            return true;
+                )
+                SELECT @IdOrden, u.user_numero, GETDATE(), 'A', @Principal, @RolFuncion, @RolFuncion,
+                       @EsExterno, CASE WHEN @EsExterno = 1 THEN u.user_nombre ELSE '' END,
+                       CASE WHEN @EsExterno = 1 THEN u.user_cedula ELSE '' END
+                FROM vt_usuarios u
+                WHERE u.user_numero = @IdUsuario AND u.user_estado = 'A'
+                  AND u.user_tipouser_numero IN (2, 3)
+                  AND @EsExterno = CASE WHEN u.user_tipouser_numero = 2 AND u.user_tipomedico = 'E' THEN 1 ELSE 0 END
+                  AND (@EsExterno = 0 OR NULLIF(LTRIM(RTRIM(u.user_cedula)), '') IS NOT NULL)
+                """;
+            return await _db.ExecuteAsync(sql, miembro) > 0;
         }
         catch (Exception ex)
         {

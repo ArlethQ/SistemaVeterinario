@@ -1,1 +1,30 @@
-<nav class="security-nav" aria-label="Administración"><NavLink href="administracion/empresas">Empresas</NavLink><NavLink href="administracion/usuarios">Usuarios</NavLink><NavLink href="administracion/roles">Roles</NavLink><NavLink href="administracion/roles-permisos">Asignar permisos</NavLink><NavLink href="administracion/catalogos">Catálogos clínicos</NavLink><NavLink href="administracion/localidades">Localidades</NavLink></nav>
+<nav class="security-nav" aria-label="Administración">
+    @if (Permisos.Permite("administracion/empresas"))
+    {
+        <NavLink href="administracion/empresas">Empresas</NavLink>
+    }
+    @if (Permisos.Permite("administracion/usuarios"))
+    {
+        <NavLink href="administracion/usuarios">Usuarios</NavLink>
+    }
+    @if (Permisos.Permite("administracion/roles"))
+    {
+        <NavLink href="administracion/roles">Roles</NavLink>
+    }
+    @if (Permisos.Permite("administracion/roles-permisos"))
+    {
+        <NavLink href="administracion/roles-permisos">Asignar permisos</NavLink>
+    }
+    @if (Permisos.Permite("administracion/catalogos"))
+    {
+        <NavLink href="administracion/catalogos">Catálogos clínicos</NavLink>
+    }
+    @if (Permisos.Permite("administracion/localidades"))
+    {
+        <NavLink href="administracion/localidades">Localidades</NavLink>
+    }
+</nav>
+
+@code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+}

@@ -9,7 +9,11 @@
     <header class="orders-header">
         <div class="orders-title"><span class="orders-title-icon"><i class="bi bi-clipboard2-pulse-fill"></i></span><div><h1>Bandeja General de <span>Órdenes de Atención</span></h1><p>Gestiona las órdenes activas de pacientes en consulta, hospitalización o cirugía para acceder a su Kardex y fichas clínicas.</p></div></div>
         <nav class="orders-nav" aria-label="Accesos principales">
-            <a href="/dashboard"><i class="bi bi-house-door-fill"></i> Panel Principal</a><a href="/admision/clientes-pacientes"><i class="bi bi-people-fill"></i> Clientes / Pacientes</a><a href="/admision/ordenes" class="nav-green"><i class="bi bi-plus-circle-fill"></i> Recepción y Nueva Orden</a><a href="/admision/citas" class="nav-blue"><i class="bi bi-calendar3"></i> Agenda de Citas</a><a href="/facturacion/proformas" class="nav-amber"><i class="bi bi-file-earmark-text-fill"></i> Proformas</a>
+            <a href="/dashboard"><i class="bi bi-house-door-fill"></i> Panel Principal</a>
+            @if (Permisos.Permite("/admision/clientes-pacientes")) { <a href="/admision/clientes-pacientes"><i class="bi bi-people-fill"></i> Clientes / Pacientes</a> }
+            @if (Permisos.Permite("/admision/ordenes")) { <a href="/admision/ordenes" class="nav-green"><i class="bi bi-plus-circle-fill"></i> Recepción y Nueva Orden</a> }
+            @if (Permisos.Permite("/admision/citas")) { <a href="/admision/citas" class="nav-blue"><i class="bi bi-calendar3"></i> Agenda de Citas</a> }
+            @if (Permisos.Permite("/facturacion/proformas")) { <a href="/facturacion/proformas" class="nav-amber"><i class="bi bi-file-earmark-text-fill"></i> Proformas</a> }
         </nav>
     </header>
 
@@ -51,10 +55,22 @@
                         <td><div class="owner-cell"><i class="bi bi-person-fill"></i>@item.Cliente</div></td><td><div class="doctor-cell"><i class="bi bi-stethoscope"></i><span>@item.Medico<small>@item.Especialidad</small></span></div></td>
                         <td><div class="date-cell"><i class="bi bi-calendar3"></i><span>@item.FechaOrden.ToString("yyyy-MM-dd")<small><i class="bi bi-clock"></i> @item.FechaOrden.ToString("HH:mm")</small></span></div></td>
                         <td class="text-center orders-actions-cell"><div class="orders-actions">
-                            <a class="btn action-main action-kardex" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl"><i class="bi bi-folder-fill"></i> Kardex</a><a class="btn action-main action-signos" href="/kardex/signos/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-activity"></i> Signos</a><a class="btn action-main action-ficha" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-file-earmark-text-fill"></i> Ficha 24h</a>
-                            <details class="actions-more"><summary class="btn action-more-button" title="Más acciones"><i class="bi bi-three-dots-vertical"></i></summary><div class="actions-menu"><div class="actions-menu-title">Más acciones clínicas</div>
-                                <a class="actions-menu-item" href="/hospitalizacion/monitoreo/@item.OrdenAtencionId/@item.Nhcl">🩺 Monitoreo</a><a class="actions-menu-item" href="/quirofano/preanestesia/@item.OrdenAtencionId/@item.Nhcl">🧪 Pre-Anestesia</a><a class="actions-menu-item" href="/quirofano/anestesia/@item.OrdenAtencionId/@item.Nhcl">🫁 Anestesia</a><a class="actions-menu-item" href="/quirofano/protocolo/@item.OrdenAtencionId/@item.Nhcl">🔪 Protocolo Quirúrgico</a><a class="actions-menu-item" href="/quirofano/recuperacion/@item.OrdenAtencionId/@item.Nhcl">🛏️ Recuperación</a><a class="actions-menu-item" href="/consulta/fichamedica/@item.OrdenAtencionId/@item.Nhcl">📋 Historia Clínica SOAP</a><a class="actions-menu-item" href="/consulta/evoluciones/@item.OrdenAtencionId/@item.Nhcl">📝 Evolución Médica</a><a class="actions-menu-item" href="/consulta/recetario/@item.OrdenAtencionId/@item.Nhcl">💊 Recetario</a><a class="actions-menu-item" href="/consulta/autorizaciones/@item.OrdenAtencionId/@item.Nhcl">📄 Consentimientos y Alta</a><a class="actions-menu-item" href="/diagnostico/laboratorio/@item.OrdenAtencionId/@item.Nhcl">🔬 Laboratorio</a><a class="actions-menu-item" href="/diagnostico/imagenologia/@item.OrdenAtencionId/@item.Nhcl">☢️ RX / Ecografía</a><a class="actions-menu-item" href="/diagnostico/bandeja/@item.OrdenAtencionId/@item.Nhcl">📥 Informes</a>
-                            </div></details>
+                            @if (Permisos.Permite("/kardex/enfermeria")) { <a class="btn action-main action-kardex" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl"><i class="bi bi-folder-fill"></i> Kardex</a> }
+                            @if (Permisos.Permite("/kardex/signos")) { <a class="btn action-main action-signos" href="/kardex/signos/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-activity"></i> Signos</a> }
+                            @if (Permisos.Permite("/hospitalizacion/ficha")) { <a class="btn action-main action-ficha" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-file-earmark-text-fill"></i> Ficha 24h</a> }
+                            @if (AccionesClinicas.Any(accion => Permisos.Permite(accion.Ruta)))
+                            {
+                                <details class="actions-more">
+                                    <summary class="btn action-more-button" title="Más acciones"><i class="bi bi-three-dots-vertical"></i></summary>
+                                    <div class="actions-menu">
+                                        <div class="actions-menu-title">Más acciones clínicas</div>
+                                        @foreach (var accion in AccionesClinicas.Where(accion => Permisos.Permite(accion.Ruta)))
+                                        {
+                                            <a class="actions-menu-item" href="@($"{accion.Ruta}/{item.OrdenAtencionId}/{item.Nhcl}")">@accion.Texto</a>
+                                        }
+                                    </div>
+                                </details>
+                            }
                         </div></td>
                     </tr>}</tbody>
                 </table></div><footer class="orders-footer">Mostrando @OrdenesFiltradas.Count() de @_ordenes.Count órdenes</footer>
@@ -118,6 +134,24 @@
 </style>
 
 @code {
+    private static readonly (string Ruta, string Texto)[] AccionesClinicas =
+    [
+        ("/hospitalizacion/monitoreo", "🩺 Monitoreo"),
+        ("/quirofano/preanestesia", "🧪 Pre-Anestesia"),
+        ("/quirofano/anestesia", "🫁 Anestesia"),
+        ("/quirofano/protocolo", "🔪 Protocolo Quirúrgico"),
+        ("/quirofano/recuperacion", "🛏️ Recuperación"),
+        ("/consulta/fichamedica", "📋 Historia Clínica SOAP"),
+        ("/consulta/evoluciones", "📝 Evolución Médica"),
+        ("/consulta/recetario", "💊 Recetario"),
+        ("/consulta/autorizaciones", "📄 Consentimientos y Alta"),
+        ("/diagnostico/laboratorio", "🔬 Laboratorio"),
+        ("/diagnostico/imagenologia", "☢️ RX / Ecografía"),
+        ("/diagnostico/bandeja", "📥 Informes")
+    ];
+
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+
     private List<OrdenActivaResumenDto> _ordenes = [];
     private string _filtro = string.Empty, _filtroAplicado = string.Empty, _especieFiltro = string.Empty, _estadoFiltro = string.Empty;
     private DateTime? _fechaFiltro;

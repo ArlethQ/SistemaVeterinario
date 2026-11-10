@@ -433,6 +433,10 @@
                     <button type="button" class="btn-close btn-close-white" @onclick="CerrarModalEliminarPlantilla"></button>
                 </div>
                 <div class="modal-body p-3">
+                    @if (!string.IsNullOrWhiteSpace(ErrorEliminarPlantilla))
+                    {
+                        <div class="alert alert-danger" role="alert">@ErrorEliminarPlantilla</div>
+                    }
                     <p class="mb-2">¿Está seguro de que desea eliminar la plantilla personalizada?</p>
                     <div class="alert alert-warning py-2 mb-2 small">
                         <strong><i class="bi bi-file-earmark-text me-1"></i>@(PlantillaSeleccionada?.FormNombre ?? "Plantilla")</strong>
@@ -806,6 +810,8 @@
         }
     }
 
+    private string ErrorEliminarPlantilla = string.Empty;
+
     private void AbrirModalEliminarPlantilla()
     {
         if (PlantillaSeleccionada == null || !PlantillaSeleccionada.EsPersonalizada)
@@ -814,6 +820,7 @@
             EsErrorAlerta = true;
             return;
         }
+        ErrorEliminarPlantilla = string.Empty;
         MostrarModalEliminarPlantilla = true;
     }
 
@@ -846,22 +853,20 @@
 
                 MensajeAlerta = $"Plantilla personalizada '{nombreEliminado}' eliminada exitosamente.";
                 EsErrorAlerta = false;
+                CerrarModalEliminarPlantilla();
             }
             else
             {
-                MensajeAlerta = res.Mensaje ?? "No se pudo eliminar la plantilla.";
-                EsErrorAlerta = true;
+                ErrorEliminarPlantilla = res.Mensaje ?? "No se pudo eliminar la plantilla.";
             }
         }
         catch (Exception ex)
         {
-            MensajeAlerta = $"Error al eliminar la plantilla: {ex.Message}";
-            EsErrorAlerta = true;
+            ErrorEliminarPlantilla = $"Error al eliminar la plantilla: {ex.Message}";
         }
         finally
         {
             EliminandoPlantilla = false;
-            CerrarModalEliminarPlantilla();
         }
     }
 

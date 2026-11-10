@@ -27,18 +27,30 @@
                 </p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                <a href="/admision/ordenes" class="btn btn-light text-primary fw-semibold shadow-sm">
-                    🛎️ Nueva Orden
-                </a>
-                <a href="/kardex/ordenes" class="btn btn-outline-light fw-semibold">
-                    📋 Bandeja de Órdenes
-                </a>
-                <a href="/admision/citas" class="btn btn-outline-light fw-semibold">
-                    📅 Agenda de Citas
-                </a>
-                <a href="/admision/clientes-pacientes" class="btn btn-outline-light fw-semibold">
-                    🐾 Pacientes
-                </a>
+                @if (Puede("/admision/ordenes"))
+                {
+                    <a href="/admision/ordenes" class="btn btn-light text-primary fw-semibold shadow-sm">
+                        🛎️ Nueva Orden
+                    </a>
+                }
+                @if (Puede("/kardex/ordenes"))
+                {
+                    <a href="/kardex/ordenes" class="btn btn-outline-light fw-semibold">
+                        📋 Bandeja de Órdenes
+                    </a>
+                }
+                @if (Puede("/admision/citas"))
+                {
+                    <a href="/admision/citas" class="btn btn-outline-light fw-semibold">
+                        📅 Agenda de Citas
+                    </a>
+                }
+                @if (Puede("/admision/clientes-pacientes"))
+                {
+                    <a href="/admision/clientes-pacientes" class="btn btn-outline-light fw-semibold">
+                        🐾 Pacientes
+                    </a>
+                }
             </div>
         </div>
     </div>
@@ -54,454 +66,585 @@
 
 <!-- Tarjetas de Métricas / KPIs del Día -->
 <div class="row g-3 mb-4">
-    <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm border-0 h-100 border-start border-danger border-4" style="border-radius: 12px;">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small text-uppercase fw-bold">Documentos disponibles</div>
-                        <h3 class="fw-bold text-danger mb-0">@_saldoDocumentos</h3>
+    @if (Puede("contabilidad/compra-documentos"))
+    {
+        <div class="col-sm-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100 border-start border-danger border-4" style="border-radius: 12px;">
+                <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small text-uppercase fw-bold">Documentos disponibles</div>
+                            <h3 class="fw-bold text-danger mb-0">@_saldoDocumentos</h3>
+                        </div>
+                        <div class="fs-1 text-danger opacity-50">📄</div>
                     </div>
-                    <div class="fs-1 text-danger opacity-50">📄</div>
+                    <div class="mt-3"><a href="/contabilidad/compra-documentos" class="text-danger text-decoration-none small fw-semibold">Recargar documentos &rarr;</a></div>
                 </div>
-                <div class="mt-3"><a href="/contabilidad/compra-documentos" class="text-danger text-decoration-none small fw-semibold">Recargar documentos &rarr;</a></div>
             </div>
         </div>
-    </div>
+    }
 
-    <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm border-0 h-100 border-start @_firmaColor border-4" style="border-radius: 12px;">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small text-uppercase fw-bold">Vigencia de firma</div>
-                        <h5 class="fw-bold mb-0">@_firmaResumen</h5>
-                        @if (_firmaExpiracion is not null)
-                        {
-                            <small class="text-muted">Hasta @_firmaExpiracion.Value.ToString("dd/MM/yyyy")</small>
-                        }
+    @if (Puede("facturacion/configuracion/firma"))
+    {
+        <div class="col-sm-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100 border-start @_firmaColor border-4" style="border-radius: 12px;">
+                <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small text-uppercase fw-bold">Vigencia de firma</div>
+                            <h5 class="fw-bold mb-0">@_firmaResumen</h5>
+                            @if (_firmaExpiracion is not null)
+                            {
+                                <small class="text-muted">Hasta @_firmaExpiracion.Value.ToString("dd/MM/yyyy")</small>
+                            }
+                        </div>
+                        <div class="fs-1 opacity-50">✍️</div>
                     </div>
-                    <div class="fs-1 opacity-50">✍️</div>
+                    <div class="mt-3"><a href="/facturacion/configuracion/firma" class="text-decoration-none small fw-semibold">Ver firma electrónica &rarr;</a></div>
                 </div>
-                <div class="mt-3"><a href="/facturacion/configuracion/firma" class="text-decoration-none small fw-semibold">Ver firma electrónica &rarr;</a></div>
             </div>
         </div>
-    </div>
+    }
 
-    <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm border-0 h-100 border-start border-primary border-4" style="border-radius: 12px;">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small text-uppercase fw-bold">Órdenes Activas</div>
-                        <h3 class="fw-bold text-primary mb-0">@_totalOrdenesActivas</h3>
+    @if (Puede("kardex/ordenes"))
+    {
+        <div class="col-sm-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100 border-start border-primary border-4" style="border-radius: 12px;">
+                <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small text-uppercase fw-bold">Órdenes Activas</div>
+                            <h3 class="fw-bold text-primary mb-0">@_totalOrdenesActivas</h3>
+                        </div>
+                        <div class="fs-1 text-primary opacity-50">📋</div>
                     </div>
-                    <div class="fs-1 text-primary opacity-50">📋</div>
-                </div>
-                <div class="mt-3">
-                    <a href="/kardex/ordenes" class="text-primary text-decoration-none small fw-semibold">
-                        Ver bandeja de órdenes &rarr;
-                    </a>
+                    <div class="mt-3">
+                        <a href="/kardex/ordenes" class="text-primary text-decoration-none small fw-semibold">
+                            Ver bandeja de órdenes &rarr;
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    }
 
-    <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm border-0 h-100 border-start border-info border-4" style="border-radius: 12px;">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small text-uppercase fw-bold">Citas de Hoy</div>
-                        <h3 class="fw-bold text-info mb-0">@_totalCitasHoy</h3>
+    @if (Puede("admision/citas"))
+    {
+        <div class="col-sm-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100 border-start border-info border-4" style="border-radius: 12px;">
+                <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small text-uppercase fw-bold">Citas de Hoy</div>
+                            <h3 class="fw-bold text-info mb-0">@_totalCitasHoy</h3>
+                        </div>
+                        <div class="fs-1 text-info opacity-50">📅</div>
                     </div>
-                    <div class="fs-1 text-info opacity-50">📅</div>
-                </div>
-                <div class="mt-3">
-                    <a href="/admision/citas" class="text-info text-decoration-none small fw-semibold">
-                        Ver agenda del día &rarr;
-                    </a>
+                    <div class="mt-3">
+                        <a href="/admision/citas" class="text-info text-decoration-none small fw-semibold">
+                            Ver agenda del día &rarr;
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    }
 
-    <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm border-0 h-100 border-start border-success border-4" style="border-radius: 12px;">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small text-uppercase fw-bold">Hospitalización 24h</div>
-                        <h3 class="fw-bold text-success mb-0">@_totalHospitalizados</h3>
+    @if (Puede("hospitalizacion/ficha"))
+    {
+        <div class="col-sm-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100 border-start border-success border-4" style="border-radius: 12px;">
+                <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small text-uppercase fw-bold">Hospitalización 24h</div>
+                            <h3 class="fw-bold text-success mb-0">@_totalHospitalizados</h3>
+                        </div>
+                        <div class="fs-1 text-success opacity-50">🏥</div>
                     </div>
-                    <div class="fs-1 text-success opacity-50">🏥</div>
-                </div>
-                <div class="mt-3">
-                    <a href="/hospitalizacion/ficha" class="text-success text-decoration-none small fw-semibold">
-                        Ver fichas activas &rarr;
-                    </a>
+                    <div class="mt-3">
+                        <a href="/hospitalizacion/ficha" class="text-success text-decoration-none small fw-semibold">
+                            Ver fichas activas &rarr;
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    }
 
-    <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm border-0 h-100 border-start border-warning border-4" style="border-radius: 12px;">
-            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small text-uppercase fw-bold">Kardex y Enfermería</div>
-                        <h3 class="fw-bold text-warning text-dark mb-0">Activo</h3>
+    @if (Puede("kardex/enfermeria"))
+    {
+        <div class="col-sm-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100 border-start border-warning border-4" style="border-radius: 12px;">
+                <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small text-uppercase fw-bold">Kardex y Enfermería</div>
+                            <h3 class="fw-bold text-warning text-dark mb-0">Activo</h3>
+                        </div>
+                        <div class="fs-1 text-warning opacity-50">💉</div>
                     </div>
-                    <div class="fs-1 text-warning opacity-50">💉</div>
-                </div>
-                <div class="mt-3">
-                    <a href="/kardex/enfermeria" class="text-warning text-dark text-decoration-none small fw-semibold">
-                        Abrir kardex rápido &rarr;
-                    </a>
+                    <div class="mt-3">
+                        <a href="/kardex/enfermeria" class="text-warning text-dark text-decoration-none small fw-semibold">
+                            Abrir kardex rápido &rarr;
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    }
 </div>
 
 <!-- Acceso Rápido por Orden / NHCL -->
-<div class="card shadow-sm border-0 mb-4" style="border-radius: 12px; background-color: #f8fafc;">
-    <div class="card-body p-3">
-        <div class="row g-2 align-items-center">
-            <div class="col-md-3">
-                <span class="fw-bold text-secondary small">⚡ Acceso Rápido Directo:</span>
-                <div class="small text-muted">Ingrese Orden y NHCL para ir directo:</div>
-            </div>
-            <div class="col-md-2">
-                <input type="number" class="form-control form-control-sm" placeholder="N° Orden" @bind="_ordenManual" />
-            </div>
-            <div class="col-md-2">
-                <input type="number" class="form-control form-control-sm" placeholder="NHCL Mascota" @bind="_nhclManual" />
-            </div>
-            <div class="col-md-5 d-flex gap-1 flex-wrap">
-                <button class="btn btn-primary btn-sm" @onclick='() => IrModuloManual("kardex")'>
-                    💉 Kardex
-                </button>
-                <button class="btn btn-outline-primary btn-sm" @onclick='() => IrModuloManual("signos")'>
-                    📈 Signos
-                </button>
-                <button class="btn btn-outline-success btn-sm" @onclick='() => IrModuloManual("ficha")'>
-                    🏥 Ficha 24h
-                </button>
-                <button class="btn btn-outline-danger btn-sm" @onclick='() => IrModuloManual("preanestesia")'>
-                    🧪 Pre-Anest.
-                </button>
-                <button class="btn btn-outline-info btn-sm" @onclick='() => IrModuloManual("anestesia")'>
-                    🫁 Anestesia
-                </button>
+@if (TieneAccesosDirectos)
+{
+    <div class="card shadow-sm border-0 mb-4" style="border-radius: 12px; background-color: #f8fafc;">
+        <div class="card-body p-3">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-3">
+                    <span class="fw-bold text-secondary small">⚡ Acceso Rápido Directo:</span>
+                    <div class="small text-muted">Ingrese Orden y NHCL para ir directo:</div>
+                </div>
+                <div class="col-md-2">
+                    <input type="number" class="form-control form-control-sm" placeholder="N° Orden" @bind="_ordenManual" />
+                </div>
+                <div class="col-md-2">
+                    <input type="number" class="form-control form-control-sm" placeholder="NHCL Mascota" @bind="_nhclManual" />
+                </div>
+                <div class="col-md-5 d-flex gap-1 flex-wrap">
+                    @if (Puede("kardex/enfermeria"))
+                    {
+                        <button class="btn btn-primary btn-sm" @onclick='() => IrModuloManual("kardex")'>
+                            💉 Kardex
+                        </button>
+                    }
+                    @if (Puede("kardex/signos"))
+                    {
+                        <button class="btn btn-outline-primary btn-sm" @onclick='() => IrModuloManual("signos")'>
+                            📈 Signos
+                        </button>
+                    }
+                    @if (Puede("hospitalizacion/ficha"))
+                    {
+                        <button class="btn btn-outline-success btn-sm" @onclick='() => IrModuloManual("ficha")'>
+                            🏥 Ficha 24h
+                        </button>
+                    }
+                    @if (Puede("quirofano/preanestesia"))
+                    {
+                        <button class="btn btn-outline-danger btn-sm" @onclick='() => IrModuloManual("preanestesia")'>
+                            🧪 Pre-Anest.
+                        </button>
+                    }
+                    @if (Puede("quirofano/anestesia"))
+                    {
+                        <button class="btn btn-outline-info btn-sm" @onclick='() => IrModuloManual("anestesia")'>
+                            🫁 Anestesia
+                        </button>
+                    }
+                </div>
             </div>
         </div>
     </div>
-</div>
+}
 
 <!-- Módulos del Sistema (Estilo vt_principal / Tarjetas Modernas) -->
 <h5 class="fw-bold text-dark mb-3">Módulos y Servicios del Sistema</h5>
 <div class="row g-3 mb-4">
     <!-- Módulo 1: Admisión y Recepción -->
-    <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
-            <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="fs-4">🐾</span>
-                    <div>
-                        <h6 class="fw-bold mb-0 text-primary">Admisión y Recepción</h6>
-                        <small class="text-muted">Gestión de pacientes y citas</small>
+    @if (PuedeAlguno("/admision/clientes-pacientes", "/admision/ordenes", "/admision/citas"))
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+                <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fs-4">🐾</span>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-primary">Admisión y Recepción</h6>
+                            <small class="text-muted">Gestión de pacientes y citas</small>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="card-body p-3">
-                <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
-                    <li>
-                        <a href="/admision/clientes-pacientes" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>👥 Registro de Clientes y Pacientes</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/admision/ordenes" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>🛎️ Recepción y Nuevas Órdenes</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/admision/citas" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>📅 Agenda y Programación de Citas</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                </ul>
+                <div class="card-body p-3">
+                    <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
+                        @if (Puede("/admision/clientes-pacientes"))
+                        {
+                            <li>
+                                <a href="/admision/clientes-pacientes" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>👥 Registro de Clientes y Pacientes</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/admision/ordenes"))
+                        {
+                            <li>
+                                <a href="/admision/ordenes" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>🛎️ Recepción y Nuevas Órdenes</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/admision/citas"))
+                        {
+                            <li>
+                                <a href="/admision/citas" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>📅 Agenda y Programación de Citas</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
             </div>
         </div>
-    </div>
+    }
 
     <!-- Módulo 2: Núcleo Kardex de Enfermería -->
-    <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
-            <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="fs-4">💉</span>
-                    <div>
-                        <h6 class="fw-bold mb-0 text-primary">Kardex y Enfermería</h6>
-                        <small class="text-muted">Administración de fármacos y signos</small>
+    @if (PuedeAlguno("/kardex/ordenes", "/kardex/enfermeria", "/kardex/signos"))
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+                <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fs-4">💉</span>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-primary">Kardex y Enfermería</h6>
+                            <small class="text-muted">Administración de fármacos y signos</small>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="card-body p-3">
-                <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
-                    <li>
-                        <a href="/kardex/ordenes" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>📋 Bandeja de Órdenes Clínicas</span>
-                            <span class="text-primary fw-bold">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/kardex/enfermeria" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>💊 Sábana de Kardex (5 Días)</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/kardex/signos" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>📈 Signos Vitales y Balance Hídrico</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                </ul>
+                <div class="card-body p-3">
+                    <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
+                        @if (Puede("/kardex/ordenes"))
+                        {
+                            <li>
+                                <a href="/kardex/ordenes" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>📋 Bandeja de Órdenes Clínicas</span>
+                                    <span class="text-primary fw-bold">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/kardex/enfermeria"))
+                        {
+                            <li>
+                                <a href="/kardex/enfermeria" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>💊 Sábana de Kardex (5 Días)</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/kardex/signos"))
+                        {
+                            <li>
+                                <a href="/kardex/signos" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>📈 Signos Vitales y Balance Hídrico</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
             </div>
         </div>
-    </div>
+    }
 
     <!-- Módulo 3: Hospitalización 24 Horas -->
-    <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
-            <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="fs-4">🏥</span>
-                    <div>
-                        <h6 class="fw-bold mb-0 text-primary">Hospitalización 24h</h6>
-                        <small class="text-muted">Seguimiento y cuidados críticos</small>
+    @if (PuedeAlguno("/hospitalizacion/ficha", "/hospitalizacion/monitoreo"))
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+                <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fs-4">🏥</span>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-primary">Hospitalización 24h</h6>
+                            <small class="text-muted">Seguimiento y cuidados críticos</small>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="card-body p-3">
-                <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
-                    <li>
-                        <a href="/hospitalizacion/ficha" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>📋 Ficha de Hospitalización 24 Horas</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/hospitalizacion/monitoreo" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>🩺 Monitoreo Clínico de Pacientes</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                </ul>
+                <div class="card-body p-3">
+                    <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
+                        @if (Puede("/hospitalizacion/ficha"))
+                        {
+                            <li>
+                                <a href="/hospitalizacion/ficha" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>📋 Ficha de Hospitalización 24 Horas</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/hospitalizacion/monitoreo"))
+                        {
+                            <li>
+                                <a href="/hospitalizacion/monitoreo" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>🩺 Monitoreo Clínico de Pacientes</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
             </div>
         </div>
-    </div>
+    }
 
     <!-- Módulo 4: Quirófano y Anestesiología -->
-    <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
-            <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="fs-4">🔪</span>
-                    <div>
-                        <h6 class="fw-bold mb-0 text-danger">Quirófano y Anestesia</h6>
-                        <small class="text-muted">Cirugía y cuidados anestésicos</small>
+    @if (PuedeAlguno("/quirofano/preanestesia", "/quirofano/anestesia", "/quirofano/protocolo", "/quirofano/recuperacion"))
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+                <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fs-4">🔪</span>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-danger">Quirófano y Anestesia</h6>
+                            <small class="text-muted">Cirugía y cuidados anestésicos</small>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="card-body p-3">
-                <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
-                    <li>
-                        <a href="/quirofano/preanestesia" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>🧪 Pre-Anestesia y Evaluación ASA</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/quirofano/anestesia" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>🫁 Hoja de Anestesia Transoperatoria</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/quirofano/protocolo" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>📝 Protocolo y Reporte Quirúrgico</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/quirofano/recuperacion" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>🛏️ Sala de Recuperación Post-Quirúrgica</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                </ul>
+                <div class="card-body p-3">
+                    <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
+                        @if (Puede("/quirofano/preanestesia"))
+                        {
+                            <li>
+                                <a href="/quirofano/preanestesia" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>🧪 Pre-Anestesia y Evaluación ASA</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/quirofano/anestesia"))
+                        {
+                            <li>
+                                <a href="/quirofano/anestesia" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>🫁 Hoja de Anestesia Transoperatoria</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/quirofano/protocolo"))
+                        {
+                            <li>
+                                <a href="/quirofano/protocolo" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>📝 Protocolo y Reporte Quirúrgico</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/quirofano/recuperacion"))
+                        {
+                            <li>
+                                <a href="/quirofano/recuperacion" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>🛏️ Sala de Recuperación Post-Quirúrgica</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
             </div>
         </div>
-    </div>
+    }
 
     <!-- Módulo 5: Consulta Externa y Recetario -->
-    <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
-            <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="fs-4">📋</span>
-                    <div>
-                        <h6 class="fw-bold mb-0 text-info">Atención Médica SOAP</h6>
-                        <small class="text-muted">Historia clínica y prescripción</small>
+    @if (PuedeAlguno("/consulta/fichamedica", "/consulta/evoluciones", "/consulta/recetario", "/consulta/autorizaciones"))
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+                <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fs-4">📋</span>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-info">Atención Médica SOAP</h6>
+                            <small class="text-muted">Historia clínica y prescripción</small>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="card-body p-3">
-                <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
-                    <li>
-                        <a href="/consulta/fichamedica" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>🩺 Historia Clínica SOAP</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/consulta/evoluciones" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>📝 Notas de Evolución Médica</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/consulta/recetario" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>💊 Recetario Médico Electrónico</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/consulta/autorizaciones" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>📄 Consentimientos y Plan de Alta</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                </ul>
+                <div class="card-body p-3">
+                    <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
+                        @if (Puede("/consulta/fichamedica"))
+                        {
+                            <li>
+                                <a href="/consulta/fichamedica" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>🩺 Historia Clínica SOAP</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/consulta/evoluciones"))
+                        {
+                            <li>
+                                <a href="/consulta/evoluciones" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>📝 Notas de Evolución Médica</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/consulta/recetario"))
+                        {
+                            <li>
+                                <a href="/consulta/recetario" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>💊 Recetario Médico Electrónico</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/consulta/autorizaciones"))
+                        {
+                            <li>
+                                <a href="/consulta/autorizaciones" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>📄 Consentimientos y Plan de Alta</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
             </div>
         </div>
-    </div>
+    }
 
     <!-- Módulo 6: Diagnóstico y Facturación -->
-    <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
-            <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="fs-4">🔬</span>
-                    <div>
-                        <h6 class="fw-bold mb-0 text-success">Diagnóstico y Facturación</h6>
-                        <small class="text-muted">Laboratorio, RX y proformas</small>
+    @if (PuedeAlguno("/diagnostico/laboratorio", "/diagnostico/imagenologia", "/diagnostico/bandeja", "/facturacion/proformas"))
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+                <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fs-4">🔬</span>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-success">Diagnóstico y Facturación</h6>
+                            <small class="text-muted">Laboratorio, RX y proformas</small>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="card-body p-3">
-                <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
-                    <li>
-                        <a href="/diagnostico/laboratorio" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>🧪 Órdenes de Laboratorio Clínico</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/diagnostico/imagenologia" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>☢️ Órdenes de Rayos X y Ecografía</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/diagnostico/bandeja" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>📥 Bandeja de Resultados e Informes</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/facturacion/proformas" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                            <span>💳 Proformas</span>
-                            <span class="text-muted">&rsaquo;</span>
-                        </a>
-                    </li>
-                </ul>
+                <div class="card-body p-3">
+                    <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
+                        @if (Puede("/diagnostico/laboratorio"))
+                        {
+                            <li>
+                                <a href="/diagnostico/laboratorio" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>🧪 Órdenes de Laboratorio Clínico</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/diagnostico/imagenologia"))
+                        {
+                            <li>
+                                <a href="/diagnostico/imagenologia" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>☢️ Órdenes de Rayos X y Ecografía</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/diagnostico/bandeja"))
+                        {
+                            <li>
+                                <a href="/diagnostico/bandeja" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>📥 Bandeja de Resultados e Informes</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                        @if (Puede("/facturacion/proformas"))
+                        {
+                            <li>
+                                <a href="/facturacion/proformas" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
+                                    <span>💳 Proformas</span>
+                                    <span class="text-muted">&rsaquo;</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
             </div>
         </div>
-    </div>
+    }
 </div>
 
 <!-- Pacientes Recientes en Atención -->
-<div class="card shadow-sm border-0 mb-4">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-        <h6 class="fw-bold text-dark mb-0">🐾 Pacientes Recientes en Atención</h6>
-        <a href="/kardex/ordenes" class="btn btn-outline-primary btn-sm">
-            Ver todas las órdenes en la Bandeja &rarr;
-        </a>
-    </div>
-    <div class="card-body p-0">
-        @if (_pacientesRecientes.Count == 0 && !_cargando)
-        {
-            <div class="p-3 text-muted small">No hay órdenes activas registradas en este momento.</div>
-        }
-        else
-        {
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>N° Orden</th>
-                            <th>NHCL</th>
-                            <th>Paciente</th>
-                            <th>Especie / Sexo</th>
-                            <th>Propietario</th>
-                            <th>Médico Asignado</th>
-                            <th class="text-end pe-3">Acceso Directo</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var p in _pacientesRecientes.Take(6))
-                        {
+@if (Puede("kardex/ordenes"))
+{
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+            <h6 class="fw-bold text-dark mb-0">🐾 Pacientes Recientes en Atención</h6>
+            <a href="/kardex/ordenes" class="btn btn-outline-primary btn-sm">
+                Ver todas las órdenes en la Bandeja &rarr;
+            </a>
+        </div>
+        <div class="card-body p-0">
+            @if (_pacientesRecientes.Count == 0 && !_cargando)
+            {
+                <div class="p-3 text-muted small">No hay órdenes activas registradas en este momento.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
                             <tr>
-                                <td class="fw-bold">@p.OrdenAtencionId</td>
-                                <td class="text-danger fw-bold">@p.Nhcl</td>
-                                <td class="fw-semibold">@p.Paciente</td>
-                                <td>@p.Especie (@p.Sexo)</td>
-                                <td>@p.Cliente</td>
-                                <td>
-                                    <div>@p.Medico</div>
-                                    <small class="text-muted">@p.Especialidad</small>
-                                </td>
-                                <td class="text-end pe-3">
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="/kardex/enfermeria?orden=@p.OrdenAtencionId&nhcl=@p.Nhcl" class="btn btn-primary" title="Abrir Kardex">
-                                            💉 Kardex
-                                        </a>
-                                        <a href="/kardex/signos/@p.OrdenAtencionId/@p.Nhcl" class="btn btn-outline-primary" title="Ver Signos">
-                                            📈 Signos
-                                        </a>
-                                        <a href="/hospitalizacion/ficha/@p.OrdenAtencionId/@p.Nhcl" class="btn btn-outline-success" title="Ficha Hospitalaria">
-                                            🏥 Ficha
-                                        </a>
-                                    </div>
-                                </td>
+                                <th>N° Orden</th>
+                                <th>NHCL</th>
+                                <th>Paciente</th>
+                                <th>Especie / Sexo</th>
+                                <th>Propietario</th>
+                                <th>Médico Asignado</th>
+                                <th class="text-end pe-3">Acceso Directo</th>
                             </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
+                        </thead>
+                        <tbody>
+                            @foreach (var p in _pacientesRecientes.Take(6))
+                            {
+                                <tr>
+                                    <td class="fw-bold">@p.OrdenAtencionId</td>
+                                    <td class="text-danger fw-bold">@p.Nhcl</td>
+                                    <td class="fw-semibold">@p.Paciente</td>
+                                    <td>@p.Especie (@p.Sexo)</td>
+                                    <td>@p.Cliente</td>
+                                    <td>
+                                        <div>@p.Medico</div>
+                                        <small class="text-muted">@p.Especialidad</small>
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <div class="btn-group btn-group-sm">
+                                            @if (Puede("/kardex/enfermeria"))
+                                            {
+                                                <a href="/kardex/enfermeria?orden=@p.OrdenAtencionId&nhcl=@p.Nhcl" class="btn btn-primary" title="Abrir Kardex">
+                                                    💉 Kardex
+                                                </a>
+                                            }
+                                            @if (Puede("/kardex/signos"))
+                                            {
+                                                <a href="/kardex/signos/@p.OrdenAtencionId/@p.Nhcl" class="btn btn-outline-primary" title="Ver Signos">
+                                                    📈 Signos
+                                                </a>
+                                            }
+                                            @if (Puede("/hospitalizacion/ficha"))
+                                            {
+                                                <a href="/hospitalizacion/ficha/@p.OrdenAtencionId/@p.Nhcl" class="btn btn-outline-success" title="Ficha Hospitalaria">
+                                                    🏥 Ficha
+                                                </a>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
     </div>
-</div>
+}
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+    private bool Puede(string ruta) => Permisos.Permite(ruta);
+    private bool PuedeAlguno(params string[] rutas) => rutas.Any(Puede);
+    private bool TieneAccesosDirectos => PuedeAlguno("kardex/enfermeria", "kardex/signos", "hospitalizacion/ficha", "quirofano/preanestesia", "quirofano/anestesia");
+
     private bool _cargando;
     private int _totalOrdenesActivas;
     private int _totalCitasHoy;
@@ -523,19 +666,24 @@
         await Task.Yield();
         try
         {
-            var ordenesTask = KardexService.ObtenerOrdenesActivasAsync();
-            var citasTask = AdmisionService.ObtenerCitasPorFechaAsync(DateTime.Today, DateTime.Today);
-            var cuentaTask = CargarIndicadoresFacturacionAsync();
+            var ordenesTask = PuedeAlguno("kardex/ordenes", "hospitalizacion/ficha")
+                ? KardexService.ObtenerOrdenesActivasAsync() : Task.FromResult(new List<OrdenActivaResumenDto>());
+            var citasTask = Puede("admision/citas")
+                ? AdmisionService.ObtenerCitasPorFechaAsync(DateTime.Today, DateTime.Today) : Task.FromResult(new List<CitaMedicaDto>());
+            var cuentaTask = PuedeAlguno("contabilidad/compra-documentos", "facturacion/configuracion/firma")
+                ? CargarIndicadoresFacturacionAsync() : Task.CompletedTask;
 
             await Task.WhenAll(ordenesTask, citasTask, cuentaTask);
 
-            _pacientesRecientes = await ordenesTask;
+            var ordenes = await ordenesTask;
+            if (Puede("kardex/ordenes"))
+                _pacientesRecientes = ordenes;
             _totalOrdenesActivas = _pacientesRecientes.Count;
 
             var citas = await citasTask;
             _totalCitasHoy = citas.Count;
 
-            _totalHospitalizados = _pacientesRecientes.Count(o => o.Especialidad.Contains("Hosp", StringComparison.OrdinalIgnoreCase) || o.OrdenAtencionId > 0);
+            _totalHospitalizados = ordenes.Count(o => o.Etapa.Contains("Hosp", StringComparison.OrdinalIgnoreCase));
 
             if (_pacientesRecientes.Count > 0)
             {
@@ -547,7 +695,7 @@
         }
         catch (Exception)
         {
-            _mensajeAccesoRapido = "No se pudieron cargar las órdenes desde la base de datos.";
+            _mensajeAccesoRapido = "No se pudieron cargar todos los indicadores del panel.";
         }
         finally
         {
@@ -567,6 +715,8 @@
             usuario = await context.Usuarios.AsNoTracking().FirstOrDefaultAsync(x => x.IdUsuario == usuario.idJefe.Value) ?? usuario;
 
         _saldoDocumentos = Math.Max(0, usuario.SaldoDocumentos);
+        if (!Puede("facturacion/configuracion/firma")) return;
+
         var emisor = await context.Emisores.AsNoTracking()
             .Where(x => x.IdUsuario == usuario.IdUsuario && x.Estado)
             .OrderByDescending(x => x.Codigo)

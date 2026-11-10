@@ -319,36 +319,26 @@ else if (paciente != null)
                     <div class="form-check form-check-inline mb-0">
                         <input class="form-check-input" type="radio" name="tipoMiembro" id="tipoExterno" checked="@nuevoMiembro.EsExterno" @onchange="() => CambiarTipoMiembro(true)">
                         <label class="form-check-label fw-semibold text-primary" for="tipoExterno">
-                            <i class="bi bi-person-plus-fill me-1"></i>Persona / Profesional Externo
+                            <i class="bi bi-person-plus-fill me-1"></i>Médico Externo
                         </label>
                     </div>
                 </div>
 
                 <div class="row g-2 mb-3 align-items-end bg-light p-2 rounded border">
-                    @if (!nuevoMiembro.EsExterno)
-                    {
-                        <div class="col-md-5">
-                            <label class="form-label mb-1 fw-semibold">Profesional del Sistema</label>
-                            <select class="form-select form-select-sm" @bind="nuevoMiembro.IdUsuario">
-                                <option value="0">-- Seleccionar Profesional --</option>
-                                @foreach (var u in profesionales)
-                                {
-                                    <option value="@u.UserNumero">@u.UserNombre</option>
-                                }
-                            </select>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="col-md-3">
-                            <label class="form-label mb-1 fw-semibold">Nombre y Apellidos (Externo)</label>
-                            <input type="text" class="form-control form-control-sm" placeholder="Ej: Dr. Juan Pérez" @bind="nuevoMiembro.NombreProfesional" />
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label mb-1 fw-semibold">Cédula / Identificación</label>
-                            <input type="text" class="form-control form-control-sm" placeholder="C.I. (Opcional)" @bind="nuevoMiembro.Cedula" />
-                        </div>
-                    }
+                    <div class="col-md-5">
+                        <label class="form-label mb-1 fw-semibold">Profesional del Sistema</label>
+                        <select class="form-select form-select-sm" @bind="nuevoMiembro.IdUsuario">
+                            <option value="0">-- Seleccionar Profesional --</option>
+                            @foreach (var u in profesionales.Where(u => u.EsExterno == nuevoMiembro.EsExterno))
+                            {
+                                <option value="@u.UserNumero">@u.UserNombre</option>
+                            }
+                        </select>
+                        @if (nuevoMiembro.EsExterno)
+                        {
+                            <small class="text-muted">Registre al médico externo en Administración de usuarios antes de seleccionarlo.</small>
+                        }
+                    </div>
                     <div class="col-md-4">
                         <label class="form-label mb-1 fw-semibold">Rol en Quirófano</label>
                         <select class="form-select form-select-sm" @bind="nuevoMiembro.RolFuncion">
@@ -518,7 +508,7 @@ else if (paciente != null)
         cargandoInicial = true;
         await Task.Yield();
 
-        var tProf = KardexService.ObtenerFuncionariosEnfermeriaAsync();
+        var tProf = KardexService.ObtenerProfesionalesQuirurgicosAsync();
         var tOrd = KardexService.ObtenerOrdenesActivasAsync();
         await Task.WhenAll(tProf, tOrd);
 
@@ -763,36 +753,16 @@ else if (paciente != null)
     private void CambiarTipoMiembro(bool esExterno)
     {
         nuevoMiembro.EsExterno = esExterno;
-        if (esExterno)
-        {
-            nuevoMiembro.IdUsuario = 0;
-        }
-        else
-        {
-            nuevoMiembro.NombreProfesional = string.Empty;
-            nuevoMiembro.Cedula = string.Empty;
-        }
+        nuevoMiembro.IdUsuario = 0;
     }
 
     private async Task AgregarMiembroAsync()
     {
-        if (nuevoMiembro.EsExterno)
+        if (nuevoMiembro.IdUsuario <= 0)
         {
-            if (string.IsNullOrWhiteSpace(nuevoMiembro.NombreProfesional))
-            {
-                esError = true;
-                mensajeAlerta = "Debe ingresar el nombre del profesional o especialista externo.";
-                return;
-            }
-        }
-        else
-        {
-            if (nuevoMiembro.IdUsuario <= 0)
-            {
-                esError = true;
-                mensajeAlerta = "Seleccione el profesional para integrarlo al equipo quirúrgico.";
-                return;
-            }
+            esError = true;
+            mensajeAlerta = "Seleccione un profesional registrado para integrarlo al equipo quirúrgico.";
+            return;
         }
 
         nuevoMiembro.IdOrden = IdOrden;
@@ -810,7 +780,7 @@ else if (paciente != null)
         else
         {
             esError = true;
-            mensajeAlerta = "No se pudo añadir el integrante al equipo quirúrgico.";
+            mensajeAlerta = "No se pudo añadir el integrante. Verifique que el profesional siga activo y que corresponda al tipo seleccionado.";
         }
     }
 

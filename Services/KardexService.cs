@@ -12,6 +12,7 @@ public interface IKardexService
     Task<PacienteHeaderDto?> ObtenerEncabezadoPacienteAsync(int ordenId, int nhcl) => ObtenerCabeceraPacienteAsync(ordenId, nhcl);
     Task<List<ViaAdministracionDto>> ObtenerViasAdministracionAsync();
     Task<List<FuncionarioDto>> ObtenerFuncionariosEnfermeriaAsync();
+    Task<List<FuncionarioDto>> ObtenerProfesionalesQuirurgicosAsync();
     Task<List<FuncionEnfermeriaDto>> ObtenerFuncionesEnfermeriaAsync();
     Task<List<ProductoUtilizadoDto>> ObtenerProductosUtilizadosAsync(int ordenId, string modulo = "EnCirugia");
     Task<(bool Exito, string Mensaje)> RegistrarAdministracionMedicamentoAsync(
@@ -199,6 +200,18 @@ public class KardexService : IKardexService
         }
 
         return [];
+    }
+
+    public async Task<List<FuncionarioDto>> ObtenerProfesionalesQuirurgicosAsync()
+    {
+        const string sql = """
+            SELECT user_numero AS UserNumero, RTRIM(user_nombre) AS UserNombre,
+                   CAST(CASE WHEN user_tipouser_numero = 2 AND user_tipomedico = 'E' THEN 1 ELSE 0 END AS BIT) AS EsExterno
+            FROM vt_usuarios
+            WHERE user_tipouser_numero IN (2, 3) AND user_estado = 'A'
+            ORDER BY user_nombre
+            """;
+        return (await _sql.QueryAsync<FuncionarioDto>(sql)).ToList();
     }
 
     public async Task<List<FuncionarioDto>> ObtenerFuncionariosEnfermeriaAsync()

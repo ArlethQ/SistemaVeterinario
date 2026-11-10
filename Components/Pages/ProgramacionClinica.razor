@@ -5,7 +5,7 @@
 <PageTitle>Programación clínica | e-ForVets</PageTitle>
 @if(_autorizado){
 <div class="container-fluid py-3">
-<div class="d-flex justify-content-between"><h2>Horarios médicos y programación quirúrgica</h2><a class="btn btn-outline-primary" href="/programacion/consultorios">Gestionar pisos y consultorios</a></div>
+<div class="d-flex justify-content-between"><h2>Horarios médicos y programación quirúrgica</h2>@if (Permisos.Permite("programacion/consultorios")) { <a class="btn btn-outline-primary" href="/programacion/consultorios">Gestionar pisos y consultorios</a> }</div>
 <ul class="nav nav-tabs my-3"><li class="nav-item"><button class="nav-link @(_tab=="horarios"?"active":"")" @onclick='()=>Cambiar("horarios")'>Horarios semanales</button></li><li class="nav-item"><button class="nav-link @(_tab=="excepciones"?"active":"")" @onclick='()=>Cambiar("excepciones")'>Bloqueos y excepciones</button></li><li class="nav-item"><button class="nav-link @(_tab=="cirugias"?"active":"")" @onclick='()=>Cambiar("cirugias")'>Cirugías</button></li></ul>
 @if(!string.IsNullOrEmpty(_mensaje)){<div class="alert @(_error?"alert-danger":"alert-success")">@_mensaje</div>}
 @if(_tab=="horarios"){
@@ -28,6 +28,7 @@
 <table class="table"><thead><tr><th>Fecha</th><th>Médico</th><th>Paciente</th><th>Procedimiento</th><th>Horario</th><th></th></tr></thead><tbody>@foreach(var x in _cirugias.Where(x=>x.Estado=="A")){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td>@x.Medico</td><td>@x.Paciente</td><td>@x.Procedimiento</td><td>@x.HoraInicio - @x.HoraFin</td><td><button class="btn btn-sm btn-outline-danger" @onclick="()=>CancelarCirugia(x.Id)">Cancelar</button></td></tr>}</tbody></table>
 }</div>}
 @code{
+[CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
 bool _autorizado,_error;string _tab="horarios",_mensaje="",_filtroPaciente="",_filtroProcedimiento="";int _consultorioId;HorarioMedicoDto _horario=new();ExcepcionHorarioDto _excepcion=new();CirugiaProgramadaDto _cirugia=new();List<HorarioMedicoDto> _horarios=[];List<ExcepcionHorarioDto> _excepciones=[];List<CirugiaProgramadaDto> _cirugias=[];List<PisoClinicoDto> _pisos=[];List<ConsultorioClinicoDto> _consultorios=[];List<SelectorClinicoDto> _medicos=[],_localidades=[],_pacientes=[],_procedimientos=[];readonly Dictionary<string,string> Dias=new(){{"Lunes","Monday"},{"Martes","Tuesday"},{"Miércoles","Wednesday"},{"Jueves","Thursday"},{"Viernes","Friday"},{"Sábado","Saturday"},{"Domingo","Sunday"}};
 IEnumerable<ConsultorioClinicoDto> ConsultoriosDisponibles=>_consultorios.Where(c=>_horario.IdLocalidad==0||_pisos.Any(p=>p.Id==c.IdPiso&&p.IdLocalidad==_horario.IdLocalidad));
 protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated){Nav.NavigateTo("/login");return;}_autorizado=true;var m=Service.ObtenerMedicosAsync();var l=Service.ObtenerLocalidadesSelectorAsync();var p=Service.BuscarPacientesAsync("");var pr=Service.BuscarProcedimientosAsync("");var pi=Service.ObtenerPisosAsync(true);var co=Service.ObtenerConsultoriosAsync(true);await Task.WhenAll(m,l,p,pr,pi,co);_medicos=await m;_localidades=await l;_pacientes=await p;_procedimientos=await pr;_pisos=await pi;_consultorios=await co;await Cargar();}

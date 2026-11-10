@@ -45,7 +45,7 @@
         <article class="purchase-kpi purchase-kpi-total"><i class="ri-coins-line"></i><div><span>Valor total (filtrado)</span><strong>@TotalOrdenes.ToString("C2")</strong><small>@OrdenesVisibles.Count() orden(es)</small></div></article>
     </section>
 
-    @if (!string.IsNullOrWhiteSpace(error))
+    @if (!mostrarEditor && !string.IsNullOrWhiteSpace(error))
     {
         <div class="alert alert-danger" role="alert">@error</div>
     }
@@ -200,6 +200,10 @@
             </header>
 
             <div class="purchase-modal-body p-4 overflow-auto">
+                @if (!string.IsNullOrWhiteSpace(error))
+                {
+                    <div class="alert alert-danger" role="alert">@error</div>
+                }
                 <div class="purchase-editor-card mb-3">
                     <div class="purchase-section-heading"><div><span>DATOS DEL DOCUMENTO</span><h3>Información de la orden</h3></div><i class="ri-file-list-3-line"></i></div>
                     <div class="row g-3 p-3">

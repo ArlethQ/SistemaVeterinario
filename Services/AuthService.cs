@@ -162,7 +162,7 @@ public interface IAuthService
     Task<HashSet<int>> ObtenerAccesosRolAsync(int idRol);
     Task<bool> GuardarRolConPermisosAsync(RolUsuarioModel rol, IReadOnlyCollection<int> menuIds, int adminId);
     Task<(bool Exito, string Mensaje)> EliminarRolAsync(int idRol, int adminId);
-    Task<bool> TieneAccesoRutaAsync(string ruta);
+    Task<PermisosNavegacion> ObtenerPermisosNavegacionAsync(string ruta);
     Task<(bool Puede, string Motivo)> ValidarCambioRolUsuarioAsync(int idUser, int nuevoRolId, IReadOnlyCollection<int>? nuevasEspecialidades = null);
     Task<(bool Exito, string Mensaje)> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId);
     Task<bool> GuardarRolAsync(RolUsuarioModel rol, int adminId);
@@ -336,8 +336,10 @@ public class AuthService : IAuthService
                 (607, 'Consentimientos y alta', 6, 'consulta/autorizaciones'),
                 (608, 'Seguimiento clÃ­nico', 6, 'seguimiento/clinico'),
                 (609, 'Expediente / Lotes fichas', 6, 'consulta/imprimir-fichas'),
+                (610, 'Historial del paciente', 6, 'consulta/historial'),
                 (701, 'Operaciones clÃ­nicas', 7, 'operaciones/clinicas'),
                 (702, 'ProgramaciÃ³n clÃ­nica', 7, 'programacion/clinica'),
+                (703, 'Pisos y consultorios', 7, 'programacion/consultorios'),
                 (801, 'Ã“rdenes de laboratorio', 8, 'diagnostico/laboratorio'),
                 (802, 'Rayos X y ecografÃ­a', 8, 'diagnostico/imagenologia'),
                 (803, 'Bandeja de resultados', 8, 'diagnostico/bandeja'),
@@ -373,6 +375,41 @@ public class AuthService : IAuthService
                 (1012, 'ConfiguraciÃ³n contable', 10, 'contabilidad/configuracion/general'),
                 (1013, 'Usuarios contables', 10, 'contabilidad/administracion/usuarios'),
                 (1014, 'Roles y permisos contables', 10, 'contabilidad/administracion/roles'),
+                (1016, 'Nueva factura contable', 10, 'contabilidad/facturacion/nueva'),
+                (1017, 'Documentos contables', 10, 'contabilidad/facturacion/documentos'),
+                (1018, 'Productos contables', 10, 'contabilidad/productos'),
+                (1019, 'Categorías contables', 10, 'contabilidad/configuracion/categorias'),
+                (1020, 'Emisor contable', 10, 'contabilidad/emisor'),
+                (1021, 'Organización contable', 10, 'contabilidad/organizacion'),
+                (1022, 'Perfil contable', 10, 'contabilidad/perfil'),
+                (1023, 'Cotizaciones', 10, 'contabilidad/cotizaciones'),
+                (1024, 'Auditoría SQL', 10, 'contabilidad/administracion/auditoria-sql'),
+                (1025, 'Cajas y secuencias contables', 10, 'contabilidad/administracion/cajas-secuencias'),
+                (1026, 'Formas de pago', 10, 'contabilidad/administracion/formas-pago'),
+                (1027, 'Identificaciones', 10, 'contabilidad/administracion/identificaciones'),
+                (1028, 'Impuestos', 10, 'contabilidad/administracion/impuestos'),
+                (1029, 'Historial de compras', 10, 'contabilidad/historial-compras'),
+                (1030, 'Operaciones de inventario', 10, 'contabilidad/inventarios/operaciones'),
+                (1031, 'Reportes de inventario', 10, 'contabilidad/inventarios/reportes'),
+                (1032, 'Historial de inicios de sesión', 10, 'contabilidad/administracion/logs-inicio'),
+                (1033, 'Retenciones contables', 10, 'contabilidad/administracion/retenciones'),
+                (1034, 'Roles internos contables', 10, 'contabilidad/administracion/roles-internos'),
+                (1035, 'Estado de cuenta de clientes', 10, 'contabilidad/cuentas-por-cobrar/estado-cuenta'),
+                (1036, 'Guías de remisión contables', 10, 'contabilidad/facturacion/guia-remision'),
+                (1037, 'Guías de remisión emitidas', 10, 'contabilidad/facturacion/guias-remision-generadas'),
+                (1038, 'Firma contable', 10, 'contabilidad/configuracion/firma'),
+                (1039, 'Liquidación de compra contable', 10, 'contabilidad/compras/nueva-liquidacion'),
+                (1040, 'Liquidaciones de compra emitidas', 10, 'contabilidad/compras/liquidaciones-generadas'),
+                (1041, 'Reportes de actividad', 10, 'contabilidad/reportes/logs'),
+                (1042, 'Nota de crédito contable', 10, 'contabilidad/facturacion/nota-credito'),
+                (1043, 'Notas de crédito emitidas', 10, 'contabilidad/facturacion/notas-credito-generadas'),
+                (1044, 'Nota de débito contable', 10, 'contabilidad/facturacion/nota-debito'),
+                (1045, 'Notas de débito emitidas', 10, 'contabilidad/facturacion/notas-debito-generadas'),
+                (1046, 'Puntos de emisión', 10, 'contabilidad/configuracion/puntos-emision'),
+                (1047, 'Retenciones emitidas', 10, 'contabilidad/facturacion/retenciones-generadas'),
+                (1048, 'Seguridad contable', 10, 'contabilidad/configuracion/seguridad'),
+                (1049, 'Tipos de cliente', 10, 'contabilidad/configuracion/tipos-cliente'),
+                (1050, 'Usuarios de la empresa', 10, 'contabilidad/usuarios'),
                 (1015, 'Reportes clÃ­nicos', 10, 'reportes/clinicos'),
                 (1101, 'CatÃ¡logos clÃ­nicos', 11, 'administracion/catalogos'),
                 (1102, 'DiagnÃ³sticos y laboratorio', 11, 'administracion/catalogos-operativos'),
@@ -386,8 +423,7 @@ public class AuthService : IAuthService
             UPDATE dest
             SET dest.descripcion = src.Descripcion,
                 dest.secNuevoMenu = src.Sec,
-                dest.padreNuevoMenu = src.Padre,
-                dest.habilitado = 1
+                dest.padreNuevoMenu = src.Padre
             FROM vt_menuDinamico dest
             INNER JOIN @Modulos src
                 ON LOWER(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(dest.url, ''))), '~/', ''), '/', '')) = LOWER(REPLACE(src.Url, '/', ''));
@@ -516,7 +552,7 @@ public class AuthService : IAuthService
                 FROM dbo.vt_usuarios u
                 INNER JOIN dbo.vt_accesos a ON a.ac_idusuario = u.user_numero
                 WHERE ISNULL(u.user_tipouser_numero, 0) > 1
-                  AND TRY_CAST(a.ac_modulo AS INT) IS NOT NULL;
+                  AND TRY_CAST(a.ac_modulo AS INT) > 0;
             END";
         try { await _sql.ExecuteAsync(sql); }
         catch { }
@@ -539,7 +575,7 @@ public class AuthService : IAuthService
 
     public async Task<bool> GuardarRolConPermisosAsync(RolUsuarioModel rol, IReadOnlyCollection<int> menuIds, int adminId)
     {
-        if (!_session.IsAuthenticated || _session.TipoUser != 1 || _session.IdUser != adminId || string.IsNullOrWhiteSpace(rol.Descripcion))
+        if (!await EsAdministradorValidoAsync(adminId) || string.IsNullOrWhiteSpace(rol.Descripcion))
             return false;
 
         try
@@ -570,6 +606,10 @@ public class AuthService : IAuthService
                     CROSS JOIN vt_menuDinamico m
                     WHERE u.user_tipouser_numero = @RolId
                       AND m.id IN @MenuIds
+                      AND NOT EXISTS (
+                          SELECT 1 FROM vt_accesos sinAcceso
+                          WHERE sinAcceso.ac_idusuario = u.user_numero AND TRY_CAST(sinAcceso.ac_modulo AS INT) = 0
+                      )
                       AND NOT EXISTS (
                           SELECT 1 FROM vt_accesos ex
                           WHERE ex.ac_idusuario = u.user_numero AND TRY_CAST(ex.ac_modulo AS INT) = m.id
@@ -609,7 +649,7 @@ public class AuthService : IAuthService
                             FROM vt_accesos a
                             INNER JOIN vt_usuarios u ON u.user_numero = a.ac_idusuario
                             WHERE u.user_tipouser_numero = @RolId
-                              AND TRY_CAST(a.ac_modulo AS INT) IS NOT NULL;
+                              AND TRY_CAST(a.ac_modulo AS INT) > 0;
                         END
 
                         DELETE FROM vt_roles_accesos WHERE ra_idrol = @RolId;
@@ -639,7 +679,7 @@ public class AuthService : IAuthService
 
     public async Task<(bool Exito, string Mensaje)> EliminarRolAsync(int idRol, int adminId)
     {
-        if (!EsAdministradorValido(adminId))
+        if (!await EsAdministradorValidoAsync(adminId))
             return (false, "No autorizado.");
 
                 if (idRol is 1 or 2 or 11)
@@ -678,7 +718,7 @@ public class AuthService : IAuthService
         await AsegurarTablaRolesAccesosAsync();
         const string sql = @"
             IF EXISTS (SELECT 1 FROM vt_accesos WHERE ac_idusuario = @IdUser AND TRY_CAST(ac_modulo AS INT) IS NOT NULL)
-                SELECT TRY_CAST(ac_modulo AS INT) FROM vt_accesos WHERE ac_idusuario = @IdUser AND TRY_CAST(ac_modulo AS INT) IS NOT NULL;
+                SELECT TRY_CAST(ac_modulo AS INT) FROM vt_accesos WHERE ac_idusuario = @IdUser AND TRY_CAST(ac_modulo AS INT) > 0;
             ELSE
                 SELECT ra.ra_modulo
                 FROM vt_roles_accesos ra
@@ -688,37 +728,17 @@ public class AuthService : IAuthService
         catch { return []; }
     }
 
-    public async Task<bool> TieneAccesoRutaAsync(string ruta)
+    public async Task<PermisosNavegacion> ObtenerPermisosNavegacionAsync(string ruta)
     {
-        if (!_session.IsAuthenticated) return false;
-        if (_session.TipoUser == 1) return true;
+        if (!_session.IsAuthenticated) return new(0, []);
 
-        string rutaNormalizada = NormalizarRuta(ruta);
-        if (rutaNormalizada == "/dashboard") return true;
-
-        var menus = await ObtenerMenuUsuarioAsync(_session.IdUser, _session.TipoUser);
-        bool autorizado = menus.Any(menu =>
-        {
-            string rutaMenu = NormalizarRuta(menu.Url);
-            return rutaMenu.Length > 1 && (rutaNormalizada == rutaMenu || rutaNormalizada.StartsWith(rutaMenu + "/", StringComparison.OrdinalIgnoreCase));
-        });
-
-        if (!autorizado)
-            await _sql.RegistrarBitacoraAsync($"Acceso denegado a ruta: {rutaNormalizada}", _session.IdUser);
-
-        return autorizado;
-    }
-
-    private static string NormalizarRuta(string? ruta)
-    {
-        if (string.IsNullOrWhiteSpace(ruta)) return string.Empty;
-        string valor = ruta.Trim();
-        if (Uri.TryCreate(valor, UriKind.Absolute, out var uri)) valor = uri.AbsolutePath;
-        int queryIndex = valor.IndexOfAny(['?', '#']);
-        if (queryIndex >= 0) valor = valor[..queryIndex];
-        valor = valor.Replace('\\', '/').TrimStart('~');
-        if (!valor.StartsWith('/')) valor = "/" + valor;
-        return valor.Length > 1 ? valor.TrimEnd('/').ToLowerInvariant() : valor;
+        int usuario = _session.IdUser;
+        int rol = await ObtenerRolActivoAsync(usuario);
+        var menus = rol > 1 ? await ObtenerMenuUsuarioAsync(usuario, rol) : [];
+        var permisos = new PermisosNavegacion(rol, menus.Select(menu => menu.Url).OfType<string>());
+        if (!permisos.Permite(ruta))
+            await _sql.RegistrarBitacoraAsync($"Acceso denegado a ruta: {ruta}", usuario);
+        return permisos;
     }
 
     public async Task<(bool Puede, string Motivo)> ValidarCambioRolUsuarioAsync(
@@ -868,7 +888,7 @@ public class AuthService : IAuthService
 
     public async Task<(bool Exito, string Mensaje)> GuardarRolYAccesosAsync(int idUser, int tipoUser, IReadOnlyCollection<int> menuIds, int adminId)
     {
-        if (!_session.IsAuthenticated || _session.TipoUser != 1 || _session.IdUser != adminId)
+        if (!await EsAdministradorValidoAsync(adminId))
             return (false, "No autorizado.");
 
         var val = await ValidarCambioRolUsuarioAsync(idUser, tipoUser);
@@ -876,9 +896,12 @@ public class AuthService : IAuthService
             return (false, val.Motivo);
 
         var ids = menuIds.Distinct().ToArray();
-        var insert = ids.Length == 0
+        // El valor 0 representa una asignación individual sin módulos.
+        var insert = tipoUser == 1
             ? string.Empty
-            : "INSERT INTO vt_accesos (ac_idusuario, ac_modulo) SELECT @IdUser, CAST(id AS VARCHAR(50)) FROM vt_menuDinamico WHERE id IN @MenuIds;";
+            : ids.Length == 0
+                ? "INSERT INTO vt_accesos (ac_idusuario, ac_modulo) VALUES (@IdUser, '0');"
+                : "INSERT INTO vt_accesos (ac_idusuario, ac_modulo) SELECT @IdUser, CAST(id AS VARCHAR(50)) FROM vt_menuDinamico WHERE id IN @MenuIds;";
         var sql = $@"
             BEGIN TRY
                 BEGIN TRANSACTION;
@@ -908,7 +931,7 @@ public class AuthService : IAuthService
 
     public async Task<bool> GuardarRolAsync(RolUsuarioModel rol, int adminId)
     {
-        if (!_session.IsAuthenticated || _session.TipoUser != 1 || _session.IdUser != adminId || string.IsNullOrWhiteSpace(rol.Descripcion)) return false;
+        if (!await EsAdministradorValidoAsync(adminId) || string.IsNullOrWhiteSpace(rol.Descripcion)) return false;
         if (rol.Id is 1 or 2 or 11 || rol.EsPredeterminado) return true;
         var sql = rol.Id > 0
             ? "UPDATE vt_tipos_usuarios SET tipuser_descripcion = @Descripcion, tipuser_estado = 'A' WHERE tipuser_numero = @Id AND tipuser_numero NOT IN (1, 2, 11)"
@@ -921,7 +944,7 @@ public class AuthService : IAuthService
 
     public async Task<bool> GuardarMenuAsync(MenuItemModel menu, int adminId)
     {
-        if (!_session.IsAuthenticated || _session.TipoUser != 1 || _session.IdUser != adminId || string.IsNullOrWhiteSpace(menu.Descripcion)) return false;
+        if (!await EsAdministradorValidoAsync(adminId) || string.IsNullOrWhiteSpace(menu.Descripcion)) return false;
         var sql = menu.Id > 0
             ? @"UPDATE vt_menuDinamico SET secNuevoMenu = TRY_CAST(@Seccion AS INT), descripcion = @Descripcion,
                     padreNuevoMenu = TRY_CAST(@Padre AS INT), habilitado = @Habilitado, url = @Url WHERE id = @Id"
@@ -1015,8 +1038,12 @@ public class AuthService : IAuthService
     }
     private async Task<(bool Exito, string Mensaje)> DoGuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId)
     {
-        if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
+        if (!await EsAdministradorValidoAsync(adminId)) return (false, "No autorizado.");
         if (string.IsNullOrWhiteSpace(usuario.Nombre) || string.IsNullOrWhiteSpace(usuario.Login) || usuario.RolId <= 0) return (false, "Nombre, usuario y rol son obligatorios.");
+        if (usuario.RolId == 2 && usuario.TipoMedico.Trim() is not ("P" or "L" or "E"))
+            return (false, "Seleccione si el médico es interno o externo.");
+        if (usuario.RolId == 2 && usuario.TipoMedico.Trim() == "E" && string.IsNullOrWhiteSpace(usuario.Cedula))
+            return (false, "La identificación del médico externo es obligatoria.");
         if (usuario.Login.Equals("admin", StringComparison.OrdinalIgnoreCase) && usuario.RolId != 1) return (false, "El rol del usuario admin principal está protegido y no se puede cambiar.");
         if (usuario.Id > 0)
         {
@@ -1079,7 +1106,7 @@ public class AuthService : IAuthService
     }
     private async Task<(bool Exito, string Mensaje)> DoCambiarEstadoUsuarioAsync(int idUser, bool activo, int adminId)
     {
-        if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
+        if (!await EsAdministradorValidoAsync(adminId)) return (false, "No autorizado.");
         if (idUser == _session.IdUser && !activo) return (false, "No puedes desactivar tu propia cuenta.");
         if (!activo)
         {
@@ -1102,7 +1129,7 @@ public class AuthService : IAuthService
     }
     private async Task<(bool Exito, string Mensaje)> DoRestablecerClaveUsuarioAsync(int idUser, string nuevaClave, int adminId)
     {
-        if (!EsAdministradorValido(adminId)) return (false, "No autorizado.");
+        if (!await EsAdministradorValidoAsync(adminId)) return (false, "No autorizado.");
         if (string.IsNullOrWhiteSpace(nuevaClave) || nuevaClave.Length < 8) return (false, "La contraseÃ±a debe tener al menos 8 caracteres.");
         var result = await _sql.ExecuteAsync("UPDATE vt_usuarios SET user_clave=@Clave,user_fechacambio=GETDATE() WHERE user_numero=@IdUser", new { Clave=_sql.HashPasswordSha1(nuevaClave), IdUser=idUser });
         if (result < 0) return (false, "No se pudo restablecer la contraseÃ±a.");
@@ -1110,7 +1137,13 @@ public class AuthService : IAuthService
         return (true, "ContraseÃ±a restablecida correctamente.");
     }
 
-    private bool EsAdministradorValido(int adminId) => _session.IsAuthenticated && _session.TipoUser == 1 && _session.IdUser == adminId;
+    private async Task<bool> EsAdministradorValidoAsync(int adminId) =>
+        _session.IsAuthenticated && _session.IdUser == adminId && await ObtenerRolActivoAsync(adminId) == 1;
+
+    private Task<int> ObtenerRolActivoAsync(int usuario) =>
+        _sql.ExecuteScalarAsync<int>(
+            "SELECT ISNULL(user_tipouser_numero, 0) FROM vt_usuarios WHERE user_numero = @Usuario AND user_estado = 'A'",
+            new { Usuario = usuario });
     private async Task<bool> PuedeReducirAdministradoresAsync(int idUser)
     {
         var objetivoEsAdmin = await _sql.ExecuteScalarAsync<int>("SELECT COUNT(1) FROM vt_usuarios WHERE user_numero=@IdUser AND user_tipouser_numero=1 AND user_estado='A'", new { IdUser=idUser });

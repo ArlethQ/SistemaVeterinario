@@ -47,7 +47,7 @@
         <article class="purchase-kpi purchase-kpi-total"><span><i class="ri-inbox-line"></i>Unidades recibidas</span><strong>@TotalRecibido.ToString("0.####")</strong><small>@recepciones.Count recepción(es)</small></article>
     </section>
 
-    @if (!string.IsNullOrWhiteSpace(error))
+    @if (!mostrarEditor && !string.IsNullOrWhiteSpace(error))
     {
         <div class="alert alert-danger" role="alert">@error</div>
     }
@@ -179,6 +179,10 @@
             </header>
 
             <div class="purchase-modal-body p-4 overflow-auto">
+                @if (!string.IsNullOrWhiteSpace(error))
+                {
+                    <div class="alert alert-danger" role="alert">@error</div>
+                }
                 <div class="purchase-editor-card mb-3">
                     <div class="purchase-section-heading"><div><span>CABECERA</span><h3>Documento de recepción</h3></div><i class="ri-inbox-archive-line"></i></div>
                     <div class="row g-3 p-3">

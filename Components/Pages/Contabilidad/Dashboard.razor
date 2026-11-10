@@ -6,6 +6,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavManager
 @inject SelectedAppServiceStateService SelectedAppServiceState
+@inject EContaxSeguridadService SeguridadEContax
 
 <PageTitle>Inicio | E-Contax</PageTitle>
 
@@ -36,15 +37,24 @@ else
             </div>
             <p class="summary-spotlight-copy">Accede a facturacion, catalogos y configuracion manteniendo la informacion separada por empresa y sucursal.</p>
             <div class="spotlight-grid">
-                <button class="spotlight-card spotlight-action" @onclick="() => Ir(EContaxRoutes.FacturacionNueva)">
-                    <span class="spotlight-label">Facturacion</span><strong><i class="ri-file-add-line"></i></strong><small>Genera una nueva factura electronica.</small>
-                </button>
-                <button class="spotlight-card spotlight-action" @onclick="() => Ir(EContaxRoutes.FacturacionDocumentos)">
-                    <span class="spotlight-label">Documentos</span><strong><i class="ri-file-list-3-line"></i></strong><small>Consulta las facturas emitidas y su estado.</small>
-                </button>
-                <button class="spotlight-card spotlight-action" @onclick="() => Ir(EContaxRoutes.Clientes)">
-                    <span class="spotlight-label">Catalogo</span><strong><i class="ri-group-line"></i></strong><small>Administra clientes y proveedores.</small>
-                </button>
+                @if (accesos.Contains(EContaxRoutes.FacturacionNueva))
+                {
+                    <button class="spotlight-card spotlight-action" @onclick="() => Ir(EContaxRoutes.FacturacionNueva)">
+                        <span class="spotlight-label">Facturacion</span><strong><i class="ri-file-add-line"></i></strong><small>Genera una nueva factura electronica.</small>
+                    </button>
+                }
+                @if (accesos.Contains(EContaxRoutes.FacturacionDocumentos))
+                {
+                    <button class="spotlight-card spotlight-action" @onclick="() => Ir(EContaxRoutes.FacturacionDocumentos)">
+                        <span class="spotlight-label">Documentos</span><strong><i class="ri-file-list-3-line"></i></strong><small>Consulta las facturas emitidas y su estado.</small>
+                    </button>
+                }
+                @if (accesos.Contains(EContaxRoutes.Clientes))
+                {
+                    <button class="spotlight-card spotlight-action" @onclick="() => Ir(EContaxRoutes.Clientes)">
+                        <span class="spotlight-label">Catalogo</span><strong><i class="ri-group-line"></i></strong><small>Administra clientes y proveedores.</small>
+                    </button>
+                }
             </div>
         </section>
 
@@ -52,23 +62,44 @@ else
             <article class="econtax-panel">
                 <div class="panel-head"><div><span class="panel-kicker">Catalogos</span><h3>Datos comerciales</h3></div></div>
                 <div class="compact-list">
-                    <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.Productos)"><span><strong>Productos y servicios</strong><span>Precios, impuestos y existencias.</span></span><i class="ri-arrow-right-s-line"></i></button>
-                    <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.ConfiguracionCategorias)"><span><strong>Categorias</strong><span>Clasificacion del catalogo.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                    @if (accesos.Contains(EContaxRoutes.Productos))
+                    {
+                        <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.Productos)"><span><strong>Productos y servicios</strong><span>Precios, impuestos y existencias.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                    }
+                    @if (accesos.Contains(EContaxRoutes.ConfiguracionCategorias))
+                    {
+                        <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.ConfiguracionCategorias)"><span><strong>Categorias</strong><span>Clasificacion del catalogo.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                    }
                 </div>
             </article>
             <article class="econtax-panel">
                 <div class="panel-head"><div><span class="panel-kicker">Empresa</span><h3>Configuracion</h3></div></div>
                 <div class="compact-list">
-                    <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.Emisor)"><span><strong>Emisor</strong><span>Datos fiscales y certificado.</span></span><i class="ri-arrow-right-s-line"></i></button>
-                    <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.Organizacion)"><span><strong>Organizacion</strong><span>Empresa, sucursales y asignaciones.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                    @if (accesos.Contains(EContaxRoutes.Emisor))
+                    {
+                        <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.Emisor)"><span><strong>Emisor</strong><span>Datos fiscales y certificado.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                    }
+                    @if (accesos.Contains(EContaxRoutes.Organizacion))
+                    {
+                        <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.Organizacion)"><span><strong>Organizacion</strong><span>Empresa, sucursales y asignaciones.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                    }
                 </div>
             </article>
             <article class="econtax-panel">
                 <div class="panel-head"><div><span class="panel-kicker">Control</span><h3>Administracion</h3></div></div>
                 <div class="compact-list">
-                    <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.AdministracionUsuarios)"><span><strong>Usuarios</strong><span>Usuarios, roles y menús de acceso.</span></span><i class="ri-arrow-right-s-line"></i></button>
-                    <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.AdministracionRoles)"><span><strong>Roles y permisos</strong><span>Plantillas de menús por rol E-Contax.</span></span><i class="ri-arrow-right-s-line"></i></button>
-                    <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.Profile)"><span><strong>Mi perfil</strong><span>Datos personales y seguridad.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                    @if (accesos.Contains(EContaxRoutes.AdministracionUsuarios))
+                    {
+                        <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.AdministracionUsuarios)"><span><strong>Usuarios</strong><span>Usuarios, roles y menús de acceso.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                    }
+                    @if (accesos.Contains(EContaxRoutes.AdministracionRoles))
+                    {
+                        <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.AdministracionRoles)"><span><strong>Roles y permisos</strong><span>Plantillas de menús por rol E-Contax.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                    }
+                    @if (accesos.Contains(EContaxRoutes.Profile))
+                    {
+                        <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.Profile)"><span><strong>Mi perfil</strong><span>Datos personales y seguridad.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                    }
                 </div>
             </article>
         </section>
@@ -76,6 +107,9 @@ else
 }
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+
+    private readonly HashSet<string> accesos = [];
     private string? errorCarga;
 
     protected override async Task OnInitializedAsync()
@@ -98,6 +132,23 @@ else
             }
 
             await SelectedAppServiceState.SetCurrentServiceKeyAsync(EContaxRoutes.ServiceKey);
+
+            string[] rutas =
+            [
+                EContaxRoutes.FacturacionNueva,
+                EContaxRoutes.FacturacionDocumentos,
+                EContaxRoutes.Clientes,
+                EContaxRoutes.Productos,
+                EContaxRoutes.ConfiguracionCategorias,
+                EContaxRoutes.Emisor,
+                EContaxRoutes.Organizacion,
+                EContaxRoutes.AdministracionUsuarios,
+                EContaxRoutes.AdministracionRoles,
+                EContaxRoutes.Profile
+            ];
+            var verificaciones = await Task.WhenAll(rutas.Where(Permisos.Permite).Select(async ruta =>
+                (Ruta: ruta, Permitida: await SeguridadEContax.PuedeAccederRutaAsync(userId, ruta))));
+            accesos.UnionWith(verificaciones.Where(acceso => acceso.Permitida).Select(acceso => acceso.Ruta));
         }
         catch (Exception ex)
         {

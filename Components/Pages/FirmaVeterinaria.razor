@@ -17,7 +17,6 @@
 @inject NavigationManager NavManager
 @inject EmisorOnboardingService EmisorOnboardingService
 @inject EmisionControlService EmisionControlService
-@inject SweetAlertService AlertService
 
 @rendermode InteractiveServer
 
@@ -123,20 +122,9 @@
                 </div>
             </div>
 
-            @if (!string.IsNullOrWhiteSpace(mensaje))
+            @if (!mostrarModalFirma)
             {
-                <div class="status-banner status-banner-info">
-                    <i class="bi bi-info-circle"></i>
-                    <span>@mensaje</span>
-                </div>
-            }
-
-            @if (!string.IsNullOrWhiteSpace(debugError))
-            {
-                <div class="status-banner status-banner-error">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    <span>@debugError</span>
-                </div>
+                @AvisosOperacion
             }
 
             @if (cargando)
@@ -374,6 +362,7 @@
                     <button type="button" class="btn-close btn-close-white" @onclick="CerrarModalFirma"></button>
                 </div>
                 <div class="modal-body p-4" style="max-height: calc(100vh - 180px); overflow-y:auto;">
+                    @AvisosOperacion
                     <section class="editor-card entity-editor-card">
                         @if (!FirmaDisponible)
                         {
@@ -500,6 +489,24 @@
 }
 
 @code {
+    private RenderFragment AvisosOperacion => @<div>
+        @if (!string.IsNullOrWhiteSpace(mensaje))
+        {
+            <div class="status-banner status-banner-info" role="status">
+                <i class="bi bi-info-circle"></i>
+                <span>@mensaje</span>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(debugError))
+        {
+            <div class="status-banner status-banner-error" role="alert">
+                <i class="bi bi-exclamation-triangle"></i>
+                <span>@debugError</span>
+            </div>
+        }
+    </div>;
+
     private const long MaxCertificadoSize = 5 * 1024 * 1024;
 
     private readonly List<EmisorDto> emisores = new();
@@ -717,7 +724,7 @@
                 debugError = await LeerMensajeErrorHttpAsync(response, "No se pudo guardar la firma electronica.");
                 firmaEstadoEditor = CrearEstadoFirmaInvalido(debugError);
                 firmaPendienteValidacion = false;
-                await MostrarAlertaErrorFirmaAsync(debugError);
+                debugError = OrientarErrorFirma(debugError);
                 return;
             }
 
@@ -856,22 +863,16 @@
         }
     }
 
-    private ValueTask MostrarAlertaErrorFirmaAsync(string detalle)
+    private static string OrientarErrorFirma(string detalle)
     {
         var requiereDatosEmisor =
             detalle.Contains("razón social", StringComparison.OrdinalIgnoreCase) ||
             detalle.Contains("razon social", StringComparison.OrdinalIgnoreCase) ||
             detalle.Contains("nombre comercial", StringComparison.OrdinalIgnoreCase);
 
-        var texto = requiereDatosEmisor
+        return requiereDatosEmisor
             ? $"{detalle} Corrige este dato desde Datos del emisor y luego vuelve a guardar la firma."
             : detalle;
-
-        var titulo = requiereDatosEmisor
-            ? "Completa los datos del emisor"
-            : "No se pudo guardar la firma";
-
-        return AlertService.ShowWarningAsync(texto, titulo);
     }
 
     private async Task<string> GuardarArchivoCertificadoAsync(byte[] bytes, string subcarpeta)

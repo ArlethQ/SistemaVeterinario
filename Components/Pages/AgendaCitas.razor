@@ -150,7 +150,10 @@
                                 <td><span class="table-status @ClaseEstadoCita(cita.CiEstadoCita)">@TextoEstadoCita(cita.CiEstadoCita)</span></td>
                                 <td class="text-end">
                                     <button class="btn btn-info btn-sm" @onclick="() => VerDetalleCita(cita)">Ver</button>
-                                    <button class="btn btn-primary btn-sm" title="Mandar a Recepción de Órdenes" @onclick="() => EnviarARecepcionOrdenes(cita)"><i class="bi bi-clipboard2-pulse"></i> Orden</button>
+                                    @if (Permisos.Permite("admision/ordenes"))
+                                    {
+                                        <button class="btn btn-primary btn-sm" title="Mandar a Recepción de Órdenes" @onclick="() => EnviarARecepcionOrdenes(cita)"><i class="bi bi-clipboard2-pulse"></i> Orden</button>
+                                    }
                                     @if (cita.CiEstadoCita != "X")
                                     {
                                         <button class="btn btn-outline-primary btn-sm" @onclick="() => AbrirReagendar(cita)">Reagendar</button>
@@ -314,6 +317,10 @@
                 </div>
                 <button type="button" @onclick="CerrarDetalleCita">×</button>
             </header>
+            @if (!string.IsNullOrWhiteSpace(_mensajeModal))
+            {
+                <div class="alert alert-danger mx-3 mt-3 mb-0" role="alert">@_mensajeModal</div>
+            }
             <div class="detail-patient">
                 <span class="detail-photo">
                     @if(!string.IsNullOrEmpty(ObtenerFotoPaciente(_citaDetalle.CiNhcl)))
@@ -369,9 +376,12 @@
                             <i class="bi bi-arrow-counterclockwise me-1"></i>Por confirmar
                         </button>
                     }
-                    <button type="button" class="btn btn-primary fw-bold" @onclick="() => EnviarARecepcionOrdenes(_citaDetalle)" title="Crear Orden de Atención en Recepción con los datos de esta cita">
-                        <i class="bi bi-clipboard2-pulse-fill me-1"></i>Recepción / Crear Orden
-                    </button>
+                    @if (Permisos.Permite("admision/ordenes"))
+                    {
+                        <button type="button" class="btn btn-primary fw-bold" @onclick="() => EnviarARecepcionOrdenes(_citaDetalle)" title="Crear Orden de Atención en Recepción con los datos de esta cita">
+                            <i class="bi bi-clipboard2-pulse-fill me-1"></i>Recepción / Crear Orden
+                        </button>
+                    }
                 </div>
             </footer>
         </section>
@@ -388,6 +398,10 @@
                 </div>
                 <button type="button" @onclick="() => _citaReagendar = null">×</button>
             </header>
+            @if (!string.IsNullOrWhiteSpace(_mensajeModal))
+            {
+                <div class="alert alert-danger mx-3 mt-3 mb-0" role="alert">@_mensajeModal</div>
+            }
             <div class="detail-grid p-3">
                 <div>
                     <label class="small text-muted fw-bold mb-1">Nueva Fecha</label>
@@ -426,6 +440,10 @@
                 </div>
                 <button type="button" @onclick="() => _citaCancelar = null">×</button>
             </header>
+            @if (!string.IsNullOrWhiteSpace(_mensajeModal))
+            {
+                <div class="alert alert-danger mx-3 mt-3 mb-0" role="alert">@_mensajeModal</div>
+            }
             <div class="p-3">
                 <div class="alert alert-warning py-2 small mb-3">
                     <i class="bi bi-exclamation-triangle-fill me-1"></i>
@@ -677,6 +695,8 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+
     private List<CatalogoItemGenericoDto> _medicos = new();
     private List<CatalogoItemGenericoDto> _especialidades = new();
     private List<PacienteMascotaDto> _pacientes = new();
@@ -689,6 +709,7 @@
     private DateTime _fechaAgenda = DateTime.Today;
     private bool _cargandoInicial = true;
     private string _mensaje = string.Empty;
+    private string _mensajeModal = string.Empty;
     private bool _mensajeEsError;
     private bool _mostrarFormularioCita;
     private bool _mostrarModalNuevoPaciente;
@@ -960,14 +981,21 @@
         }
         StateHasChanged();
     }
-    private void VerDetalleCita(CitaMedicaDto cita) => _citaDetalle = cita;
-    private void CerrarDetalleCita() => _citaDetalle = null;
+    private void VerDetalleCita(CitaMedicaDto cita)
+    {
+        _mensajeModal = string.Empty;
+        _citaDetalle = cita;
+    }
+    private void CerrarDetalleCita()
+    {
+        _citaDetalle = null;
+        _mensajeModal = string.Empty;
+    }
     private void EnviarARecepcionOrdenes(CitaMedicaDto cita)
     {
         if (cita.CiNhcl <= 0)
         {
-            _mensajeEsError = true;
-            _mensaje = $"La cita de {cita.CiNombreMas} no tiene un paciente (NHCL) asignado. Primero vincule o registre el paciente en 'Clientes, tutores y mascotas'.";
+            MostrarErrorCita($"La cita de {cita.CiNombreMas} no tiene un paciente (NHCL) asignado. Primero vincule o registre el paciente en 'Clientes, tutores y mascotas'.");
             return;
         }
 
@@ -998,19 +1026,24 @@
     }
     private async Task AbrirHistorialAsync(){_vistaAgenda="historial";if(_historial.Count==0)await CargarHistorialAsync();}
     private async Task CargarHistorialAsync(){if(_historialHasta<_historialDesde){_mensaje="El rango de historial no es válido.";return;}_historial=await AdmisionService.ObtenerCitasPorFechaAsync(_historialDesde,_historialHasta,0);}
-    private void AbrirReagendar(CitaMedicaDto c){_citaReagendar=c;_reagendaFecha=c.CiFecha;_reagendaHora=c.CiHora;_reagendaMedico=c.CiUsuario;}
-    private void AbrirCancelar(CitaMedicaDto c){_citaCancelar=c;_motivoCancelacion="";}
+    private void AbrirReagendar(CitaMedicaDto c){_mensajeModal="";_citaReagendar=c;_reagendaFecha=c.CiFecha;_reagendaHora=c.CiHora;_reagendaMedico=c.CiUsuario;}
+    private void AbrirCancelar(CitaMedicaDto c){_mensajeModal="";_citaCancelar=c;_motivoCancelacion="";}
     private async Task ReagendarAsync()
     {
         if (_citaReagendar is null) return;
+        _mensajeModal = string.Empty;
         try
         {
             int idUser = SessionState.IdUser > 0 ? SessionState.IdUser : (SessionState.UsuarioActual?.IdUsuario ?? 1);
             int localidad = _citaReagendar.CiLocalidad > 0 ? _citaReagendar.CiLocalidad : SessionState.Localidad;
             var ok = await AdmisionService.ReagendarCitaAsync(_citaReagendar.CiId, _reagendaFecha, _reagendaHora, _reagendaMedico, localidad, idUser);
-            _mensajeEsError = !ok;
-            _mensaje = ok ? "Cita reagendada y verificada." : "No se guardó el reagendamiento. El horario puede estar ocupado o la cita ya no esté activa.";
-            if (!ok) return;
+            if (!ok)
+            {
+                _mensajeModal = "No se guardó el reagendamiento. El horario puede estar ocupado o la cita ya no esté activa.";
+                return;
+            }
+            _mensajeEsError = false;
+            _mensaje = "Cita reagendada y verificada.";
 
             _fechaAgenda = _reagendaFecha;
             _idMedicoFiltro = _reagendaMedico;
@@ -1021,32 +1054,38 @@
         }
         catch (Exception ex)
         {
-            _mensajeEsError = true;
-            _mensaje = $"No se pudo reagendar la cita: {ex.Message}";
+            MostrarErrorCita($"No se pudo reagendar la cita: {ex.Message}");
         }
     }
     private async Task CancelarCitaAsync()
     {
         if (_citaCancelar is null) return;
+        _mensajeModal = string.Empty;
+        if (string.IsNullOrWhiteSpace(_motivoCancelacion))
+        {
+            _mensajeModal = "Ingrese el motivo de cancelación.";
+            return;
+        }
         try
         {
             int idCita = _citaCancelar.CiId;
             int idUser = SessionState.IdUser > 0 ? SessionState.IdUser : (SessionState.UsuarioActual?.IdUsuario ?? 1);
             var ok = await AdmisionService.CancelarCitaAsync(idCita, _motivoCancelacion, idUser);
-            _mensajeEsError = !ok;
-            _mensaje = ok ? $"Cita #{idCita} cancelada exitosamente." : "No se pudo cancelar la cita.";
-            if (ok)
+            if (!ok)
             {
-                _citaCancelar = null;
-                _citaDetalle = null;
+                _mensajeModal = "No se pudo cancelar la cita.";
+                return;
             }
+            _mensajeEsError = false;
+            _mensaje = $"Cita #{idCita} cancelada exitosamente.";
+            _citaCancelar = null;
+            _citaDetalle = null;
             await CargarAgendaAsync();
             await CargarHistorialAsync();
         }
         catch (Exception ex)
         {
-            _mensajeEsError = true;
-            _mensaje = $"Error al cancelar la cita: {ex.Message}";
+            MostrarErrorCita($"Error al cancelar la cita: {ex.Message}");
         }
     }
     private async Task DiaAnterior() { _fechaAgenda = _fechaAgenda.AddDays(-1); await CargarAgendaAsync(); }
@@ -1180,6 +1219,7 @@
 
     private async Task CambiarEstadoCitaAsync(int idCita, string nuevoEstado)
     {
+        _mensajeModal = string.Empty;
         try
         {
             var ok = await AdmisionService.ActualizarEstadoCitaAsync(idCita, nuevoEstado);
@@ -1196,8 +1236,8 @@
             }
             else
             {
-                _mensajeEsError = true;
-                _mensaje = $"No se pudo actualizar el estado de la cita #{idCita}.";
+                MostrarErrorCita($"No se pudo actualizar el estado de la cita #{idCita}.");
+                return;
             }
             await CargarAgendaAsync();
             if (_citaDetalle != null && _citaDetalle.CiId == idCita)
@@ -1207,8 +1247,18 @@
         }
         catch (Exception ex)
         {
+            MostrarErrorCita($"Error al cambiar estado de la cita: {ex.Message}");
+        }
+    }
+
+    private void MostrarErrorCita(string mensaje)
+    {
+        if (_citaDetalle is not null || _citaReagendar is not null || _citaCancelar is not null)
+            _mensajeModal = mensaje;
+        else
+        {
             _mensajeEsError = true;
-            _mensaje = $"Error al cambiar estado de la cita: {ex.Message}";
+            _mensaje = mensaje;
         }
     }
 

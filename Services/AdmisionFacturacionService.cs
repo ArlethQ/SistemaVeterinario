@@ -811,7 +811,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 LEFT JOIN vt_usuarioEspecialidades ue ON ue.ue_idUsuario = u.user_numero AND ISNULL(ue.ue_estado, 'A') = 'A'
                 WHERE user_estado = 'A'
                   AND u.user_tipouser_numero = 2
-                  AND UPPER(LTRIM(RTRIM(ISNULL(user_tipomedico, '')))) IN ('P', 'L')
+                  AND UPPER(LTRIM(RTRIM(ISNULL(user_tipomedico, '')))) IN ('P', 'L', 'E')
                   AND (
                       @IdEsp = 0 
                       OR ue.ue_idEspecialidad = @IdEsp 

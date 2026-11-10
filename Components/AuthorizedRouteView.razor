@@ -1,16 +1,22 @@
+@using System.Reflection
 @inject SessionStateService Session
 @inject IAuthService AuthService
 @inject NavigationManager Navigation
+@inject ILogger<AuthorizedRouteView> Logger
 
 @if (_evaluando)
 {
-    <LayoutView Layout="typeof(Layout.MainLayout)">
-        <p class="p-4 text-muted" role="status">Verificando acceso...</p>
-    </LayoutView>
+    <CascadingValue Value="_permisos">
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <p class="p-4 text-muted" role="status">Verificando acceso...</p>
+        </LayoutView>
+    </CascadingValue>
 }
 else if (_esPublica || _autorizado)
 {
-    <RouteView RouteData="RouteData" DefaultLayout="typeof(Layout.MainLayout)" />
+    <CascadingValue Value="_permisos">
+        <RouteView RouteData="RouteData" DefaultLayout="typeof(Layout.MainLayout)" />
+    </CascadingValue>
 }
 else if (!_autenticado)
 {
@@ -18,31 +24,79 @@ else if (!_autenticado)
 }
 else
 {
-    <LayoutView Layout="typeof(Layout.MainLayout)">
-        <div class="alert alert-danger m-4" role="alert">
-            No tienes permiso para acceder a este módulo.
-        </div>
-    </LayoutView>
+    <CascadingValue Value="_permisos">
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <div class="alert alert-danger m-4" role="alert">
+                @(_errorPermisos ? "No se pudieron verificar los permisos. Vuelva a intentar." : "No tienes permiso para acceder a este módulo.")
+            </div>
+        </LayoutView>
+    </CascadingValue>
 }
 
 @code {
     [Parameter, EditorRequired]
     public RouteData RouteData { get; set; } = default!;
 
+    private int _revision;
     private bool _evaluando = true;
     private bool _esPublica;
     private bool _autenticado;
     private bool _autorizado;
+    private bool _errorPermisos;
+    private PermisosNavegacion _permisos = new(0, []);
 
     protected override async Task OnParametersSetAsync()
     {
-        _evaluando = true;
-        _esPublica = EsPaginaPublica(RouteData.PageType);
-        if (!_esPublica)
+        var revision = ++_revision;
+        // Mantiene el layout montado mientras se verifica la nueva ruta.
+        var esPublica = EsPaginaPublica(RouteData.PageType);
+        var ruta = RutaDePermiso();
+        if (!esPublica)
             await Session.RestoreAsync();
-        _autenticado = _esPublica || Session.ValidateAndTouch();
-        _autorizado = _esPublica || (_autenticado && await AuthService.TieneAccesoRutaAsync(Navigation.ToBaseRelativePath(Navigation.Uri)));
+
+        if (revision != _revision) return;
+
+        var autenticado = esPublica || Session.ValidateAndTouch();
+        var permisos = new PermisosNavegacion(0, []);
+        var errorPermisos = false;
+        if (!esPublica && autenticado)
+        {
+            try
+            {
+                permisos = await AuthService.ObtenerPermisosNavegacionAsync(ruta);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "No se pudieron verificar los permisos para {Ruta}", ruta);
+                errorPermisos = true;
+            }
+        }
+
+        if (revision != _revision) return;
+
+        _esPublica = esPublica;
+        _autenticado = autenticado;
+        _permisos = permisos;
+        _errorPermisos = errorPermisos;
+        _autorizado = esPublica || permisos.Permite(ruta);
         _evaluando = false;
+    }
+
+    private string RutaDePermiso()
+    {
+        var ruta = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/');
+        var segmentos = ruta.Split('/');
+        foreach (var atributo in RouteData.PageType.GetCustomAttributes<RouteAttribute>())
+        {
+            var plantilla = atributo.Template.Trim('/').Split('/');
+            int parametro = Array.FindIndex(plantilla, parte => parte.StartsWith('{'));
+            if (parametro <= 0 || plantilla.Length != segmentos.Length)
+                continue;
+
+            if (plantilla.Take(parametro).SequenceEqual(segmentos.Take(parametro), StringComparer.OrdinalIgnoreCase))
+                return string.Join("/", plantilla.Take(parametro));
+        }
+        return ruta;
     }
 
     private static bool EsPaginaPublica(Type pageType) => pageType == typeof(Pages.Landing)

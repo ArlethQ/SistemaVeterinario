@@ -125,20 +125,9 @@
                 </div>
             }
 
-            @if (!string.IsNullOrWhiteSpace(mensaje))
+            @if (!mostrarModalFormularioEmisor && !(mostrarDetalle && emisorDetalle is not null))
             {
-                <div class="status-banner status-banner-info">
-                    <i class="bi bi-info-circle"></i>
-                    <span>@mensaje</span>
-                </div>
-            }
-
-            @if (!string.IsNullOrWhiteSpace(debugError))
-            {
-                <div class="status-banner status-banner-error">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    <span>@debugError</span>
-                </div>
+                @AvisosOperacion
             }
 
             @if (cargando)
@@ -476,6 +465,7 @@
                     <button type="button" class="btn-close btn-close-white" @onclick="CerrarModalFormularioEmisor"></button>
                 </div>
                 <div class="modal-body p-4" style="max-height: calc(100vh - 180px); overflow-y:auto;">
+                    @AvisosOperacion
                     <section class="editor-card entity-editor-card">
                         <div class="editor-body entity-form-legacy">
                             <EditForm Model="@model" OnValidSubmit="Guardar" @key="formKey">
@@ -656,6 +646,7 @@
                 </div>
 
                 <div class="modal-body p-4">
+                    @AvisosOperacion
                     <div class="row g-4">
                         <div class="col-md-6 border-end pe-md-4">
                             <h6 class="fw-bold text-muted border-bottom pb-2 mb-3">Información General</h6>
@@ -774,6 +765,24 @@
 }
 
 @code {
+    private RenderFragment AvisosOperacion => @<div>
+        @if (!string.IsNullOrWhiteSpace(mensaje))
+        {
+            <div class="status-banner status-banner-info" role="status">
+                <i class="bi bi-info-circle"></i>
+                <span>@mensaje</span>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(debugError))
+        {
+            <div class="status-banner status-banner-error" role="alert">
+                <i class="bi bi-exclamation-triangle"></i>
+                <span>@debugError</span>
+            </div>
+        }
+    </div>;
+
 
     private string PageBrandTitle => "Numerica e-fact";
 
@@ -1345,7 +1354,8 @@
                 model.LogoImagen = null;
                 logoArchivoSeleccionado = null;
                 mensaje = "Solo se permiten archivos JPG, JPEG o PNG.";
-                await AlertService.ShowErrorAsync(mensaje, "Formato de logo no permitido");
+                if (!mostrarModalFormularioEmisor)
+                    await AlertService.ShowErrorAsync(mensaje, "Formato de logo no permitido");
                 return;
             }
 
@@ -1357,7 +1367,8 @@
                 model.LogoImagen = null;
                 logoArchivoSeleccionado = null;
                 mensaje = "El archivo seleccionado no es una imagen válida.";
-                await AlertService.ShowErrorAsync(mensaje, "Formato de logo no permitido");
+                if (!mostrarModalFormularioEmisor)
+                    await AlertService.ShowErrorAsync(mensaje, "Formato de logo no permitido");
                 return;
             }
 
@@ -1367,7 +1378,8 @@
                 model.LogoImagen = null;
                 logoArchivoSeleccionado = null;
                 mensaje = "El logo excede el tamaño máximo de 2 MB.";
-                await AlertService.ShowErrorAsync(mensaje, "Logo demasiado pesado");
+                if (!mostrarModalFormularioEmisor)
+                    await AlertService.ShowErrorAsync(mensaje, "Logo demasiado pesado");
                 return;
             }
 
@@ -1407,7 +1419,8 @@
             logoArchivoSeleccionado = null;
             debugError = ex.Message;
             mensaje = "Error al procesar la imagen.";
-            await AlertService.ShowErrorAsync(ex.Message, mensaje);
+            if (!mostrarModalFormularioEmisor)
+                await AlertService.ShowErrorAsync(ex.Message, mensaje);
         }
     }
 
