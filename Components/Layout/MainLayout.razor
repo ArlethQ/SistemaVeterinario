@@ -26,18 +26,25 @@
 
 @code {
     private DateTime _ahora = DateTime.Now;
-    private readonly System.Threading.Timer _reloj;
+    private readonly PeriodicTimer _reloj = new(TimeSpan.FromSeconds(1));
+    private bool _disposed;
 
-    public MainLayout()
+    protected override void OnInitialized() => _ = ActualizarRelojAsync();
+
+    private async Task ActualizarRelojAsync()
     {
-        _reloj = new System.Threading.Timer(_ =>
+        while (await _reloj.WaitForNextTickAsync() && !_disposed)
         {
             _ahora = DateTime.Now;
-            _ = InvokeAsync(StateHasChanged);
-        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            StateHasChanged();
+        }
     }
 
-    public void Dispose() => _reloj.Dispose();
+    public void Dispose()
+    {
+        _disposed = true;
+        _reloj.Dispose();
+    }
 
     private async Task CerrarSesion()
     {
