@@ -532,7 +532,13 @@ public class AuthService : IAuthService
         const string sql = @"SELECT tipuser_numero AS Id, RTRIM(ISNULL(tipuser_descripcion, '')) AS Descripcion
                              FROM vt_tipos_usuarios
                              WHERE ISNULL(tipuser_estado, 'A') = 'A'
-                             ORDER BY CASE WHEN tipuser_numero IN (1, 2, 11) THEN 0 ELSE 1 END, tipuser_numero, tipuser_descripcion";
+                             ORDER BY CASE 
+                                 WHEN tipuser_numero = 1 THEN 0 
+                                 WHEN tipuser_numero = 2 THEN 1 
+                                 WHEN tipuser_numero = 11 OR UPPER(tipuser_descripcion) LIKE '%ENFERMER%' THEN 2 
+                                 WHEN UPPER(tipuser_descripcion) LIKE '%CAJER%' OR UPPER(RTRIM(tipuser_descripcion)) = 'CAJA' THEN 3 
+                                 ELSE 4 
+                             END, tipuser_numero, tipuser_descripcion";
         try { return (await _sql.QueryAsync<RolUsuarioModel>(sql)).ToList(); }
         catch { return []; }
     }
@@ -682,7 +688,11 @@ public class AuthService : IAuthService
                     DECLARE @RolId INT = @Id;
                     IF @RolId > 0
                     BEGIN
-                        IF @RolId NOT IN (1, 2, 11)
+                        IF @RolId NOT IN (1, 2, 11) AND NOT EXISTS (
+                            SELECT 1 FROM vt_tipos_usuarios 
+                            WHERE tipuser_numero = @RolId 
+                              AND (UPPER(tipuser_descripcion) LIKE '%CAJER%' OR UPPER(RTRIM(tipuser_descripcion)) = 'CAJA' OR UPPER(tipuser_descripcion) LIKE '%ENFERMER%')
+                        )
                         BEGIN
                             UPDATE vt_tipos_usuarios
                             SET tipuser_descripcion = @Descripcion,
@@ -743,8 +753,17 @@ public class AuthService : IAuthService
         if (!await EsAdministradorValidoAsync(adminId))
             return (false, "No autorizado.");
 
-                if (idRol is 1 or 2 or 11)
-            return (false, "Los roles predeterminados (Administrador, Médico y Enfermería) no se pueden eliminar.");
+        var nombreRol = await _sql.QueryFirstOrDefaultAsync<string>(
+            "SELECT RTRIM(ISNULL(tipuser_descripcion, '')) FROM vt_tipos_usuarios WHERE tipuser_numero = @IdRol",
+            new { IdRol = idRol }) ?? $"#{idRol}";
+
+        if (idRol is 1 or 2 or 11 ||
+            nombreRol.Contains("Enfermer", StringComparison.OrdinalIgnoreCase) ||
+            nombreRol.Contains("Cajer", StringComparison.OrdinalIgnoreCase) ||
+            nombreRol.Trim().Equals("Caja", StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, "Los roles predeterminados (Administrador, Médico, Enfermería y Cajero) no se pueden eliminar.");
+        }
 
         try
         {
@@ -755,14 +774,15 @@ public class AuthService : IAuthService
             if (usuariosAsignados > 0)
                 return (false, $"No se puede eliminar este rol porque hay {usuariosAsignados} usuario(s) que tienen este rol asignado.");
 
-            var nombreRol = await _sql.QueryFirstOrDefaultAsync<string>(
-                "SELECT RTRIM(ISNULL(tipuser_descripcion, '')) FROM vt_tipos_usuarios WHERE tipuser_numero = @IdRol",
-                new { IdRol = idRol }) ?? $"#{idRol}";
-
             await AsegurarTablaRolesAccesosAsync();
             await _sql.ExecuteAsync(@"
                 DELETE FROM vt_roles_accesos WHERE ra_idrol = @IdRol;
-                DELETE FROM vt_tipos_usuarios WHERE tipuser_numero = @IdRol AND tipuser_numero NOT IN (1, 2, 11);",
+                DELETE FROM vt_tipos_usuarios 
+                WHERE tipuser_numero = @IdRol 
+                  AND tipuser_numero NOT IN (1, 2, 11)
+                  AND UPPER(tipuser_descripcion) NOT LIKE '%CAJER%'
+                  AND UPPER(RTRIM(tipuser_descripcion)) <> 'CAJA'
+                  AND UPPER(tipuser_descripcion) NOT LIKE '%ENFERMER%';",
                 new { IdRol = idRol });
 
             await _sql.RegistrarBitacoraAsync($"Elimina rol: {nombreRol} (ID {idRol})", adminId);
@@ -995,7 +1015,7 @@ public class AuthService : IAuthService
         if (!await EsAdministradorValidoAsync(adminId) || string.IsNullOrWhiteSpace(rol.Descripcion)) return false;
         if (rol.Id is 1 or 2 or 11 || rol.EsPredeterminado) return true;
         var sql = rol.Id > 0
-            ? "UPDATE vt_tipos_usuarios SET tipuser_descripcion = @Descripcion, tipuser_estado = 'A' WHERE tipuser_numero = @Id AND tipuser_numero NOT IN (1, 2, 11)"
+            ? "UPDATE vt_tipos_usuarios SET tipuser_descripcion = @Descripcion, tipuser_estado = 'A' WHERE tipuser_numero = @Id AND tipuser_numero NOT IN (1, 2, 11) AND UPPER(tipuser_descripcion) NOT LIKE '%CAJER%' AND UPPER(RTRIM(tipuser_descripcion)) <> 'CAJA' AND UPPER(tipuser_descripcion) NOT LIKE '%ENFERMER%'"
             : "INSERT INTO vt_tipos_usuarios (tipuser_descripcion, tipuser_estado) VALUES (@Descripcion, 'A')";
         var result = await _sql.ExecuteAsync(sql, new { rol.Id, Descripcion = rol.Descripcion.Trim() });
         if (result < 0) return false;

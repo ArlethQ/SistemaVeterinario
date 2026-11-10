@@ -33,7 +33,8 @@ public class RolUsuarioModel
 {
     public int Id { get; set; }
     public string Descripcion { get; set; } = string.Empty;
-    public bool EsPredeterminado => Id is 1 or 2 or 11 || (!string.IsNullOrWhiteSpace(Descripcion) && Descripcion.Trim().Contains("Enfermer", StringComparison.OrdinalIgnoreCase));
+    public bool EsCajero => !string.IsNullOrWhiteSpace(Descripcion) && (Descripcion.Contains("Cajer", StringComparison.OrdinalIgnoreCase) || Descripcion.Trim().Equals("Caja", StringComparison.OrdinalIgnoreCase));
+    public bool EsPredeterminado => Id is 1 or 2 or 11 || EsCajero || (!string.IsNullOrWhiteSpace(Descripcion) && Descripcion.Trim().Contains("Enfermer", StringComparison.OrdinalIgnoreCase));
 }
 
 public class UsuarioAdministracionModel
