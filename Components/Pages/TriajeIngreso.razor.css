@@ -1,0 +1,728 @@
+.triaje-page {
+    --triage-ink: #102b49;
+    --triage-teal: #008e92;
+    color: var(--triage-ink);
+    background: linear-gradient(140deg,#f2fbff,#f8fbff 45%,#edf5ff);
+    min-height: 100vh;
+    padding-inline: clamp(1rem,2vw,2rem)
+}
+
+    .triaje-page .triaje-heading {
+        max-width: none;
+        margin: 0 0 1rem;
+        border-radius: 18px;
+        background: linear-gradient(105deg,#fff,#e8f8ff) !important
+    }
+
+.triaje-heading .card-body {
+    padding: 1rem 1.25rem !important
+}
+
+.triaje-heading h1 {
+    font-size: clamp(1.35rem,2vw,2rem)
+}
+
+.triaje-heading .fs-4 {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: linear-gradient(135deg,#11c9ac,#006e82);
+    color: white !important
+}
+
+.triaje-workspace {
+    display: grid;
+    grid-template-columns: minmax(265px,310px) minmax(0,1fr);
+    align-items: start;
+    gap: 1.2rem
+}
+
+.triaje-queue, .triaje-content {
+    min-width: 0
+}
+
+    .triaje-queue > .card {
+        border: 1px solid #d9e8f2 !important;
+        border-radius: 18px;
+        overflow: hidden
+    }
+
+    .triaje-queue .card-header {
+        background: #eef9fc !important
+    }
+
+    .triaje-queue h5 {
+        font-size: 1rem
+    }
+
+    .triaje-queue .table-responsive {
+        overflow: visible
+    }
+
+    .triaje-queue table, .triaje-queue tbody {
+        display: block
+    }
+
+    .triaje-queue thead {
+        display: none
+    }
+
+    .triaje-queue tr {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: .25rem .5rem;
+        margin: .5rem;
+        padding: .75rem;
+        border: 1px solid #dce9f3;
+        border-radius: 14px;
+        background: white;
+        box-shadow: 0 5px 13px #133c6310
+    }
+
+        .triaje-queue tr.table-active {
+            border-color: #00a9b0;
+            background: #e5f9fb
+        }
+
+    .triaje-queue td {
+        display: block;
+        padding: 0;
+        border: 0;
+        font-size: .8rem
+    }
+
+        .triaje-queue td:nth-child(2) {
+            font-weight: 800
+        }
+
+        .triaje-queue td:nth-child(3) {
+            grid-column: 1 / -1;
+            font-size: .95rem;
+            font-weight: 700
+        }
+
+        .triaje-queue td:nth-child(4) {
+            grid-column: 1 / -1;
+            color: #54718b
+        }
+
+        .triaje-queue td:last-child {
+            grid-column: 2;
+            grid-row: 1 / span 2
+        }
+
+.triaje-detail {
+    width: 100%
+}
+
+.triaje-content > .alert, .triaje-content > .card {
+    max-width: none !important
+}
+
+.triaje-detail > .card {
+    border: 1px solid #dce9f3 !important;
+    border-radius: 18px;
+    overflow: hidden
+}
+
+    .triaje-detail > .card.bg-primary {
+        background: #e9f8ff !important
+    }
+
+    .triaje-detail > .card .card-body {
+        padding: 1.25rem !important
+    }
+
+.triaje-detail .card-header {
+    background: linear-gradient(105deg,#007f8e,#0ba6bd) !important;
+    color: white !important
+}
+
+    .triaje-detail .card-header .text-primary {
+        color: white !important
+    }
+
+.triaje-detail .form-label {
+    color: #163b56
+}
+
+.triaje-detail .form-control, .triaje-detail .form-select {
+    min-height: 38px;
+    border-color: #d2e2ed;
+    border-radius: 9px
+}
+
+.triaje-detail .btn-group {
+    gap: .5rem
+}
+
+    .triaje-detail .btn-group > .btn {
+        border-radius: 11px !important;
+        min-height: 42px
+    }
+
+.triaje-detail .border-top .btn-success {
+    border-radius: 10px
+}
+
+@media(max-width:950px) {
+    .triaje-workspace {
+        grid-template-columns: 1fr
+    }
+
+    .triaje-queue .table-responsive {
+        max-height: 260px;
+        overflow: auto
+    }
+
+    .triaje-content {
+        width: 100%
+    }
+}
+
+@media(max-width:600px) {
+    .triaje-page {
+        padding-inline: .75rem
+    }
+
+    .triaje-detail .card-header {
+        align-items: flex-start !important;
+        gap: .5rem;
+        flex-direction: column
+    }
+
+    .triaje-detail .btn-group {
+        display: grid;
+        grid-template-columns: repeat(2,1fr)
+    }
+
+        .triaje-detail .btn-group > .btn {
+            width: 100%
+        }
+
+    .triaje-detail .card-body {
+        padding: 1rem !important
+    }
+}
+
+.triaje-page .triaje-workspace {
+    grid-template-columns: minmax(270px,300px) minmax(0,1fr);
+    gap: 1rem
+}
+
+.triaje-page .triaje-heading {
+    background: linear-gradient(110deg,#fff 50%,#e8f8ff) !important
+}
+
+    .triaje-page .triaje-heading .fs-4 {
+        font-size: 0 !important
+    }
+
+        .triaje-page .triaje-heading .fs-4::after {
+            content: '⌁';
+            font-size: 2rem
+        }
+
+.triaje-page .triaje-detail > .card.bg-primary {
+    border: 1px solid #d6eaf4 !important;
+    border-radius: 16px;
+    background: #eaf7ff !important
+}
+
+    .triaje-page .triaje-detail > .card.bg-primary .card-body {
+        padding: 1.1rem 1.4rem !important
+    }
+
+    .triaje-page .triaje-detail > .card.bg-primary .badge {
+        border-radius: 99px
+    }
+
+.triaje-page .triaje-detail > .card:not(.bg-primary) {
+    box-shadow: 0 12px 25px #1a648018 !important
+}
+
+    .triaje-page .triaje-detail > .card:not(.bg-primary) > .card-header {
+        margin: 0;
+        border: 0;
+        border-radius: 16px 16px 0 0;
+        background: linear-gradient(90deg,#00a79a,#007184) !important
+    }
+
+        .triaje-page .triaje-detail > .card:not(.bg-primary) > .card-header .badge {
+            background: #e4f6f6 !important;
+            color: #007080 !important;
+            border: 0 !important
+        }
+
+.triaje-form-layout {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) minmax(210px,250px);
+    gap: 1rem
+}
+
+.triaje-form-main {
+    min-width: 0
+}
+
+.triaje-form-layout > .border-top {
+    grid-column: 1 / -1;
+    margin-top: 0 !important
+}
+
+.triaje-section-title {
+    display: block;
+    margin: .2rem 0 .75rem;
+    font-size: .9rem;
+    font-weight: 800;
+    color: #0b4660
+}
+
+    .triaje-section-title i {
+        color: #00a89d;
+        margin-right: .35rem
+    }
+
+.triaje-form-main .row.g-2 {
+    margin-bottom: 1rem !important
+}
+
+    .triaje-form-main .row.g-2 > .col-4 {
+        width: 25%
+    }
+
+.triaje-form-main .btn-group {
+    display: grid;
+    grid-template-columns: repeat(4,minmax(0,1fr));
+    margin-bottom: 1.2rem !important
+}
+
+    .triaje-form-main .btn-group > .btn {
+        min-width: 0;
+        white-space: normal
+    }
+
+.triaje-side {
+    display: grid;
+    align-content: start;
+    gap: .8rem;
+    padding-left: .85rem;
+    border-left: 1px solid #e4edf3
+}
+
+.triaje-side-card {
+    padding: 1rem;
+    border: 1px solid #e2edf3;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 7px 18px #15495d0e
+}
+
+    .triaje-side-card h3 {
+        margin: 0 0 .9rem;
+        font-size: .85rem;
+        font-weight: 800;
+        color: #12334f
+    }
+
+        .triaje-side-card h3 i {
+            color: #00a798
+        }
+
+.triaje-icc-value {
+    margin: 0 0 .4rem;
+    text-align: center;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #007d8e
+}
+
+.triaje-side-card dl {
+    margin: 0
+}
+
+    .triaje-side-card dl > div {
+        display: flex;
+        justify-content: space-between;
+        gap: .5rem;
+        padding: .42rem 0;
+        border-bottom: 1px solid #e7eff4;
+        font-size: .75rem
+    }
+
+        .triaje-side-card dl > div:last-child {
+            border: 0
+        }
+
+.triaje-side-card dt {
+    color: #496a81
+}
+
+.triaje-side-card dd {
+    margin: 0;
+    font-weight: 700;
+    color: #173d55
+}
+
+.triaje-page ::deep .triaje-queue > .card {
+    overflow: hidden;
+    border: 1px solid #dceaf1 !important;
+    border-radius: 16px
+}
+
+.triaje-page ::deep .triaje-queue .card-header {
+    display: block !important;
+    padding: 1rem;
+    background: #fff !important
+}
+
+    .triaje-page ::deep .triaje-queue .card-header h5 {
+        margin-bottom: .7rem !important;
+        font-size: .95rem;
+        font-weight: 800
+    }
+
+.triaje-page ::deep .triaje-queue .table-responsive {
+    overflow: visible
+}
+
+.triaje-page ::deep .triaje-queue table, .triaje-page ::deep .triaje-queue tbody {
+    display: block
+}
+
+.triaje-page ::deep .triaje-queue thead {
+    display: none
+}
+
+.triaje-page ::deep .triaje-queue tbody tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: .25rem;
+    margin: .5rem;
+    padding: .75rem;
+    border: 1px solid #dceaf1;
+    border-radius: 13px;
+    background: #fff
+}
+
+    .triaje-page ::deep .triaje-queue tbody tr.table-active {
+        border-color: #00a49e;
+        background: #e7fafb
+    }
+
+.triaje-page ::deep .triaje-queue td {
+    display: block;
+    padding: 0;
+    border: 0;
+    font-size: .77rem
+}
+
+    .triaje-page ::deep .triaje-queue td:nth-child(2) {
+        font-weight: 800
+    }
+
+    .triaje-page ::deep .triaje-queue td:nth-child(3) {
+        grid-column: 1/-1;
+        font-size: .95rem;
+        font-weight: 800
+    }
+
+    .triaje-page ::deep .triaje-queue td:nth-child(4) {
+        grid-column: 1/-1;
+        color: #52738b
+    }
+
+    .triaje-page ::deep .triaje-queue td:nth-child(5) {
+        color: #a06700
+    }
+
+    .triaje-page ::deep .triaje-queue td:last-child {
+        grid-column: 2;
+        grid-row: 1/span 2
+    }
+
+        .triaje-page ::deep .triaje-queue td:last-child .btn {
+            border-radius: 8px
+        }
+
+@media(max-width:1050px) {
+    .triaje-form-layout {
+        grid-template-columns: 1fr
+    }
+
+    .triaje-side {
+        grid-template-columns: repeat(2,minmax(0,1fr));
+        padding-left: 0;
+        border-left: 0
+    }
+
+    .triaje-form-main .row.g-2 > .col-4 {
+        width: 33.333%
+    }
+}
+
+@media(max-width:600px) {
+    .triaje-side {
+        grid-template-columns: 1fr
+    }
+
+    .triaje-form-main .row.g-2 > .col-4 {
+        width: 50%
+    }
+
+    .triaje-form-main .btn-group {
+        grid-template-columns: repeat(2,minmax(0,1fr))
+    }
+}
+
+.triaje-page .triaje-heading h1 {
+    font-size: clamp(1.35rem,1.8vw,1.85rem);
+    letter-spacing: -.035em
+}
+
+.triaje-page .triaje-heading .card-body {
+    padding: .8rem 1.2rem !important
+}
+
+.triaje-page .triaje-patient {
+    background: #fff !important
+}
+
+.triaje-patient-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap
+}
+
+.triaje-avatar {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 68px;
+    height: 68px;
+    overflow: hidden;
+    border: 3px solid white;
+    border-radius: 50%;
+    background: #daf4f5;
+    color: #008e92;
+    box-shadow: 0 0 0 1px #c9e3e8
+}
+
+    .triaje-avatar i {
+        font-size: 1.7rem
+    }
+
+    .triaje-avatar img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover
+    }
+
+.triaje-patient-name {
+    min-width: 200px;
+    flex: 1
+}
+
+    .triaje-patient-name strong, .triaje-patient-name small, .triaje-patient-name span {
+        display: block
+    }
+
+    .triaje-patient-name strong {
+        font-size: 1.15rem;
+        color: #102b49
+    }
+
+    .triaje-patient-name small {
+        font-size: .8rem;
+        color: #486779
+    }
+
+    .triaje-patient-name span {
+        display: inline-block;
+        margin-top: .25rem;
+        padding: .12rem .5rem;
+        border-radius: 99px;
+        background: #e4eaff;
+        color: #334e9d;
+        font-size: .7rem;
+        font-weight: 700
+    }
+
+.triaje-patient-meta {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding-left: 1.2rem;
+    border-left: 1px solid #dce9ef
+}
+
+    .triaje-patient-meta i {
+        color: #009b9b;
+        font-size: 1.35rem
+    }
+
+    .triaje-patient-meta small, .triaje-patient-meta strong {
+        display: block;
+        font-size: .75rem
+    }
+
+.triaje-page ::deep .triaje-queue .table > :not(caption) > * > * {
+    background: transparent !important;
+    box-shadow: none !important
+}
+
+.triaje-page ::deep .triaje-queue tbody tr {
+    position: relative;
+    padding: .9rem;
+    background: #f8fcff
+}
+
+    .triaje-page ::deep .triaje-queue tbody tr.table-active {
+        background: #e6f8f7
+    }
+
+.triaje-page ::deep .triaje-queue td:nth-child(5) {
+    display: inline-block;
+    justify-self: start;
+    padding: .2rem .65rem;
+    border-radius: 99px;
+    background: #fff2cb !important;
+    color: #8e5b00;
+    font-weight: 700
+}
+
+/* Cola superior de órdenes */
+.triaje-page .triaje-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+}
+
+.triaje-page ::deep .triaje-queue > .card {
+    margin-bottom: 0 !important;
+    border: 1px solid #a9dfe2 !important;
+    border-left: 5px solid #009a9a !important;
+    background: #effafa;
+}
+
+.triaje-page ::deep .triaje-queue .card-header {
+    display: flex !important;
+    align-items: center;
+    background: #e3f6f6 !important;
+    border-bottom: 1px solid #cde9e9;
+}
+
+.triaje-page ::deep .triaje-queue .card-header h5 {
+    margin-bottom: 0 !important;
+    color: #075e69;
+}
+
+.triaje-page ::deep .triaje-queue .table-responsive {
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.triaje-page ::deep .triaje-queue tbody {
+    display: flex;
+    align-items: stretch;
+    gap: .65rem;
+    padding: .65rem;
+}
+
+.triaje-page ::deep .triaje-queue tbody tr {
+    flex: 0 0 260px;
+    margin: 0;
+}
+
+@media (max-width: 600px) {
+    .triaje-page ::deep .triaje-queue tbody tr {
+        flex-basis: min(260px, 82vw);
+    }
+}
+
+.triaje-page .triaje-detail .card-header {
+    min-height: 52px
+}
+
+.triaje-page .triaje-side-card {
+    background: #f9fcfe
+}
+
+.triaje-page .triaje-form-layout {
+    padding: 1.25rem !important
+}
+
+@media(max-width:650px) {
+    .triaje-patient-meta {
+        padding-left: 0;
+        border: 0
+    }
+
+    .triaje-patient-name {
+        min-width: 150px
+    }
+
+    .triaje-avatar {
+        width: 56px;
+        height: 56px
+    }
+}
+
+.triaje-tabs {
+    display: flex;
+    gap: .6rem;
+    margin: 0 0 .8rem;
+    flex-wrap: wrap
+}
+
+    .triaje-tabs button {
+        padding: .7rem 1rem;
+        border: 1px solid #d9e7ef;
+        border-radius: 10px;
+        background: #fff;
+        color: #24465c;
+        font-weight: 700
+    }
+
+        .triaje-tabs button.active {
+            color: #fff;
+            border-color: #008e92;
+            background: #008e92
+        }
+
+.triaje-form-card, .triaje-history {
+    border: 1px solid #dce9f3 !important;
+    border-radius: 18px;
+    overflow: hidden
+}
+
+    .triaje-form-card > .card-header {
+        background: linear-gradient(105deg,#007f8e,#0ba6bd) !important;
+        color: #fff
+    }
+
+        .triaje-form-card > .card-header .text-primary {
+            color: #fff !important
+        }
+
+    .triaje-history .card-body {
+        padding: 1.5rem
+    }
+
+    .triaje-history h2 {
+        font-size: 1.15rem;
+        font-weight: 800
+    }
+
+    .triaje-history p {
+        color: #54718b
+    }
+
+    .triaje-history table {
+        min-width: 580px
+    }

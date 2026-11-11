@@ -10,17 +10,17 @@
 {
     <PageTitle>Triaje de Ingreso y Constantes Fisiológicas — e-ForVets</PageTitle>
 
-    <div class="container-fluid py-3">
+    <div class="container-fluid py-3 triaje-page">
         <!-- BARRA SUPERIOR DE SELECCIÓN Y ACCIONES -->
-        <div class="card shadow-sm border-0 mb-3 bg-white" style="max-width: 760px; margin: 0 auto;">
+        <div class="card shadow-sm border-0 mb-3 bg-white triaje-heading">
             <div class="card-body py-2 px-3">
                 <div class="row g-2 align-items-center">
-                    <div class="col-md-5">
+                    <div class="col-12">
                         <div class="d-flex align-items-center gap-2">
                             <span class="fs-4 text-warning">🌡️</span>
                             <div>
-                                <h6 class="mb-0 fw-bold text-dark">Triaje de Ingreso</h6>
-                                <small class="text-muted" style="font-size: 0.72rem;">Constantes fisiológicas sincronizadas con SOAP</small>
+                                <h1 class="mb-0 fw-bold text-dark">Triaje de Ingreso y Constantes</h1>
+                                <small class="text-muted">Registro de signos vitales y evaluación inicial del paciente.</small>
                             </div>
                         </div>
                     </div>
@@ -29,7 +29,9 @@
             </div>
         </div>
 
-        <ColaOrdenesClinicas Triaje="true" OrdenSeleccionada="@(IdOrden ?? 0)" />
+        <div class="triaje-workspace">
+            <aside class="triaje-queue"><ColaOrdenesClinicas Triaje="true" OrdenSeleccionada="@(IdOrden ?? 0)" /></aside>
+            <div class="triaje-content">
 
         <!-- Mensajes de feedback -->
         @if (!string.IsNullOrEmpty(_mensajeAlerta))
@@ -61,21 +63,15 @@
         }
         else
         {
-            <div style="max-width: 760px; margin: 0 auto;">
+            <div class="triaje-detail">
                 <!-- BANNER DEL PACIENTE SELECCIONADO (modo página completa) -->
-                <div class="card shadow-sm border-0 mb-3 bg-primary bg-opacity-10">
+                <div class="card shadow-sm border-0 mb-3 bg-primary bg-opacity-10 triaje-patient">
                     <div class="card-body py-2 px-3">
-                        <div class="row align-items-center g-2 small">
-                            <div class="col-sm-6">
-                                <span class="text-muted d-block" style="font-size: 0.72rem;">PACIENTE / NHCL</span>
-                                <strong class="fs-6 text-primary">@_paciente.PacienteNombre</strong>
-                                <span class="badge bg-dark ms-1">NHCL #@_paciente.Nhcl</span>
-                                <span class="badge bg-secondary ms-1">Orden #@_ficha.MedOrden</span>
-                            </div>
-                            <div class="col-sm-6 text-sm-end">
-                                <span class="text-muted d-block" style="font-size: 0.72rem;">ESPECIE / RAZA / SEXO / EDAD</span>
-                                <strong>@_paciente.Especie — @_paciente.Raza (@_paciente.Sexo) | @_paciente.EdadTexto</strong>
-                            </div>
+                        <div class="triaje-patient-info">
+                            <div class="triaje-avatar"><i class="bi bi-heart-pulse"></i><img src="@($"/pacientes-fotos/{_paciente.Nhcl}")" alt="Foto de @_paciente.PacienteNombre" onerror="this.style.display='none'" /></div>
+                            <div class="triaje-patient-name"><strong>@_paciente.PacienteNombre</strong><small>@_paciente.Especie · @_paciente.Raza · @_paciente.Sexo · @_paciente.EdadTexto</small><span>HC: @_paciente.Nhcl</span></div>
+                            <div class="triaje-patient-meta"><i class="bi bi-calendar2-check"></i><span><small>Orden</small><strong>#@_ficha.MedOrden</strong></span></div>
+                            <div class="triaje-patient-meta"><i class="bi bi-person-fill"></i><span><small>Propietario</small><strong>@_paciente.PropietarioNombre</strong></span></div>
                         </div>
                     </div>
                 </div>
@@ -83,6 +79,8 @@
                 @RenderTarjetaTriaje()
             </div>
         }
+            </div>
+        </div>
     </div>
 }
 else
@@ -124,7 +122,40 @@ else
 }
 
 @{
-    RenderFragment RenderTarjetaTriaje() => @<div class="card shadow-sm border-0">
+    RenderFragment RenderTarjetaTriaje() => @<div class="triaje-panel">
+        <div class="triaje-tabs" role="group" aria-label="Vista de triaje">
+            <button type="button" class="@(!_mostrarHistorial ? "active" : "")" @onclick="() => _mostrarHistorial = false">Constantes fisiológicas y triaje</button>
+            <button type="button" class="@(_mostrarHistorial ? "active" : "")" @onclick="MostrarHistorialAsync">Historial de triajes</button>
+        </div>
+        @if (_mostrarHistorial)
+        {
+            <div class="triaje-history card shadow-sm border-0">
+                <div class="card-body">
+                    <h2>Historial de constantes</h2>
+                    <p>Registros clínicos anteriores del paciente.</p>
+                    @if (_cargandoHistorial)
+                    {
+                        <p role="status">Cargando historial...</p>
+                    }
+                    else if (_historial.Count == 0)
+                    {
+                        <p>No hay registros clínicos disponibles para este paciente.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Fecha</th><th>Orden</th><th>Profesional</th><th>Peso</th><th>Temperatura</th><th>FC</th></tr></thead><tbody>
+                        @foreach (var registro in _historial)
+                        {
+                            <tr @key="registro.Sec"><td>@registro.Fecha.ToString("dd/MM/yyyy HH:mm")</td><td>#@registro.Orden</td><td>@registro.Medico</td><td>@(registro.Peso?.ToString("0.##") ?? "—") kg</td><td>@(registro.Temperatura?.ToString("0.#") ?? "—") °C</td><td>@(registro.FrecuenciaCardiaca?.ToString() ?? "—")</td></tr>
+                        }
+                        </tbody></table></div>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+        <div class="card shadow-sm border-0 triaje-form-card">
         <div class="card-header bg-white fw-bold py-2 d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-1">
                 <span class="text-primary fs-5">🌡️</span>
@@ -138,7 +169,9 @@ else
             </div>
             <span class="badge bg-light text-dark border small">Compartido con SOAP</span>
         </div>
-        <div class="card-body p-3">
+        <div class="card-body p-3 triaje-form-layout">
+            <div class="triaje-form-main">
+            <div class="triaje-section-title"><i class="bi bi-clipboard2-pulse"></i> Información del triaje</div>
             <!-- Fila 1: Tipo de Consulta, Esterilizado, Sede / Tipo -->
             <div class="row g-2 mb-3">
                 <div class="col-md-5">
@@ -168,7 +201,7 @@ else
             </div>
 
             <!-- Fila 2: Semáforo de Temperamento del Paciente -->
-            <label class="form-label small fw-semibold d-block">Semáforo de Temperamento del Paciente</label>
+            <label class="form-label small fw-semibold d-block triaje-section-title"><i class="bi bi-heart-pulse"></i> Semáforo de Temperamento del Paciente</label>
             <div class="btn-group w-100 mb-3" role="group">
                 <button type="button" class="btn btn-sm @(_ficha.Temperamento == "TRANQUILO" ? "btn-dark shadow-sm fw-bold" : "btn-outline-secondary")"
                         @onclick='() => SeleccionarTemperamento("TRANQUILO", "imagenes/temperamento/blanco.png", "green")'>
@@ -189,6 +222,7 @@ else
             </div>
 
             <!-- Fila 3 y 4: Constantes Fisiológicas -->
+            <div class="triaje-section-title"><i class="bi bi-heart"></i> Constantes Vitales</div>
             <div class="row g-2">
                 <div class="col-4">
                     <label class="form-label small fw-semibold">Peso (kg)</label>
@@ -214,12 +248,7 @@ else
                     <label class="form-label small fw-semibold">Deshidratación (%)</label>
                     <input type="number" min="0" max="100" class="form-control form-control-sm" @bind="_ficha.Deshidratacion" />
                 </div>
-                <div class="col-6">
-                    <label class="form-label small fw-semibold">Condición Corporal (ICC 1-9)</label>
-                    <input type="range" class="form-range" min="1" max="9" @bind="_ficha.IndiceCondicionCorporal" />
-                    <div class="text-center small fw-bold text-primary">ICC: @_ficha.IndiceCondicionCorporal / 9</div>
-                </div>
-                <div class="col-6">
+                <div class="col-12">
                     <label class="form-label small fw-semibold">Pulso / CP</label>
                     <input type="text" class="form-control form-control-sm" @bind="_ficha.Cp" placeholder="Normal" />
                 </div>
@@ -229,6 +258,11 @@ else
                 </div>
             </div>
 
+            </div>
+            <aside class="triaje-side">
+                <div class="triaje-side-card"><h3><i class="bi bi-layers"></i> Condición Corporal (ICC 1–9)</h3><div class="triaje-icc-value">ICC: @_ficha.IndiceCondicionCorporal / 9</div><input type="range" class="form-range" min="1" max="9" @bind="_ficha.IndiceCondicionCorporal" /></div>
+                <div class="triaje-side-card"><h3><i class="bi bi-clock-history"></i> Constantes actuales</h3><dl><div><dt>Peso</dt><dd>@_ficha.Peso kg</dd></div><div><dt>Temp.</dt><dd>@_ficha.Temperatura °C</dd></div><div><dt>FC</dt><dd>@_ficha.FrecuenciaCardiaca lpm</dd></div><div><dt>FR</dt><dd>@_ficha.FrecuenciaRespiratoria rpm</dd></div><div><dt>Deshidratación</dt><dd>@_ficha.Deshidratacion %</dd></div></dl></div>
+            </aside>
             <!-- Botones de Acción -->
             <div class="d-flex justify-content-between align-items-center mt-4 pt-2 border-top">
                 @if (Permisos.Permite("consulta/fichamedica"))
@@ -242,6 +276,8 @@ else
                 </button>
             </div>
         </div>
+        </div>
+        }
     </div>;
 }
 
@@ -254,6 +290,9 @@ else
 
     private bool _cargando = true;
     private bool _guardando;
+    private bool _mostrarHistorial;
+    private bool _cargandoHistorial;
+    private List<FichaMedicaResumenLoteDto> _historial = [];
     private string? _mensajeAlerta;
     private bool _esError;
 
@@ -269,6 +308,8 @@ else
         _parametrosCargados = parametros;
 
         _cargando = true;
+        _mostrarHistorial = false;
+        _historial = [];
         _paciente = null;
         _mensajeAlerta = null;
         if ((IdOrden ?? 0) > 0 || (ModoModal && (Nhcl ?? 0) > 0))
@@ -322,6 +363,20 @@ else
     {
         _ficha.Temperamento = temperamento;
         _ficha.ColorTriaje = rutaImagen;
+    }
+
+    private async Task MostrarHistorialAsync()
+    {
+        _mostrarHistorial = true;
+        _cargandoHistorial = true;
+        try
+        {
+            _historial = await ConsultaService.ObtenerAtencionesParaImpresionLoteAsync(Nhcl ?? _paciente?.Nhcl ?? 0);
+        }
+        finally
+        {
+            _cargandoHistorial = false;
+        }
     }
 
     private async Task GuardarTriajeAsync()
