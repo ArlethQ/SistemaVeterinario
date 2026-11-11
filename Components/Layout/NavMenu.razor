@@ -403,6 +403,10 @@
                     <details>
                         <summary><MenuIcon Name="consultation" /><span>Configuración clínica</span><i>⌄</i></summary>
                         <div class="submenu">
+                            @if (TienePermiso("administracion/empresas"))
+                            {
+                                <NavLink href="administracion/empresas">Empresas</NavLink>
+                            }
                             @if (TienePermiso("administracion/catalogos"))
                             {
                                 <NavLink href="administracion/catalogos">Catálogos clínicos</NavLink>
@@ -583,6 +587,7 @@
 
     private static readonly string[] RutasConfiguracionClinica =
     [
+        "administracion/empresas",
         "administracion/catalogos",
         "administracion/catalogos-operativos",
         "administracion/diagnosticos",
