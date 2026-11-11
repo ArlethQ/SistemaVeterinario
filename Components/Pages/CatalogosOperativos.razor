@@ -330,8 +330,11 @@
 }
 
 @code {
-    private bool _autorizado, _error, _aplicaIva;
-    private string _tipo = "diagnosticos", _filtro = "", _mensaje = "", _seccion = "general";
+    private bool _autorizado, _error, _aplicaIva, _guardando, _cargando, _importandoExcel;
+    private static readonly string[] ColumnasExcel =
+        ["Código", "Descripción", "Tipo (B/S)", "Precio base", "Precio 2", "Precio 3",
+         "Categoría", "Subcategoría", "Inventario (Sí/No)", "Código tarifa IVA", "Estado (A/I)"];
+    private string _tipo = "diagnosticos", _filtro = "", _mensaje = "", _seccion = "general", _ultimaRutaCargada = "";
     private string _filtroTipo = "", _filtroGrupo = "", _filtroSubgrupo = "", _filtroInventario = "", _filtroIva = "", _filtroEstado = "";
     private int _paginaActual = 1, _tamanoPagina = 20;
 
@@ -855,5 +858,158 @@
 
         _items = _items.OrderBy(x => x.Descripcion, StringComparer.OrdinalIgnoreCase).ToList();
         _paginaActual = Math.Clamp(_paginaActual, 1, TotalPaginas);
+    }
+
+    private Task DescargarPlantillaExcelAsync() => DescargarCatalogoExcelAsync("Plantilla_productos.xlsx", []);
+
+    private Task ExportarProductosExcelAsync() => DescargarCatalogoExcelAsync("Productos_y_servicios.xlsx", _items);
+
+    private async Task DescargarCatalogoExcelAsync(string nombre, IEnumerable<CatalogoOperativoDto> productos)
+    {
+        using var libro = new XLWorkbook();
+        var hoja = libro.Worksheets.Add("Productos y servicios");
+        for (int i = 0; i < ColumnasExcel.Length; i++)
+            hoja.Cell(1, i + 1).Value = ColumnasExcel[i];
+
+        int fila = 2;
+        foreach (var item in productos)
+        {
+            hoja.Cell(fila, 1).Value = item.Codigo;
+            hoja.Cell(fila, 2).Value = item.Descripcion;
+            hoja.Cell(fila, 3).Value = item.Tipo;
+            if (item.Precio is decimal precio) hoja.Cell(fila, 4).Value = precio;
+            if (item.Precio2 is decimal precio2) hoja.Cell(fila, 5).Value = precio2;
+            if (item.Precio3 is decimal precio3) hoja.Cell(fila, 6).Value = precio3;
+            hoja.Cell(fila, 7).Value = item.Grupo;
+            hoja.Cell(fila, 8).Value = item.Subgrupo;
+            hoja.Cell(fila, 9).Value = item.Inventario ? "Sí" : "No";
+            hoja.Cell(fila, 10).Value = item.PorcentajeImpuesto;
+            hoja.Cell(fila, 11).Value = item.Estado;
+            fila++;
+        }
+
+        hoja.Row(1).Style.Font.Bold = true;
+        hoja.Column(1).Style.NumberFormat.Format = "@";
+        hoja.Column(2).Width = 35;
+        hoja.Column(10).Style.NumberFormat.Format = "@";
+        hoja.SheetView.FreezeRows(1);
+        using var contenido = new MemoryStream();
+        libro.SaveAs(contenido);
+        contenido.Position = 0;
+        using var referencia = new DotNetStreamReference(contenido);
+        await JS.InvokeVoidAsync("numericaUi.downloadExcelFile", nombre, referencia);
+    }
+
+    private async Task ImportarProductosExcelAsync(InputFileChangeEventArgs args)
+    {
+        if (!_autorizado || _tipo != "productos" || _importandoExcel) return;
+        _importandoExcel = true;
+        _mensaje = "";
+        int creados = 0;
+        var errores = new List<string>();
+        try
+        {
+            var archivo = args.File;
+            if (!Path.GetExtension(archivo.Name).Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Selecciona un archivo Excel (.xlsx).");
+
+            using var contenido = new MemoryStream();
+            using var origen = archivo.OpenReadStream(4 * 1024 * 1024);
+            await origen.CopyToAsync(contenido);
+            contenido.Position = 0;
+            using var libro = new XLWorkbook(contenido);
+            var hoja = libro.Worksheet(1);
+            if (ColumnasExcel.Where((titulo, i) => !titulo.Equals(hoja.Cell(1, i + 1).GetString().Trim(), StringComparison.OrdinalIgnoreCase)).Any())
+                throw new InvalidOperationException("Usa la plantilla de Productos y servicios.");
+
+            var productos = await EFactCatalog.ObtenerProductosAsync();
+            var grupos = await EFactCatalog.ObtenerCategoriasAsync();
+            var subgrupos = await EFactCatalog.ObtenerSubcategoriasAsync();
+            var tarifas = await EFactCatalog.ObtenerTarifasIvaAsync();
+            foreach (var fila in hoja.RowsUsed().Skip(1))
+            {
+                var valores = ColumnasExcel.Select((_, i) => fila.Cell(i + 1).Value
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture).Trim()).ToArray();
+                if (valores.All(string.IsNullOrWhiteSpace)) continue;
+
+                try
+                {
+                    var item = LeerProductoExcel(valores, grupos, subgrupos, tarifas);
+                    bool duplicado = productos.Any(p => item.Codigo.Length > 0
+                        ? p.Codigo.Equals(item.Codigo, StringComparison.OrdinalIgnoreCase)
+                        : p.Tipo == item.Tipo && p.Descripcion.Equals(item.Descripcion, StringComparison.OrdinalIgnoreCase));
+                    if (duplicado)
+                        throw new InvalidOperationException("Ya existe un registro con ese código o descripción.");
+                    if (!await EFactCatalog.GuardarProductoAsync(item))
+                        throw new InvalidOperationException("No se pudo guardar el registro.");
+                    productos.Add(item);
+                    creados++;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    errores.Add($"Fila {fila.RowNumber()}: {ex.Message}");
+                }
+            }
+
+            if (creados == 0 && errores.Count == 0)
+                errores.Add("El archivo no contiene productos o servicios.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se completó la importación del catálogo veterinario.");
+            errores.Add(ex is InvalidOperationException ? ex.Message : "Revisa que el archivo sea un Excel válido de hasta 4 MB.");
+        }
+        finally
+        {
+            _importandoExcel = false;
+        }
+
+        _error = errores.Count > 0;
+        _mensaje = $"Registros importados: {creados}.";
+        if (_error)
+            _mensaje += $" Incidencias: {errores.Count}. {string.Join(" ", errores.Take(5))}";
+        if (creados > 0 && _tipo == "productos") await Cargar();
+    }
+
+    private static CatalogoOperativoDto LeerProductoExcel(
+        string[] valores, List<CatalogoOperativoDto> grupos, List<CatalogoOperativoDto> subgrupos, List<TarifaIvaDto> tarifas)
+    {
+        var tipo = valores[2].ToUpperInvariant();
+        var inventario = valores[8].ToUpperInvariant();
+        var estado = valores[10].ToUpperInvariant();
+        if (valores[0].Length > 50 || valores[1].Length is 0 or > 300 || tipo is not ("B" or "S"))
+            throw new InvalidOperationException("Revisa la descripción, el código y el tipo (B o S).");
+        if (inventario is not ("" or "SÍ" or "SI" or "NO") || estado is not ("" or "A" or "I"))
+            throw new InvalidOperationException("Usa Sí/No para inventario y A/I para estado.");
+
+        var grupo = grupos.FirstOrDefault(g => g.Tipo == tipo && g.Descripcion.Equals(valores[6], StringComparison.OrdinalIgnoreCase));
+        var subgrupo = subgrupos.FirstOrDefault(s => grupo is not null && s.IdGrupo == grupo.Id &&
+            s.Descripcion.Equals(valores[7], StringComparison.OrdinalIgnoreCase));
+        if ((valores[6].Length > 0 && grupo is null) || (valores[7].Length > 0 && subgrupo is null))
+            throw new InvalidOperationException("La categoría o subcategoría no existe para este tipo de registro.");
+        if (valores[9].Length > 0 && !tarifas.Any(t => t.Codigo == valores[9]))
+            throw new InvalidOperationException("El código de tarifa IVA no existe.");
+
+        return new CatalogoOperativoDto
+        {
+            Codigo = valores[0], Descripcion = valores[1], Tipo = tipo,
+            Precio = LeerPrecioExcel(valores[3]) ?? throw new InvalidOperationException("Indica el precio base."),
+            Precio2 = LeerPrecioExcel(valores[4]), Precio3 = LeerPrecioExcel(valores[5]),
+            IdGrupo = grupo?.Id, IdSubgrupo = subgrupo?.Id,
+            Inventario = tipo == "B" && inventario != "NO",
+            CodigoImpuesto = valores[9].Length > 0 ? "2" : "",
+            PorcentajeImpuesto = valores[9],
+            Estado = estado == "I" ? "I" : "A"
+        };
+    }
+
+    private static decimal? LeerPrecioExcel(string valor)
+    {
+        if (valor.Length == 0) return null;
+        if (!decimal.TryParse(valor.Replace(',', '.'), System.Globalization.NumberStyles.AllowDecimalPoint,
+                System.Globalization.CultureInfo.InvariantCulture, out var precio) ||
+            precio > 99999999.99m || decimal.Round(precio, 2) != precio)
+            throw new InvalidOperationException("Usa precios positivos o cero, con hasta dos decimales.");
+        return precio;
     }
 }
