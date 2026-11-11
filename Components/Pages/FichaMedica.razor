@@ -517,7 +517,11 @@
                         <span><i class="bi bi-capsule me-1"></i>Prescripción Médica</span>
                         <div class="d-flex align-items-center gap-2">
                             <span class="badge bg-success">@RecetaItems.Count ítem(s)</span>
-                            <button class="btn btn-xs btn-outline-primary py-0" @onclick='() => Nav.NavigateTo($"/consulta/recetario/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
+                            <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2" @onclick="ImprimirRecetaMedicaPdfAsync"
+                                    title="Imprimir Receta Médica">
+                                <i class="bi bi-printer me-1"></i>Imprimir Receta
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-primary py-0" @onclick='() => Nav.NavigateTo($"/consulta/recetario/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
                                 Abrir Recetario Completo
                             </button>
                         </div>
@@ -716,45 +720,165 @@
                             </div>
                         </div>
 
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover align-middle small mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Categoría</th>
-                                        <th>Servicio</th>
-                                        <th class="text-center">Cant.</th>
-                                        <th>Observaciones / Prioridad</th>
-                                        <th class="text-end">Precio</th>
-                                        <th>Estado</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @if (!ServiciosOrdenUnificados.Any())
-                                    {
-                                        <tr><td colspan="7" class="text-center text-muted py-3">Sin órdenes de laboratorio, imagenología o fisioterapia registradas para esta orden.</td></tr>
-                                    }
-                                    @foreach (var item in ServiciosOrdenUnificados)
-                                    {
-                                        <tr>
-                                            <td>
-                                                <span class="badge @item.BadgeClass">@item.Categoria</span>
-                                            </td>
-                                            <td class="fw-semibold">[@item.Codigo] @item.Descripcion</td>
-                                            <td class="text-center">@item.Cantidad.ToString("0.##")</td>
-                                            <td>@item.Detalle</td>
-                                            <td class="text-end">$@item.Precio.ToString("N2")</td>
-                                            <td><span class="badge bg-light text-dark border">@item.Estado</span></td>
-                                            <td class="text-end">
-                                                <button type="button" class="btn btn-sm btn-link text-danger p-0" title="Eliminar orden de servicio"
-                                                        @onclick="() => EliminarServicioOrdenAsync(item)">
-                                                    <i class="bi bi-trash"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
+                        <!-- 3 órdenes distintas por servicio, cada una con su impresión individual -->
+                        <div class="row g-3">
+                            <!-- 1. Orden de Laboratorio -->
+                            <div class="col-12">
+                                <div class="border rounded">
+                                    <div class="bg-info bg-opacity-10 px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold text-primary small">
+                                            <i class="bi bi-droplet-half me-1"></i>Orden de Laboratorio
+                                            <span class="badge bg-info text-dark ms-1">@OrdenesLab.Count</span>
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2"
+                                                @onclick="ImprimirOrdenLaboratorioPdfAsync">
+                                            <i class="bi bi-printer me-1"></i>Imprimir Orden de Laboratorio
+                                        </button>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle small mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Prueba / Examen</th>
+                                                    <th class="text-center">Prioridad</th>
+                                                    <th class="text-center">Cant.</th>
+                                                    <th>Observaciones</th>
+                                                    <th class="text-end">Precio</th>
+                                                    <th>Estado</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @if (!OrdenesLab.Any())
+                                                {
+                                                    <tr><td colspan="7" class="text-center text-muted py-2">Sin pruebas de laboratorio en esta orden.</td></tr>
+                                                }
+                                                @foreach (var lab in OrdenesLab)
+                                                {
+                                                    <tr>
+                                                        <td class="fw-semibold">[@lab.CodigoProd] @lab.DescripcionExamen</td>
+                                                        <td class="text-center">
+                                                            <span class="badge @(lab.Prioridad == "Emergente" ? "bg-danger" : "bg-secondary")">@lab.Prioridad</span>
+                                                        </td>
+                                                        <td class="text-center">@lab.Cantidad</td>
+                                                        <td>@lab.Observaciones</td>
+                                                        <td class="text-end">$@lab.Precio.ToString("N2")</td>
+                                                        <td><span class="badge bg-light text-dark border">@lab.Estado</span></td>
+                                                        <td class="text-end">
+                                                            <button type="button" class="btn btn-sm btn-link text-danger p-0" title="Eliminar examen"
+                                                                    @onclick='() => EliminarServicioPorCategoriaAsync("Laboratorio", lab.Sec)'>
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 2. Orden de Imagenología -->
+                            <div class="col-12">
+                                <div class="border rounded">
+                                    <div class="bg-warning bg-opacity-10 px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold text-primary small">
+                                            <i class="bi bi-radioactive me-1"></i>Orden de Imagenología
+                                            <span class="badge bg-warning text-dark ms-1">@OrdenesImagen.Count</span>
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2"
+                                                @onclick="ImprimirOrdenImagenPdfAsync">
+                                            <i class="bi bi-printer me-1"></i>Imprimir Orden de Imagenología
+                                        </button>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle small mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Estudio de Imagenología</th>
+                                                    <th class="text-center">Cant.</th>
+                                                    <th>Proyecciones / Observaciones</th>
+                                                    <th class="text-end">Precio</th>
+                                                    <th>Estado</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @if (!OrdenesImagen.Any())
+                                                {
+                                                    <tr><td colspan="6" class="text-center text-muted py-2">Sin estudios de imagenología en esta orden.</td></tr>
+                                                }
+                                                @foreach (var img in OrdenesImagen)
+                                                {
+                                                    <tr>
+                                                        <td class="fw-semibold">[@img.CodigoProd] @img.DescripcionEstudio</td>
+                                                        <td class="text-center">@img.Cantidad</td>
+                                                        <td>@img.Observaciones</td>
+                                                        <td class="text-end">$@img.Precio.ToString("N2")</td>
+                                                        <td><span class="badge bg-light text-dark border">@img.Estado</span></td>
+                                                        <td class="text-end">
+                                                            <button type="button" class="btn btn-sm btn-link text-danger p-0" title="Eliminar estudio"
+                                                                    @onclick='() => EliminarServicioPorCategoriaAsync("Imagenología", img.Sec)'>
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 3. Orden de Fisioterapia -->
+                            <div class="col-12">
+                                <div class="border rounded">
+                                    <div class="bg-success bg-opacity-10 px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold text-primary small">
+                                            <i class="bi bi-heart-pulse me-1"></i>Orden de Fisioterapia
+                                            <span class="badge bg-success ms-1">@OrdenesFisio.Count</span>
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2"
+                                                @onclick="ImprimirOrdenFisioterapiaPdfAsync">
+                                            <i class="bi bi-printer me-1"></i>Imprimir Orden de Fisioterapia
+                                        </button>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle small mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Servicio de Fisioterapia</th>
+                                                    <th class="text-center">Cant.</th>
+                                                    <th>Observaciones del Tratamiento</th>
+                                                    <th class="text-end">Precio</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @if (!OrdenesFisio.Any())
+                                                {
+                                                    <tr><td colspan="5" class="text-center text-muted py-2">Sin sesiones de fisioterapia en esta orden.</td></tr>
+                                                }
+                                                @foreach (var fisio in OrdenesFisio)
+                                                {
+                                                    <tr>
+                                                        <td class="fw-semibold">[@fisio.IdProducto] @fisio.Descripcion</td>
+                                                        <td class="text-center">@fisio.Cantidad.ToString("0.##")</td>
+                                                        <td>@fisio.Observaciones</td>
+                                                        <td class="text-end">$@fisio.Precio.ToString("N2")</td>
+                                                        <td class="text-end">
+                                                            <button type="button" class="btn btn-sm btn-link text-danger p-0" title="Eliminar sesión"
+                                                                    @onclick='() => EliminarServicioPorCategoriaAsync("Fisioterapia", fisio.Sec)'>
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -942,7 +1066,6 @@
 
     // Órdenes de Servicio (Laboratorio, Imagenología, Fisioterapia desde PRODUCTO)
     private sealed record ServicioCatalogoItem(string Codigo, string Descripcion, decimal Precio);
-    private sealed record ServicioOrdenResumenItem(int Sec, string Categoria, string BadgeClass, string Codigo, string Descripcion, decimal Cantidad, string Detalle, decimal Precio, string Estado);
 
     private string _categoriaServicio = "Laboratorio";
     private readonly Dictionary<string, List<ServicioCatalogoItem>> _cacheServiciosPorCategoria = new();
@@ -957,20 +1080,6 @@
     private List<OrdenLaboratorioItemDto> OrdenesLab { get; set; } = new();
     private List<OrdenImagenItemDto> OrdenesImagen { get; set; } = new();
     private List<FisioterapiaOrdenDto> OrdenesFisio { get; set; } = new();
-
-    private IEnumerable<ServicioOrdenResumenItem> ServiciosOrdenUnificados =>
-        OrdenesLab.Select(x => new ServicioOrdenResumenItem(
-            x.Sec, "Laboratorio", "bg-info text-dark", x.CodigoProd, x.DescripcionExamen,
-            x.Cantidad, $"{x.Prioridad}{(string.IsNullOrWhiteSpace(x.Observaciones) ? "" : $" — {x.Observaciones}")}",
-            x.Precio, x.Estado))
-        .Concat(OrdenesImagen.Select(x => new ServicioOrdenResumenItem(
-            x.Sec, "Imagenología", "bg-warning text-dark", x.CodigoProd, x.DescripcionEstudio,
-            x.Cantidad, string.IsNullOrWhiteSpace(x.Observaciones) ? "-" : x.Observaciones,
-            x.Precio, x.Estado)))
-        .Concat(OrdenesFisio.Select(x => new ServicioOrdenResumenItem(
-            x.Sec, "Fisioterapia", "bg-success", x.IdProducto.ToString(), x.Descripcion,
-            x.Cantidad, string.IsNullOrWhiteSpace(x.Observaciones) ? "-" : x.Observaciones,
-            x.Precio, "Activa")));
 
     protected override async Task OnParametersSetAsync()
     {
@@ -1790,25 +1899,25 @@
         }
     }
 
-    private async Task EliminarServicioOrdenAsync(ServicioOrdenResumenItem item)
+    private async Task EliminarServicioPorCategoriaAsync(string categoria, int sec)
     {
         try
         {
             int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
             int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
 
-            switch (item.Categoria)
+            switch (categoria)
             {
                 case "Laboratorio":
-                    await LabImagenService.EliminarOrdenLaboratorioAsync(item.Sec);
+                    await LabImagenService.EliminarOrdenLaboratorioAsync(sec);
                     OrdenesLab = await LabImagenService.ObtenerOrdenesLaboratorioAsync(ordenTarget, nhclTarget);
                     break;
                 case "Imagenología":
-                    await LabImagenService.EliminarOrdenImagenAsync(item.Sec);
+                    await LabImagenService.EliminarOrdenImagenAsync(sec);
                     OrdenesImagen = await LabImagenService.ObtenerOrdenesImagenAsync(ordenTarget, nhclTarget);
                     break;
                 case "Fisioterapia":
-                    await AdminClinicaService.EliminarFisioterapiaAsync(item.Sec);
+                    await AdminClinicaService.EliminarFisioterapiaAsync(sec);
                     OrdenesFisio = await AdminClinicaService.ObtenerFisioterapiaAsync(ordenTarget, nhclTarget);
                     break;
             }
@@ -1823,16 +1932,84 @@
         }
     }
 
-    private async Task ExportarPdfAsync()
+    private bool ValidarPacienteParaPdf(out PacienteHeaderDto pac)
     {
-        var pac = Paciente;
-        if (pac is null || pac.Nhcl <= 0)
+        if (Paciente is null || Paciente.Nhcl <= 0)
         {
+            pac = null!;
             EsError = true;
             MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
+            return false;
+        }
+        pac = Paciente;
+        return true;
+    }
+
+    private async Task DescargarPdfDocumentoAsync(byte[] pdfBytes, string nombreArchivo)
+    {
+        await JS.InvokeVoidAsync("descargarArchivoBase64", nombreArchivo, "application/pdf", Convert.ToBase64String(pdfBytes));
+    }
+
+    private async Task ImprimirRecetaMedicaPdfAsync()
+    {
+        if (!ValidarPacienteParaPdf(out var pac)) return;
+        if (!RecetaItems.Any())
+        {
+            EsError = true;
+            MensajeAlerta = "Agregue al menos un medicamento antes de imprimir la receta médica.";
             return;
         }
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        var pdfBytes = ReportService.GenerarRecetaMedicaPdf(pac, RecetaItems, Diagnosticos, Ficha.IndicacionesGeneralesReceta ?? "");
+        await DescargarPdfDocumentoAsync(pdfBytes, $"Receta_Medica_Orden_{ordenTarget}.pdf");
+    }
+
+    private async Task ImprimirOrdenLaboratorioPdfAsync()
+    {
+        if (!ValidarPacienteParaPdf(out var pac)) return;
+        if (!OrdenesLab.Any())
+        {
+            EsError = true;
+            MensajeAlerta = "Agregue al menos una prueba antes de imprimir la orden de laboratorio.";
+            return;
+        }
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        var pdfBytes = ReportService.GenerarOrdenLaboratorioPdf(pac, OrdenesLab, Diagnosticos);
+        await DescargarPdfDocumentoAsync(pdfBytes, $"Orden_Laboratorio_Orden_{ordenTarget}.pdf");
+    }
+
+    private async Task ImprimirOrdenImagenPdfAsync()
+    {
+        if (!ValidarPacienteParaPdf(out var pac)) return;
+        if (!OrdenesImagen.Any())
+        {
+            EsError = true;
+            MensajeAlerta = "Agregue al menos un estudio antes de imprimir la orden de imagenología.";
+            return;
+        }
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        var pdfBytes = ReportService.GenerarOrdenImagenPdf(pac, OrdenesImagen, Diagnosticos);
+        await DescargarPdfDocumentoAsync(pdfBytes, $"Orden_Imagenologia_Orden_{ordenTarget}.pdf");
+    }
+
+    private async Task ImprimirOrdenFisioterapiaPdfAsync()
+    {
+        if (!ValidarPacienteParaPdf(out var pac)) return;
+        if (!OrdenesFisio.Any())
+        {
+            EsError = true;
+            MensajeAlerta = "Agregue al menos un servicio antes de imprimir la orden de fisioterapia.";
+            return;
+        }
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        var pdfBytes = ReportService.GenerarOrdenFisioterapiaPdf(pac, OrdenesFisio, Diagnosticos);
+        await DescargarPdfDocumentoAsync(pdfBytes, $"Orden_Fisioterapia_Orden_{ordenTarget}.pdf");
+    }
+
+    private async Task ExportarPdfAsync()
+    {
+        if (!ValidarPacienteParaPdf(out var pac)) return;
         var pdfBytes = ReportService.GenerarFichaMedicaPdf(pac, Ficha, Diagnosticos, RecetaItems);
-        await JS.InvokeVoidAsync("descargarArchivoBase64", $"HistoriaClinica_Orden_{Ficha.MedOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+        await DescargarPdfDocumentoAsync(pdfBytes, $"HistoriaClinica_Orden_{Ficha.MedOrden}.pdf");
     }
 }
