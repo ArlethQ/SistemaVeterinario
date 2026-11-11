@@ -158,6 +158,7 @@ public class ConsultaExternaService : IConsultaExternaService
                     ISNULL(pronosticotueri, 'Bueno') AS MedPronostico,
                     TRY_CONVERT(DATETIME, contmtiempo) AS MedFechaControl,
                     ISNULL(med_pregunta, 'N') AS RequiereCirugia,
+                    CAST(ISNULL(med_requiereHospitalizacion, 0) AS BIT) AS RequiereHospitalizacion,
                     ISNULL(estadoparte, 'PENDIENTE') AS EstadoParte,
                     RTRIM(ISNULL(u.user_nombre, '')) AS UserNombre,
                     RTRIM(ISNULL(u.user_nombre, '')) AS NombreMedico,
@@ -377,7 +378,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(dto.MedMotivo))
+            if (triaje && string.IsNullOrWhiteSpace(dto.MedMotivo))
             {
                 dto.MedMotivo = "Triaje y signos vitales";
             }
@@ -473,6 +474,7 @@ public class ConsultaExternaService : IConsultaExternaService
                         contpsi = @ContpSi,
                         contpno = @ContpNo,
                         med_pregunta = @RequiereCirugia,
+                        med_requiereHospitalizacion = @RequiereHospitalizacion,
                         estadoparte = @EstadoParte,
                         med_idmodifica = @MedIdUser,
                         med_fechamodifica = GETDATE()
@@ -505,7 +507,7 @@ public class ConsultaExternaService : IConsultaExternaService
                         mucosas, tiempollenadocapilar, deshidratacion, reflejotusigeno,
                         auscultacion, palpaciontiroides, indicecondicioncorporal, cp,
                         linfonodos, palpacionabdominal, pielyanexos, cavidadoral, otros,
-                        tratamiento, observacionesyrecomendaciones, med_apuntes, temperamento, pronosticotueri, contmtiempo, contpsi, contpno, med_estado, med_pregunta, estadoparte
+                        tratamiento, observacionesyrecomendaciones, med_apuntes, temperamento, pronosticotueri, contmtiempo, contpsi, contpno, med_estado, med_pregunta, med_requiereHospitalizacion, estadoparte
                     ) VALUES (
                         @MedNhcl, @MedOrden, GETDATE(), @MedIdUser, @MedTipo, @MedCliente,
                         @MedEspecialidad, @MedEdadAnios, @MedEdadMeses, @MedLocalidad, @MedEspecie,
@@ -515,7 +517,7 @@ public class ConsultaExternaService : IConsultaExternaService
                         @Mucosas, @TiempoLlenadoCapilar, @Deshidratacion, @ReflejoTusigeno,
                         @Auscultacion, @PalpacionTiroides, @IndiceCondicionCorporal, @Cp,
                         @Linfonodos, @PalpacionAbdominal, @PielYAnexos, @CavidadOral, @Otros,
-                        @Tratamiento, @ObservacionesYRecomendaciones, @MedApuntes, @Temperamento, @MedPronostico, @MedFechaControlStr, @ContpSi, @ContpNo, 'A', @RequiereCirugia, @EstadoParte
+                        @Tratamiento, @ObservacionesYRecomendaciones, @MedApuntes, @Temperamento, @MedPronostico, @MedFechaControlStr, @ContpSi, @ContpNo, 'A', @RequiereCirugia, @RequiereHospitalizacion, @EstadoParte
                     )";
 
                 if (triaje)

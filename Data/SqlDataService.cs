@@ -120,6 +120,13 @@ public class SqlDataService : ISqlDataService
                     )
                     BEGIN
                         ALTER TABLE dbo.vt_fichamedica ALTER COLUMN med_tipoconsulta varchar(150) NULL;
+                    END;
+
+                    IF OBJECT_ID(N'dbo.vt_fichamedica', N'U') IS NOT NULL
+                       AND COL_LENGTH(N'dbo.vt_fichamedica', N'med_requiereHospitalizacion') IS NULL
+                    BEGIN
+                        ALTER TABLE dbo.vt_fichamedica
+                            ADD med_requiereHospitalizacion bit NOT NULL CONSTRAINT DF_vt_fichamedica_req_hosp DEFAULT (0);
                     END;";
                 cmd.ExecuteNonQuery();
                 _schemaVerified = true;
