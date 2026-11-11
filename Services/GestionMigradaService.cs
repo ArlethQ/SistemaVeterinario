@@ -33,8 +33,9 @@ public interface IGestionMigradaService
     Task<List<BitacoraDto>> ObtenerBitacoraAsync(DateTime desde, DateTime hasta, string filtro);
 }
 
-public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogService eFactCatalog) : IGestionMigradaService
+public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogService eFactCatalog, SessionStateService session) : IGestionMigradaService
 {
+    private int UsuarioFacturacion => 1_000_000 + (session.Localidad > 0 ? session.Localidad : 1);
     private async Task VerificarColumnasAsync(string tabla, params string[] requeridas)
     {
         var disponibles = (await db.QueryAsync<string>("SELECT name FROM sys.columns WHERE object_id=OBJECT_ID(@Tabla)", new { Tabla = tabla })).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -255,7 +256,7 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         var conflicto=await db.QueryFirstOrDefaultAsync<int>(@"SELECT COUNT(1) FROM qvt_calendario_cirugias WHERE estado='A' AND sec<>@Id AND CAST(fechacirugia AS date)=CAST(@Fecha AS date) AND (codmed=@IdMedico OR localidad=@IdLocalidad) AND CAST(horainicio AS time)<CAST(@HoraFin AS time) AND CAST(horafinalizacion AS time)>CAST(@HoraInicio AS time)",x);
         var bloqueo=await db.QueryFirstOrDefaultAsync<int>(@"SELECT COUNT(1) FROM vt_calendarizacionHorariosMedicos WHERE cal_estado='A' AND cal_idMedico=@IdMedico AND cal_localidad=@IdLocalidad AND CAST(cal_fecha AS date)=CAST(@Fecha AS date) AND TRY_CONVERT(time,cal_desde)<TRY_CONVERT(time,@HoraFin) AND TRY_CONVERT(time,CASE WHEN cal_hasta='24:00' THEN '23:59:59' ELSE cal_hasta END)>TRY_CONVERT(time,@HoraInicio)",x);
         if(conflicto>0||bloqueo>0)return false;
-        var sql=x.Id>0?@"UPDATE q SET codmed=@IdMedico,nhcl=@Nhcl,codprocedimiento=@IdProcedimiento,fechacirugia=@Fecha,horainicio=@HoraInicio,horafinalizacion=@HoraFin,localidad=@IdLocalidad,nommedico=u.user_nombre,nompaciente=p.mas_nombre,nomprocedimiento=pr.prod_descripcion,idcliente=p.mas_idcliente FROM qvt_calendario_cirugias q INNER JOIN vt_usuarios u ON u.user_numero=@IdMedico INNER JOIN vt_pacientes p ON p.mas_nhcl=@Nhcl INNER JOIN vt_productos pr ON pr.prod_id=@IdProcedimiento WHERE q.sec=@Id":@"INSERT INTO qvt_calendario_cirugias(codmed,nhcl,codprocedimiento,idcliente,fechacirugia,horainicio,horafinalizacion,usering,localidad,nommedico,nompaciente,nomprocedimiento,estado) SELECT @IdMedico,@Nhcl,@IdProcedimiento,p.mas_idcliente,@Fecha,@HoraInicio,@HoraFin,@Usuario,@IdLocalidad,u.user_nombre,p.mas_nombre,pr.prod_descripcion,'A' FROM vt_pacientes p CROSS JOIN vt_usuarios u CROSS JOIN vt_productos pr WHERE p.mas_nhcl=@Nhcl AND u.user_numero=@IdMedico AND pr.prod_id=@IdProcedimiento";
+        var sql=x.Id>0?@"UPDATE q SET codmed=@IdMedico,nhcl=@Nhcl,codprocedimiento=@IdProcedimiento,fechacirugia=@Fecha,horainicio=@HoraInicio,horafinalizacion=@HoraFin,localidad=@IdLocalidad,nommedico=u.user_nombre,nompaciente=p.mas_nombre,nomprocedimiento=RTRIM(ISNULL(pr.NOMBRE,'')),idcliente=p.mas_idcliente FROM qvt_calendario_cirugias q INNER JOIN vt_usuarios u ON u.user_numero=@IdMedico INNER JOIN vt_pacientes p ON p.mas_nhcl=@Nhcl INNER JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO=@IdProcedimiento WHERE q.sec=@Id":@"INSERT INTO qvt_calendario_cirugias(codmed,nhcl,codprocedimiento,idcliente,fechacirugia,horainicio,horafinalizacion,usering,localidad,nommedico,nompaciente,nomprocedimiento,estado) SELECT @IdMedico,@Nhcl,@IdProcedimiento,p.mas_idcliente,@Fecha,@HoraInicio,@HoraFin,@Usuario,@IdLocalidad,u.user_nombre,p.mas_nombre,RTRIM(ISNULL(pr.NOMBRE,'')),'A' FROM vt_pacientes p CROSS JOIN vt_usuarios u CROSS JOIN VeterinariaFacturacion.dbo.PRODUCTO pr WHERE p.mas_nhcl=@Nhcl AND u.user_numero=@IdMedico AND pr.CODIGO=@IdProcedimiento";
         var ok=await db.ExecuteAsync(sql,new{x.Id,x.IdMedico,x.Nhcl,x.IdProcedimiento,x.Fecha,x.HoraInicio,x.HoraFin,x.IdLocalidad,Usuario=idUsuario})>0;if(ok)await db.RegistrarBitacoraAsync($"Programación de cirugía NHCL {x.Nhcl}",idUsuario);return ok;
     }
     public async Task<bool> CancelarCirugiaAsync(int id,int idUsuario){var ok=await db.ExecuteAsync("UPDATE qvt_calendario_cirugias SET estado='I',fechaelimina=GETDATE(),quienelimina=@Usuario WHERE sec=@Id AND estado='A'",new{Id=id,Usuario=idUsuario})>0;if(ok)await db.RegistrarBitacoraAsync($"Cancela cirugía programada {id}",idUsuario);return ok;}
@@ -273,7 +274,19 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     public async Task<List<SelectorClinicoDto>> ObtenerLocalidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,loc_id) Id,RTRIM(loc_descripcion) Descripcion FROM vt_localidades WHERE loc_estado='A' ORDER BY loc_descripcion")).ToList();
     public async Task<List<SelectorClinicoDto>> ObtenerEspecialidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,es_id) Id,RTRIM(es_descripcion) Descripcion FROM vt_especialidades ORDER BY es_descripcion")).ToList();
     public async Task<List<SelectorClinicoDto>> BuscarPacientesAsync(string filtro)=>(await db.QueryAsync<SelectorClinicoDto>("SELECT TOP 100 mas_nhcl Id,RTRIM(mas_nombre)+' · NHCL '+CAST(mas_nhcl AS varchar(20)) Descripcion,mas_idcliente IdRelacionado FROM vt_pacientes WHERE mas_estado='A' AND (@Filtro='' OR mas_nombre LIKE '%'+@Filtro+'%' OR CAST(mas_nhcl AS varchar(20)) LIKE '%'+@Filtro+'%') ORDER BY mas_nombre",new{Filtro=filtro?.Trim()??""})).ToList();
-    public async Task<List<SelectorClinicoDto>> BuscarProcedimientosAsync(string filtro)=>(await db.QueryAsync<SelectorClinicoDto>("SELECT TOP 100 prod_id Id,RTRIM(prod_descripcion) Descripcion,prod_grupo IdRelacionado FROM vt_productos WHERE prod_estado='A' AND (@Filtro='' OR prod_descripcion LIKE '%'+@Filtro+'%' OR CAST(prod_id AS varchar(20)) LIKE '%'+@Filtro+'%') ORDER BY prod_descripcion",new{Filtro=filtro?.Trim()??""})).ToList();
+    public async Task<List<SelectorClinicoDto>> BuscarProcedimientosAsync(string filtro) =>
+        (await db.QueryAsync<SelectorClinicoDto>(@"
+            SELECT TOP 100
+                p.CODIGO AS Id,
+                RTRIM(ISNULL(p.NOMBRE, '')) AS Descripcion,
+                ISNULL(p.IDSUBTIPO, 0) AS IdRelacionado
+            FROM VeterinariaFacturacion.dbo.PRODUCTO p
+            INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+            WHERE ISNULL(p.ESTADO, 1) = 1
+              AND p.IDUSUARIO = @IdUsuario
+              AND UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) = 'SERVICIOS'
+              AND (@Filtro = '' OR p.NOMBRE LIKE '%' + @Filtro + '%' OR CAST(p.CODIGO AS VARCHAR(20)) LIKE '%' + @Filtro + '%' OR ISNULL(p.CODIGO_PRINCIPAL, '') LIKE '%' + @Filtro + '%')
+            ORDER BY p.NOMBRE", new { IdUsuario = UsuarioFacturacion, Filtro = filtro?.Trim() ?? "" })).ToList();
 
     private static bool HoraValida(string desde,string hasta,bool admiteFinDia=false)
     {

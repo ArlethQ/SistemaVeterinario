@@ -2,6 +2,7 @@
 @page "/administracion/diagnosticos"
 @page "/administracion/productos"
 @page "/facturacion/productos"
+@implements IDisposable
 @inject IGestionMigradaService Service
 @inject IEFactCatalogService EFactCatalog
 @inject SessionStateService Session
@@ -120,6 +121,13 @@
             </div>
         </div>
         @if (!string.IsNullOrEmpty(_mensaje)) { <div class="alert @(_error ? "alert-danger" : "alert-success")">@_mensaje</div> }
+        @if (_cargando)
+        {
+            <div class="alert alert-info py-2 d-flex align-items-center gap-2">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <span>Cargando catálogo...</span>
+            </div>
+        }
         @if (_pendienteEliminar is not null) { <div class="alert alert-warning d-flex align-items-center justify-content-between"><span>¿Desactivar <strong>@_pendienteEliminar.Descripcion</strong> del catálogo local?</span><span><button class="btn btn-sm btn-danger me-2" @onclick="ConfirmarEliminar">Sí, desactivar</button><button class="btn btn-sm btn-outline-secondary" @onclick="CancelarEliminar">Cancelar</button></span></div> }
         <div class="row g-3">
             <div class="col-lg-8">
@@ -243,7 +251,7 @@
             </div>
             <div class="col-lg-4"><div class="card"><div class="card-body">
                 <h5>@(_edit.Id > 0 ? "Editar" : "Nuevo")</h5>
-                <label>Descripción</label><input class="form-control mb-2" maxlength="300" @bind="_edit.Descripcion" />
+                <label>Descripción</label><input class="form-control mb-2" maxlength="300" @bind="_edit.Descripcion" @bind:event="oninput" />
                 @if (_tipo == "productos")
                 {
                     <label>Tipo</label><select class="form-select mb-2" @bind="_edit.Tipo" @bind:after="CambiarTipoProducto"><option value="B">Bien (B)</option><option value="S">Servicio (S)</option></select>
@@ -259,7 +267,7 @@
                 @if (_tipo == "productos")
                 {
                     <label>Subcategoría</label><select class="form-select mb-2" @bind="_edit.IdSubgrupo"><option value="">Sin subcategoría</option>@foreach (var s in SubcategoriasDisponibles) { <option value="@s.Id">@s.Descripcion</option> }</select>
-                    <label>Código (opcional)</label><input class="form-control mb-2" maxlength="50" @bind="_edit.Codigo" />
+                    <label>Código (opcional)</label><input class="form-control mb-2" maxlength="50" @bind="_edit.Codigo" @bind:event="oninput" />
                     <label>Precio base</label><input class="form-control mb-2" type="number" min="0" max="99999999.99" step="0.01" @bind="_edit.Precio" />
                     <div class="row g-2"><div class="col-6"><label>Precio 2 (opcional)</label><input class="form-control mb-2" type="number" min="0" max="99999999.99" step="0.01" @bind="_edit.Precio2" /></div><div class="col-6"><label>Precio 3 (opcional)</label><input class="form-control mb-2" type="number" min="0" max="99999999.99" step="0.01" @bind="_edit.Precio3" /></div></div>
                     <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="aplicaIva" @bind="_aplicaIva" @bind:after="CambiarIva" /><label class="form-check-label" for="aplicaIva">IVA (opcional)</label></div>
@@ -281,7 +289,17 @@
                     <label>Tipo</label><input class="form-control mb-2" maxlength="1" @bind="_edit.Tipo" />
                 }
                 <label>Estado</label><select class="form-select mb-3" @bind="_edit.Estado"><option value="A">Activo</option><option value="I">Inactivo</option></select>
-                <button class="btn btn-primary" @onclick="Guardar">Guardar</button>
+                <button type="button" class="btn btn-primary" disabled="@_guardando" @onclick="Guardar">
+                    @if (_guardando)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Guardando...</span>
+                    }
+                    else
+                    {
+                        <span>Guardar</span>
+                    }
+                </button>
             </div></div></div>
         </div>
         @if (_vista is not null)
@@ -292,8 +310,8 @@
 }
 
 @code {
-    private bool _autorizado, _error, _aplicaIva;
-    private string _tipo = "diagnosticos", _filtro = "", _mensaje = "", _seccion = "general";
+    private bool _autorizado, _error, _aplicaIva, _guardando, _cargando;
+    private string _tipo = "diagnosticos", _filtro = "", _mensaje = "", _seccion = "general", _ultimaRutaCargada = "";
     private string _filtroTipo = "", _filtroGrupo = "", _filtroSubgrupo = "", _filtroInventario = "", _filtroIva = "", _filtroEstado = "";
     private int _paginaActual = 1, _tamanoPagina = 20;
 
@@ -493,25 +511,76 @@
     {
         if (!Session.IsAuthenticated || Session.TipoUser != 1) { Nav.NavigateTo("/dashboard"); return; }
         _autorizado = true;
-        ActualizarSeccionDesdeRuta();
+        Nav.LocationChanged -= OnLocationChanged;
+        Nav.LocationChanged += OnLocationChanged;
+        _ultimaRutaCargada = Nav.Uri;
+        ActualizarSeccionDesdeRuta(Nav.Uri);
         await Cargar();
     }
 
     protected override async Task OnParametersSetAsync()
     {
         if (!_autorizado) return;
-        var seccionAnterior = _seccion;
-        ActualizarSeccionDesdeRuta();
-        if (seccionAnterior != _seccion)
+        await SincronizarRutaAsync(Nav.Uri);
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (!_autorizado) return;
+        try
         {
-            LimpiarFiltros();
-            await Cargar();
+            await InvokeAsync(() => SincronizarRutaAsync(e.Location));
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _mensaje = $"No se pudo cambiar de catálogo: {ex.Message}";
+            _cargando = false;
+            try { await InvokeAsync(StateHasChanged); } catch { }
         }
     }
 
-    private void ActualizarSeccionDesdeRuta()
+    private async Task SincronizarRutaAsync(string uri)
     {
-        var uri = Nav.Uri;
+        if (string.Equals(_ultimaRutaCargada, uri, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _ultimaRutaCargada = uri;
+        var seccionAnterior = _seccion;
+        var tipoAnterior = _tipo;
+        ActualizarSeccionDesdeRuta(uri);
+        if (seccionAnterior != _seccion || tipoAnterior != _tipo)
+        {
+            _mensaje = "";
+            _error = false;
+            _vista = null;
+            _pendienteEliminar = null;
+            _items = [];
+            _grupos = [];
+            _subgrupos = [];
+            _cargando = true;
+            LimpiarFiltros();
+            StateHasChanged();
+            try
+            {
+                await Cargar();
+            }
+            finally
+            {
+                _cargando = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+
+    private void ActualizarSeccionDesdeRuta(string? uriActual = null)
+    {
+        var uri = uriActual ?? Nav.Uri;
         if (uri.Contains("/administracion/diagnosticos", StringComparison.OrdinalIgnoreCase))
         {
             _seccion = "diagnosticos";
@@ -532,10 +601,17 @@
     }
     private async Task Cargar()
     {
-        _items = await Service.ObtenerCatalogoAsync(_tipo);
-        _grupos = MuestraGrupo ? await Service.ObtenerCatalogoAsync(TipoGrupo) : [];
-        _subgrupos = _tipo == "productos" ? await Service.ObtenerCatalogoAsync("subgrupos-productos") : [];
-        _tarifas = _tipo == "productos" ? await EFactCatalog.ObtenerTarifasIvaAsync() : [];
+        var tItems = Service.ObtenerCatalogoAsync(_tipo);
+        var tGrupos = MuestraGrupo ? Service.ObtenerCatalogoAsync(TipoGrupo) : Task.FromResult(new List<CatalogoOperativoDto>());
+        var tSubgrupos = _tipo == "productos" ? Service.ObtenerCatalogoAsync("subgrupos-productos") : Task.FromResult(new List<CatalogoOperativoDto>());
+        var tTarifas = _tipo == "productos" ? EFactCatalog.ObtenerTarifasIvaAsync() : Task.FromResult(new List<TarifaIvaDto>());
+
+        await Task.WhenAll(tItems, tGrupos, tSubgrupos, tTarifas);
+
+        _items = await tItems;
+        _grupos = await tGrupos;
+        _subgrupos = await tSubgrupos;
+        _tarifas = await tTarifas;
         _paginaActual = Math.Clamp(_paginaActual, 1, TotalPaginas);
         Nuevo();
     }
@@ -658,6 +734,106 @@
     private void CerrarVista() => _vista = null;
     private void PrepararEliminar(CatalogoOperativoDto x) => _pendienteEliminar = x;
     private void CancelarEliminar() => _pendienteEliminar = null;
-    private async Task ConfirmarEliminar() { if (_pendienteEliminar is null) return; var ok = await EFactCatalog.EliminarProductoAsync(_pendienteEliminar.Id); _error = !ok; _mensaje = ok ? "Producto desactivado en el catálogo de esta veterinaria." : "No se pudo desactivar el producto."; if (ok) { _vista = null; _pendienteEliminar = null; await Cargar(); } }
-    private async Task Guardar() { var ok = await Service.GuardarCatalogoAsync(_tipo, _edit, Session.IdUser); _error = !ok; _mensaje = ok ? "Registro guardado en el catálogo de esta veterinaria." : "No se pudo guardar: revise los campos obligatorios o nombres duplicados."; if (ok) await Cargar(); }
+    private async Task ConfirmarEliminar()
+    {
+        if (_pendienteEliminar is null || _guardando) return;
+        _guardando = true;
+        try
+        {
+            var eliminado = _pendienteEliminar;
+            var ok = await EFactCatalog.EliminarProductoAsync(eliminado.Id);
+            _error = !ok;
+            _mensaje = ok ? "Producto desactivado en el catálogo de esta veterinaria." : "No se pudo desactivar el producto.";
+            if (ok)
+            {
+                _vista = null;
+                _pendienteEliminar = null;
+                var item = _items.FirstOrDefault(x => x.Id == eliminado.Id);
+                if (item != null)
+                {
+                    item.Estado = "I";
+                }
+                _paginaActual = Math.Clamp(_paginaActual, 1, TotalPaginas);
+            }
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private async Task Guardar()
+    {
+        if (_guardando) return;
+        _guardando = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var ok = await Service.GuardarCatalogoAsync(_tipo, _edit, Session.IdUser);
+            _error = !ok;
+            _mensaje = ok
+                ? "Registro guardado en el catálogo de esta veterinaria."
+                : "No se pudo guardar: revise los campos obligatorios o nombres duplicados.";
+            if (ok)
+            {
+                if (_tipo == "productos" && _edit.Id > 0)
+                {
+                    AplicarProductoEnMemoria(_edit);
+                    _vista = null;
+                    Nuevo();
+                }
+                else
+                {
+                    await Cargar();
+                }
+            }
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private void AplicarProductoEnMemoria(CatalogoOperativoDto guardado)
+    {
+        var grupo = guardado.IdGrupo.HasValue
+            ? _grupos.FirstOrDefault(g => g.Id == guardado.IdGrupo.Value)?.Descripcion ?? string.Empty
+            : string.Empty;
+        var subgrupo = guardado.IdSubgrupo.HasValue
+            ? _subgrupos.FirstOrDefault(s => s.Id == guardado.IdSubgrupo.Value)?.Descripcion ?? string.Empty
+            : string.Empty;
+        bool esServicio = guardado.Tipo == "S" || string.Equals(guardado.Tipo, "SERVICIO", StringComparison.OrdinalIgnoreCase);
+
+        var actualizado = new CatalogoOperativoDto
+        {
+            Id = guardado.Id,
+            Descripcion = guardado.Descripcion.Trim(),
+            Codigo = guardado.Codigo?.Trim() ?? string.Empty,
+            Precio = guardado.Precio,
+            Precio2 = guardado.Precio2,
+            Precio3 = guardado.Precio3,
+            IdGrupo = guardado.IdGrupo,
+            Grupo = grupo,
+            IdSubgrupo = guardado.IdSubgrupo,
+            Subgrupo = subgrupo,
+            Tipo = esServicio ? "S" : "B",
+            Inventario = !esServicio && guardado.Inventario,
+            CodigoImpuesto = guardado.CodigoImpuesto == "2" ? "2" : string.Empty,
+            PorcentajeImpuesto = guardado.CodigoImpuesto == "2" ? guardado.PorcentajeImpuesto : string.Empty,
+            Estado = guardado.Estado == "I" ? "I" : "A"
+        };
+
+        var idx = _items.FindIndex(x => x.Id == actualizado.Id);
+        if (idx >= 0)
+        {
+            _items[idx] = actualizado;
+        }
+        else
+        {
+            _items.Add(actualizado);
+        }
+
+        _items = _items.OrderBy(x => x.Descripcion, StringComparer.OrdinalIgnoreCase).ToList();
+        _paginaActual = Math.Clamp(_paginaActual, 1, TotalPaginas);
+    }
 }

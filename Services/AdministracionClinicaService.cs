@@ -686,10 +686,9 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
                 CAST(ISNULL(p.VALOR_UNITARIO, 0.00) AS decimal(18,2)) AS Precio
             FROM VeterinariaFacturacion.dbo.PRODUCTO p
             INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
-            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
             WHERE ISNULL(p.ESTADO, 1) = 1
               AND p.IDUSUARIO = @IdUsuario
-              AND UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) LIKE '%FISIOTERAPIA%'
+              AND UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) LIKE '%FISIOTERAPIA%'
             ORDER BY p.NOMBRE ASC", new { IdUsuario = UsuarioFacturacion })).ToList();
 
     public async Task<List<FisioterapiaOrdenDto>> ObtenerFisioterapiaAsync(int idOrden, int nhcl) =>
