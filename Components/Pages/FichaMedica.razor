@@ -142,23 +142,13 @@
                     <div class="card-body">
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
-                                <label class="form-label small fw-semibold">Tipo de Consulta</label>
-                                <select class="form-select form-select-sm" @bind="Ficha.MedTipoConsulta">
-                                    <option value="Consulta Externa">Consulta Externa</option>
-                                    <option value="Emergencia">Emergencia</option>
-                                    <option value="Control Médico">Control Médico</option>
-                                    <option value="Especialidad">Especialidad</option>
-                                    <option value="Chequeo Preventivo">Chequeo Preventivo</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
                                 <label class="form-label small fw-semibold">Esterilizado</label>
                                 <select class="form-select form-select-sm" @bind="Ficha.Esterilizado">
                                     <option value="S">SÍ</option>
                                     <option value="N">NO</option>
                                 </select>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Sede / Tipo</label>
                                 <select class="form-select form-select-sm" @bind="Ficha.MedTipo">
                                     <option value="HDEV">Doméstico (Mascotas)</option>
@@ -356,6 +346,15 @@
                                min="@DateTime.Today.ToString("yyyy-MM-dd")"
                                value="@(Ficha.MedFechaControl?.ToString("yyyy-MM-dd"))"
                                @onchange="OnFechaControlChanged" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Tipo de Consulta</label>
+                        <select class="form-select form-select-sm" @bind="Ficha.MedTipoConsulta">
+                            @foreach (var tipo in TiposConsultaDisponibles)
+                            {
+                                <option value="@tipo">@tipo</option>
+                            }
+                        </select>
                     </div>
                 </div>
             </div>
@@ -655,6 +654,12 @@
     private List<AntecedenteClinicoDto> Antecedentes { get; set; } = new();
     private List<VacunaPacienteDto> Vacunas { get; set; } = new();
     private List<CatalogoItemGenericoDto> CatalogoVacunas { get; set; } = new();
+    private List<string> TiposConsultaCatalogo { get; set; } = new();
+    private IEnumerable<string> TiposConsultaDisponibles =>
+        !string.IsNullOrWhiteSpace(Ficha.MedTipoConsulta) &&
+        !TiposConsultaCatalogo.Any(x => string.Equals(x, Ficha.MedTipoConsulta, StringComparison.OrdinalIgnoreCase))
+            ? TiposConsultaCatalogo.Append(Ficha.MedTipoConsulta)
+            : TiposConsultaCatalogo;
 
     private string FiltroCie10 { get; set; } = string.Empty;
     private DiagnosticoCie10Dto NuevoDiagnostico { get; set; } = new();
@@ -807,7 +812,8 @@
         var tAnt = ConsultaService.ObtenerAntecedentesPacienteAsync(Nhcl);
         var tVac = ConsultaService.ObtenerVacunasPacienteAsync(Nhcl);
         var tCatalogoVac = ConsultaService.ObtenerCatalogoVacunasAsync();
-        await Task.WhenAll(tFicha, tDiag, tRec, tAnt, tVac, tCatalogoVac);
+        var tTiposConsulta = ConsultaService.ObtenerTiposConsultaCatalogoAsync(Session.Localidad);
+        await Task.WhenAll(tFicha, tDiag, tRec, tAnt, tVac, tCatalogoVac, tTiposConsulta);
 
         Ficha = await tFicha;
         if (Ficha.MedOrden <= 0) Ficha.MedOrden = IdOrden;
@@ -819,6 +825,7 @@
         Antecedentes = await tAnt;
         Vacunas = await tVac;
         CatalogoVacunas = await tCatalogoVac;
+        TiposConsultaCatalogo = await tTiposConsulta;
     }
 
     private void OnFechaControlChanged(ChangeEventArgs e)

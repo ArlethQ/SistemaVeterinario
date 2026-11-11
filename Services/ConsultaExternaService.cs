@@ -7,6 +7,7 @@ public interface IConsultaExternaService
 {
     // 1. Ficha Médica / Historia Clínica SOAP (vt_fichamedica)
     Task<FichaMedicaCompletaDto> ObtenerFichaMedicaAsync(int idOrden, int nhcl);
+    Task<List<string>> ObtenerTiposConsultaCatalogoAsync(int idLocalidad = 0);
     Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario);
 
     // 2. Diagnósticos CIE-10 (vt_diagnosticos + vt_cie10)
@@ -104,7 +105,7 @@ public class ConsultaExternaService : IConsultaExternaService
                     ISNULL(med_fecha, GETDATE()) AS MedFecha,
                     ISNULL(med_tipo, 'HDEV') AS MedTipo,
                     ISNULL(med_especie, '') AS MedEspecie,
-                    ISNULL(med_tipoconsulta, 'Consulta Externa') AS MedTipoConsulta,
+                    ISNULL(med_tipoconsulta, '') AS MedTipoConsulta,
                     ISNULL(med_motivo, '') AS MedMotivo,
                     ISNULL(med_anamnesis, '') AS MedAnamnesis,
                     ISNULL(med_antecedente, '') AS MedAntecedente,
@@ -173,6 +174,12 @@ public class ConsultaExternaService : IConsultaExternaService
             }
 
             dto.IndicacionesGeneralesReceta = await ObtenerIndicacionesGeneralesAsync(idOrden);
+
+            if (string.IsNullOrWhiteSpace(dto.MedTipoConsulta) ||
+                string.Equals(dto.MedTipoConsulta.Trim(), "Consulta Externa", StringComparison.OrdinalIgnoreCase))
+            {
+                dto.MedTipoConsulta = await ResolverTipoConsultaPredeterminadoOrdenAsync(idOrden);
+            }
         }
         catch (Exception ex)
         {
@@ -180,6 +187,121 @@ public class ConsultaExternaService : IConsultaExternaService
         }
 
         return dto;
+    }
+
+    public async Task<List<string>> ObtenerTiposConsultaCatalogoAsync(int idLocalidad = 0)
+    {
+        int idUsuarioFact = idLocalidad > 0 ? 1_000_000 + idLocalidad : 0;
+
+        const string sqlPorSucursal = @"
+            SELECT DISTINCT LTRIM(RTRIM(p.NOMBRE)) AS Nombre
+            FROM VeterinariaFacturacion.dbo.PRODUCTO p
+            INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+            INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
+            WHERE ISNULL(p.ESTADO, 1) = 1
+              AND ISNULL(t.ESTADO, 1) = 1
+              AND ISNULL(s.ESTADO, 'A') <> 'I'
+              AND p.IDUSUARIO = @IdUsuarioFact
+              AND UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) LIKE 'SERVICIO%'
+              AND UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) LIKE 'CONSULTA%'
+              AND NULLIF(LTRIM(RTRIM(ISNULL(p.NOMBRE, ''))), '') IS NOT NULL
+            ORDER BY LTRIM(RTRIM(p.NOMBRE)) ASC";
+
+        const string sqlGeneral = @"
+            SELECT DISTINCT LTRIM(RTRIM(p.NOMBRE)) AS Nombre
+            FROM VeterinariaFacturacion.dbo.PRODUCTO p
+            INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+            INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
+            WHERE ISNULL(p.ESTADO, 1) = 1
+              AND ISNULL(t.ESTADO, 1) = 1
+              AND ISNULL(s.ESTADO, 'A') <> 'I'
+              AND p.IDUSUARIO >= 1000000
+              AND UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) LIKE 'SERVICIO%'
+              AND UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) LIKE 'CONSULTA%'
+              AND NULLIF(LTRIM(RTRIM(ISNULL(p.NOMBRE, ''))), '') IS NOT NULL
+            ORDER BY LTRIM(RTRIM(p.NOMBRE)) ASC";
+
+        try
+        {
+            if (idUsuarioFact > 0)
+            {
+                var locales = (await _db.QueryAsync<string>(sqlPorSucursal, new { IdUsuarioFact = idUsuarioFact })).ToList();
+                if (locales.Count > 0) return locales;
+            }
+
+            return (await _db.QueryAsync<string>(sqlGeneral)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo consultar el catálogo de consultas desde PRODUCTO.");
+            return [];
+        }
+    }
+
+    private sealed class OrdenTipoConsultaInfo
+    {
+        public int? TipoConsultaOrden { get; set; }
+        public int IdEspecialidad { get; set; }
+        public int IdLocalidad { get; set; }
+        public string CodigoEspecialidad { get; set; } = string.Empty;
+        public string DescripcionEspecialidad { get; set; } = string.Empty;
+    }
+
+    private async Task<string> ResolverTipoConsultaPredeterminadoOrdenAsync(int idOrden)
+    {
+        OrdenTipoConsultaInfo? ordenInfo = null;
+        if (idOrden > 0)
+        {
+            try
+            {
+                const string sqlOrden = @"
+                    SELECT TOP 1
+                        o.ordenAten_tipoConsulta AS TipoConsultaOrden,
+                        ISNULL(o.ordenAten_esp_numero, 0) AS IdEspecialidad,
+                        ISNULL(o.ordenAten_idlocalidad, 0) AS IdLocalidad,
+                        RTRIM(ISNULL(e.es_codigo, '')) AS CodigoEspecialidad,
+                        RTRIM(ISNULL(e.es_descripcion, '')) AS DescripcionEspecialidad
+                    FROM vt_ordenAtencion o
+                    LEFT JOIN vt_especialidades e ON e.es_id = o.ordenAten_esp_numero
+                    WHERE o.ordenAten_id = @IdOrden";
+                ordenInfo = await _db.QueryFirstOrDefaultAsync<OrdenTipoConsultaInfo>(sqlOrden, new { IdOrden = idOrden });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo consultar el tipo de consulta de la orden {IdOrden}.", idOrden);
+            }
+        }
+
+        bool esEspecialista = false;
+        if (ordenInfo != null)
+        {
+            if (ordenInfo.TipoConsultaOrden == 2)
+            {
+                esEspecialista = true;
+            }
+            else if (ordenInfo.TipoConsultaOrden is 1 or 4)
+            {
+                esEspecialista = false;
+            }
+            else if (ordenInfo.IdEspecialidad > 0)
+            {
+                bool esMedGeneral = string.Equals(ordenInfo.CodigoEspecialidad, "MG", StringComparison.OrdinalIgnoreCase)
+                    || ordenInfo.DescripcionEspecialidad.Contains("MEDICINA GENERAL", StringComparison.OrdinalIgnoreCase);
+                esEspecialista = !esMedGeneral;
+            }
+        }
+
+        var opciones = await ObtenerTiposConsultaCatalogoAsync(ordenInfo?.IdLocalidad ?? 0);
+        if (esEspecialista)
+        {
+            return opciones.FirstOrDefault(x => string.Equals(x, "CONSULTA ESPECIALISTA DE LLAMADA", StringComparison.OrdinalIgnoreCase))
+                ?? opciones.FirstOrDefault(x => x.Contains("ESPECIALISTA", StringComparison.OrdinalIgnoreCase))
+                ?? "CONSULTA ESPECIALISTA DE LLAMADA";
+        }
+
+        return opciones.FirstOrDefault(x => string.Equals(x, "CONSULTA DE PLANTA", StringComparison.OrdinalIgnoreCase))
+            ?? opciones.FirstOrDefault(x => x.Contains("PLANTA", StringComparison.OrdinalIgnoreCase) || x.Contains("GENERAL", StringComparison.OrdinalIgnoreCase))
+            ?? "CONSULTA DE PLANTA";
     }
 
     public async Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario)

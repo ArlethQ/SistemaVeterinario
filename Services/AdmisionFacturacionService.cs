@@ -977,14 +977,16 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     ordenAten_estado, ordenAten_fecha, ordenAten_esp_numero, ordenAten_idlocalidad,
                     ordenAten_hora, ordenAten_IdUsuario, ordenaten_IPOrigen, ordenAten_etapa,
                     ordenAten_Tipo, ordenAten_Despacho, ordenAten_turno, ordenAten_consultorio,
-                    ordenAten_esProcedimiento, ordenAten_idEnfermero, ordenAten_triajeMedico
+                    ordenAten_esProcedimiento, ordenAten_idEnfermero, ordenAten_triajeMedico,
+                    ordenAten_tipoConsulta
                 )
                 VALUES (
                     @NombrePropietario, @IdCliente, @Nhcl, @IdMedico,
                     'A', @FechaOrden, @IdEspecialidad, @IdLocalidad,
                     @HoraOrden, @IdUsuario, @IpOrigen, @Etapa,
                     @TipoOrigen, @TipoDespacho, @TurnoCodigo, @Consultorio,
-                    @EsProcedimiento, @IdEnfermero, @TriajeMedico
+                    @EsProcedimiento, @IdEnfermero, @TriajeMedico,
+                    @TipoConsulta
                 );
                 DECLARE @NuevaOrden INT = CAST(SCOPE_IDENTITY() AS INT);
                 INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
@@ -1010,10 +1012,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 IpOrigen = ipOrigen,
                 Etapa = etapaInicial,
                 orden.TipoOrigen,
-                orden.TipoDespacho
-                ,orden.EsProcedimiento
-                ,orden.IdEnfermero
-                ,orden.TriajeMedico
+                orden.TipoDespacho,
+                orden.EsProcedimiento,
+                orden.IdEnfermero,
+                orden.TriajeMedico,
+                orden.TipoConsulta
             });
 
             if (idNueva > 0) return idNueva;
