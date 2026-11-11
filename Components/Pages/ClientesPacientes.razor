@@ -366,7 +366,7 @@
 
             <div class="summary-tabs-bar">
                 <ul class="nav nav-tabs flex-nowrap">
-                    @foreach (var tab in _pestanasResumen)
+                    @foreach (var tab in _pestanasResumen.Where(item => item.Id != "triaje" || Permisos.Permite("admision/triaje")))
                     {
                         <li class="nav-item">
                             <button type="button"
@@ -441,9 +441,9 @@
                                                 <span class="triaje-pill triaje-@(_mascotaResumen.MasColorTriaje ?? "green")">
                                                     <i class="bi bi-shield-fill-check me-1"></i>
                                                     @(_mascotaResumen.MasColorTriaje switch {
-                                                        "red" => "Triaje Rojo (Alerta de Manejo / Agresivo)",
-                                                        "yellow" => "Triaje Amarillo (Precaución / Nervioso)",
-                                                        _ => "Triaje Verde (Temperamento Dócil / Normal)"
+                                                        "red" => "Requiere personal capacitado",
+                                                        "yellow" => "Evitar tocar si no es necesario",
+                                                        _ => "Se deja tocar"
                                                     })
                                                 </span>
 
@@ -743,8 +743,18 @@
                             }
                             break;
                         case "triaje":
-                            <div class="triaje-modal-tab-container py-1" style="max-width: 820px; margin: 0 auto;">
-                                @if (_ordenIdSeleccionada.HasValue && _ordenIdSeleccionada.Value > 0)
+                            <div class="triaje-modal-tab-container py-1 mx-auto" style="max-width: 980px;">
+                                <div class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Vista de triaje">
+                                    <button type="button" class="btn btn-sm @(!_verHistorialTriaje ? "btn-primary" : "btn-outline-primary")"
+                                            aria-pressed="@(!_verHistorialTriaje ? "true" : "false")" @onclick="() => _verHistorialTriaje = false">Triaje de la orden</button>
+                                    <button type="button" class="btn btn-sm @(_verHistorialTriaje ? "btn-primary" : "btn-outline-primary")"
+                                            aria-pressed="@(_verHistorialTriaje ? "true" : "false")" @onclick="() => _verHistorialTriaje = true">Historial de triajes</button>
+                                </div>
+                                @if (_verHistorialTriaje)
+                                {
+                                    <HistorialTriaje Nhcl="@_mascotaResumen.MasNhcl" />
+                                }
+                                else if (_ordenIdSeleccionada.HasValue && _ordenIdSeleccionada.Value > 0)
                                 {
                                     <TriajeIngreso IdOrden="@_ordenIdSeleccionada.Value"
                                                    Nhcl="@_mascotaResumen.MasNhcl"
@@ -1636,6 +1646,7 @@
     private bool _modalResumenAbierto;
     private PacienteMascotaDto? _mascotaResumen;
     private string _pestanaResumenActiva = "resumen";
+    private bool _verHistorialTriaje;
 
     private readonly (string Id, string Titulo, string Icono)[] _pestanasResumen = new[]
     {
@@ -1855,6 +1866,7 @@
     private async Task AbrirModalResumen(PacienteMascotaDto mas)
     {
         _mascotaResumen = mas;
+        _verHistorialTriaje = false;
         _pestanaResumenActiva = "resumen";
         _modalResumenAbierto = true;
         _mostrarDropdownOrdenes = false;
@@ -2437,9 +2449,9 @@
                                 <div class="col-md-5">
                                     <label class="form-label small fw-bold">Semáforo de Temperamento / Triaje</label>
                                     <select class="form-select form-select-sm" @bind="_mascotaEditando.MasColorTriaje">
-                                        <option value="green">🟢 Verde — Dócil / Manejo Estándar</option>
-                                        <option value="yellow">🟡 Amarillo — Nervioso / Precaución</option>
-                                        <option value="red">🔴 Rojo — Agresivo / Riesgo / Braquicéfalo</option>
+                                        <option value="green">🟢 Verde — Se deja tocar</option>
+                                        <option value="yellow">🟡 Amarillo — Evitar tocar si no es necesario</option>
+                                        <option value="red">🔴 Rojo — Requiere personal capacitado</option>
                                     </select>
                                 </div>
 
@@ -2502,8 +2514,8 @@
 
     private static string ObtenerTextoTriaje(string color) => color switch
     {
-        "red" => "Crítico / Precaución",
-        "yellow" => "Nervioso",
-        _ => "Dócil"
+        "red" => "Requiere personal capacitado",
+        "yellow" => "Evitar tocar si no es necesario",
+        _ => "Se deja tocar"
     };
 }

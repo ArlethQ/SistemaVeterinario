@@ -251,6 +251,17 @@ public class FormularioAltaMedicaDto
     public string Medicacion { get; set; } = string.Empty;
 }
 
+public class TriajeHistorialDto
+{
+    public int Orden { get; set; }
+    public DateTime Fecha { get; set; }
+    public string RegistradoPor { get; set; } = string.Empty;
+    public decimal? Peso { get; set; }
+    public decimal? Temperatura { get; set; }
+    public int? FrecuenciaCardiaca { get; set; }
+    public bool PuedeEditar { get; set; }
+}
+
 public class FichaMedicaResumenLoteDto
 {
     public int Sec { get; set; }

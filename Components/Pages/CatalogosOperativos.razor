@@ -2,11 +2,15 @@
 @page "/administracion/diagnosticos"
 @page "/administracion/productos"
 @page "/facturacion/productos"
+@using ClosedXML.Excel
+@using Microsoft.AspNetCore.Components.Forms
 @implements IDisposable
 @inject IGestionMigradaService Service
 @inject IEFactCatalogService EFactCatalog
 @inject SessionStateService Session
 @inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ILogger<CatalogosOperativos> Logger
 
 <PageTitle>@(TituloSeccion) | e-ForVets</PageTitle>
 
@@ -120,6 +124,22 @@
                 }
             </div>
         </div>
+        @if (_tipo == "productos")
+        {
+            <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
+                <div>
+                    <label for="productos-excel" class="form-label small mb-1">Importar Excel (.xlsx)</label>
+                    <InputFile id="productos-excel" class="form-control form-control-sm" accept=".xlsx"
+                               OnChange="ImportarProductosExcelAsync" disabled="@_importandoExcel" />
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="DescargarPlantillaExcelAsync">Descargar plantilla</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ExportarProductosExcelAsync" disabled="@_importandoExcel">Exportar Excel</button>
+            </div>
+            @if (_importandoExcel)
+            {
+                <p role="status">Importando productos y servicios…</p>
+            }
+        }
         @if (!string.IsNullOrEmpty(_mensaje)) { <div class="alert @(_error ? "alert-danger" : "alert-success")">@_mensaje</div> }
         @if (_cargando)
         {
@@ -310,8 +330,8 @@
 }
 
 @code {
-    private bool _autorizado, _error, _aplicaIva, _guardando, _cargando;
-    private string _tipo = "diagnosticos", _filtro = "", _mensaje = "", _seccion = "general", _ultimaRutaCargada = "";
+    private bool _autorizado, _error, _aplicaIva;
+    private string _tipo = "diagnosticos", _filtro = "", _mensaje = "", _seccion = "general";
     private string _filtroTipo = "", _filtroGrupo = "", _filtroSubgrupo = "", _filtroInventario = "", _filtroIva = "", _filtroEstado = "";
     private int _paginaActual = 1, _tamanoPagina = 20;
 

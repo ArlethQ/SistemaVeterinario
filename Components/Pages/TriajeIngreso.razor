@@ -30,7 +30,7 @@
         </div>
 
         <div class="triaje-workspace">
-            <aside class="triaje-queue"><ColaOrdenesClinicas Triaje="true" OrdenSeleccionada="@(IdOrden ?? 0)" /></aside>
+            <aside class="triaje-queue"><ColaOrdenesClinicas @key="IdOrden" Triaje="true" OrdenSeleccionada="@(IdOrden ?? 0)" /></aside>
             <div class="triaje-content">
 
         <!-- Mensajes de feedback -->
@@ -85,7 +85,7 @@
 }
 else
 {
-    <div class="triaje-modal-embedded" style="max-width: 760px; margin: 0 auto;">
+    <div class="triaje-modal-embedded">
         <!-- Mensajes de feedback -->
         @if (!string.IsNullOrEmpty(_mensajeAlerta))
         {
@@ -102,7 +102,7 @@ else
                 <span class="fw-semibold small">Cargando constantes de la Orden #@(IdOrden ?? _ficha.MedOrden)...</span>
             </div>
         }
-        else if (_paciente is null && (!IdOrden.HasValue || IdOrden.Value <= 0))
+        else if (_paciente is null)
         {
             <div class="card shadow-sm border-0 py-4 text-center text-muted">
                 <div class="card-body">
@@ -123,35 +123,15 @@ else
 
 @{
     RenderFragment RenderTarjetaTriaje() => @<div class="triaje-panel">
-        <div class="triaje-tabs" role="group" aria-label="Vista de triaje">
-            <button type="button" class="@(!_mostrarHistorial ? "active" : "")" @onclick="() => _mostrarHistorial = false">Constantes fisiológicas y triaje</button>
-            <button type="button" class="@(_mostrarHistorial ? "active" : "")" @onclick="MostrarHistorialAsync">Historial de triajes</button>
-        </div>
-        @if (_mostrarHistorial)
+        @if (!ModoModal && Nhcl.GetValueOrDefault() > 0)
         {
-            <div class="triaje-history card shadow-sm border-0">
-                <div class="card-body">
-                    <h2>Historial de constantes</h2>
-                    <p>Registros clínicos anteriores del paciente.</p>
-                    @if (_cargandoHistorial)
-                    {
-                        <p role="status">Cargando historial...</p>
-                    }
-                    else if (_historial.Count == 0)
-                    {
-                        <p>No hay registros clínicos disponibles para este paciente.</p>
-                    }
-                    else
-                    {
-                        <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Fecha</th><th>Orden</th><th>Profesional</th><th>Peso</th><th>Temperatura</th><th>FC</th></tr></thead><tbody>
-                        @foreach (var registro in _historial)
-                        {
-                            <tr @key="registro.Sec"><td>@registro.Fecha.ToString("dd/MM/yyyy HH:mm")</td><td>#@registro.Orden</td><td>@registro.Medico</td><td>@(registro.Peso?.ToString("0.##") ?? "—") kg</td><td>@(registro.Temperatura?.ToString("0.#") ?? "—") °C</td><td>@(registro.FrecuenciaCardiaca?.ToString() ?? "—")</td></tr>
-                        }
-                        </tbody></table></div>
-                    }
-                </div>
-            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary mb-3" @onclick="() => _verHistorial = !_verHistorial">
+                @(_verHistorial ? "Volver al triaje" : "Historial de triajes")
+            </button>
+        }
+        @if (_verHistorial)
+        {
+            <HistorialTriaje Nhcl="@Nhcl.GetValueOrDefault()" />
         }
         else
         {
@@ -167,10 +147,13 @@ else
                     </span>
                 }
             </div>
-            <span class="badge bg-light text-dark border small">Compartido con SOAP</span>
+            @if (!DesdeHistorial)
+            {
+                <span class="small text-muted">Responsable: @Session.NombreUsuario</span>
+            }
         </div>
         <div class="card-body p-3 triaje-form-layout">
-            <div class="triaje-form-main">
+            <fieldset class="triaje-form-main" disabled="@SoloLectura">
             <div class="triaje-section-title"><i class="bi bi-clipboard2-pulse"></i> Información del triaje</div>
             <!-- Fila 1: Tipo de Consulta, Esterilizado, Sede / Tipo -->
             <div class="row g-2 mb-3">
@@ -184,13 +167,16 @@ else
                         <option value="Chequeo Preventivo">Chequeo Preventivo</option>
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Esterilizado</label>
-                    <select class="form-select form-select-sm" @bind="_ficha.Esterilizado">
-                        <option value="S">SÍ</option>
-                        <option value="N">NO</option>
-                    </select>
-                </div>
+                @if (!DesdeHistorial)
+                {
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Esterilizado</label>
+                        <select class="form-select form-select-sm" @bind="_ficha.Esterilizado">
+                            <option value="S">SÍ</option>
+                            <option value="N">NO</option>
+                        </select>
+                    </div>
+                }
                 <div class="col-md-4">
                     <label class="form-label small fw-semibold">Sede / Tipo</label>
                     <select class="form-select form-select-sm" @bind="_ficha.MedTipo">
@@ -202,27 +188,27 @@ else
 
             <!-- Fila 2: Semáforo de Temperamento del Paciente -->
             <label class="form-label small fw-semibold d-block triaje-section-title"><i class="bi bi-heart-pulse"></i> Semáforo de Temperamento del Paciente</label>
-            <div class="btn-group w-100 mb-3" role="group">
+            <div class="triaje-temperamentos mb-3" role="group" aria-label="Temperamento">
                 <button type="button" class="btn btn-sm @(_ficha.Temperamento == "TRANQUILO" ? "btn-dark shadow-sm fw-bold" : "btn-outline-secondary")"
                         @onclick='() => SeleccionarTemperamento("TRANQUILO", "imagenes/temperamento/blanco.png", "green")'>
-                    ⚪ Tranquilo
+                    ⚪ Se deja tocar
                 </button>
                 <button type="button" class="btn btn-sm @(_ficha.Temperamento == "NERVIOSO" ? "btn-success shadow-sm fw-bold" : "btn-outline-success")"
                         @onclick='() => SeleccionarTemperamento("NERVIOSO", "imagenes/temperamento/verde.png", "green")'>
-                    🟢 Nervioso
+                    🟢 Acercarse despacio
                 </button>
                 <button type="button" class="btn btn-sm @(_ficha.Temperamento == "A LA DEFENSIVA" ? "btn-warning text-dark shadow-sm fw-bold" : "btn-outline-warning text-dark")"
                         @onclick='() => SeleccionarTemperamento("A LA DEFENSIVA", "imagenes/temperamento/amarillo.png", "yellow")'>
-                    🟡 Defensivo
+                    🟡 Evitar tocar si no es necesario
                 </button>
                 <button type="button" class="btn btn-sm @(_ficha.Temperamento == "AGRESIVO" ? "btn-danger shadow-sm fw-bold" : "btn-outline-danger")"
                         @onclick='() => SeleccionarTemperamento("AGRESIVO", "imagenes/temperamento/rojo.png", "red")'>
-                    🔴 Agresivo
+                    🔴 Requiere personal capacitado
                 </button>
             </div>
 
-            </div>
-            <div class="triaje-vitals">
+            </fieldset>
+            <fieldset class="triaje-vitals" disabled="@SoloLectura">
             <!-- Fila 3 y 4: Constantes Fisiológicas -->
             <div class="triaje-section-title"><i class="bi bi-heart"></i> Constantes Vitales</div>
             <div class="row g-2">
@@ -265,7 +251,7 @@ else
                 </div>
             </div>
 
-            </div>
+            </fieldset>
             <!-- Botones de Acción -->
             <div class="d-flex justify-content-between align-items-center mt-4 pt-2 border-top">
                 @if (Permisos.Permite("consulta/fichamedica"))
@@ -274,9 +260,12 @@ else
                     <i class="bi bi-file-medical me-1"></i>Ver en SOAP
                 </a>
                 }
-                <button type="button" class="btn btn-success fw-bold px-4" @onclick="GuardarTriajeAsync" disabled="@_guardando">
-                    <i class="bi bi-floppy-fill me-1"></i>@(_guardando ? "Guardando..." : "Guardar Constantes")
-                </button>
+                @if (!SoloLectura)
+                {
+                    <button type="button" class="btn btn-success fw-bold px-4" @onclick="GuardarTriajeAsync" disabled="@_guardando">
+                        <i class="bi bi-floppy-fill me-1"></i>@(_guardando ? "Guardando..." : "Guardar Constantes")
+                    </button>
+                }
             </div>
         </div>
         </div>
@@ -289,17 +278,18 @@ else
     [Parameter] public int? IdOrden { get; set; }
     [Parameter] public int? Nhcl { get; set; }
     [Parameter] public bool ModoModal { get; set; }
+    [Parameter] public bool DesdeHistorial { get; set; }
+    [Parameter] public bool SoloLectura { get; set; }
     [Parameter] public EventCallback<FichaMedicaCompletaDto> OnGuardado { get; set; }
 
     private bool _cargando = true;
     private bool _guardando;
-    private bool _mostrarHistorial;
-    private bool _cargandoHistorial;
-    private List<FichaMedicaResumenLoteDto> _historial = [];
+    private bool _verHistorial;
     private string? _mensajeAlerta;
     private bool _esError;
 
     private PacienteHeaderDto? _paciente;
+    private int _especialidad;
     private FichaMedicaCompletaDto _ficha = new();
 
     private (int? Orden, int? Paciente, bool Modal)? _parametrosCargados;
@@ -309,10 +299,9 @@ else
         var parametros = (IdOrden, Nhcl, ModoModal);
         if (_parametrosCargados == parametros) return;
         _parametrosCargados = parametros;
+        _verHistorial = false;
 
         _cargando = true;
-        _mostrarHistorial = false;
-        _historial = [];
         _paciente = null;
         _mensajeAlerta = null;
         if ((IdOrden ?? 0) > 0 || (ModoModal && (Nhcl ?? 0) > 0))
@@ -328,16 +317,24 @@ else
         int ord = IdOrden ?? 0;
         int nh = Nhcl ?? 0;
 
-        if (!ModoModal)
+        if (!Permisos.Permite("admision/triaje"))
+        {
+            _esError = true;
+            _mensajeAlerta = "El triaje requiere una sesión de Enfermería o Administración.";
+            return;
+        }
+
+        if (!DesdeHistorial)
         {
             var orden = (await AdmisionService.ObtenerColaClinicaAsync(triaje: true, idOrden: ord)).FirstOrDefault();
             if (orden is null)
             {
                 _esError = true;
-                _mensajeAlerta = "Esta orden de triaje fue asignada a otro profesional o no requiere triaje.";
+                _mensajeAlerta = "Esta orden ya no está disponible para triaje.";
                 return;
             }
             Nhcl = nh = orden.Nhcl;
+            _especialidad = orden.IdEspecialidad;
         }
 
         _paciente = await KardexService.ObtenerEncabezadoPacienteAsync(ord, nh);
@@ -346,12 +343,12 @@ else
             Nhcl = _paciente.Nhcl;
         }
 
-        if (ord > 0)
+        if (ord > 0 && !DesdeHistorial)
         {
             Session.SeleccionarOrden(ord, Nhcl ?? (_paciente?.Nhcl ?? 0), _paciente?.PacienteNombre);
         }
 
-        _ficha = await ConsultaService.ObtenerFichaMedicaAsync(ord, Nhcl ?? (_paciente?.Nhcl ?? 0));
+        _ficha = await ConsultaService.ObtenerFichaMedicaAsync(ord, Nhcl ?? (_paciente?.Nhcl ?? 0), historica: DesdeHistorial);
         if (string.IsNullOrWhiteSpace(_ficha.MedTipoConsulta))
         {
             _ficha.MedTipoConsulta = "Consulta Externa";
@@ -368,22 +365,9 @@ else
         _ficha.ColorTriaje = rutaImagen;
     }
 
-    private async Task MostrarHistorialAsync()
-    {
-        _mostrarHistorial = true;
-        _cargandoHistorial = true;
-        try
-        {
-            _historial = await ConsultaService.ObtenerAtencionesParaImpresionLoteAsync(Nhcl ?? _paciente?.Nhcl ?? 0);
-        }
-        finally
-        {
-            _cargandoHistorial = false;
-        }
-    }
-
     private async Task GuardarTriajeAsync()
     {
+        if (SoloLectura) return;
         int ord = IdOrden ?? _ficha.MedOrden;
         if (ord <= 0)
         {
@@ -403,18 +387,27 @@ else
             if (string.IsNullOrEmpty(_ficha.MedEspecie) && _paciente != null) _ficha.MedEspecie = _paciente.Especie;
 
             int idUsuario = Session.UsuarioActual?.IdUsuario ?? Session.IdUser;
-            if (idUsuario <= 0) idUsuario = 1;
+            if (idUsuario <= 0 || !Permisos.Permite("admision/triaje"))
+            {
+                _esError = true;
+                _mensajeAlerta = "El triaje requiere una sesión de Enfermería o Administración.";
+                return;
+            }
 
-            bool exito = await ConsultaService.GuardarFichaMedicaAsync(_ficha, idUsuario);
+            if (!DesdeHistorial) _ficha.MedEspecialidad = _especialidad;
+            bool exito = await ConsultaService.GuardarFichaMedicaAsync(_ficha, idUsuario, triaje: true, editarTriaje: DesdeHistorial);
 
             _esError = !exito;
             _mensajeAlerta = exito
                 ? "Constantes de triaje guardadas exitosamente y sincronizadas con la Historia Clínica SOAP."
-                : "No fue posible guardar las constantes de triaje.";
+                : "No fue posible guardar las constantes de triaje. Si está editando el historial, compruebe si ya se guardó la anamnesis.";
 
             if (exito)
             {
-                Session.SeleccionarOrden(_ficha.MedOrden, _ficha.MedNhcl, _paciente?.PacienteNombre);
+                if (!DesdeHistorial)
+                    Session.SeleccionarOrden(_ficha.MedOrden, _ficha.MedNhcl, _paciente?.PacienteNombre);
+                if (!ModoModal)
+                    Nav.NavigateTo("/admision/triaje");
                 if (OnGuardado.HasDelegate)
                 {
                     await OnGuardado.InvokeAsync(_ficha);

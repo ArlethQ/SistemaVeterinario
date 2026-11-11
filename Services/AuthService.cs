@@ -817,7 +817,10 @@ public class AuthService : IAuthService
         int usuario = _session.IdUser;
         int rol = await ObtenerRolActivoAsync(usuario);
         var menus = rol > 1 ? await ObtenerMenuUsuarioAsync(usuario, rol) : [];
-        var permisos = new PermisosNavegacion(rol, menus);
+        bool esEnfermeria = rol > 0 && await _sql.ExecuteScalarAsync<int>(@"
+            SELECT COUNT(*) FROM vt_tipos_usuarios
+            WHERE tipuser_numero = @Rol AND UPPER(tipuser_descripcion) LIKE '%ENFERMER%'", new { Rol = rol }) > 0;
+        var permisos = new PermisosNavegacion(rol, menus, esEnfermeria);
         if (!permisos.Permite(ruta))
             await _sql.RegistrarBitacoraAsync($"Acceso denegado a ruta: {ruta}", usuario);
         return permisos;

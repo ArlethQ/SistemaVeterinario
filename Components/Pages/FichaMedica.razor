@@ -44,9 +44,6 @@
             <button class="btn btn-sm btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/consulta/imprimir-fichas/{Ficha.MedNhcl}")'>
                 <i class="bi bi-collection-fill me-1"></i>Lotes / Seguros
             </button>
-            <button class="btn btn-sm btn-outline-warning text-dark fw-semibold" @onclick='() => Nav.NavigateTo($"/admision/triaje/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
-                <i class="bi bi-thermometer-half me-1"></i>Ir a Triaje
-            </button>
             <button class="btn btn-sm btn-outline-primary" @onclick='() => Nav.NavigateTo($"/consulta/recetario/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
                 <i class="bi bi-prescription2 me-1"></i>Ir a Recetario
             </button>
@@ -94,7 +91,7 @@
                     <div class="col-md-3 text-md-end">
                         <span class="text-muted d-block">TRIAJE TEMPERAMENTO / ESTERILIZADO</span>
                         <span class="badge @ObtenerClaseBadgeTemperamento(Ficha.Temperamento) fs-6">
-                            <i class="bi bi-shield-fill-exclamation me-1"></i>@Ficha.Temperamento
+                            <i class="bi bi-shield-fill-exclamation me-1"></i>@ObtenerTextoTemperamento(Ficha.Temperamento)
                         </span>
                         <span class="badge @(Ficha.Esterilizado == "S" ? "bg-info text-dark" : "bg-light text-dark border") ms-1">
                             @(Ficha.Esterilizado == "S" ? "Esterilizado: SÍ" : "Esterilizado: NO")
@@ -172,19 +169,19 @@
                         <div class="btn-group w-100 mb-3" role="group">
                             <button type="button" class="btn btn-sm @(Ficha.Temperamento == "TRANQUILO" ? "btn-dark" : "btn-outline-secondary")"
                                     @onclick='() => SeleccionarTemperamento("TRANQUILO", "imagenes/temperamento/blanco.png")'>
-                                ⚪ Tranquilo
+                                ⚪ Se deja tocar
                             </button>
                             <button type="button" class="btn btn-sm @(Ficha.Temperamento == "NERVIOSO" ? "btn-success" : "btn-outline-success")"
                                     @onclick='() => SeleccionarTemperamento("NERVIOSO", "imagenes/temperamento/verde.png")'>
-                                🟢 Nervioso
+                                🟢 Acercarse despacio
                             </button>
                             <button type="button" class="btn btn-sm @(Ficha.Temperamento == "A LA DEFENSIVA" ? "btn-warning text-dark fw-bold" : "btn-outline-warning text-dark")"
                                     @onclick='() => SeleccionarTemperamento("A LA DEFENSIVA", "imagenes/temperamento/amarillo.png")'>
-                                🟡 Defensivo
+                                🟡 Evitar tocar si no es necesario
                             </button>
                             <button type="button" class="btn btn-sm @(Ficha.Temperamento == "AGRESIVO" ? "btn-danger" : "btn-outline-danger")"
                                     @onclick='() => SeleccionarTemperamento("AGRESIVO", "imagenes/temperamento/rojo.png")'>
-                                🔴 Agresivo
+                                🔴 Requiere personal capacitado
                             </button>
                         </div>
 
@@ -870,6 +867,14 @@
         Ficha.Temperamento = temperamento;
         Ficha.ColorTriaje = rutaImagen;
     }
+
+    private static string ObtenerTextoTemperamento(string? temperamento) => temperamento?.Trim().ToUpperInvariant() switch
+    {
+        "NERVIOSO" => "Acercarse despacio",
+        "A LA DEFENSIVA" => "Evitar tocar si no es necesario",
+        "AGRESIVO" => "Requiere personal capacitado",
+        _ => "Se deja tocar"
+    };
 
     private string ObtenerClaseBadgeTemperamento(string temp) => temp?.ToUpper() switch
     {

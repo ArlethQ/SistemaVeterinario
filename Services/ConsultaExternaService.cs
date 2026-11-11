@@ -6,8 +6,10 @@ namespace HosvetKardex.Web.Services;
 public interface IConsultaExternaService
 {
     // 1. Ficha Médica / Historia Clínica SOAP (vt_fichamedica)
-    Task<FichaMedicaCompletaDto> ObtenerFichaMedicaAsync(int idOrden, int nhcl);
-    Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario);
+    Task<FichaMedicaCompletaDto> ObtenerFichaMedicaAsync(int idOrden, int nhcl, bool historica = false);
+    Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario, bool triaje = false, bool editarTriaje = false);
+
+    Task<List<TriajeHistorialDto>> ObtenerHistorialTriajeAsync(int nhcl);
 
     // 2. Diagnósticos CIE-10 (vt_diagnosticos + vt_cie10)
     Task<List<CatalogoCie10ItemDto>> BuscarCatalogoCie10Async(string filtro);
@@ -70,6 +72,26 @@ public interface IConsultaExternaService
 
 public class ConsultaExternaService : IConsultaExternaService
 {
+    private const string FiltroRegistroTriaje = """
+        (marca.Fecha IS NOT NULL OR (
+            LTRIM(RTRIM(CONVERT(nvarchar(max), f.med_motivo))) = 'Triaje y signos vitales'
+            AND EXISTS (
+                SELECT 1 FROM vt_usuarios autor
+                JOIN vt_tipos_usuarios tipo ON tipo.tipuser_numero = autor.user_tipouser_numero
+                WHERE autor.user_numero = f.med_iduser AND UPPER(tipo.tipuser_descripcion) LIKE '%ENFERMER%'
+            )
+        ))
+        """;
+
+    private const string MarcaRegistroTriaje = """
+        OUTER APPLY (
+            SELECT TOP (1) v.vit_idFechaMod AS Fecha, v.vit_idUser AS Usuario
+            FROM vt_vitacora v
+            WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', f.med_orden)
+            ORDER BY v.vit_idFechaMod DESC
+        ) marca
+        """;
+
     private readonly ISqlDataService _db;
     private readonly ILogger<ConsultaExternaService> _logger;
 
@@ -84,7 +106,7 @@ public class ConsultaExternaService : IConsultaExternaService
     // ========================================================================
     // 1. FICHA MÉDICA / HISTORIA CLÍNICA SOAP (Reemplaza vt_hisDatMedicos.aspx)
     // ========================================================================
-    public async Task<FichaMedicaCompletaDto> ObtenerFichaMedicaAsync(int idOrden, int nhcl)
+    public async Task<FichaMedicaCompletaDto> ObtenerFichaMedicaAsync(int idOrden, int nhcl, bool historica = false)
     {
         var dto = new FichaMedicaCompletaDto { MedOrden = idOrden, MedNhcl = nhcl };
 
@@ -142,14 +164,16 @@ public class ConsultaExternaService : IConsultaExternaService
                 FROM vt_fichamedica
                 LEFT JOIN vt_usuarios u ON u.user_numero = med_iduser
                 LEFT JOIN vt_especialidades e ON e.es_id = med_especialidad
-                WHERE med_orden = @IdOrden
+                WHERE med_orden = @IdOrden AND (@Historica = 0 OR med_nhcl = @Nhcl)
                 ORDER BY sec DESC";
 
-            var existente = await _db.QueryFirstOrDefaultAsync<FichaMedicaCompletaDto>(sql, new { IdOrden = idOrden, Nhcl = nhcl });
+            var existente = await _db.QueryFirstOrDefaultAsync<FichaMedicaCompletaDto>(sql, new { IdOrden = idOrden, Nhcl = nhcl, Historica = historica });
             if (existente != null)
             {
                 dto = existente;
             }
+
+            if (historica) return dto;
 
             // Cargar triaje de temperamento y castrado desde vt_pacientes
             var pac = await _db.QueryFirstOrDefaultAsync<dynamic>(
@@ -182,7 +206,25 @@ public class ConsultaExternaService : IConsultaExternaService
         return dto;
     }
 
-    public async Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario)
+    public async Task<List<TriajeHistorialDto>> ObtenerHistorialTriajeAsync(int nhcl)
+    {
+        return (await _db.QueryAsync<TriajeHistorialDto>($"""
+            SELECT f.med_orden AS Orden, COALESCE(marca.Fecha, f.med_fecha) AS Fecha,
+                RTRIM(ISNULL(u.user_nombre, '')) AS RegistradoPor,
+                f.peso AS Peso, f.temperatura AS Temperatura, f.frecuenciacardiaca AS FrecuenciaCardiaca,
+                CASE WHEN NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), f.med_anamnesis))), '') IS NULL
+                    THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS PuedeEditar
+            FROM vt_fichamedica f
+            {MarcaRegistroTriaje}
+            LEFT JOIN vt_usuarios u ON u.user_numero = COALESCE(marca.Usuario, f.med_iduser)
+            WHERE f.med_nhcl = @Nhcl AND f.med_orden > 0 AND {FiltroRegistroTriaje}
+                AND f.sec = (SELECT MAX(actual.sec) FROM vt_fichamedica actual
+                    WHERE actual.med_nhcl = f.med_nhcl AND actual.med_orden = f.med_orden)
+            ORDER BY Fecha DESC, Orden DESC
+            """, new { Nhcl = nhcl })).ToList();
+    }
+
+    public async Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario, bool triaje = false, bool editarTriaje = false)
     {
         try
         {
@@ -218,9 +260,57 @@ public class ConsultaExternaService : IConsultaExternaService
                 dto.MedMotivo = "Triaje y signos vitales";
             }
 
+            var comandos = new List<(string Sql, object? Parameters)>();
+            if (triaje && editarTriaje)
+            {
+                comandos.Add(($"""
+                    IF NOT EXISTS (
+                        SELECT 1 FROM vt_fichamedica f WITH (UPDLOCK, HOLDLOCK)
+                        {MarcaRegistroTriaje}
+                        WHERE f.sec = @Sec AND f.med_orden = @MedOrden AND f.med_nhcl = @MedNhcl
+                            AND {FiltroRegistroTriaje}
+                            AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), f.med_anamnesis))), '') IS NULL
+                    ) OR NOT EXISTS (
+                        SELECT 1 FROM vt_usuarios u
+                        JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
+                        WHERE u.user_numero = @MedIdUser AND u.user_estado = 'A'
+                            AND (t.tipuser_numero = 1 OR UPPER(t.tipuser_descripcion) LIKE '%ENFERMER%')
+                    )
+                        THROW 50001, 'El triaje ya no se puede editar.', 1;
+                    """, dto));
+            }
+            else if (triaje)
+            {
+                comandos.Add((@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM vt_ordenAtencion o WITH (UPDLOCK, HOLDLOCK)
+                        WHERE o.ordenAten_id = @MedOrden AND o.ordenAten_nhcl = @MedNhcl
+                          AND o.ordenAten_esp_numero > 0 AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
+                          AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                    ) OR NOT EXISTS (
+                        SELECT 1 FROM vt_usuarios u
+                        JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
+                        WHERE u.user_numero = @MedIdUser AND u.user_estado = 'A'
+                          AND (t.tipuser_numero = 1 OR UPPER(t.tipuser_descripcion) LIKE '%ENFERMER%')
+                    ) OR EXISTS (
+                        SELECT 1 FROM vt_vitacora
+                        WHERE vit_detalle = CONCAT('Triaje de ingreso completado Orden #', @MedOrden)
+                    )
+                        THROW 50001, 'La orden ya no está disponible para triaje.', 1;
+
+                    UPDATE vt_ordenAtencion SET ordenAten_idEnfermero = @MedIdUser
+                    WHERE ordenAten_id = @MedOrden;
+
+                    INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
+                    VALUES (CONCAT('Triaje de ingreso completado Orden #', @MedOrden),
+                        @MedIdUser, GETDATE(), '127.0.0.1', 'BlazorClient');", dto));
+            }
+
             var existeSec = await _db.ExecuteScalarAsync<int?>(
-                "SELECT TOP 1 sec FROM vt_fichamedica WHERE med_orden = @MedOrden",
-                new { dto.MedOrden });
+                "SELECT TOP 1 sec FROM vt_fichamedica WHERE med_orden = @MedOrden AND (@EditarTriaje = 0 OR med_nhcl = @MedNhcl) ORDER BY sec DESC",
+                new { dto.MedOrden, dto.MedNhcl, EditarTriaje = editarTriaje });
+
+            if (editarTriaje && (!existeSec.HasValue || existeSec.Value <= 0)) return false;
 
             if (existeSec.HasValue && existeSec.Value > 0)
             {
@@ -266,7 +356,20 @@ public class ConsultaExternaService : IConsultaExternaService
                         med_fechamodifica = GETDATE()
                     WHERE sec = @Sec";
 
-                await _db.ExecuteAsync(sqlUpdate, dto);
+                if (triaje)
+                {
+                    comandos.Add((@"
+                        UPDATE vt_fichamedica SET med_tipo = @MedTipo, med_tipoconsulta = @MedTipoConsulta,
+                            peso = @Peso, temperatura = @Temperatura,
+                            frecuenciacardiaca = @FrecuenciaCardiaca, frecuenciarespiratoria = @FrecuenciaRespiratoria,
+                            mucosas = @Mucosas, tiempollenadocapilar = @TiempoLlenadoCapilar,
+                            deshidratacion = @Deshidratacion, indicecondicioncorporal = @IndiceCondicionCorporal,
+                            cp = @Cp, med_apuntes = @MedApuntes,
+                            temperamento = @Temperamento, med_idmodifica = @MedIdUser, med_fechamodifica = GETDATE()
+                        WHERE sec = @Sec", dto));
+                }
+                else
+                    await _db.ExecuteAsync(sqlUpdate, dto);
             }
             else
             {
@@ -293,7 +396,10 @@ public class ConsultaExternaService : IConsultaExternaService
                         @Tratamiento, @ObservacionesYRecomendaciones, @MedApuntes, @Temperamento, @MedPronostico, @MedFechaControlStr, @ContpSi, @ContpNo, 'A', @RequiereCirugia, @EstadoParte
                     )";
 
-                await _db.ExecuteAsync(sqlInsert, dto);
+                if (triaje)
+                    comandos.Add((sqlInsert, dto));
+                else
+                    await _db.ExecuteAsync(sqlInsert, dto);
             }
 
             // Actualizar color de triaje y esterilizado en vt_pacientes
@@ -310,9 +416,19 @@ public class ConsultaExternaService : IConsultaExternaService
                 else
                     colorCode = "green";
 
-                await _db.ExecuteAsync(
-                    "UPDATE vt_pacientes SET mas_castrado = @Esterilizado, mas_colortriaje = @ColorCode WHERE mas_nhcl = @MedNhcl",
-                    new { dto.Esterilizado, ColorCode = colorCode, dto.MedNhcl });
+                if (triaje && !editarTriaje)
+                    comandos.Add(("UPDATE vt_pacientes SET mas_castrado = @Esterilizado, mas_colortriaje = @ColorCode WHERE mas_nhcl = @MedNhcl",
+                        new { dto.Esterilizado, ColorCode = colorCode, dto.MedNhcl }));
+                else if (!triaje)
+                    await _db.ExecuteAsync(
+                        "UPDATE vt_pacientes SET mas_castrado = @Esterilizado, mas_colortriaje = @ColorCode WHERE mas_nhcl = @MedNhcl",
+                        new { dto.Esterilizado, ColorCode = colorCode, dto.MedNhcl });
+            }
+
+            if (triaje)
+            {
+                await _db.ExecuteBatchAsync(comandos);
+                return true;
             }
 
             // Actualizar indicaciones generales de receta siempre
