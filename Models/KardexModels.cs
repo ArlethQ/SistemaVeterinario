@@ -78,6 +78,11 @@ public class PacienteHeaderDto
     public string PropietarioNombre => ClienteNombre;
     public string TipoOrigen => Origen;
     public string MedicoResponsable { get; set; } = string.Empty;
+    public string MedicoCedula { get; set; } = string.Empty;
+    public string MedicoEspecialidad { get; set; } = string.Empty;
+    public string MedicoTelefono { get; set; } = string.Empty;
+    public string MedicoEmail { get; set; } = string.Empty;
+    public string MedicoObservaciones { get; set; } = string.Empty;
     public string Cierre { get; set; } = "N";
     public bool Fallecido { get; set; }
     public DateTime? FechaFallecido { get; set; }

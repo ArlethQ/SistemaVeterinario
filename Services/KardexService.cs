@@ -145,6 +145,11 @@ public class KardexService : IKardexService
                     CASE WHEN RTRIM(ISNULL(p.mas_origen, 'M')) = 'M' THEN 'Doméstico' ELSE 'Silvestre' END AS Origen,
                     p.mas_fechanace AS FechaNacimiento,
                     RTRIM(ISNULL(u.user_nombre, 'Médico de Turno')) AS MedicoResponsable,
+                    RTRIM(ISNULL(u.user_cedula, '')) AS MedicoCedula,
+                    RTRIM(ISNULL(esp_m.es_descripcion, '')) AS MedicoEspecialidad,
+                    RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(u.user_celular)), ''), ISNULL(u.user_convensional, ''))) AS MedicoTelefono,
+                    RTRIM(ISNULL(u.user_email, '')) AS MedicoEmail,
+                    RTRIM(ISNULL(CONVERT(nvarchar(500), u.user_observaciones), '')) AS MedicoObservaciones,
                     RTRIM(ISNULL(o.cierre, 'N')) AS Cierre,
                     CAST(CASE WHEN ISNULL(p.fallecido, 'False') = 'True' OR ISNULL(p.fallecido, '0') = '1' THEN 1 ELSE 0 END AS BIT) AS Fallecido,
                     p.fechafallecido AS FechaFallecido,
@@ -155,6 +160,7 @@ public class KardexService : IKardexService
                 LEFT JOIN vt_especie e ON p.mas_especie = e.especie_id
                 LEFT JOIN vt_razas r ON p.mas_raza = r.id_raza
                 LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
+                LEFT JOIN vt_especialidades esp_m ON u.user_esp_numero = esp_m.es_id
                 WHERE (@OrdenId > 0 AND o.ordenAten_id = @OrdenId)
                    OR (@OrdenId <= 0 AND @Nhcl > 0 AND p.mas_nhcl = @Nhcl)
                 ORDER BY ISNULL(o.ordenAten_id, 0) DESC";

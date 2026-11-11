@@ -28,6 +28,7 @@ public interface IReportExportService
     byte[] GenerarAltaMedicaPdf(PacienteHeaderDto paciente, FormularioAltaMedicaDto alta);
     byte[] GenerarOrdenLaboratorioPdf(PacienteHeaderDto paciente, List<OrdenLaboratorioItemDto> ordenes, List<DiagnosticoCie10Dto> diagnosticos);
     byte[] GenerarOrdenImagenPdf(PacienteHeaderDto paciente, List<OrdenImagenItemDto> ordenes, List<DiagnosticoCie10Dto> diagnosticos);
+    byte[] GenerarOrdenFisioterapiaPdf(PacienteHeaderDto paciente, List<FisioterapiaOrdenDto> ordenes, List<DiagnosticoCie10Dto> diagnosticos);
     byte[] GenerarInformeDiagnosticoPdf(PacienteHeaderDto paciente, InformeDiagnosticoDto informe);
     byte[] GenerarBandejaLaboratorioExcel(List<BandejaTrabajoDiagnosticoDto> bandeja, DateTime desde, DateTime hasta);
     byte[] GenerarProformaConsolidadaPdf(OrdenProformaResumenDto proforma);
@@ -53,11 +54,32 @@ public interface IReportExportService
 
 public class ReportExportService : IReportExportService
 {
+    private static readonly Lazy<byte[]?> LogoClinicaBytes = new(CargarLogoClinica);
+
     public ReportExportService()
     {
         QuestPDF.Settings.License = LicenseType.Community;
         QuestPDF.Settings.UseSystemFonts = true;
         QuestPDF.Settings.ThrowOnMissingFontFamilies = false;
+    }
+
+    private static byte[]? CargarLogoClinica()
+    {
+        string[] candidatos =
+        [
+            Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "imagenes", "numerica_veterinaria_logo.png"),
+            Path.Combine(AppContext.BaseDirectory, "wwwroot", "imagenes", "numerica_veterinaria_logo.png"),
+            Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "favicon.png")
+        ];
+
+        foreach (var path in candidatos)
+        {
+            if (File.Exists(path))
+            {
+                try { return File.ReadAllBytes(path); } catch { }
+            }
+        }
+        return null;
     }
 
     public byte[] GenerarCodigoQrPng(string texto)
@@ -2166,6 +2188,180 @@ public class ReportExportService : IReportExportService
     // ========================================================================
     // 10. RECETA MÉDICA e-ForVets (PDF - Reemplaza RptrecetaHDEV.rpt)
     // ========================================================================
+    private byte[] GenerarDocumentoClinicoOrdenPdf(
+        PacienteHeaderDto paciente,
+        string tituloDocumento,
+        string? subtituloReferencia,
+        string colorAcentoHex,
+        List<DiagnosticoCie10Dto> diagnosticos,
+        DateTime? fechaEmision,
+        Action<ColumnDescriptor> renderContenido)
+    {
+        var qrBytes = GenerarCodigoQrPng($"NUMERICA-{paciente.Nhcl}-{paciente.OrdenAtencionId}");
+        var logoBytes = LogoClinicaBytes.Value;
+        var referencia = string.IsNullOrWhiteSpace(subtituloReferencia) ? $"ORDEN #{paciente.OrdenAtencionId}" : subtituloReferencia;
+        var fecha = fechaEmision ?? DateTime.Now;
+        var medicoNombre = string.IsNullOrWhiteSpace(paciente.MedicoResponsable) ? "Médico de Turno" : paciente.MedicoResponsable;
+
+        return Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(20);
+                page.DefaultTextStyle(x => x.FontSize(8.5f).FontFamily("Lato"));
+
+                page.Header().Column(col =>
+                {
+                    col.Item().BorderBottom(1.2f).BorderColor(colorAcentoHex).PaddingBottom(6).Row(row =>
+                    {
+                        if (logoBytes is not null)
+                        {
+                            row.ConstantItem(58).AlignMiddle().PaddingRight(8).Image(logoBytes).FitArea();
+                        }
+
+                        row.RelativeItem().AlignMiddle().Column(c =>
+                        {
+                            c.Item().Text("HOSPITAL DE ESPECIALIDADES VETERINARIAS — e-ForVets")
+                                .Bold().FontSize(12).FontColor(colorAcentoHex);
+                            c.Item().PaddingTop(2).Row(b =>
+                            {
+                                b.AutoItem().Background(colorAcentoHex).PaddingHorizontal(6).PaddingVertical(2)
+                                    .Text($"{tituloDocumento} — {referencia}").Bold().FontSize(9).FontColor(Colors.White);
+                            });
+                            c.Item().PaddingTop(2).Text($"Fecha de Emisión: {fecha:yyyy-MM-dd HH:mm}").FontSize(7.8f).FontColor(Colors.Grey.Darken1);
+                        });
+
+                        row.ConstantItem(50).AlignRight().Column(colQr =>
+                        {
+                            colQr.Item().Border(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(2).Image(qrBytes);
+                            colQr.Item().AlignCenter().Text($"#{paciente.OrdenAtencionId}").Bold().FontSize(6.5f).FontColor(Colors.Grey.Darken2);
+                        });
+                    });
+
+                    // Tarjeta unificada de Paciente, Tutor y Médico que atendió
+                    col.Item().PaddingTop(6).PaddingBottom(4).Background(Colors.Blue.Lighten5).Border(0.6f).BorderColor(Colors.Blue.Lighten3).Padding(6).Row(r =>
+                    {
+                        r.RelativeItem(1.2f).PaddingRight(8).Column(c =>
+                        {
+                            c.Item().Text("DATOS DEL PACIENTE Y PROPIETARIO").Bold().FontSize(7.5f).FontColor(colorAcentoHex);
+                            c.Item().Text(t =>
+                            {
+                                t.Span("Paciente: ").Bold();
+                                t.Span($"{paciente.PacienteNombre} ({paciente.Especie} · {paciente.Sexo}) | NHCL: #{paciente.Nhcl}");
+                            });
+                            c.Item().Text(t =>
+                            {
+                                t.Span("Raza / Edad: ").Bold();
+                                t.Span($"{paciente.Raza} · {paciente.EdadTexto}");
+                            });
+                            c.Item().Text(t =>
+                            {
+                                t.Span("Propietario: ").Bold();
+                                t.Span($"{paciente.ClienteNombre} (C.I./RUC: {paciente.ClienteCedula})");
+                            });
+                        });
+
+                        r.RelativeItem(1f).BorderLeft(0.5f).BorderColor(Colors.Blue.Lighten3).PaddingLeft(8).Column(c =>
+                        {
+                            c.Item().Text("MÉDICO QUE ATENDIÓ").Bold().FontSize(7.5f).FontColor(colorAcentoHex);
+                            c.Item().Text(t =>
+                            {
+                                t.Span("Doctor(a): ").Bold();
+                                t.Span(medicoNombre);
+                            });
+                            if (!string.IsNullOrWhiteSpace(paciente.MedicoEspecialidad))
+                            {
+                                c.Item().Text(t =>
+                                {
+                                    t.Span("Especialidad: ").Bold();
+                                    t.Span(paciente.MedicoEspecialidad);
+                                });
+                            }
+                            if (!string.IsNullOrWhiteSpace(paciente.MedicoCedula))
+                            {
+                                c.Item().Text(t =>
+                                {
+                                    t.Span("C.I. / Registro: ").Bold();
+                                    t.Span(paciente.MedicoCedula);
+                                });
+                            }
+                            var contacto = new List<string>();
+                            if (!string.IsNullOrWhiteSpace(paciente.MedicoTelefono)) contacto.Add($"Tel: {paciente.MedicoTelefono}");
+                            if (!string.IsNullOrWhiteSpace(paciente.MedicoEmail)) contacto.Add(paciente.MedicoEmail);
+                            if (contacto.Count > 0)
+                            {
+                                c.Item().Text(string.Join("  |  ", contacto)).FontSize(7.8f);
+                            }
+                            if (!string.IsNullOrWhiteSpace(paciente.MedicoObservaciones))
+                            {
+                                c.Item().Text(t =>
+                                {
+                                    t.Span("Reg. Prof. / Obs.: ").Bold();
+                                    t.Span(paciente.MedicoObservaciones);
+                                });
+                            }
+                        });
+                    });
+                });
+
+                page.Content().PaddingTop(4).Column(col =>
+                {
+                    if (diagnosticos.Any())
+                    {
+                        col.Item().PaddingBottom(3).Text("DIAGNÓSTICOS CIE-10:").Bold().FontSize(8.5f).FontColor(colorAcentoHex);
+                        col.Item().PaddingBottom(6).Border(0.5f).BorderColor(Colors.Grey.Lighten1).Padding(5).Column(c =>
+                        {
+                            foreach (var d in diagnosticos)
+                            {
+                                c.Item().Text($"• [{d.CodigoDiag}] {d.NombreCie10} ({d.TipoDiag})" +
+                                    (string.IsNullOrWhiteSpace(d.DescripcionObservacion) ? "" : $" — {d.DescripcionObservacion}"));
+                            }
+                        });
+                    }
+
+                    renderContenido(col);
+
+                    // Bloque de firma del médico tratante al pie del documento
+                    col.Item().PaddingTop(24).AlignCenter().Width(280).Column(firma =>
+                    {
+                        firma.Item().BorderBottom(0.8f).BorderColor(Colors.Grey.Darken2).PaddingBottom(2).Text("");
+                        firma.Item().PaddingTop(3).AlignCenter().Text($"Dr(a). {medicoNombre}").Bold().FontSize(8.5f);
+                        if (!string.IsNullOrWhiteSpace(paciente.MedicoEspecialidad))
+                        {
+                            firma.Item().AlignCenter().Text(paciente.MedicoEspecialidad).FontSize(7.5f).FontColor(Colors.Grey.Darken1);
+                        }
+                        var credenciales = new List<string>();
+                        if (!string.IsNullOrWhiteSpace(paciente.MedicoCedula)) credenciales.Add($"C.I./Reg: {paciente.MedicoCedula}");
+                        if (!string.IsNullOrWhiteSpace(paciente.MedicoTelefono)) credenciales.Add($"Tel: {paciente.MedicoTelefono}");
+                        if (!string.IsNullOrWhiteSpace(paciente.MedicoEmail)) credenciales.Add(paciente.MedicoEmail);
+                        if (credenciales.Count > 0)
+                        {
+                            firma.Item().AlignCenter().Text(string.Join("  ·  ", credenciales)).FontSize(7.2f).FontColor(Colors.Grey.Darken1);
+                        }
+                        if (!string.IsNullOrWhiteSpace(paciente.MedicoObservaciones))
+                        {
+                            firma.Item().AlignCenter().Text(paciente.MedicoObservaciones).FontSize(7.2f).FontColor(Colors.Grey.Darken1);
+                        }
+                    });
+                });
+
+                page.Footer().Row(f =>
+                {
+                    f.RelativeItem().Text($"e-ForVets · {tituloDocumento} · Paciente #{paciente.Nhcl}").FontSize(7.5f).FontColor(Colors.Grey.Darken1);
+                    f.AutoItem().Text(t =>
+                    {
+                        t.DefaultTextStyle(s => s.FontSize(7.5f).FontColor(Colors.Grey.Darken1));
+                        t.Span("Página ");
+                        t.CurrentPageNumber();
+                        t.Span(" de ");
+                        t.TotalPages();
+                    });
+                });
+            });
+        }).GeneratePdf();
+    }
+
     public byte[] GenerarRecetaMedicaPdf(
         PacienteHeaderDto paciente,
         List<RecetaMedicamentoItemDto> items,
@@ -2174,103 +2370,58 @@ public class ReportExportService : IReportExportService
         string? identificador = null,
         DateTime? fechaEmision = null)
     {
-        var qrBytes = GenerarCodigoQrPng($"NUMERICA-{paciente.Nhcl}-{paciente.OrdenAtencionId}");
-        var referencia = string.IsNullOrWhiteSpace(identificador) ? $"ORDEN #{paciente.OrdenAtencionId}" : identificador;
-        var fecha = fechaEmision ?? DateTime.Today;
-
-        return Document.Create(container =>
-        {
-            container.Page(page =>
+        return GenerarDocumentoClinicoOrdenPdf(
+            paciente,
+            "RECETA MÉDICA VETERINARIA",
+            identificador,
+            "#1E40AF",
+            diagnosticos,
+            fechaEmision ?? DateTime.Now,
+            col =>
             {
-                page.Size(PageSizes.A4.Landscape());
-                page.Margin(18);
-                page.DefaultTextStyle(x => x.FontSize(8.5f).FontFamily("Lato"));
-
-                page.Header().Column(col =>
+                col.Item().PaddingBottom(3).Text("Rp. / MEDICAMENTOS E INSUMOS PRESCRITOS E INDICACIONES POSOLÓGICAS:").Bold().FontColor("#1E40AF");
+                col.Item().Table(t =>
                 {
-                    col.Item().Row(row =>
+                    t.ColumnsDefinition(c =>
                     {
-                        row.RelativeItem().Column(c =>
-                        {
-                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(13).FontColor(Colors.Blue.Darken3);
-                            c.Item().Text($"RECETA MÉDICA VETERINARIA E INDICACIONES AL PROPIETARIO — {referencia}").Bold().FontSize(10);
-                        });
-                        row.ConstantItem(48).Image(qrBytes);
+                        c.RelativeColumn(2.6f);
+                        c.RelativeColumn(0.7f);
+                        c.RelativeColumn(1.2f);
+                        c.RelativeColumn(3.5f);
+                    });
+                    t.Header(h =>
+                    {
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Medicamento / Presentación").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).AlignCenter().Text("Cant.").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("En Letras").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Indicaciones Posológicas").Bold();
                     });
 
-                    col.Item().PaddingVertical(4).Background(Colors.Blue.Lighten5).Border(0.5f).BorderColor(Colors.Blue.Lighten3).Padding(5).Row(r =>
+                    if (!items.Any())
                     {
-                        r.RelativeItem().Text($"Paciente: {paciente.PacienteNombre} ({paciente.Especie} - {paciente.Sexo}) | NHCL: {paciente.Nhcl}").Bold();
-                        r.RelativeItem().Text($"Propietario: {paciente.ClienteNombre} (C.I./RUC: {paciente.ClienteCedula})");
-                        r.RelativeItem().Text($"Médico: {paciente.MedicoResponsable} | Fecha: {fecha:yyyy-MM-dd}");
-                    });
-                });
-
-                page.Content().Row(row =>
-                {
-                    // Columna Izquierda: Rp./ Medicamentos Prescritos (Cantidades)
-                    row.RelativeItem().PaddingRight(8).Border(0.5f).Padding(8).Column(col =>
+                        t.Cell().ColumnSpan(4).Border(0.5f).Padding(6).AlignCenter().Text("Sin medicamentos prescritos en esta orden.");
+                    }
+                    else
                     {
-                        col.Item().PaddingBottom(4).Text("Rp. / MEDICAMENTOS E INSUMOS PRESCRITOS").Bold().FontSize(10).FontColor(Colors.Blue.Darken3);
-                        col.Item().Table(t =>
-                        {
-                            t.ColumnsDefinition(c =>
-                            {
-                                c.RelativeColumn(3f);
-                                c.RelativeColumn(1f);
-                                c.RelativeColumn(1.5f);
-                            });
-                            t.Header(h =>
-                            {
-                                h.Cell().BorderBottom(1).Padding(3).Text("Medicamento / Presentación").Bold();
-                                h.Cell().BorderBottom(1).Padding(3).AlignCenter().Text("Cant.").Bold();
-                                h.Cell().BorderBottom(1).Padding(3).Text("En Letras").Bold();
-                            });
-                            foreach (var m in items)
-                            {
-                                t.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(4).Text(m.Descripcionamento).Bold();
-                                t.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(4).AlignCenter().Text($"{m.Cantidad:N0}");
-                                t.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(4).Text(m.CantidadLetras);
-                            }
-                        });
-
-                        if (diagnosticos.Any())
-                        {
-                            col.Item().PaddingTop(10).Text("DIAGNÓSTICOS CIE-10:").Bold().FontSize(8.5f);
-                            foreach (var d in diagnosticos)
-                            {
-                                col.Item().Text($"• [{d.CodigoDiag}] {d.NombreCie10}");
-                            }
-                        }
-                    });
-
-                    // Columna Derecha: Indicaciones de Administración y Cuidados Generales
-                    row.RelativeItem().PaddingLeft(8).Border(0.5f).Padding(8).Column(col =>
-                    {
-                        col.Item().PaddingBottom(4).Text("INDICACIONES POSOLÓGICAS PARA EL PACIENTE").Bold().FontSize(10).FontColor(Colors.Blue.Darken3);
                         foreach (var m in items)
                         {
-                            col.Item().PaddingVertical(3).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Column(c =>
-                            {
-                                c.Item().Text(m.Descripcionamento).Bold().FontColor(Colors.Indigo.Darken3);
-                                c.Item().Text($"Indicaciones: {m.Indicaciones}");
-                            });
+                            t.Cell().Border(0.5f).Padding(4).Text(m.Descripcionamento).Bold();
+                            t.Cell().Border(0.5f).Padding(4).AlignCenter().Text($"{m.Cantidad:N0}");
+                            t.Cell().Border(0.5f).Padding(4).Text(m.CantidadLetras);
+                            t.Cell().Border(0.5f).Padding(4).Text(m.Indicaciones);
                         }
-
-                        if (!string.IsNullOrWhiteSpace(indicacionesGenerales))
-                        {
-                            col.Item().PaddingTop(10).Background(Colors.Yellow.Lighten5).Border(0.5f).BorderColor(Colors.Yellow.Darken2).Padding(6).Column(c =>
-                            {
-                                c.Item().Text("INDICACIONES GENERALES Y SIGNOS DE ALARMA:").Bold();
-                                c.Item().Text(indicacionesGenerales);
-                            });
-                        }
-                    });
+                    }
                 });
 
-                page.Footer().AlignCenter().Text($"Firma y sello médico tratante: {paciente.MedicoResponsable} — e-ForVets");
+                if (!string.IsNullOrWhiteSpace(indicacionesGenerales))
+                {
+                    col.Item().PaddingTop(8).Background(Colors.Yellow.Lighten5).Border(0.5f).BorderColor(Colors.Yellow.Darken2).Padding(6).Column(c =>
+                    {
+                        c.Item().Text("INDICACIONES GENERALES Y SIGNOS DE ALARMA:").Bold().FontSize(8.2f);
+                        c.Item().PaddingTop(2).Text(indicacionesGenerales);
+                    });
+                }
             });
-        }).GeneratePdf();
     }
 
     // ========================================================================
@@ -2401,90 +2552,50 @@ public class ReportExportService : IReportExportService
         List<OrdenLaboratorioItemDto> ordenes,
         List<DiagnosticoCie10Dto> diagnosticos)
     {
-        var qrBytes = GenerarCodigoQrPng($"NUMERICA-{paciente.Nhcl}-{paciente.OrdenAtencionId}");
-
-        return Document.Create(container =>
-        {
-            container.Page(page =>
+        return GenerarDocumentoClinicoOrdenPdf(
+            paciente,
+            "ORDEN DE PRUEBAS DE LABORATORIO CLÍNICO",
+            null,
+            "#1E40AF",
+            diagnosticos,
+            DateTime.Now,
+            col =>
             {
-                page.Size(PageSizes.A4);
-                page.Margin(20);
-                page.DefaultTextStyle(x => x.FontSize(8.5f).FontFamily("Lato"));
-
-                page.Header().Column(col =>
+                col.Item().PaddingBottom(3).Text("PRUEBAS DE LABORATORIO SOLICITADAS:").Bold().FontColor("#1E40AF");
+                col.Item().Table(t =>
                 {
-                    col.Item().Row(row =>
+                    t.ColumnsDefinition(c =>
                     {
-                        row.RelativeItem().Column(c =>
-                        {
-                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
-                            c.Item().Text($"ORDEN DE PRUEBAS DE LABORATORIO CLÍNICO — ORDEN #{paciente.OrdenAtencionId}").Bold().FontSize(10);
-                            c.Item().Text($"Fecha de Solicitud: {DateTime.Now:yyyy-MM-dd HH:mm}").FontSize(8).FontColor(Colors.Grey.Darken1);
-                        });
-                        row.ConstantItem(46).Image(qrBytes);
+                        c.RelativeColumn(1.2f);
+                        c.RelativeColumn(3.2f);
+                        c.RelativeColumn(1f);
+                        c.RelativeColumn(0.8f);
+                        c.RelativeColumn(1.2f);
+                        c.RelativeColumn(2.2f);
                     });
 
-                    col.Item().PaddingVertical(4).Background(Colors.Blue.Lighten5).Border(0.5f).BorderColor(Colors.Blue.Lighten3).Padding(5).Row(r =>
+                    t.Header(h =>
                     {
-                        r.RelativeItem().Text($"Paciente: {paciente.PacienteNombre} ({paciente.Especie} - {paciente.Sexo}) | NHCL: #{paciente.Nhcl}").Bold();
-                        r.RelativeItem().Text($"Propietario: {paciente.PropietarioNombre}");
-                        r.RelativeItem().Text($"Médico Solicitante: {paciente.MedicoResponsable}");
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Código").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Prueba / Perfil de Laboratorio").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).AlignCenter().Text("Prioridad").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).AlignCenter().Text("Cant.").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).AlignCenter().Text("Estado").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Observación / Muestra").Bold();
                     });
-                });
 
-                page.Content().Column(col =>
-                {
-                    if (diagnosticos.Any())
+                    foreach (var item in ordenes)
                     {
-                        col.Item().PaddingBottom(4).Text("DIAGNÓSTICOS PRESUNTIVOS / DEFINITIVOS (CIE-10):").Bold().FontColor(Colors.Blue.Darken3);
-                        col.Item().Border(0.5f).Padding(4).Column(c =>
-                        {
-                            foreach (var d in diagnosticos)
-                            {
-                                c.Item().Text($"• [{d.CodigoDiag}] {d.NombreCie10} ({d.TipoDiag}) — {d.DescripcionObservacion}");
-                            }
-                        });
+                        string bg = item.Prioridad == "Emergente" ? "#FEF2F2" : "#FFFFFF";
+                        t.Cell().Border(0.5f).Background(bg).Padding(4).Text(item.CodigoProd);
+                        t.Cell().Border(0.5f).Background(bg).Padding(4).Text(item.DescripcionExamen).Bold();
+                        t.Cell().Border(0.5f).Background(bg).Padding(4).AlignCenter().Text(item.Prioridad);
+                        t.Cell().Border(0.5f).Background(bg).Padding(4).AlignCenter().Text($"{item.Cantidad}");
+                        t.Cell().Border(0.5f).Background(bg).Padding(4).AlignCenter().Text(item.Estado);
+                        t.Cell().Border(0.5f).Background(bg).Padding(4).Text(item.Observaciones);
                     }
-
-                    col.Item().PaddingTop(6).PaddingBottom(3).Text("PRUEBAS DE LABORATORIO SOLICITADAS:").Bold().FontColor(Colors.Blue.Darken3);
-                    col.Item().Table(t =>
-                    {
-                        t.ColumnsDefinition(c =>
-                        {
-                            c.RelativeColumn(1.2f);
-                            c.RelativeColumn(3.2f);
-                            c.RelativeColumn(1f);
-                            c.RelativeColumn(0.8f);
-                            c.RelativeColumn(1.2f);
-                            c.RelativeColumn(2.2f);
-                        });
-
-                        t.Header(h =>
-                        {
-                            h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).Text("Código").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).Text("Prueba / Perfil de Laboratorio").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).AlignCenter().Text("Prioridad").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).AlignCenter().Text("Cant.").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).AlignCenter().Text("Estado").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).Text("Observación / Muestra").Bold();
-                        });
-
-                        foreach (var item in ordenes)
-                        {
-                            string bg = item.Prioridad == "Emergente" ? "#FEF2F2" : "#FFFFFF";
-                            t.Cell().Border(0.5f).Background(bg).Padding(3).Text(item.CodigoProd);
-                            t.Cell().Border(0.5f).Background(bg).Padding(3).Text(item.DescripcionExamen).Bold();
-                            t.Cell().Border(0.5f).Background(bg).Padding(3).AlignCenter().Text(item.Prioridad);
-                            t.Cell().Border(0.5f).Background(bg).Padding(3).AlignCenter().Text($"{item.Cantidad}");
-                            t.Cell().Border(0.5f).Background(bg).Padding(3).AlignCenter().Text(item.Estado);
-                            t.Cell().Border(0.5f).Background(bg).Padding(3).Text(item.Observaciones);
-                        }
-                    });
                 });
-
-                page.Footer().AlignCenter().Text($"Firma médico solicitante: {paciente.MedicoResponsable} — Laboratorio clínico e-ForVets");
             });
-        }).GeneratePdf();
     }
 
     // ========================================================================
@@ -2495,86 +2606,93 @@ public class ReportExportService : IReportExportService
         List<OrdenImagenItemDto> ordenes,
         List<DiagnosticoCie10Dto> diagnosticos)
     {
-        var qrBytes = GenerarCodigoQrPng($"NUMERICA-{paciente.Nhcl}-{paciente.OrdenAtencionId}");
-
-        return Document.Create(container =>
-        {
-            container.Page(page =>
+        return GenerarDocumentoClinicoOrdenPdf(
+            paciente,
+            "ORDEN DE ESTUDIOS DE IMAGENOLOGÍA (RAYOS X / ECOGRAFÍA)",
+            null,
+            "#1E40AF",
+            diagnosticos,
+            DateTime.Now,
+            col =>
             {
-                page.Size(PageSizes.A4);
-                page.Margin(20);
-                page.DefaultTextStyle(x => x.FontSize(8.5f).FontFamily("Lato"));
-
-                page.Header().Column(col =>
+                col.Item().PaddingBottom(3).Text("ESTUDIOS RADIOLÓGICOS / ECOGRÁFICOS SOLICITADOS:").Bold().FontColor("#1E40AF");
+                col.Item().Table(t =>
                 {
-                    col.Item().Row(row =>
+                    t.ColumnsDefinition(c =>
                     {
-                        row.RelativeItem().Column(c =>
-                        {
-                            c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(12).FontColor(Colors.Blue.Darken3);
-                            c.Item().Text($"ORDEN DE ESTUDIOS DE IMAGENOLOGÍA (RAYOS X / ECOGRAFÍA) — ORDEN #{paciente.OrdenAtencionId}").Bold().FontSize(10);
-                            c.Item().Text($"Fecha de Solicitud: {DateTime.Now:yyyy-MM-dd HH:mm}").FontSize(8).FontColor(Colors.Grey.Darken1);
-                        });
-                        row.ConstantItem(46).Image(qrBytes);
+                        c.RelativeColumn(1.2f);
+                        c.RelativeColumn(3.5f);
+                        c.RelativeColumn(0.9f);
+                        c.RelativeColumn(1.2f);
+                        c.RelativeColumn(2.6f);
                     });
 
-                    col.Item().PaddingVertical(4).Background(Colors.Blue.Lighten5).Border(0.5f).BorderColor(Colors.Blue.Lighten3).Padding(5).Row(r =>
+                    t.Header(h =>
                     {
-                        r.RelativeItem().Text($"Paciente: {paciente.PacienteNombre} ({paciente.Especie} - {paciente.Sexo}) | NHCL: #{paciente.Nhcl}").Bold();
-                        r.RelativeItem().Text($"Propietario: {paciente.PropietarioNombre}");
-                        r.RelativeItem().Text($"Médico Solicitante: {paciente.MedicoResponsable}");
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Código").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Estudio de Imagenología").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).AlignCenter().Text("Cant.").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).AlignCenter().Text("Estado").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Proyecciones / Región Anatómica / Obs.").Bold();
                     });
-                });
 
-                page.Content().Column(col =>
-                {
-                    if (diagnosticos.Any())
+                    foreach (var item in ordenes)
                     {
-                        col.Item().PaddingBottom(4).Text("DIAGNÓSTICOS CIE-10 ASOCIADOS:").Bold().FontColor(Colors.Blue.Darken3);
-                        col.Item().Border(0.5f).Padding(4).Column(c =>
-                        {
-                            foreach (var d in diagnosticos)
-                            {
-                                c.Item().Text($"• [{d.CodigoDiag}] {d.NombreCie10} ({d.TipoDiag}) — {d.DescripcionObservacion}");
-                            }
-                        });
+                        t.Cell().Border(0.5f).Padding(4).Text(item.CodigoProd);
+                        t.Cell().Border(0.5f).Padding(4).Text(item.DescripcionEstudio).Bold();
+                        t.Cell().Border(0.5f).Padding(4).AlignCenter().Text($"{item.Cantidad}");
+                        t.Cell().Border(0.5f).Padding(4).AlignCenter().Text(item.Estado);
+                        t.Cell().Border(0.5f).Padding(4).Text(item.Observaciones);
                     }
-
-                    col.Item().PaddingTop(6).PaddingBottom(3).Text("ESTUDIOS RADIOLÓGICOS / ECOGRÁFICOS SOLICITADOS:").Bold().FontColor(Colors.Blue.Darken3);
-                    col.Item().Table(t =>
-                    {
-                        t.ColumnsDefinition(c =>
-                        {
-                            c.RelativeColumn(1.2f);
-                            c.RelativeColumn(3.5f);
-                            c.RelativeColumn(0.9f);
-                            c.RelativeColumn(1.2f);
-                            c.RelativeColumn(2.6f);
-                        });
-
-                        t.Header(h =>
-                        {
-                            h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(3).Text("Código").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(3).Text("Estudio de Imagenología").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(3).AlignCenter().Text("Cant.").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(3).AlignCenter().Text("Estado").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(3).Text("Proyecciones / Región Anatómica / Obs.").Bold();
-                        });
-
-                        foreach (var item in ordenes)
-                        {
-                            t.Cell().Border(0.5f).Padding(3).Text(item.CodigoProd);
-                            t.Cell().Border(0.5f).Padding(3).Text(item.DescripcionEstudio).Bold();
-                            t.Cell().Border(0.5f).Padding(3).AlignCenter().Text($"{item.Cantidad}");
-                            t.Cell().Border(0.5f).Padding(3).AlignCenter().Text(item.Estado);
-                            t.Cell().Border(0.5f).Padding(3).Text(item.Observaciones);
-                        }
-                    });
                 });
-
-                page.Footer().AlignCenter().Text($"Firma médico solicitante: {paciente.MedicoResponsable} — Servicio de imagenología e-ForVets");
             });
-        }).GeneratePdf();
+    }
+
+    // ========================================================================
+    // 14B. ORDEN DE FISIOTERAPIA Y REHABILITACIÓN (PDF)
+    // ========================================================================
+    public byte[] GenerarOrdenFisioterapiaPdf(
+        PacienteHeaderDto paciente,
+        List<FisioterapiaOrdenDto> ordenes,
+        List<DiagnosticoCie10Dto> diagnosticos)
+    {
+        return GenerarDocumentoClinicoOrdenPdf(
+            paciente,
+            "ORDEN DE SERVICIOS DE FISIOTERAPIA Y REHABILITACIÓN",
+            null,
+            "#1E40AF",
+            diagnosticos,
+            DateTime.Now,
+            col =>
+            {
+                col.Item().PaddingBottom(3).Text("SESIONES / SERVICIOS DE FISIOTERAPIA SOLICITADOS:").Bold().FontColor("#1E40AF");
+                col.Item().Table(t =>
+                {
+                    t.ColumnsDefinition(c =>
+                    {
+                        c.RelativeColumn(1.2f);
+                        c.RelativeColumn(3.6f);
+                        c.RelativeColumn(1f);
+                        c.RelativeColumn(3.6f);
+                    });
+
+                    t.Header(h =>
+                    {
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Código").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Servicio de Fisioterapia").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).AlignCenter().Text("Cant.").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.Blue.Lighten4).Padding(4).Text("Indicaciones / Observaciones del Tratamiento").Bold();
+                    });
+
+                    foreach (var item in ordenes)
+                    {
+                        t.Cell().Border(0.5f).Padding(4).Text($"{item.IdProducto}");
+                        t.Cell().Border(0.5f).Padding(4).Text(item.Descripcion).Bold();
+                        t.Cell().Border(0.5f).Padding(4).AlignCenter().Text($"{item.Cantidad:0.##}");
+                        t.Cell().Border(0.5f).Padding(4).Text(item.Observaciones);
+                    }
+                });
+            });
     }
 
     // ========================================================================
