@@ -48,6 +48,14 @@ public class SessionStateService
         NotifyStateChanged();
     }
 
+    public void LimpiarOrdenActiva()
+    {
+        OrdenActiva = null;
+        NhclActivo = null;
+        PacienteActivo = null;
+        NotifyStateChanged();
+    }
+
     public event Action? OnChange;
 
     public async Task SetSessionAsync(UsuarioModel user, int localidad = 1, string localidadDesc = "HOSPITAL DE ESPECIALIDADES VETERINARIAS")
