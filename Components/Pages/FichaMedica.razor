@@ -40,18 +40,21 @@
 
             <!-- Búsqueda Manual por Orden / NHCL con autocomplete -->
             <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPorInputAsync" />
-            <button class="btn btn-sm btn-success" @onclick="GuardarFichaCompletaAsync" disabled="@Guardando">
-                <i class="bi bi-floppy-fill me-1"></i>@(Guardando ? "Guardando..." : "Guardar Ficha SOAP")
-            </button>
-<button class="btn btn-sm btn-outline-danger" @onclick="ExportarPdfAsync">
-                <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF Historia
-            </button>
-            <button class="btn btn-sm btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/consulta/imprimir-fichas/{Ficha.MedNhcl}")'>
-                <i class="bi bi-collection-fill me-1"></i>Lotes / Seguros
-            </button>
-            <button class="btn btn-sm btn-outline-primary" @onclick='() => Nav.NavigateTo($"/consulta/recetario/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
-                <i class="bi bi-prescription2 me-1"></i>Ir a Recetario
-            </button>
+            @if (Paciente != null)
+            {
+                <button class="btn btn-sm btn-success" @onclick="GuardarFichaCompletaAsync" disabled="@Guardando">
+                    <i class="bi bi-floppy-fill me-1"></i>@(Guardando ? "Guardando..." : "Guardar Ficha SOAP")
+                </button>
+                <button class="btn btn-sm btn-outline-danger" @onclick="ExportarPdfAsync">
+                    <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF Historia
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/consulta/imprimir-fichas/{Ficha.MedNhcl}")'>
+                    <i class="bi bi-collection-fill me-1"></i>Lotes / Seguros
+                </button>
+                <button class="btn btn-sm btn-outline-primary" @onclick='() => Nav.NavigateTo($"/consulta/recetario/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
+                    <i class="bi bi-prescription2 me-1"></i>Ir a Recetario
+                </button>
+            }
         </div>
     </div>
 
@@ -140,8 +143,21 @@
         </details>
     }
 
-    <!-- Cinta de Identificación del Paciente y Semáforo de Temperamento -->
-    @if (Paciente != null)
+    <!-- Cinta de Identificación del Paciente y Semáforo de Temperamento + 4 Pestañas Clínicas -->
+    @if (Paciente == null && !CargandoInicial)
+    {
+        <div class="card shadow-sm border-0 py-4 text-center text-muted mb-3">
+            <div class="card-body">
+                <i class="bi bi-clipboard2-pulse fs-1 d-block mb-2 text-primary opacity-75"></i>
+                <h5 class="text-dark">Ninguna orden clínica abierta</h5>
+                <p class="small mb-0">
+                    Selecciona <strong>Abrir</strong> en la <strong>Cola de órdenes del día</strong> o busca una orden para iniciar la atención SOAP.
+                </p>
+            </div>
+        </div>
+    }
+
+    @if (Paciente != null && !CargandoInicial)
     {
         <div class="card shadow-sm border-0 mb-3 bg-primary bg-opacity-10">
             <div class="card-body py-2 px-3">
@@ -172,31 +188,30 @@
                 </div>
             </div>
         </div>
-    }
 
-    <!-- Navegación por Pestañas Clínicas -->
-    <ul class="nav nav-tabs mb-3 fw-semibold">
-        <li class="nav-item">
-            <button class="nav-link @(TabActiva == 1 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(1)">
-                <i class="bi bi-heart-pulse me-1"></i>1. Examen Físico, Constantes y Temperamento
-            </button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link @(TabActiva == 2 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(2)">
-                <i class="bi bi-journal-medical me-1"></i>2. Evaluación Clínica SOAP & Plan
-            </button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link @(TabActiva == 3 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(3)">
-                <i class="bi bi-tags-fill me-1"></i>3. Diagnósticos CIE-10 (@Diagnosticos.Count) y Prescripción (@RecetaItems.Count)
-            </button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link @(TabActiva == 4 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(4)">
-                <i class="bi bi-shield-plus me-1"></i>4. Antecedentes (@Antecedentes.Count) y Carnet Vacunas (@Vacunas.Count)
-            </button>
-        </li>
-    </ul>
+        <!-- Navegación por Pestañas Clínicas -->
+        <ul class="nav nav-tabs mb-3 fw-semibold">
+            <li class="nav-item">
+                <button class="nav-link @(TabActiva == 1 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(1)">
+                    <i class="bi bi-heart-pulse me-1"></i>1. Examen Físico, Constantes y Temperamento
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(TabActiva == 2 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(2)">
+                    <i class="bi bi-journal-medical me-1"></i>2. Evaluación Clínica SOAP & Plan
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(TabActiva == 3 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(3)">
+                    <i class="bi bi-tags-fill me-1"></i>3. Diagnósticos CIE-10 (@Diagnosticos.Count) y Prescripción (@RecetaItems.Count)
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(TabActiva == 4 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(4)">
+                    <i class="bi bi-shield-plus me-1"></i>4. Antecedentes (@Antecedentes.Count) y Carnet Vacunas (@Vacunas.Count)
+                </button>
+            </li>
+        </ul>
 
     <!-- TAB 1: EXAMEN FÍSICO, CONSTANTES FISIOLÓGICAS Y TRIAJE -->
     @if (TabActiva == 1)
@@ -1037,6 +1052,7 @@
             </div>
         </div>
     }
+    }
 </div>
 
 @code {
@@ -1101,14 +1117,26 @@
     private List<OrdenImagenItemDto> OrdenesImagen { get; set; } = new();
     private List<FisioterapiaOrdenDto> OrdenesFisio { get; set; } = new();
 
+    private bool _fichaRecienCerrada;
+
     protected override async Task OnParametersSetAsync()
     {
+        if (_fichaRecienCerrada && IdOrden <= 0 && Nhcl <= 0)
+        {
+            _fichaRecienCerrada = false;
+            CargandoInicial = false;
+            return;
+        }
+        _fichaRecienCerrada = false;
+
         CargandoInicial = true;
         await Task.Yield();
 
         if (_ordenesActivas.Count == 0)
         {
-            _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(top: 50);
+            _ordenesActivas = (await KardexService.ObtenerOrdenesActivasAsync(top: 50))
+                .Where(o => o.Estado.Trim() != "T" && o.Estado.Trim() != "I")
+                .ToList();
             if (Session.TipoUser == 2)
             {
                 _ordenesActivas = _ordenesActivas.Where(o => o.IdMedico == Session.IdUser).ToList();
@@ -1125,15 +1153,15 @@
         }
         else if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
         {
-            IdOrden = Session.OrdenActiva.Value;
-            Nhcl = Session.NhclActivo ?? 0;
-        }
-        else if (IdOrden <= 0)
-        {
-            if (_ordenesActivas.Count > 0)
+            var activa = _ordenesActivas.FirstOrDefault(o => o.IdOrdenAtencion == Session.OrdenActiva.Value);
+            if (activa != null)
             {
-                IdOrden = _ordenesActivas[0].IdOrdenAtencion;
-                Nhcl = _ordenesActivas[0].Nhcl;
+                IdOrden = activa.IdOrdenAtencion;
+                Nhcl = activa.Nhcl;
+            }
+            else
+            {
+                Session.LimpiarOrdenActiva();
             }
         }
 
@@ -1155,6 +1183,10 @@
                     Sexo = Paciente.Sexo
                 });
             }
+        }
+        else
+        {
+            Paciente = null;
         }
         CargandoInicial = false;
     }
@@ -1415,32 +1447,56 @@
 
         Guardando = true;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        int ordenCerrada = Ficha.MedOrden;
         bool ok = await ConsultaService.GuardarFichaMedicaAsync(Ficha, idUser);
         if (ok)
         {
             KardexService.InvalidarCacheOrdenesActivas();
-            if (Ficha.MedNhcl > 0)
-            {
-                try
-                {
-                    _historialOrdenes = await AdmisionService.ObtenerOrdenesPacienteAsync(Ficha.MedNhcl);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogWarning(ex, "No se pudo actualizar el historial de órdenes tras guardar SOAP {Orden}", Ficha.MedOrden);
-                }
-            }
+            Session.LimpiarOrdenActiva();
+            _ordenesActivas.RemoveAll(o => o.IdOrdenAtencion == ordenCerrada);
+
             if (_colaOrdenes is not null)
             {
                 await _colaOrdenes.RefrescarAsync();
             }
+
+            // Cerrar la ficha actual y las 4 pestañas para habilitar el siguiente paciente
+            _fichaRecienCerrada = true;
+            IdOrden = 0;
+            Nhcl = 0;
+            IdOrdenInput = 0;
+            NhclInput = 0;
+            Paciente = null;
+            _historialOrdenes = [];
+            Ficha = new();
+            Diagnosticos = [];
+            ResultadosCie10 = [];
+            FiltroCie10 = string.Empty;
+            NuevoDiagnostico = new();
+            RecetaItems = [];
+            NuevoMedicamento = new();
+            _mostrarSugerenciasMed = false;
+            Antecedentes = [];
+            NuevoAntecedente = new();
+            Vacunas = [];
+            NuevaVacuna = new();
+            OrdenesLab = [];
+            OrdenesImagen = [];
+            OrdenesFisio = [];
+            _mostrarSugerenciasServicio = false;
+            TabActiva = 1;
         }
         Guardando = false;
 
         EsError = !ok;
         MensajeAlerta = ok
-            ? $"Historia Clínica SOAP de la Orden #{Ficha.MedOrden} guardada y cerrada exitosamente (movida al historial)."
+            ? $"Historia Clínica SOAP de la Orden #{ordenCerrada} guardada y cerrada exitosamente. Ya puede abrir el siguiente paciente desde la cola."
             : "Ocurrió un error al guardar la Ficha Médica.";
+
+        if (ok)
+        {
+            Nav.NavigateTo("/consulta/fichamedica", replace: true);
+        }
     }
 
     private async Task BuscarCie10AutoAsync()
