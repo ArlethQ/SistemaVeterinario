@@ -160,11 +160,10 @@ else
                 <div class="col-md-5">
                     <label class="form-label small fw-semibold">Tipo de Consulta</label>
                     <select class="form-select form-select-sm" @bind="_ficha.MedTipoConsulta">
-                        <option value="Consulta Externa">Consulta Externa</option>
-                        <option value="Emergencia">Emergencia</option>
-                        <option value="Control Médico">Control Médico</option>
-                        <option value="Especialidad">Especialidad</option>
-                        <option value="Chequeo Preventivo">Chequeo Preventivo</option>
+                        @foreach (var tipo in TiposConsultaDisponibles)
+                        {
+                            <option value="@tipo">@tipo</option>
+                        }
                     </select>
                 </div>
                 @if (!DesdeHistorial)
@@ -291,6 +290,12 @@ else
     private PacienteHeaderDto? _paciente;
     private int _especialidad;
     private FichaMedicaCompletaDto _ficha = new();
+    private List<string> _tiposConsultaCatalogo = [];
+    private IEnumerable<string> TiposConsultaDisponibles =>
+        !string.IsNullOrWhiteSpace(_ficha.MedTipoConsulta) &&
+        !_tiposConsultaCatalogo.Any(x => string.Equals(x, _ficha.MedTipoConsulta, StringComparison.OrdinalIgnoreCase))
+            ? _tiposConsultaCatalogo.Append(_ficha.MedTipoConsulta)
+            : _tiposConsultaCatalogo;
 
     private (int? Orden, int? Paciente, bool Modal)? _parametrosCargados;
 
@@ -348,11 +353,8 @@ else
             Session.SeleccionarOrden(ord, Nhcl ?? (_paciente?.Nhcl ?? 0), _paciente?.PacienteNombre);
         }
 
+        _tiposConsultaCatalogo = await ConsultaService.ObtenerTiposConsultaCatalogoAsync(Session.Localidad);
         _ficha = await ConsultaService.ObtenerFichaMedicaAsync(ord, Nhcl ?? (_paciente?.Nhcl ?? 0), historica: DesdeHistorial);
-        if (string.IsNullOrWhiteSpace(_ficha.MedTipoConsulta))
-        {
-            _ficha.MedTipoConsulta = "Consulta Externa";
-        }
         if (string.IsNullOrWhiteSpace(_ficha.Temperamento))
         {
             _ficha.Temperamento = "TRANQUILO";

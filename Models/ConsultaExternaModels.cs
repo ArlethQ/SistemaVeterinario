@@ -19,7 +19,7 @@ public class FichaMedicaCompletaDto
     public DateTime MedFecha { get; set; } = DateTime.Now;
     public string MedTipo { get; set; } = "HDEV"; // HDEV o TUERI
     public string MedEspecie { get; set; } = string.Empty;
-    public string MedTipoConsulta { get; set; } = "Consulta Externa";
+    public string MedTipoConsulta { get; set; } = string.Empty;
 
     // Anamnesis y Evaluación SOAP
     [Required(ErrorMessage = "El motivo de consulta es obligatorio")]

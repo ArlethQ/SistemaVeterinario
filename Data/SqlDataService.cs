@@ -102,6 +102,24 @@ public class SqlDataService : ISqlDataService
                         UPDATE dbo.vt_formatos
                         SET form_es_sistema = CASE WHEN form_id <= 8 THEN 1 ELSE 0 END
                         WHERE form_es_sistema IS NULL;
+                    END;
+
+                    IF OBJECT_ID(N'dbo.vt_ordenAtencion', N'U') IS NOT NULL
+                       AND COL_LENGTH(N'dbo.vt_ordenAtencion', N'ordenAten_tipoConsulta') IS NULL
+                    BEGIN
+                        ALTER TABLE dbo.vt_ordenAtencion
+                            ADD ordenAten_tipoConsulta INT NULL;
+                    END;
+
+                    IF EXISTS (
+                        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_NAME = 'vt_fichamedica'
+                          AND COLUMN_NAME = 'med_tipoconsulta'
+                          AND CHARACTER_MAXIMUM_LENGTH IS NOT NULL
+                          AND CHARACTER_MAXIMUM_LENGTH < 150
+                    )
+                    BEGIN
+                        ALTER TABLE dbo.vt_fichamedica ALTER COLUMN med_tipoconsulta varchar(150) NULL;
                     END;";
                 cmd.ExecuteNonQuery();
                 _schemaVerified = true;
