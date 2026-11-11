@@ -31,6 +31,7 @@ public interface IAdministracionClinicaService
     Task<List<FisioterapiaOrdenDto>> ObtenerCatalogoFisioterapiaAsync();
     Task<List<FisioterapiaOrdenDto>> ObtenerFisioterapiaAsync(int idOrden, int nhcl);
     Task<bool> GuardarFisioterapiaAsync(FisioterapiaOrdenDto orden);
+    Task<bool> EliminarFisioterapiaAsync(int sec);
     Task<List<IStatDto>> ObtenerIStatAsync(int nhcl);
     Task<bool> GuardarIStatAsync(IStatDto resultado, int idUsuario);
     Task<bool> EliminarIStatAsync(int id, int idUsuario);
@@ -711,6 +712,9 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
             ORDER BY f.fisioO_fecha DESC", new { IdOrden = idOrden, Nhcl = nhcl })).ToList();
 
     public async Task<bool> GuardarFisioterapiaAsync(FisioterapiaOrdenDto x) => await _db.ExecuteAsync(@"INSERT INTO vt_fisioterapia_ordenes(fisioO_nhcl,fisioO_idProdu,fisoO_observaciones,fisioO_cantidad,fisioO_id_orden,fisioO_estado,fisioO_fecha) VALUES(@Nhcl,@IdProducto,@Observaciones,@Cantidad,@IdOrden,'A',@Fecha)",x)>0;
+
+    public async Task<bool> EliminarFisioterapiaAsync(int sec) =>
+        await _db.ExecuteAsync("DELETE FROM vt_fisioterapia_ordenes WHERE sec = @Sec", new { Sec = sec }) > 0;
 
     public async Task<List<IStatDto>> ObtenerIStatAsync(int nhcl) =>
         (await _db.QueryAsync<IStatDto>(@"
