@@ -345,13 +345,22 @@
                                @onchange="OnFechaControlChanged" />
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label small fw-semibold">Tipo de Consulta</label>
+                        <label class="form-label small fw-semibold">Tipo de Consulta *</label>
                         <select class="form-select form-select-sm" @bind="Ficha.MedTipoConsulta">
+                            <option value="">-- Seleccione tipo de consulta --</option>
                             @foreach (var tipo in TiposConsultaDisponibles)
                             {
                                 <option value="@tipo">@tipo</option>
                             }
                         </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" id="chkRequiereHospitalizacion" @bind="Ficha.RequiereHospitalizacion" />
+                            <label class="form-check-label small fw-semibold" for="chkRequiereHospitalizacion">
+                                ¿Debe quedarse en hospitalización?
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -897,10 +906,18 @@
         if (Ficha.MedNhcl <= 0) Ficha.MedNhcl = Nhcl;
         if (Ficha.MedCliente <= 0 && Paciente != null) Ficha.MedCliente = Paciente.ClienteCodigo;
         if (string.IsNullOrEmpty(Ficha.MedEspecie) && Paciente != null) Ficha.MedEspecie = Paciente.Especie;
+        var faltantes = new List<string>();
         if (string.IsNullOrWhiteSpace(Ficha.MedMotivo))
+            faltantes.Add("Motivo principal de consulta");
+        if (Diagnosticos.Count == 0)
+            faltantes.Add("al menos un diagnóstico CIE-10 (pestaña 3. Diagnósticos & Receta)");
+        if (string.IsNullOrWhiteSpace(Ficha.MedTipoConsulta))
+            faltantes.Add("Tipo de consulta");
+
+        if (faltantes.Count > 0)
         {
             EsError = true;
-            MensajeAlerta = "Por favor ingrese el motivo principal de la consulta antes de guardar.";
+            MensajeAlerta = $"No se puede guardar la ficha SOAP. Complete los campos obligatorios: {string.Join(", ", faltantes)}.";
             return;
         }
 
