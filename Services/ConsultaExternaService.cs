@@ -94,13 +94,18 @@ public class ConsultaExternaService : IConsultaExternaService
         """;
 
     private readonly ISqlDataService _db;
+    private readonly SessionStateService _session;
     private readonly ILogger<ConsultaExternaService> _logger;
+
+    private int UsuarioFacturacion => 1_000_000 + (_session.Localidad > 0 ? _session.Localidad : 1);
 
     public ConsultaExternaService(
         ISqlDataService db,
+        SessionStateService session,
         ILogger<ConsultaExternaService> logger)
     {
         _db = db;
+        _session = session;
         _logger = logger;
     }
 
@@ -712,12 +717,12 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(v.vacuna_fecha, GETDATE()) AS Fecha,
                 v.vacuna_revacunacion AS FechaRevacunacion,
                 ISNULL(v.vacuna_idprod, 0) AS IdProducto,
-                ISNULL(p.prod_descripcion, '') AS NombreVacuna,
+                REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), '') AS NombreVacuna,
                 ISNULL(v.vacuna_observacion, '') AS ObservacionVacuna,
                 ISNULL(v.vacuna_tipo, 'Vacunación') AS Tipo,
                 ISNULL(u.user_nombre, 'Médico') AS NombreMedico
             FROM vt_vacunas v
-            LEFT JOIN vt_productos p ON v.vacuna_idprod = p.prod_id
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON v.vacuna_idprod = p.CODIGO
             LEFT JOIN vt_usuarios u ON v.vacuna_iduser = u.user_numero
             WHERE v.vacuna_nhcl = @Nhcl AND ISNULL(v.vacuna_estado, 'A') = 'A'
             ORDER BY v.vacuna_id DESC";
@@ -729,11 +734,17 @@ public class ConsultaExternaService : IConsultaExternaService
     public async Task<List<CatalogoItemGenericoDto>> ObtenerCatalogoVacunasAsync()
     {
         const string sql = @"
-            SELECT prod_id AS Id, RTRIM(ISNULL(prod_descripcion, '')) AS Descripcion
-            FROM vt_productos
-            WHERE prod_estado = 'A' AND prod_grupo = 10
-            ORDER BY prod_descripcion";
-        return (await _db.QueryAsync<CatalogoItemGenericoDto>(sql)).ToList();
+            SELECT
+                p.CODIGO AS Id,
+                REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE, '')), CHAR(13), ''), CHAR(10), '') AS Descripcion
+            FROM VeterinariaFacturacion.dbo.PRODUCTO p
+            INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+            WHERE ISNULL(p.ESTADO, 1) = 1
+              AND ISNULL(t.ESTADO, 1) = 1
+              AND p.IDUSUARIO = @IdUsuario
+              AND UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) LIKE '%VACUN%'
+            ORDER BY Descripcion ASC";
+        return (await _db.QueryAsync<CatalogoItemGenericoDto>(sql, new { IdUsuario = UsuarioFacturacion })).ToList();
     }
 
     public async Task<bool> AgregarVacunaAsync(VacunaPacienteDto dto, int idUsuario, int idCliente)

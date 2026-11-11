@@ -1721,12 +1721,12 @@
         try
         {
             var vacunas = await SqlData.QueryAsync<RecordatorioVacunaItem>(@"
-                SELECT ISNULL(p.prod_descripcion, ISNULL(v.vacuna_tipo, 'Vacuna')) AS Vacuna,
+                SELECT COALESCE(NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), ''), ''), NULLIF(RTRIM(ISNULL(v.vacuna_tipo, '')), ''), 'Vacuna') AS Vacuna,
                        v.vacuna_fecha AS FechaAplicacion,
                        v.vacuna_revacunacion AS FechaProxima,
                        ISNULL(u.user_nombre, 'Médico') AS Medico
                 FROM vt_vacunas v
-                LEFT JOIN vt_productos p ON v.vacuna_idprod = p.prod_id
+                LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON v.vacuna_idprod = p.CODIGO
                 LEFT JOIN vt_usuarios u ON v.vacuna_iduser = u.user_numero
                 WHERE v.vacuna_nhcl = @Nhcl AND ISNULL(v.vacuna_estado, 'A') = 'A'
                   AND v.vacuna_revacunacion IS NOT NULL

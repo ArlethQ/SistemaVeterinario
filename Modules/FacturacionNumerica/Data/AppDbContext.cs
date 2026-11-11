@@ -174,12 +174,28 @@ namespace Simetric.Data
             foreach (var entry in ChangeTracker.Entries()
                 .Where(entry => entry.State is EntityState.Added or EntityState.Modified))
             {
+                bool esCatalogoProductos = entry.Entity is Producto or Productotipo or Productosubtipo;
                 foreach (var property in entry.Properties.Where(x => x.Metadata.ClrType == typeof(string)))
                 {
                     if (property.CurrentValue is string value && EsTextoDescriptivo(property.Metadata.Name))
-                        property.CurrentValue = NormalizarTextoTitulo(value, cultura);
+                    {
+                        property.CurrentValue = esCatalogoProductos
+                            ? CompactarEspacios(value)
+                            : NormalizarTextoTitulo(value, cultura);
+                    }
                 }
             }
+        }
+
+        private static string CompactarEspacios(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            return string.Join(" ", value
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         }
 
         private static bool EsTextoDescriptivo(string nombrePropiedad)

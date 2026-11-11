@@ -131,6 +131,7 @@ public sealed class EFactCatalogService(
             entity.Estado = item.Estado != "I";
             await db.SaveChangesAsync();
             item.Id = entity.Idtipoproducto;
+            item.Descripcion = entity.Descripcion ?? descripcion;
             return true;
         }
         catch (Exception ex)
@@ -168,6 +169,7 @@ public sealed class EFactCatalogService(
             entity.Estado = item.Estado == "I" ? "I" : "A";
             await db.SaveChangesAsync();
             item.Id = entity.Idsubtipo;
+            item.Descripcion = entity.Descripcion ?? item.Descripcion.Trim();
             return true;
         }
         catch (Exception ex)
@@ -196,7 +198,10 @@ public sealed class EFactCatalogService(
                 db.Productos.Add(entity);
             }
 
-            entity.Nombre = item.Descripcion.Trim();
+            var cultura = System.Globalization.CultureInfo.GetCultureInfo("es-EC");
+            entity.Nombre = string.Join(" ", item.Descripcion
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                .ToUpper(cultura);
             entity.CodigoPrincipal = string.IsNullOrWhiteSpace(item.Codigo) ? null : item.Codigo.Trim();
             entity.ValorUnitario = item.Precio;
             entity.Precio2 = item.Precio2;
@@ -227,6 +232,8 @@ public sealed class EFactCatalogService(
             entity.Estado = item.Estado != "I";
             await db.SaveChangesAsync();
             item.Id = entity.Codigo;
+            item.Descripcion = entity.Nombre ?? item.Descripcion.Trim();
+            item.Codigo = entity.CodigoPrincipal ?? string.Empty;
             InventarioService.InvalidarCache();
             return true;
         }
