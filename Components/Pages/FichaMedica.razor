@@ -55,7 +55,7 @@
         </div>
     </div>
 
-    <ColaOrdenesClinicas OrdenSeleccionada="@IdOrden" />
+    <ColaOrdenesClinicas @ref="_colaOrdenes" OrdenSeleccionada="@IdOrden" />
 
     @if (!string.IsNullOrEmpty(MensajeAlerta))
     {
@@ -89,17 +89,36 @@
             {
                 <div class="table-responsive mt-2">
                     <table class="table table-sm align-middle mb-0">
-                        <thead><tr><th>Orden</th><th>Fecha</th><th>Especialidad</th><th>Médico</th><th>Ficha SOAP</th></tr></thead>
+                        <thead><tr><th>Orden</th><th>Fecha</th><th>Especialidad</th><th>Médico</th><th>Estado</th><th>Ficha SOAP</th></tr></thead>
                         <tbody>
                             @foreach (var orden in _historialOrdenes)
                             {
+                                var estadoOrd = orden.Estado.Trim();
                                 <tr @key="orden.IdOrden" class="@(orden.IdOrden == IdOrden ? "table-active" : null)">
                                     <td>#@orden.IdOrden</td>
                                     <td>@orden.Fecha.ToString("dd/MM/yyyy") @orden.Hora</td>
                                     <td>@orden.Especialidad</td>
                                     <td>@orden.Medico</td>
                                     <td>
-                                        @if (orden.Estado.Trim() == "I")
+                                        @if (estadoOrd == "T")
+                                        {
+                                            <span class="badge bg-success">Finalizada</span>
+                                        }
+                                        else if (estadoOrd == "E")
+                                        {
+                                            <span class="badge bg-primary">En atención</span>
+                                        }
+                                        else if (estadoOrd == "I")
+                                        {
+                                            <span class="badge bg-secondary">Anulada</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">En espera</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (estadoOrd == "I")
                                         {
                                             <span class="text-muted">Anulada</span>
                                         }
@@ -1037,6 +1056,7 @@
     private bool EsError { get; set; }
 
     private PacienteHeaderDto? Paciente { get; set; }
+    private ColaOrdenesClinicas? _colaOrdenes;
     private List<OrdenPacienteResumenDto> _historialOrdenes = [];
     private bool _errorHistorialOrdenes;
     private FichaMedicaCompletaDto Ficha { get; set; } = new();
@@ -1396,11 +1416,30 @@
         Guardando = true;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
         bool ok = await ConsultaService.GuardarFichaMedicaAsync(Ficha, idUser);
+        if (ok)
+        {
+            KardexService.InvalidarCacheOrdenesActivas();
+            if (Ficha.MedNhcl > 0)
+            {
+                try
+                {
+                    _historialOrdenes = await AdmisionService.ObtenerOrdenesPacienteAsync(Ficha.MedNhcl);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "No se pudo actualizar el historial de órdenes tras guardar SOAP {Orden}", Ficha.MedOrden);
+                }
+            }
+            if (_colaOrdenes is not null)
+            {
+                await _colaOrdenes.RefrescarAsync();
+            }
+        }
         Guardando = false;
 
         EsError = !ok;
         MensajeAlerta = ok
-            ? $"Historia Clínica SOAP de la Orden #{Ficha.MedOrden} guardada exitosamente."
+            ? $"Historia Clínica SOAP de la Orden #{Ficha.MedOrden} guardada y cerrada exitosamente (movida al historial)."
             : "Ocurrió un error al guardar la Ficha Médica.";
     }
 

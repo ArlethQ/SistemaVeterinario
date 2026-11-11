@@ -558,6 +558,19 @@ public class ConsultaExternaService : IConsultaExternaService
             // Actualizar indicaciones generales de receta siempre
             await GuardarIndicacionesGeneralesAsync(dto.MedOrden, dto.MedNhcl, dto.IndicacionesGeneralesReceta ?? "");
 
+            // Al guardar la ficha SOAP, cerrar la orden para que salga de la cola del día y pase al historial
+            if (dto.MedOrden > 0)
+            {
+                await _db.ExecuteAsync(@"
+                    UPDATE vt_ordenAtencion
+                    SET ordenAten_estado = 'T',
+                        ordenAten_etapa = 'Procesado',
+                        ordenAten_fechaProcesado = ISNULL(ordenAten_fechaProcesado, GETDATE())
+                    WHERE ordenAten_id = @IdOrden
+                      AND ISNULL(ordenAten_estado, 'A') <> 'I';",
+                    new { IdOrden = dto.MedOrden });
+            }
+
             await _db.RegistrarBitacoraAsync($"Ficha Médica SOAP guardada Orden #{dto.MedOrden} NHCL #{dto.MedNhcl}", idUsuario);
             return true;
         }
