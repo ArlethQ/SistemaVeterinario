@@ -221,6 +221,8 @@ else
                 </button>
             </div>
 
+            </div>
+            <div class="triaje-vitals">
             <!-- Fila 3 y 4: Constantes Fisiológicas -->
             <div class="triaje-section-title"><i class="bi bi-heart"></i> Constantes Vitales</div>
             <div class="row g-2">
@@ -248,7 +250,12 @@ else
                     <label class="form-label small fw-semibold">Deshidratación (%)</label>
                     <input type="number" min="0" max="100" class="form-control form-control-sm" @bind="_ficha.Deshidratacion" />
                 </div>
-                <div class="col-12">
+                <div class="col-6 triaje-icc">
+                    <label class="form-label small fw-semibold">Condición Corporal (ICC 1-9)</label>
+                    <input type="range" class="form-range" min="1" max="9" @bind="_ficha.IndiceCondicionCorporal" />
+                    <div class="text-center small fw-bold text-primary">ICC: @_ficha.IndiceCondicionCorporal / 9</div>
+                </div>
+                <div class="col-6">
                     <label class="form-label small fw-semibold">Pulso / CP</label>
                     <input type="text" class="form-control form-control-sm" @bind="_ficha.Cp" placeholder="Normal" />
                 </div>
@@ -259,10 +266,6 @@ else
             </div>
 
             </div>
-            <aside class="triaje-side">
-                <div class="triaje-side-card"><h3><i class="bi bi-layers"></i> Condición Corporal (ICC 1–9)</h3><div class="triaje-icc-value">ICC: @_ficha.IndiceCondicionCorporal / 9</div><input type="range" class="form-range" min="1" max="9" @bind="_ficha.IndiceCondicionCorporal" /></div>
-                <div class="triaje-side-card"><h3><i class="bi bi-clock-history"></i> Constantes actuales</h3><dl><div><dt>Peso</dt><dd>@_ficha.Peso kg</dd></div><div><dt>Temp.</dt><dd>@_ficha.Temperatura °C</dd></div><div><dt>FC</dt><dd>@_ficha.FrecuenciaCardiaca lpm</dd></div><div><dt>FR</dt><dd>@_ficha.FrecuenciaRespiratoria rpm</dd></div><div><dt>Deshidratación</dt><dd>@_ficha.Deshidratacion %</dd></div></dl></div>
-            </aside>
             <!-- Botones de Acción -->
             <div class="d-flex justify-content-between align-items-center mt-4 pt-2 border-top">
                 @if (Permisos.Permite("consulta/fichamedica"))
