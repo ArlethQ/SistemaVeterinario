@@ -30,19 +30,8 @@
             </select>
         </div>
 
-        <!-- Búsqueda Manual por Orden / NHCL -->
-        <div class="input-group input-group-sm" style="width: auto;">
-            <span class="input-group-text bg-light fw-semibold text-secondary">Ord:</span>
-            <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
-                   min="1" placeholder="Orden" @bind="ordenInput" @onkeydown="OnInputKeyDown" />
-            <span class="input-group-text bg-light fw-semibold text-secondary">NHCL:</span>
-            <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
-                   min="1" placeholder="NHCL" @bind="nhclInput" @onkeydown="OnInputKeyDown" />
-            <button class="btn btn-primary fw-semibold px-3 d-flex align-items-center gap-1" @onclick="CargarPorInputAsync" title="Buscar y Cargar Paciente">
-                <i class="bi bi-search"></i>
-                <span>Buscar</span>
-            </button>
-        </div>
+        <!-- Búsqueda Manual por Orden / NHCL con autocomplete -->
+        <BuscadorOrdenClinica @bind-Orden="ordenInput" @bind-Nhcl="nhclInput" OnBuscar="CargarPorInputAsync" />
 
         @if (paciente != null)
         {

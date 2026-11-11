@@ -31,12 +31,27 @@
     <div class="card border-0 shadow-sm mb-3 no-print">
         <div class="card-body py-2 px-3 bg-light rounded">
             <div class="row g-2 align-items-end">
-                <div class="col-md-4">
+                <div class="col-md-4 position-relative">
                     <label class="form-label small fw-bold">Buscar paciente hospitalizado</label>
                     <div class="input-group input-group-sm">
-                        <input class="form-control" @bind="_filtro" @bind:event="oninput" placeholder="Paciente, tutor o NHCL" />
+                        <input class="form-control" autocomplete="off" @bind="_filtro" @bind:event="oninput" @bind:after="BuscarAutoAsync"
+                               @onfocus="() => _mostrarSugerencias = !string.IsNullOrWhiteSpace(_filtro)"
+                               @onblur="CerrarSugerenciasConRetrasoAsync"
+                               placeholder="Paciente, tutor o NHCL" />
                         <button class="btn btn-outline-primary" @onclick="BuscarAsync">Buscar</button>
                     </div>
+                    @if (_mostrarSugerencias && _ordenes.Count > 0 && !string.IsNullOrWhiteSpace(_filtro))
+                    {
+                        <div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto;">
+                            @foreach (var o in _ordenes)
+                            {
+                                <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start"
+                                        @onmousedown="() => SeleccionarOrdenSugeridaAsync(o)">
+                                    <strong>#@o.IdOrdenAtencion</strong> | NHCL @o.Nhcl — @o.Paciente <small class="text-muted">(@o.Cliente)</small>
+                                </button>
+                            }
+                        </div>
+                    }
                 </div>
                 <div class="col-md-6">
                     <label class="form-label small fw-bold">Orden activa</label>
@@ -186,6 +201,10 @@
 
     protected override async Task OnInitializedAsync(){ try { _ordenes=await KardexService.ObtenerOrdenesActivasAsync(); if(IdOrden>0) await CargarAsync(); } catch(Exception ex){ Error(ex); } }
     private string ClaseTab(string t)=>_tab==t?"active":"";
+    private bool _mostrarSugerencias;
+    private async Task BuscarAutoAsync(){ await BuscarAsync(); _mostrarSugerencias = !string.IsNullOrWhiteSpace(_filtro) && _ordenes.Count > 0; }
+    private async Task SeleccionarOrdenSugeridaAsync(OrdenActivaResumenDto o){ _mostrarSugerencias = false; IdOrden = o.IdOrdenAtencion; Nhcl = o.Nhcl; await CargarAsync(); }
+    private async Task CerrarSugerenciasConRetrasoAsync(){ await Task.Delay(180); _mostrarSugerencias = false; }
     private async Task BuscarAsync()=>_ordenes=await KardexService.ObtenerOrdenesActivasAsync(_filtro.Trim());
     private async Task CambiarOrdenAsync(ChangeEventArgs e){ if(int.TryParse(e.Value?.ToString(),out var id)&&id>0){var o=_ordenes.First(x=>x.IdOrdenAtencion==id);IdOrden=id;Nhcl=o.Nhcl;await CargarAsync();} }
     private async Task CargarAsync(){ _paciente=await KardexService.ObtenerCabeceraPacienteAsync(IdOrden,Nhcl); if(_paciente is null) return; Nhcl=_paciente.Nhcl; Session.SeleccionarOrden(IdOrden,Nhcl,_paciente.PacienteNombre); await RecargarAsync(); NuevoTurno();NuevaInter();NuevaTrans(); }

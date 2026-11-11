@@ -35,19 +35,19 @@
         <div class="card shadow-sm border-0 mb-3">
             <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">Filtros</h6></div>
             <div class="card-body row g-3">
-                <div class="col-md-2"><label class="form-label small fw-semibold">Desde</label><input type="date" class="form-control" @bind="_desde" /></div>
-                <div class="col-md-2"><label class="form-label small fw-semibold">Hasta</label><input type="date" class="form-control" @bind="_hasta" /></div>
+                <div class="col-md-2"><label class="form-label small fw-semibold">Desde</label><input type="date" class="form-control" @bind="_desde" @bind:after="CargarAsync" /></div>
+                <div class="col-md-2"><label class="form-label small fw-semibold">Hasta</label><input type="date" class="form-control" @bind="_hasta" @bind:after="CargarAsync" /></div>
                 @if (_tab == "atenciones")
                 {
-                    <div class="col-md-2"><label class="form-label small fw-semibold">Médico</label><select class="form-select" @bind="_idMedico"><option value="0">Todos</option>@foreach (var x in _medicos){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+                    <div class="col-md-2"><label class="form-label small fw-semibold">Médico</label><select class="form-select" @bind="_idMedico" @bind:after="CargarAsync"><option value="0">Todos</option>@foreach (var x in _medicos){<option value="@x.Id">@x.Descripcion</option>}</select></div>
                 }
                 @if (_tab is "atenciones" or "diagnosticos")
                 {
-                    <div class="col-md-2"><label class="form-label small fw-semibold">Localidad</label><select class="form-select" @bind="_idLocalidad"><option value="0">Todas</option>@foreach (var x in _localidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+                    <div class="col-md-2"><label class="form-label small fw-semibold">Localidad</label><select class="form-select" @bind="_idLocalidad" @bind:after="CargarAsync"><option value="0">Todas</option>@foreach (var x in _localidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
                 }
                 @if (_tab == "atenciones")
                 {
-                    <div class="col-md-2"><label class="form-label small fw-semibold">Especialidad</label><select class="form-select" @bind="_idEspecialidad"><option value="0">Todas</option>@foreach (var x in _especialidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+                    <div class="col-md-2"><label class="form-label small fw-semibold">Especialidad</label><select class="form-select" @bind="_idEspecialidad" @bind:after="CargarAsync"><option value="0">Todas</option>@foreach (var x in _especialidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
                     <div class="col-md-2 d-flex align-items-end"><div class="form-check mb-2"><input id="condensarAtenciones" class="form-check-input" type="checkbox" @bind="_condensado" /><label class="form-check-label fw-semibold" for="condensarAtenciones">Condensar resultado</label></div></div>
                 }
                 else if (_tab == "diagnosticos")
@@ -59,9 +59,9 @@
                     <div class="col-md-8">
                         <label class="form-label small fw-semibold">Diagnóstico CIE-10</label>
                         <div class="input-group">
-                            <input class="form-control" placeholder="Buscar por código o descripción" @bind="_filtroDiagnostico" @bind:event="oninput" @onkeydown="BuscarDiagnosticoConEnterAsync" />
+                            <input class="form-control" autocomplete="off" placeholder="Buscar por código o descripción" @bind="_filtroDiagnostico" @bind:event="oninput" @bind:after="BuscarDiagnosticosAutoAsync" @onkeydown="BuscarDiagnosticoConEnterAsync" />
                             <button class="btn btn-outline-primary" @onclick="BuscarDiagnosticosAsync">Buscar</button>
-                            @if (!string.IsNullOrWhiteSpace(_codigoDiagnostico)) { <button class="btn btn-outline-secondary" @onclick="LimpiarDiagnostico">Quitar filtro</button> }
+                            @if (!string.IsNullOrWhiteSpace(_codigoDiagnostico)) { <button class="btn btn-outline-secondary" @onclick="LimpiarDiagnosticoAsync">Quitar filtro</button> }
                         </div>
                         @if (!string.IsNullOrWhiteSpace(_codigoDiagnostico))
                         {
@@ -72,7 +72,7 @@
                             <div class="list-group mt-1" style="max-height:170px;overflow:auto">
                                 @foreach (var d in _diagnosticosCatalogo)
                                 {
-                                    <button class="list-group-item list-group-item-action py-1 small" @onclick="() => SeleccionarDiagnostico(d)"><strong>@d.CieCodigo</strong> · @d.CieDiagnostico</button>
+                                    <button class="list-group-item list-group-item-action py-1 small" @onclick="() => SeleccionarDiagnosticoAsync(d)"><strong>@d.CieCodigo</strong> · @d.CieDiagnostico</button>
                                 }
                             </div>
                         }
@@ -208,13 +208,18 @@
     }
 
     private async Task BuscarDiagnosticoConEnterAsync(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarDiagnosticosAsync(); }
-    private async Task BuscarDiagnosticosAsync()
+    private async Task BuscarDiagnosticosAutoAsync()
     {
-        if (_filtroDiagnostico.Trim().Length < 2) { _error = "Ingrese al menos dos caracteres para buscar el diagnóstico."; return; }
+        if (string.IsNullOrWhiteSpace(_filtroDiagnostico)) { _diagnosticosCatalogo = []; return; }
         _diagnosticosCatalogo = await ConsultaService.BuscarCatalogoCie10Async(_filtroDiagnostico);
     }
-    private void SeleccionarDiagnostico(CatalogoCie10ItemDto item) { _codigoDiagnostico = item.CieCodigo.ToString(); _diagnosticoSeleccionado = item.CieDiagnostico; _filtroDiagnostico = item.CieDiagnostico; _diagnosticosCatalogo = []; }
-    private void LimpiarDiagnostico() { _codigoDiagnostico = ""; _diagnosticoSeleccionado = ""; _filtroDiagnostico = ""; _diagnosticosCatalogo = []; }
+    private async Task BuscarDiagnosticosAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_filtroDiagnostico)) { _diagnosticosCatalogo = []; return; }
+        _diagnosticosCatalogo = await ConsultaService.BuscarCatalogoCie10Async(_filtroDiagnostico);
+    }
+    private async Task SeleccionarDiagnosticoAsync(CatalogoCie10ItemDto item) { _codigoDiagnostico = item.CieCodigo.ToString(); _diagnosticoSeleccionado = item.CieDiagnostico; _filtroDiagnostico = item.CieDiagnostico; _diagnosticosCatalogo = []; await CargarAsync(); }
+    private async Task LimpiarDiagnosticoAsync() { _codigoDiagnostico = ""; _diagnosticoSeleccionado = ""; _filtroDiagnostico = ""; _diagnosticosCatalogo = []; await CargarAsync(); }
 
     private async Task ExportarAtencionesPdfAsync()
     {

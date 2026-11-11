@@ -30,19 +30,8 @@
             </select>
         </div>
 
-        <!-- Búsqueda Manual por Orden / NHCL -->
-        <div class="input-group input-group-sm" style="width: auto;">
-            <span class="input-group-text bg-light fw-semibold text-secondary">Ord:</span>
-            <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
-                   min="1" placeholder="Orden" @bind="ordenInput" @onkeydown="OnInputKeyDown" />
-            <span class="input-group-text bg-light fw-semibold text-secondary">NHCL:</span>
-            <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
-                   min="1" placeholder="NHCL" @bind="nhclInput" @onkeydown="OnInputKeyDown" />
-            <button class="btn btn-primary fw-semibold px-3 d-flex align-items-center gap-1" @onclick="CargarPorInputAsync" title="Buscar y Cargar Paciente">
-                <i class="bi bi-search"></i>
-                <span>Buscar</span>
-            </button>
-        </div>
+        <!-- Búsqueda Manual por Orden / NHCL con autocomplete -->
+        <BuscadorOrdenClinica @bind-Orden="ordenInput" @bind-Nhcl="nhclInput" OnBuscar="CargarPorInputAsync" />
 
         @if (paciente != null)
         {
@@ -247,8 +236,8 @@ else
                 </div>
                 <div class="card-body">
                     <div class="input-group input-group-sm mb-2">
-                        <input type="text" class="form-control" placeholder="Buscar fármaco o insumo (mín. 3 letras)..."
-                               @bind="filtroProd" @bind:event="oninput" @onkeydown="OnFiltroProdKeyDown" />
+                        <input type="text" class="form-control" autocomplete="off" placeholder="Buscar fármaco o insumo..."
+                               @bind="filtroProd" @bind:event="oninput" @bind:after="BuscarStockAutoAsync" @onkeydown="OnFiltroProdKeyDown" />
                         <button class="btn btn-outline-primary" @onclick="BuscarStockBcAsync" disabled="@buscandoStock">
                             @(buscandoStock ? "Buscando..." : "Buscar Productos")
                         </button>
@@ -518,12 +507,27 @@ else
         }
     }
 
+    private async Task BuscarStockAutoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(filtroProd))
+        {
+            resultadosStock.Clear();
+            return;
+        }
+        buscandoStock = true;
+        mensajeAlerta = string.Empty;
+        resultadosStock = await InventarioService.BuscarMedicamentosConStockAsync(
+            filtroProd.Trim(),
+            Session.CurrentUser?.IdLocalidad ?? 1,
+            Session.CurrentUser?.PrefijoLocalidad ?? "HV");
+        buscandoStock = false;
+    }
+
     private async Task BuscarStockBcAsync()
     {
-        if (string.IsNullOrWhiteSpace(filtroProd) || filtroProd.Trim().Length < 3)
+        if (string.IsNullOrWhiteSpace(filtroProd))
         {
-            esError = true;
-            mensajeAlerta = "Ingrese al menos 3 caracteres para buscar fármacos o insumos.";
+            resultadosStock.Clear();
             return;
         }
         buscandoStock = true;

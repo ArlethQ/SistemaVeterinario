@@ -1,0 +1,221 @@
+@inject IKardexService KardexService
+@inject IAdmisionFacturacionService AdmisionService
+
+<div class="position-relative d-inline-block" style="width: auto;">
+    <div class="input-group input-group-sm" style="width: auto;">
+        <span class="input-group-text bg-light fw-semibold text-secondary">Ord:</span>
+        <input type="text" autocomplete="off"
+               class="form-control text-center fw-bold" style="width: 105px; min-width: 90px;"
+               placeholder="Orden / Pac." value="@_textoOrden"
+               @oninput="OnOrdenInputAsync" @onfocus="OnFocusOrdenAsync" @onblur="CerrarConRetrasoAsync" @onkeydown="OnKeyDownAsync" />
+        <span class="input-group-text bg-light fw-semibold text-secondary">NHCL:</span>
+        <input type="text" autocomplete="off"
+               class="form-control text-center fw-bold" style="width: 105px; min-width: 90px;"
+               placeholder="NHCL / Pac." value="@_textoNhcl"
+               @oninput="OnNhclInputAsync" @onfocus="OnFocusNhclAsync" @onblur="CerrarConRetrasoAsync" @onkeydown="OnKeyDownAsync" />
+        <button type="button" class="btn btn-primary fw-semibold px-3 d-flex align-items-center gap-1"
+                @onclick="EjecutarBusquedaManualAsync" title="Buscar y Cargar Paciente">
+            <i class="bi bi-search"></i>
+            @if (MostrarTextoBoton)
+            {
+                <span>@TextoBoton</span>
+            }
+        </button>
+    </div>
+
+    @if (_mostrarSugerencias && _sugerencias.Count > 0)
+    {
+        <div class="list-group position-absolute bg-white border rounded shadow-lg mt-1"
+             style="z-index: 1080; min-width: 340px; max-width: 440px; max-height: 260px; overflow-y: auto; right: 0;">
+            @foreach (var item in _sugerencias)
+            {
+                <button type="button"
+                        class="list-group-item list-group-item-action py-1 px-2 small text-start d-flex justify-content-between align-items-center"
+                        @onmousedown="() => SeleccionarSugerenciaAsync(item)">
+                    <div class="text-truncate me-2">
+                        @if (item.OrdenAtencionId > 0)
+                        {
+                            <strong class="text-primary">#@item.OrdenAtencionId</strong>
+                            <span class="text-muted"> · </span>
+                        }
+                        <span class="fw-semibold">NHCL #@item.Nhcl</span>
+                        <span> — @item.Paciente</span>
+                        @if (!string.IsNullOrWhiteSpace(item.Cliente))
+                        {
+                            <small class="d-block text-muted text-truncate">Tutor: @item.Cliente @(!string.IsNullOrWhiteSpace(item.Medico) ? $"· Dr(a). {item.Medico}" : "")</small>
+                        }
+                    </div>
+                    <span class="badge bg-light text-dark border">@item.Especie</span>
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Orden { get; set; }
+    [Parameter] public EventCallback<int> OrdenChanged { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+    [Parameter] public EventCallback<int> NhclChanged { get; set; }
+    [Parameter] public EventCallback OnBuscar { get; set; }
+    [Parameter] public bool MostrarTextoBoton { get; set; } = true;
+    [Parameter] public string TextoBoton { get; set; } = "Buscar";
+
+    private string _textoOrden = string.Empty;
+    private string _textoNhcl = string.Empty;
+    private int _ultimoOrdenParam = -1;
+    private int _ultimoNhclParam = -1;
+    private int _versionBusqueda;
+    private bool _mostrarSugerencias;
+    private List<OrdenActivaResumenDto> _sugerencias = [];
+
+    protected override void OnParametersSet()
+    {
+        if (Orden != _ultimoOrdenParam)
+        {
+            _ultimoOrdenParam = Orden;
+            _textoOrden = Orden > 0 ? Orden.ToString() : string.Empty;
+        }
+
+        if (Nhcl != _ultimoNhclParam)
+        {
+            _ultimoNhclParam = Nhcl;
+            _textoNhcl = Nhcl > 0 ? Nhcl.ToString() : string.Empty;
+        }
+    }
+
+    private async Task OnOrdenInputAsync(ChangeEventArgs e)
+    {
+        _textoOrden = e.Value?.ToString()?.Trim() ?? string.Empty;
+        if (int.TryParse(_textoOrden, out int ordenVal))
+        {
+            _ultimoOrdenParam = ordenVal;
+            await OrdenChanged.InvokeAsync(ordenVal);
+        }
+        else if (string.IsNullOrWhiteSpace(_textoOrden))
+        {
+            _ultimoOrdenParam = 0;
+            await OrdenChanged.InvokeAsync(0);
+        }
+
+        await BuscarSugerenciasAsync(_textoOrden);
+    }
+
+    private async Task OnNhclInputAsync(ChangeEventArgs e)
+    {
+        _textoNhcl = e.Value?.ToString()?.Trim() ?? string.Empty;
+        if (int.TryParse(_textoNhcl, out int nhclVal))
+        {
+            _ultimoNhclParam = nhclVal;
+            await NhclChanged.InvokeAsync(nhclVal);
+        }
+        else if (string.IsNullOrWhiteSpace(_textoNhcl))
+        {
+            _ultimoNhclParam = 0;
+            await NhclChanged.InvokeAsync(0);
+        }
+
+        await BuscarSugerenciasAsync(_textoNhcl);
+    }
+
+    private async Task OnFocusOrdenAsync()
+    {
+        await BuscarSugerenciasAsync(_textoOrden);
+    }
+
+    private async Task OnFocusNhclAsync()
+    {
+        await BuscarSugerenciasAsync(_textoNhcl);
+    }
+
+    private async Task BuscarSugerenciasAsync(string filtro)
+    {
+        int version = ++_versionBusqueda;
+        string termino = filtro?.Trim() ?? string.Empty;
+
+        try
+        {
+            var ordenes = await KardexService.ObtenerOrdenesActivasAsync(termino, 25);
+            if (version != _versionBusqueda) return;
+
+            var lista = ordenes.ToList();
+
+            if (!string.IsNullOrWhiteSpace(termino) && lista.Count < 10)
+            {
+                var mascotas = await AdmisionService.BuscarMascotasAsync(termino);
+                if (version != _versionBusqueda) return;
+
+                foreach (var m in mascotas.Take(15))
+                {
+                    if (lista.All(o => o.Nhcl != m.MasNhcl))
+                    {
+                        lista.Add(new OrdenActivaResumenDto
+                        {
+                            OrdenAtencionId = 0,
+                            Nhcl = m.MasNhcl,
+                            Paciente = m.MasNombre,
+                            Cliente = m.ClienteNombre,
+                            Especie = m.EspecieDescripcion,
+                            Sexo = m.SexoDescripcion
+                        });
+                    }
+                }
+            }
+
+            _sugerencias = lista;
+            _mostrarSugerencias = _sugerencias.Count > 0;
+        }
+        catch
+        {
+            _sugerencias = [];
+            _mostrarSugerencias = false;
+        }
+    }
+
+    private async Task SeleccionarSugerenciaAsync(OrdenActivaResumenDto item)
+    {
+        _mostrarSugerencias = false;
+        Orden = item.OrdenAtencionId;
+        Nhcl = item.Nhcl;
+        _ultimoOrdenParam = Orden;
+        _ultimoNhclParam = Nhcl;
+        _textoOrden = Orden > 0 ? Orden.ToString() : string.Empty;
+        _textoNhcl = Nhcl > 0 ? Nhcl.ToString() : string.Empty;
+
+        await OrdenChanged.InvokeAsync(Orden);
+        await NhclChanged.InvokeAsync(Nhcl);
+        await OnBuscar.InvokeAsync();
+    }
+
+    private async Task EjecutarBusquedaManualAsync()
+    {
+        _mostrarSugerencias = false;
+        await OnBuscar.InvokeAsync();
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            if (_mostrarSugerencias && _sugerencias.Count == 1)
+            {
+                await SeleccionarSugerenciaAsync(_sugerencias[0]);
+            }
+            else
+            {
+                _mostrarSugerencias = false;
+                await OnBuscar.InvokeAsync();
+            }
+        }
+        else if (e.Key == "Escape")
+        {
+            _mostrarSugerencias = false;
+        }
+    }
+
+    private async Task CerrarConRetrasoAsync()
+    {
+        await Task.Delay(180);
+        _mostrarSugerencias = false;
+    }
+}

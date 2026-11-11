@@ -1367,7 +1367,7 @@ public class ConsultaExternaService : IConsultaExternaService
     {
         filtro = filtro?.Trim() ?? string.Empty;
         criterio = criterio?.Trim().ToLowerInvariant() ?? "apellidos";
-        if (filtro.Length < 2 && criterio != "nhcl") return [];
+        if (filtro.Length < 1) return [];
 
         const string sql = @"
             SELECT TOP 100
@@ -1396,7 +1396,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 OR (@Criterio = 'apellidos' AND c.pa_apellidos LIKE '%' + @Filtro + '%')
                 OR (@Criterio = 'cedula' AND c.pa_cedula LIKE '%' + @Filtro + '%')
                 OR (@Criterio = 'paciente' AND p.mas_nombre LIKE '%' + @Filtro + '%')
-                OR (@Criterio = 'nhcl' AND p.mas_nhcl = TRY_CONVERT(INT, @Filtro))
+                OR (@Criterio = 'nhcl' AND CAST(p.mas_nhcl AS VARCHAR(20)) LIKE '%' + @Filtro + '%')
               )
             ORDER BY p.mas_nombre, c.pa_apellidos, c.pa_nombres";
 

@@ -14,13 +14,27 @@
     <div class="card shadow-sm border-0 mb-3 no-print">
         <div class="card-body py-2 px-3 bg-light rounded">
             <div class="row g-2 align-items-center">
-                <div class="col-md-4">
+                <div class="col-md-4 position-relative">
                     <label class="form-label small fw-bold mb-1 text-primary">Buscar Paciente Hospitalizado (Pre-Monitoreo):</label>
                     <div class="input-group input-group-sm">
-                        <input type="text" class="form-control" placeholder="Nombre mascota, propietario o NHCL..."
-                               @bind="_filtroOrden" @bind:event="oninput" />
+                        <input type="text" class="form-control" autocomplete="off" placeholder="Nombre mascota, propietario o NHCL..."
+                               @bind="_filtroOrden" @bind:event="oninput" @bind:after="BuscarOrdenesAutoAsync"
+                               @onfocus="() => _mostrarSugerenciasOrden = !string.IsNullOrWhiteSpace(_filtroOrden)"
+                               @onblur="CerrarSugerenciasOrdenConRetrasoAsync" />
                         <button class="btn btn-outline-primary" @onclick="BuscarOrdenesAsync">Buscar</button>
                     </div>
+                    @if (_mostrarSugerenciasOrden && _ordenesActivas.Count > 0 && !string.IsNullOrWhiteSpace(_filtroOrden))
+                    {
+                        <div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto;">
+                            @foreach (var ord in _ordenesActivas)
+                            {
+                                <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start"
+                                        @onmousedown="() => SeleccionarOrdenSugeridaAsync(ord)">
+                                    <strong>#@ord.IdOrdenAtencion</strong> | NHCL:@ord.Nhcl — @ord.Paciente <small class="text-muted">(@ord.Cliente)</small>
+                                </button>
+                            }
+                        </div>
+                    }
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-bold mb-1">Seleccionar Orden:</label>
@@ -225,13 +239,27 @@
                 </div>
                 <div class="card-body p-2">
                     <div class="row g-2 align-items-end mb-2 no-print small">
-                        <div class="col-md-3">
+                        <div class="col-md-3 position-relative">
                             <label class="form-label mb-0 fw-semibold">Buscar en bodega:</label>
                             <div class="input-group input-group-sm">
-                                <input type="text" class="form-control" placeholder="Nombre fármaco..."
-                                       @bind="_busquedaFarmaco" @bind:event="oninput" />
+                                <input type="text" class="form-control" autocomplete="off" placeholder="Nombre fármaco..."
+                                       @bind="_busquedaFarmaco" @bind:event="oninput" @bind:after="BuscarFarmacosAutoAsync"
+                                       @onfocus="() => _mostrarSugerenciasFarmaco = !string.IsNullOrWhiteSpace(_busquedaFarmaco)"
+                                       @onblur="CerrarSugerenciasFarmacoConRetrasoAsync" />
                                 <button class="btn btn-outline-primary" @onclick="BuscarFarmacosBcAsync">🔎</button>
                             </div>
+                            @if (_mostrarSugerenciasFarmaco && _farmacosBc.Count > 0 && !string.IsNullOrWhiteSpace(_busquedaFarmaco))
+                            {
+                                <div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index: 1050; max-height: 200px; overflow-y: auto;">
+                                    @foreach (var p in _farmacosBc)
+                                    {
+                                        <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start"
+                                                @onmousedown="() => SeleccionarFarmacoDirecto(p)">
+                                            <strong>@p.DisplayName</strong> <small class="text-muted">(@p.Number | $@p.UnitPrice)</small>
+                                        </button>
+                                    }
+                                </div>
+                            }
                         </div>
                         <div class="col-md-3">
                             <label class="form-label mb-0 fw-semibold">Producto Seleccionado:</label>
@@ -480,6 +508,29 @@
         _cargandoInicial = false;
     }
 
+    private bool _mostrarSugerenciasOrden;
+    private bool _mostrarSugerenciasFarmaco;
+
+    private async Task BuscarOrdenesAutoAsync()
+    {
+        await BuscarOrdenesAsync();
+        _mostrarSugerenciasOrden = !string.IsNullOrWhiteSpace(_filtroOrden) && _ordenesActivas.Count > 0;
+    }
+
+    private async Task SeleccionarOrdenSugeridaAsync(OrdenActivaResumenDto ord)
+    {
+        _mostrarSugerenciasOrden = false;
+        IdOrden = ord.IdOrdenAtencion;
+        Nhcl = ord.Nhcl;
+        await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, 1);
+    }
+
+    private async Task CerrarSugerenciasOrdenConRetrasoAsync()
+    {
+        await Task.Delay(180);
+        _mostrarSugerenciasOrden = false;
+    }
+
     private async Task BuscarOrdenesAsync()
     {
         _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(_filtroOrden);
@@ -559,6 +610,50 @@
         _sheet.Cerrada = true;
         _esError = false;
         _mensajeAlerta = "La ficha de Monitoreo Hospitalario ha sido cerrada.";
+    }
+
+    private async Task BuscarFarmacosAutoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_busquedaFarmaco))
+        {
+            _farmacosBc = [];
+            _mostrarSugerenciasFarmaco = false;
+            return;
+        }
+        try
+        {
+            _farmacosBc = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaFarmaco, Session.Localidad, Session.Apostrofe);
+            _mostrarSugerenciasFarmaco = _farmacosBc.Count > 0;
+            if (_farmacosBc.Count > 0)
+            {
+                _mensajeAlerta = null;
+            }
+        }
+        catch
+        {
+            _farmacosBc = [];
+            _mostrarSugerenciasFarmaco = false;
+        }
+    }
+
+    private void SeleccionarFarmacoDirecto(FarmacoStockDto item)
+    {
+        _mostrarSugerenciasFarmaco = false;
+        _busquedaFarmaco = item.DisplayName;
+        _nuevoMed.CodigoProducto = item.Number;
+        _nuevoMed.NombreProducto = item.DisplayName;
+        _nuevoMed.IdBC = item.Id;
+        _nuevoMed.Iva = item.TaxGroupCode;
+        _nuevoMed.StockDisponible = item.Inventory;
+        _nuevoMed.PrecioUnitario = item.UnitPrice;
+        _nuevoMed.Medida = item.BaseUnitOfMeasureCode;
+        _nuevoMed.Bodega = item.Location;
+    }
+
+    private async Task CerrarSugerenciasFarmacoConRetrasoAsync()
+    {
+        await Task.Delay(180);
+        _mostrarSugerenciasFarmaco = false;
     }
 
     private async Task BuscarFarmacosBcAsync()

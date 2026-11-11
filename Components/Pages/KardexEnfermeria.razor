@@ -33,16 +33,9 @@
 <div class="card shadow-sm border-primary mb-3">
     <div class="card-body py-2 px-3 bg-light">
         <div class="row g-2 align-items-center">
-            <div class="col-md-2">
-                <label class="small text-muted fw-bold d-block">N° Orden:</label>
-                <div class="input-group input-group-sm">
-                    <input type="number" class="form-control fw-bold" @bind="Orden" />
-                    <button class="btn btn-outline-primary" title="Recargar Orden" @onclick="CargarDatosPacienteYKardexAsync">↻</button>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <label class="small text-muted fw-bold d-block">N° Historia (NHCL):</label>
-                <input type="number" class="form-control form-control-sm text-danger fw-bold" @bind="Nhcl" />
+            <div class="col-md-4">
+                <label class="small text-muted fw-bold d-block">Orden / Historia (NHCL):</label>
+                <BuscadorOrdenClinica @bind-Orden="Orden" @bind-Nhcl="Nhcl" OnBuscar="CargarDatosPacienteYKardexAsync" />
             </div>
             <div class="col-md-3">
                 <span class="small text-muted fw-bold d-block">Propietario (Cliente):</span>
@@ -137,8 +130,8 @@ else
             <div class="row g-2 align-items-center mb-3">
                 <div class="col-md-6">
                     <div class="input-group">
-                        <input class="form-control" @bind="_textoBusquedaProd" @bind:event="oninput" @onkeydown="OnBusquedaProdKeyDown"
-                               placeholder="Ingrese descripción del fármaco (mínimo 3 caracteres)..." />
+                        <input class="form-control" autocomplete="off" @bind="_textoBusquedaProd" @bind:event="oninput" @bind:after="BuscarMedicamentosAutoAsync" @onkeydown="OnBusquedaProdKeyDown"
+                               placeholder="Ingrese descripción o código del fármaco..." />
                         <button class="btn btn-primary fw-semibold" type="button" @onclick="BuscarMedicamentosAsync" disabled="@_buscandoProd">
                             @(_buscandoProd ? "Buscando..." : "🔍 Buscar Fármaco")
                         </button>
@@ -593,12 +586,36 @@ else
         }
     }
 
+    private async Task BuscarMedicamentosAutoAsync()
+    {
+        _alertaMensaje = null;
+        if (string.IsNullOrWhiteSpace(_textoBusquedaProd))
+        {
+            _productosEncontrados = [];
+            _mostrarModalProductos = false;
+            return;
+        }
+
+        _buscandoProd = true;
+        try
+        {
+            _productosEncontrados = await InventarioService.BuscarMedicamentosConStockAsync(
+                _textoBusquedaProd.Trim(), Session.Localidad, Session.Apostrofe);
+            _mostrarModalProductos = _productosEncontrados.Count > 0;
+        }
+        finally
+        {
+            _buscandoProd = false;
+        }
+    }
+
     private async Task BuscarMedicamentosAsync()
     {
         _alertaMensaje = null;
-        if (string.IsNullOrWhiteSpace(_textoBusquedaProd) || _textoBusquedaProd.Trim().Length < 3)
+        if (string.IsNullOrWhiteSpace(_textoBusquedaProd))
         {
-            MostrarAlerta("Ingrese la descripción del producto (mínimo 3 caracteres).", false);
+            _productosEncontrados = [];
+            _mostrarModalProductos = false;
             return;
         }
 

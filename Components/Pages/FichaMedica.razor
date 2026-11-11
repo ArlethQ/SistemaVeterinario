@@ -33,19 +33,8 @@
                 </select>
             </div>
 
-            <!-- Búsqueda Manual por Orden / NHCL con espacio amplio para números -->
-            <div class="input-group input-group-sm" style="width: auto;">
-                <span class="input-group-text bg-light fw-semibold text-secondary">Ord:</span>
-                <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
-                       min="1" placeholder="Orden" @bind="IdOrdenInput" @onkeydown="OnInputKeyDown" />
-                <span class="input-group-text bg-light fw-semibold text-secondary">NHCL:</span>
-                <input type="number" class="form-control text-center fw-bold" style="width: 95px; min-width: 85px;"
-                       min="1" placeholder="NHCL" @bind="NhclInput" @onkeydown="OnInputKeyDown" />
-                <button class="btn btn-primary fw-semibold px-3 d-flex align-items-center gap-1" @onclick="CargarPorInputAsync" title="Buscar y Cargar Paciente">
-                    <i class="bi bi-search"></i>
-                    <span>Buscar</span>
-                </button>
-            </div>
+            <!-- Búsqueda Manual por Orden / NHCL con autocomplete -->
+            <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPorInputAsync" />
             <button class="btn btn-sm btn-success" @onclick="GuardarFichaCompletaAsync" disabled="@Guardando">
                 <i class="bi bi-floppy-fill me-1"></i>@(Guardando ? "Guardando..." : "Guardar Ficha SOAP")
             </button>
@@ -385,7 +374,7 @@
                     </div>
                     <div class="card-body">
                         <div class="input-group input-group-sm mb-2">
-                            <input type="text" class="form-control" placeholder="Buscar código o patología CIE-10..." @bind="FiltroCie10" @bind:event="oninput" />
+                            <input type="text" class="form-control" autocomplete="off" placeholder="Buscar código o patología CIE-10..." @bind="FiltroCie10" @bind:event="oninput" @bind:after="BuscarCie10AutoAsync" />
                             <button class="btn btn-outline-primary" @onclick="BuscarCie10Async">
                                 <i class="bi bi-search"></i> Buscar
                             </button>
@@ -938,6 +927,16 @@
         MensajeAlerta = ok
             ? $"Historia Clínica SOAP de la Orden #{Ficha.MedOrden} guardada exitosamente."
             : "Ocurrió un error al guardar la Ficha Médica.";
+    }
+
+    private async Task BuscarCie10AutoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(FiltroCie10))
+        {
+            ResultadosCie10.Clear();
+            return;
+        }
+        await BuscarCie10Async();
     }
 
     private async Task BuscarCie10Async()

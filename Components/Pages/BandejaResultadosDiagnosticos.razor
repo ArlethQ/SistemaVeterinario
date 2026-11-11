@@ -20,14 +20,7 @@
             <small class="text-muted">Recepción de órdenes diagnósticas, redacción de informes especializados y carga de resultados.</small>
         </div>
         <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
-            <div class="input-group input-group-sm" style="width: 260px;">
-                <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
-                <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
-                <input type="number" class="form-control" placeholder="NHCL" @bind="NhclInput" />
-                <button class="btn btn-primary" @onclick="CargarPacientePorInputAsync">
-                    <i class="bi bi-search"></i>
-                </button>
-            </div>
+            <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPacientePorInputAsync" MostrarTextoBoton="false" />
             <button class="btn btn-sm btn-outline-success" @onclick="ExportarBandejaExcelAsync">
                 <i class="bi bi-file-earmark-excel-fill me-1"></i>Exportar Bandeja Excel
             </button>
@@ -76,15 +69,15 @@
                 <div class="row g-2 align-items-end">
                     <div class="col-md-2">
                         <label class="form-label small fw-semibold mb-1">Desde</label>
-                        <input type="date" class="form-control form-control-sm" @bind="FechaDesde" />
+                        <input type="date" class="form-control form-control-sm" @bind="FechaDesde" @bind:after="CargarBandejaAsync" />
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small fw-semibold mb-1">Hasta</label>
-                        <input type="date" class="form-control form-control-sm" @bind="FechaHasta" />
+                        <input type="date" class="form-control form-control-sm" @bind="FechaHasta" @bind:after="CargarBandejaAsync" />
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small fw-semibold mb-1">Área Diagnóstica</label>
-                        <select class="form-select form-select-sm" @bind="AreaFiltro">
+                        <select class="form-select form-select-sm" @bind="AreaFiltro" @bind:after="CargarBandejaAsync">
                             <option value="TODOS">Todas (LAB + RX/Eco)</option>
                             <option value="LAB">Laboratorio Clínico</option>
                             <option value="RX">Imagenología (RX/Eco)</option>
@@ -92,7 +85,7 @@
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small fw-semibold mb-1">Filtrar Por</label>
-                        <select class="form-select form-select-sm" @bind="CriterioFiltro">
+                        <select class="form-select form-select-sm" @bind="CriterioFiltro" @bind:after="CargarBandejaAsync">
                             <option value="">Todos los Campos</option>
                             <option value="PACIENTE">Paciente</option>
                             <option value="CLIENTE">Propietario / Cliente</option>
@@ -103,7 +96,7 @@
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small fw-semibold mb-1">Valor Búsqueda</label>
-                        <input type="text" class="form-control form-control-sm" @bind="ValorFiltro" placeholder="Buscar..." />
+                        <input type="text" class="form-control form-control-sm" autocomplete="off" @bind="ValorFiltro" @bind:event="oninput" @bind:after="CargarBandejaAsync" placeholder="Buscar..." />
                     </div>
                     <div class="col-md-2">
                         <button class="btn btn-sm btn-primary w-100" @onclick="CargarBandejaAsync">

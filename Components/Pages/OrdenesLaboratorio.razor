@@ -27,14 +27,7 @@
                     <option value="@orden.IdOrdenAtencion">#@orden.IdOrdenAtencion | @orden.Paciente (NHCL @orden.Nhcl)</option>
                 }
             </select>
-            <div class="input-group input-group-sm" style="width: 260px;">
-                <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
-                <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
-                <input type="number" class="form-control" placeholder="NHCL" @bind="NhclInput" />
-                <button class="btn btn-primary" @onclick="CargarPorInputAsync">
-                    <i class="bi bi-search"></i>
-                </button>
-            </div>
+            <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPorInputAsync" MostrarTextoBoton="false" />
             <button class="btn btn-sm btn-success" @onclick="GuardarCambiosOrdenAsync" disabled="@(!OrdenesActuales.Any())">
                 <i class="bi bi-floppy-fill me-1"></i>Guardar y Procesar Orden
             </button>

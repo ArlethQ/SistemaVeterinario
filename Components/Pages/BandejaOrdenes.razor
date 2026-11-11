@@ -26,7 +26,7 @@
     </section>
 
     <section class="orders-filters">
-        <div class="filter-search"><label>Filtrar por Paciente, Propietario, N° Orden o NHCL</label><div class="input-icon"><i class="bi bi-search"></i><input @bind="_filtro" @bind:event="oninput" @onkeydown="OnFiltroKeyDown" placeholder="Buscar por paciente, propietario, NHCL o número de orden..." /></div></div>
+        <div class="filter-search"><label>Filtrar por Paciente, Propietario, N° Orden o NHCL</label><div class="input-icon"><i class="bi bi-search"></i><input autocomplete="off" @bind="_filtro" @bind:event="oninput" @bind:after="BuscarMientrasEscribeAsync" @onkeydown="OnFiltroKeyDown" placeholder="Buscar por paciente, propietario, NHCL o número de orden..." /></div></div>
         <div class="filter-select"><label><i class="bi bi-paw-fill"></i> Especie</label><select @bind="_especieFiltro"><option value="">Todas</option>@foreach (var especie in EspeciesDisponibles){<option value="@especie">@especie</option>}</select></div>
         <div class="filter-select"><label><i class="bi bi-list-task"></i> Estado</label><select @bind="_estadoFiltro"><option value="">Todos</option><option value="consulta">En consulta</option><option value="hospital">Hospitalización</option><option value="cirug">En cirugía</option><option value="final">Finalizada</option><option value="pend">Pendiente</option><option value="cancel">Cancelada</option></select></div>
         <div class="filter-date"><label><i class="bi bi-calendar3"></i> Fecha</label><input type="date" @bind="_fechaFiltro" /></div>
@@ -157,11 +157,21 @@
     private DateTime? _fechaFiltro;
     private bool _cargando;
     private int _citasHoy;
+    private int _versionBusqueda;
 
-    private IEnumerable<OrdenActivaResumenDto> OrdenesFiltradas => _ordenes.Where(x => string.IsNullOrEmpty(_especieFiltro) || x.Especie.Equals(_especieFiltro, StringComparison.OrdinalIgnoreCase)).Where(x => string.IsNullOrEmpty(_estadoFiltro) || EstadoVisual(x).Contains(_estadoFiltro, StringComparison.OrdinalIgnoreCase)).Where(x => !_fechaFiltro.HasValue || x.FechaOrden.Date == _fechaFiltro.Value.Date);
+    private IEnumerable<OrdenActivaResumenDto> OrdenesFiltradas => _ordenes
+        .Where(x => string.IsNullOrWhiteSpace(_filtro)
+            || x.Paciente.Contains(_filtro, StringComparison.OrdinalIgnoreCase)
+            || x.Cliente.Contains(_filtro, StringComparison.OrdinalIgnoreCase)
+            || x.OrdenAtencionId.ToString().Contains(_filtro, StringComparison.OrdinalIgnoreCase)
+            || x.Nhcl.ToString().Contains(_filtro, StringComparison.OrdinalIgnoreCase))
+        .Where(x => string.IsNullOrEmpty(_especieFiltro) || x.Especie.Equals(_especieFiltro, StringComparison.OrdinalIgnoreCase))
+        .Where(x => string.IsNullOrEmpty(_estadoFiltro) || EstadoVisual(x).Contains(_estadoFiltro, StringComparison.OrdinalIgnoreCase))
+        .Where(x => !_fechaFiltro.HasValue || x.FechaOrden.Date == _fechaFiltro.Value.Date);
     private IEnumerable<string> EspeciesDisponibles => _ordenes.Select(x => x.Especie).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().Order();
 
     protected override async Task OnInitializedAsync(){var ordenesTask=CargarOrdenesAsync();var citasTask=AdmisionService.ObtenerCitasPorFechaAsync(DateTime.Today,DateTime.Today);await Task.WhenAll(ordenesTask,citasTask);_citasHoy=citasTask.Result.Count;}
+    private async Task BuscarMientrasEscribeAsync(){int v=++_versionBusqueda;await Task.Delay(250);if(v!=_versionBusqueda)return;await CargarOrdenesAsync();}
     private async Task CargarOrdenesAsync(){_cargando=true;try{_ordenes=await KardexService.ObtenerOrdenesActivasAsync(_filtro);_filtroAplicado=_filtro;}finally{_cargando=false;}}
     private async Task LimpiarFiltroAsync(){var recargar=!string.IsNullOrWhiteSpace(_filtroAplicado);_filtro=_filtroAplicado=_especieFiltro=_estadoFiltro=string.Empty;_fechaFiltro=null;if(recargar)await CargarOrdenesAsync();}
     private async Task OnFiltroKeyDown(KeyboardEventArgs e){if(e.Key=="Enter")await CargarOrdenesAsync();}

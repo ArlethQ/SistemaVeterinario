@@ -41,18 +41,18 @@
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">Filtros</h6></div>
             <div class="card-body row g-3 align-items-end">
-                <div class="col-md-3"><label class="form-label">Desde</label><input class="form-control" type="date" @bind="_desde" /></div>
-                <div class="col-md-3"><label class="form-label">Hasta</label><input class="form-control" type="date" @bind="_hasta" /></div>
+                <div class="col-md-3"><label class="form-label">Desde</label><input class="form-control" type="date" @bind="_desde" @bind:after="CargarAsync" /></div>
+                <div class="col-md-3"><label class="form-label">Hasta</label><input class="form-control" type="date" @bind="_hasta" @bind:after="CargarAsync" /></div>
                 <div class="col-md-3">
                     @if (_tab == "alertas")
                     {
                         <label class="form-label">Estado del procedimiento</label>
-                        <select class="form-select" @bind="_estado"><option value="">Todos</option><option value="Pendiente">Pendiente</option><option value="En Proceso">En Proceso</option><option value="Realizado">Realizado</option></select>
+                        <select class="form-select" @bind="_estado" @bind:after="CargarAsync"><option value="">Todos</option><option value="Pendiente">Pendiente</option><option value="En Proceso">En Proceso</option><option value="Realizado">Realizado</option></select>
                     }
                     else if (_tab == "recordatorios")
                     {
                         <label class="form-label">Fecha de referencia</label>
-                        <select class="form-select" @bind="_porRevision"><option value="false">Fecha de envío</option><option value="true">Próxima revisión</option></select>
+                        <select class="form-select" @bind="_porRevision" @bind:after="CargarAsync"><option value="false">Fecha de envío</option><option value="true">Próxima revisión</option></select>
                     }
                 </div>
             </div>

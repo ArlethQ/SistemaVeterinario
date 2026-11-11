@@ -30,14 +30,7 @@
                     <option value="@orden.IdOrdenAtencion">#@orden.IdOrdenAtencion | @orden.Paciente (NHCL @orden.Nhcl)</option>
                 }
             </select>
-            <div class="input-group input-group-sm" style="width: 260px;">
-                <span class="input-group-text bg-light fw-semibold">Orden / NHCL</span>
-                <input type="number" class="form-control" placeholder="Orden" @bind="IdOrdenInput" />
-                <input type="number" class="form-control" placeholder="NHCL" @bind="NhclInput" />
-                <button class="btn btn-primary" @onclick="CargarPorInputAsync">
-                    <i class="bi bi-search"></i>
-                </button>
-            </div>
+            <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPorInputAsync" MostrarTextoBoton="false" />
             <button class="btn btn-sm btn-danger" @onclick="ExportarRecetaPdfAsync" disabled="@(!ItemsReceta.Any())">
                 <i class="bi bi-file-earmark-pdf-fill me-1"></i>Descargar Receta PDF (Doble Columna + QR)
             </button>
@@ -71,11 +64,11 @@
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="form-label small fw-semibold">Desde</label>
-                            <input type="date" class="form-control form-control-sm" @bind="FechaDesde" />
+                            <input type="date" class="form-control form-control-sm" @bind="FechaDesde" @bind:after="BuscarRecetasEmitidasAsync" />
                         </div>
                         <div class="col-6">
                             <label class="form-label small fw-semibold">Hasta</label>
-                            <input type="date" class="form-control form-control-sm" @bind="FechaHasta" />
+                            <input type="date" class="form-control form-control-sm" @bind="FechaHasta" @bind:after="BuscarRecetasEmitidasAsync" />
                         </div>
                         <div class="col-12">
                             <button class="btn btn-sm btn-outline-primary w-100" @onclick="BuscarRecetasEmitidasAsync">

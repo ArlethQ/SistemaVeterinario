@@ -31,7 +31,7 @@ public class InventarioService : IInventarioService
     public async Task<List<FarmacoStockDto>> BuscarMedicamentosConStockAsync(string filtro, int idLocalidad, string apostrofe = "HV")
     {
         var resultados = new List<FarmacoStockDto>();
-        if (string.IsNullOrWhiteSpace(filtro) || filtro.Trim().Length < 2)
+        if (string.IsNullOrWhiteSpace(filtro) || filtro.Trim().Length < 1)
             return resultados;
 
         string terminoNorm = NormalizarTexto(filtro.Trim());

@@ -14,14 +14,29 @@
     <div class="card shadow-sm border-0 mb-3 no-print">
         <div class="card-body py-2 px-3 bg-light rounded">
             <div class="row g-2 align-items-center">
-                <div class="col-md-5">
+                <div class="col-md-5 position-relative">
                     <label class="form-label small fw-bold mb-1 text-primary">Paciente / Orden Activa:</label>
                     <div class="input-group input-group-sm">
-                        <input type="text" class="form-control" placeholder="Filtrar paciente o historia..."
-                               @bind="_filtroOrden" @bind:event="oninput" @onkeydown="OnFiltroKeyDown" />
+                        <input type="text" class="form-control" autocomplete="off" placeholder="Filtrar paciente o historia..."
+                               @bind="_filtroOrden" @bind:event="oninput" @bind:after="BuscarOrdenesAutoAsync"
+                               @onfocus="() => _mostrarSugerenciasOrden = !string.IsNullOrWhiteSpace(_filtroOrden)"
+                               @onblur="CerrarSugerenciasOrdenConRetrasoAsync"
+                               @onkeydown="OnFiltroKeyDown" />
                         <button class="btn btn-outline-primary" @onclick="BuscarOrdenesAsync">Buscar</button>
                         <button class="btn btn-outline-secondary" @onclick="LimpiarBusquedaAsync">🔄 Limpiar</button>
                     </div>
+                    @if (_mostrarSugerenciasOrden && _ordenesActivas.Count > 0 && !string.IsNullOrWhiteSpace(_filtroOrden))
+                    {
+                        <div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto;">
+                            @foreach (var ord in _ordenesActivas)
+                            {
+                                <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start"
+                                        @onmousedown="() => SeleccionarOrdenSugeridaAsync(ord)">
+                                    <strong>#@ord.IdOrdenAtencion</strong> | NHCL:@ord.Nhcl — @ord.Paciente <small class="text-muted">(@ord.Cliente)</small>
+                                </button>
+                            }
+                        </div>
+                    }
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-bold mb-1">Seleccionar Orden:</label>
@@ -525,6 +540,31 @@
         }
     }
 
+    private bool _mostrarSugerenciasOrden;
+
+    private async Task BuscarOrdenesAutoAsync()
+    {
+        await BuscarOrdenesAsync();
+        _mostrarSugerenciasOrden = !string.IsNullOrWhiteSpace(_filtroOrden) && _ordenesActivas.Count > 0;
+    }
+
+    private async Task SeleccionarOrdenSugeridaAsync(OrdenActivaResumenDto ord)
+    {
+        _mostrarSugerenciasOrden = false;
+        IdOrden = ord.IdOrdenAtencion;
+        Nhcl = ord.Nhcl;
+        _ultimoIdOrdenCargado = IdOrden;
+        _ultimoNhclCargado = Nhcl;
+        _mensajeAlerta = null;
+        await CargarDatosPacienteAsync(IdOrden, Nhcl, 1);
+    }
+
+    private async Task CerrarSugerenciasOrdenConRetrasoAsync()
+    {
+        await Task.Delay(180);
+        _mostrarSugerenciasOrden = false;
+    }
+
     private async Task BuscarOrdenesAsync()
     {
         _mensajeAlerta = null;
@@ -535,6 +575,7 @@
     {
         _mensajeAlerta = null;
         _filtroOrden = string.Empty;
+        _mostrarSugerenciasOrden = false;
         _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
     }
 

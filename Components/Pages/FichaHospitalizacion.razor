@@ -14,15 +14,30 @@
     <div class="card shadow-sm border-0 mb-3 no-print">
         <div class="card-body py-2 px-3 bg-light rounded">
             <div class="row g-2 align-items-center">
-                <div class="col-md-4">
+                <div class="col-md-4 position-relative">
                     <label class="form-label small fw-bold mb-1 text-primary">Buscar Paciente Hospitalizado (Pre-Ficha):</label>
                     <div class="input-group input-group-sm">
-                        <input type="text" class="form-control" placeholder="Nombre mascota, propietario o NHCL..."
-                               @bind="_filtroOrden" @bind:event="oninput" @onkeydown="BuscarOrdenesConEnterAsync" />
+                        <input type="text" class="form-control" autocomplete="off" placeholder="Nombre mascota, propietario o NHCL..."
+                               @bind="_filtroOrden" @bind:event="oninput" @bind:after="BuscarOrdenesAutoAsync"
+                               @onfocus="() => _mostrarSugerenciasOrden = !string.IsNullOrWhiteSpace(_filtroOrden)"
+                               @onblur="CerrarSugerenciasOrdenConRetrasoAsync"
+                               @onkeydown="BuscarOrdenesConEnterAsync" />
                         <button class="btn btn-outline-primary" @onclick="BuscarOrdenesAsync" disabled="@_buscandoOrdenes">
                             @(_buscandoOrdenes ? "Buscando..." : "Buscar")
                         </button>
                     </div>
+                    @if (_mostrarSugerenciasOrden && _ordenesActivas.Count > 0 && !string.IsNullOrWhiteSpace(_filtroOrden))
+                    {
+                        <div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto;">
+                            @foreach (var ord in _ordenesActivas)
+                            {
+                                <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start"
+                                        @onmousedown="() => SeleccionarOrdenSugeridaAsync(ord)">
+                                    <strong>#@ord.IdOrdenAtencion</strong> | NHCL:@ord.Nhcl — @ord.Paciente <small class="text-muted">(@ord.Cliente)</small>
+                                </button>
+                            }
+                        </div>
+                    }
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-bold mb-1">Seleccionar Orden:</label>
@@ -163,8 +178,8 @@
                         <div class="col-md-4">
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text fw-bold">🔎 Catálogo:</span>
-                                <input type="text" class="form-control" placeholder="Buscar fármaco, alimento o fluido..."
-                                       @bind="_busquedaBc" @bind:event="oninput" @onkeydown="BuscarCatalogoConEnterAsync" />
+                                <input type="text" class="form-control" autocomplete="off" placeholder="Buscar fármaco, alimento o fluido..."
+                                       @bind="_busquedaBc" @bind:event="oninput" @bind:after="BuscarCatalogoAutoAsync" @onkeydown="BuscarCatalogoConEnterAsync" />
                                 <button class="btn btn-primary" @onclick="BuscarCatalogoBcAsync" disabled="@_buscandoCatalogo">
                                     @(_buscandoCatalogo ? "Buscando..." : "Buscar")
                                 </button>
@@ -556,6 +571,35 @@
         }
     }
 
+    private bool _mostrarSugerenciasOrden;
+
+    private async Task BuscarOrdenesAutoAsync()
+    {
+        _buscandoOrdenes = true;
+        try
+        {
+            _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync(_filtroOrden.Trim());
+            _mostrarSugerenciasOrden = !string.IsNullOrWhiteSpace(_filtroOrden) && _ordenesActivas.Count > 0;
+        }
+        catch { }
+        finally { _buscandoOrdenes = false; }
+    }
+
+    private async Task SeleccionarOrdenSugeridaAsync(OrdenActivaResumenDto ord)
+    {
+        _mostrarSugerenciasOrden = false;
+        IdOrden = ord.IdOrdenAtencion;
+        Nhcl = ord.Nhcl;
+        try { await CargarFichaCompletaAsync(IdOrden, Nhcl, 1); }
+        catch (Exception ex) { MostrarError(ex, "No se pudo abrir la ficha seleccionada"); }
+    }
+
+    private async Task CerrarSugerenciasOrdenConRetrasoAsync()
+    {
+        await Task.Delay(180);
+        _mostrarSugerenciasOrden = false;
+    }
+
     private async Task BuscarOrdenesAsync()
     {
         _buscandoOrdenes = true;
@@ -669,12 +713,32 @@
         finally { _guardando = false; }
     }
 
+    private async Task BuscarCatalogoAutoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_busquedaBc))
+        {
+            _resultadosBc = [];
+            _catalogoBuscado = false;
+            return;
+        }
+
+        _buscandoCatalogo = true;
+        _catalogoBuscado = true;
+        try
+        {
+            _resultadosBc = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaBc.Trim(), Session.Localidad, Session.Apostrofe);
+            _productoBcSeleccionadoId = _resultadosBc.Count > 0 ? ProductoKey(_resultadosBc[0]) : string.Empty;
+        }
+        catch { }
+        finally { _buscandoCatalogo = false; }
+    }
+
     private async Task BuscarCatalogoBcAsync()
     {
-        if (string.IsNullOrWhiteSpace(_busquedaBc) || _busquedaBc.Trim().Length < 2)
+        if (string.IsNullOrWhiteSpace(_busquedaBc))
         {
-            _esError = true;
-            _mensajeAlerta = "Ingrese al menos dos caracteres para buscar en el catálogo.";
+            _resultadosBc = [];
+            _catalogoBuscado = false;
             return;
         }
 

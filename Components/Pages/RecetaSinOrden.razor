@@ -52,7 +52,7 @@
                 <div class="row g-2 align-items-end">
                     <div class="col-md-3">
                         <label class="form-label small fw-semibold">Buscar por</label>
-                        <select class="form-select form-select-sm" @bind="criterioBusqueda" @bind:after="LimpiarBusqueda">
+                        <select class="form-select form-select-sm" @bind="criterioBusqueda" @bind:after="CambiarCriterioBusquedaAsync">
                             <option value="apellidos">Apellidos del propietario</option>
                             <option value="nombres">Nombres del propietario</option>
                             <option value="cedula">Cédula</option>
@@ -62,7 +62,7 @@
                     </div>
                     <div class="col-md-7">
                         <label class="form-label small fw-semibold">Criterio</label>
-                        <input class="form-control form-control-sm" autocomplete="off" @bind="filtroBusqueda" @bind:event="oninput" @onkeydown="BuscarConEnterAsync" />
+                        <input class="form-control form-control-sm" autocomplete="off" placeholder="Escriba para buscar paciente..." @bind="filtroBusqueda" @bind:event="oninput" @bind:after="BuscarPacientesAutoAsync" @onkeydown="BuscarConEnterAsync" />
                     </div>
                     <div class="col-md-2"><button class="btn btn-sm btn-primary w-100" disabled="@buscando" @onclick="BuscarPacientesAsync">@(buscando ? "Buscando..." : "Consultar")</button></div>
                 </div>
@@ -120,7 +120,7 @@
                             <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">3. Diagnósticos *</h6></div>
                             <div class="card-body">
                                 <div class="input-group input-group-sm mb-2">
-                                    <input class="form-control" placeholder="Buscar CIE-10" @bind="filtroDiagnostico" @bind:event="oninput" @onkeydown="BuscarDiagnosticoConEnterAsync" />
+                                    <input class="form-control" autocomplete="off" placeholder="Buscar CIE-10" @bind="filtroDiagnostico" @bind:event="oninput" @bind:after="BuscarDiagnosticosAutoAsync" @onkeydown="BuscarDiagnosticoConEnterAsync" />
                                     <button class="btn btn-outline-primary" @onclick="BuscarDiagnosticosAsync">Buscar</button>
                                 </div>
                                 @if (catalogoDiagnosticos.Count > 0)
@@ -260,13 +260,19 @@
 
     private static string CrearSerial() => Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
     private void LimpiarBusqueda() => resultadosPacientes = [];
+    private async Task CambiarCriterioBusquedaAsync() { LimpiarBusqueda(); if (!string.IsNullOrWhiteSpace(filtroBusqueda)) await BuscarPacientesAutoAsync(); }
     private async Task BuscarConEnterAsync(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarPacientesAsync(); }
     private async Task BuscarDiagnosticoConEnterAsync(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarDiagnosticosAsync(); }
 
+    private async Task BuscarPacientesAutoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(filtroBusqueda)) { resultadosPacientes = []; return; }
+        await BuscarPacientesAsync();
+    }
+
     private async Task BuscarPacientesAsync()
     {
-        var minimo = criterioBusqueda == "nhcl" ? 1 : 2;
-        if (filtroBusqueda.Trim().Length < minimo) { esError = true; mensaje = "Ingrese un criterio válido para buscar."; return; }
+        if (string.IsNullOrWhiteSpace(filtroBusqueda)) { resultadosPacientes = []; return; }
         buscando = true;
         try { resultadosPacientes = await ConsultaService.BuscarPacientesParaApuntesAsync(filtroBusqueda, criterioBusqueda); esError = false; }
         catch (Exception ex) { esError = true; mensaje = $"No se pudo buscar: {ex.Message}"; }
@@ -313,9 +319,15 @@
         nuevoMedicamento = new() { Cantidad = 1, Fecha = cabecera.Fecha };
     }
 
+    private async Task BuscarDiagnosticosAutoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(filtroDiagnostico)) { catalogoDiagnosticos = []; return; }
+        catalogoDiagnosticos = await ConsultaService.BuscarCatalogoCie10Async(filtroDiagnostico);
+    }
+
     private async Task BuscarDiagnosticosAsync()
     {
-        if (filtroDiagnostico.Trim().Length < 2) { esError = true; mensaje = "Ingrese al menos dos caracteres para buscar diagnósticos."; return; }
+        if (string.IsNullOrWhiteSpace(filtroDiagnostico)) { catalogoDiagnosticos = []; return; }
         catalogoDiagnosticos = await ConsultaService.BuscarCatalogoCie10Async(filtroDiagnostico);
     }
 

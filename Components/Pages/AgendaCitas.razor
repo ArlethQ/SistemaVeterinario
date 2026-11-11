@@ -188,10 +188,10 @@
         <section class="scheduled-table-card">
             <header><div><small>CONSULTA MULTIFECHA</small><h5>Historial de citas</h5></div></header>
             <div class="p-3 row g-2">
-                <div class="col-md-2"><label>Desde</label><InputDate class="form-control" @bind-Value="_historialDesde" /></div>
-                <div class="col-md-2"><label>Hasta</label><InputDate class="form-control" @bind-Value="_historialHasta" /></div>
-                <div class="col-md-3"><label>Médico</label><select class="form-select" @bind="_historialMedico"><option value="0">Todos</option>@foreach(var m in _medicos){<option value="@m.Id">@m.Descripcion</option>}</select></div>
-                <div class="col-md-3"><label>Paciente / propietario / NHCL</label><input class="form-control" @bind="_historialTexto" @bind:event="oninput" /></div>
+                <div class="col-md-2"><label>Desde</label><InputDate class="form-control" @bind-Value="_historialDesde" @bind-Value:after="CargarHistorialAsync" /></div>
+                <div class="col-md-2"><label>Hasta</label><InputDate class="form-control" @bind-Value="_historialHasta" @bind-Value:after="CargarHistorialAsync" /></div>
+                <div class="col-md-3"><label>Médico</label><select class="form-select" @bind="_historialMedico" @bind:after="CargarHistorialAsync"><option value="0">Todos</option>@foreach(var m in _medicos){<option value="@m.Id">@m.Descripcion</option>}</select></div>
+                <div class="col-md-3"><label>Paciente / propietario / NHCL</label><input class="form-control" autocomplete="off" placeholder="Escriba para filtrar..." @bind="_historialTexto" @bind:event="oninput" /></div>
                 <div class="col-md-2 align-self-end"><button class="btn btn-primary w-100" @onclick="CargarHistorialAsync">Consultar</button></div>
             </div>
             <div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Fecha/hora</th><th>Paciente</th><th>Propietario</th><th>Médico</th><th>Estado</th><th>Motivo cancelación</th><th></th></tr></thead><tbody>

@@ -38,7 +38,7 @@
             <div class="row g-2 align-items-end">
                 <div class="col-md-3 col-lg-2">
                     <label class="form-label small fw-semibold">Buscar por</label>
-                    <select class="form-select" @bind="criterioBusqueda" @bind:after="LimpiarResultados">
+                    <select class="form-select" @bind="criterioBusqueda" @bind:after="CambiarCriterioAsync">
                         <option value="apellidos">Apellidos del propietario</option>
                         <option value="nombres">Nombres del propietario</option>
                         <option value="cedula">Cédula del propietario</option>
@@ -48,7 +48,7 @@
                 </div>
                 <div class="col-md-7 col-lg-8">
                     <label class="form-label small fw-semibold">Criterio</label>
-                    <input class="form-control" autocomplete="off" placeholder="Escriba al menos dos caracteres" @bind="filtroBusqueda" @bind:event="oninput" @onkeydown="BuscarConEnterAsync" />
+                    <input class="form-control" autocomplete="off" placeholder="Escriba para buscar coincidencias..." @bind="filtroBusqueda" @bind:event="oninput" @bind:after="BuscarAutoAsync" @onkeydown="BuscarConEnterAsync" />
                 </div>
                 <div class="col-md-2">
                     <button class="btn btn-primary w-100" disabled="@buscando" @onclick="BuscarAsync">
@@ -245,6 +245,15 @@
         if (e.Key == "Enter") await BuscarAsync();
     }
 
+    private async Task CambiarCriterioAsync()
+    {
+        LimpiarResultados();
+        if (!string.IsNullOrWhiteSpace(filtroBusqueda))
+        {
+            await BuscarAutoAsync();
+        }
+    }
+
     private void LimpiarResultados()
     {
         resultados = [];
@@ -252,16 +261,23 @@
         paginaResultados = 1;
     }
 
+    private async Task BuscarAutoAsync()
+    {
+        mensaje = string.Empty;
+        if (string.IsNullOrWhiteSpace(filtroBusqueda))
+        {
+            LimpiarResultados();
+            return;
+        }
+        await BuscarAsync();
+    }
+
     private async Task BuscarAsync()
     {
         mensaje = string.Empty;
-        var minimo = criterioBusqueda == "nhcl" ? 1 : 2;
-        if (filtroBusqueda.Trim().Length < minimo)
+        if (string.IsNullOrWhiteSpace(filtroBusqueda))
         {
-            esError = true;
-            mensaje = criterioBusqueda == "nhcl"
-                ? "Ingrese un número de historia válido."
-                : "Ingrese al menos dos caracteres para buscar.";
+            LimpiarResultados();
             return;
         }
 
