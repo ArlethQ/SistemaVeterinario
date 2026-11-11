@@ -1,6 +1,7 @@
 @page "/consulta/evoluciones"
 @page "/consulta/evoluciones/{IdOrden:int}/{Nhcl:int}"
 @inject IConsultaExternaService ConsultaService
+@inject ILaboratorioImagenService LabService
 @inject IKardexService KardexService
 @inject IReportExportService ReportService
 @inject SessionStateService Session
@@ -127,7 +128,7 @@
                     <div class="row g-2">
                         <div class="col-md-4">
                             <label class="form-label small fw-semibold">Área</label>
-                            <select class="form-select form-select-sm" @bind="NuevaOrdenExamen.TipoCategoria">
+                            <select class="form-select form-select-sm" @bind="NuevaOrdenExamen.TipoCategoria" @bind:after="CargarCatalogoExamenesEvolucionAsync">
                                 <option value="LAB">Laboratorio Clínico</option>
                                 <option value="RX">Imagenología (RX/Eco)</option>
                             </select>
@@ -146,15 +147,22 @@
                             <label class="form-label small fw-semibold">Cantidad</label>
                             <input type="number" min="1" class="form-control form-control-sm" @bind="NuevaOrdenExamen.Cantidad" />
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label small fw-semibold">Estudio / Examen Solicitado</label>
-                            <input type="text" class="form-control form-control-sm" @bind="NuevaOrdenExamen.DescripcionExamen" placeholder="Ej: Hemograma, Eco Abdominal..." />
+                        <div class="col-md-5">
+                            <label class="form-label small fw-semibold">Filtrar catálogo</label>
+                            <input type="text" class="form-control form-control-sm" placeholder="Buscar examen o código..."
+                                   @bind="FiltroCatalogoExamen" @bind:event="oninput" @bind:after="CargarCatalogoExamenesEvolucionAsync" />
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label small fw-semibold">Código del examen en el catálogo</label>
-                            <input type="number" min="1" class="form-control form-control-sm" @bind="NuevaOrdenExamen.CodigoProd" />
+                        <div class="col-md-7">
+                            <label class="form-label small fw-semibold">Estudio / Examen del Catálogo *</label>
+                            <select class="form-select form-select-sm" value="@NuevaOrdenExamen.CodigoProd" @onchange="SeleccionarExamenCatalogo">
+                                <option value="">-- Seleccione examen (@CatalogoExamenesEvolucion.Count disp.) --</option>
+                                @foreach (var item in CatalogoExamenesEvolucion)
+                                {
+                                    <option value="@item.CodigoProd">[@item.CodigoProd] @item.Descripcion ($@item.PrecioUnitario.ToString("N2"))</option>
+                                }
+                            </select>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-12">
                             <label class="form-label small fw-semibold">Indicación Clínica / Muestra</label>
                             <input type="text" class="form-control form-control-sm" @bind="NuevaOrdenExamen.Observaciones" placeholder="Ayuno, región anatómica..." />
                         </div>
@@ -247,11 +255,18 @@
     private List<EvolucionMedicaDto> Evoluciones { get; set; } = new();
     private EvolucionMedicaDto EvolucionForm { get; set; } = new();
     private OrdenExamenEvolucionDto NuevaOrdenExamen { get; set; } = new();
+    private List<PruebaCatalogoDto> CatalogoExamenesEvolucion { get; set; } = new();
+    private string FiltroCatalogoExamen { get; set; } = string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
         CargandoInicial = true;
         await Task.Yield();
+
+        if (CatalogoExamenesEvolucion.Count == 0)
+        {
+            await CargarCatalogoExamenesEvolucionAsync();
+        }
 
         if (_ordenesActivas.Count == 0)
         {
@@ -453,6 +468,28 @@
         }
         MensajeAlerta = null;
         await RecargarEvolucionesAsync();
+    }
+
+    private async Task CargarCatalogoExamenesEvolucionAsync()
+    {
+        if (NuevaOrdenExamen.TipoCategoria == "RX")
+        {
+            CatalogoExamenesEvolucion = await LabService.ObtenerCatalogoImagenologiaAsync("TODOS", FiltroCatalogoExamen, Session.Apostrofe);
+        }
+        else
+        {
+            CatalogoExamenesEvolucion = await LabService.ObtenerCatalogoLaboratorioAsync(0, FiltroCatalogoExamen, Session.Apostrofe);
+        }
+        NuevaOrdenExamen.CodigoProd = string.Empty;
+        NuevaOrdenExamen.DescripcionExamen = string.Empty;
+    }
+
+    private void SeleccionarExamenCatalogo(ChangeEventArgs e)
+    {
+        var codigo = e.Value?.ToString() ?? string.Empty;
+        NuevaOrdenExamen.CodigoProd = codigo;
+        var item = CatalogoExamenesEvolucion.FirstOrDefault(x => x.CodigoProd == codigo);
+        NuevaOrdenExamen.DescripcionExamen = item?.Descripcion ?? string.Empty;
     }
 
     private async Task AgregarExamenEvolucionAsync()

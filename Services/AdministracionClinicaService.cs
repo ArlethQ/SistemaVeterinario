@@ -28,6 +28,7 @@ public interface IAdministracionClinicaService
     Task<bool> GuardarIngresoCirugiaAsync(IngresoCirugiaDto ingreso, int idUsuario);
     Task<List<DespachoClinicoDto>> ObtenerDespachosAsync(DateTime desde, DateTime hasta, int tipo = 0);
     Task<bool> MarcarDespachoProcesadoAsync(int idOrden);
+    Task<List<FisioterapiaOrdenDto>> ObtenerCatalogoFisioterapiaAsync();
     Task<List<FisioterapiaOrdenDto>> ObtenerFisioterapiaAsync(int idOrden, int nhcl);
     Task<bool> GuardarFisioterapiaAsync(FisioterapiaOrdenDto orden);
     Task<List<IStatDto>> ObtenerIStatAsync(int nhcl);
@@ -38,6 +39,9 @@ public interface IAdministracionClinicaService
 public sealed class AdministracionClinicaService : IAdministracionClinicaService
 {
     private readonly ISqlDataService _db;
+    private readonly SessionStateService _session;
+
+    private int UsuarioFacturacion => 1_000_000 + (_session.Localidad > 0 ? _session.Localidad : 1);
 
     private sealed record CatalogoSql(
         string Nombre,
@@ -133,7 +137,11 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
                 "DELETE FROM vt_ingreso WHERE id = @Id")
         };
 
-    public AdministracionClinicaService(ISqlDataService db) => _db = db;
+    public AdministracionClinicaService(ISqlDataService db, SessionStateService session)
+    {
+        _db = db;
+        _session = session;
+    }
 
     public static bool EsPredeterminado(string tipo, int id) => (tipo ?? string.Empty).ToLowerInvariant() switch
     {
@@ -288,10 +296,10 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
             ("Diagnósticos", @"SELECT CAST(c.cie_codigo AS varchar(30)) AS Codigo, RTRIM(c.cie_diagnostico) AS Descripcion, ISNULL(o.ordenAten_fecha, GETDATE()) AS Fecha, ISNULL(d.dig_id_orden, 0) AS IdOrden, 1 AS NumeroVeces FROM vt_diagnosticos d INNER JOIN vt_cie10 c ON d.dig_codigoDiag=c.cie_codigo LEFT JOIN vt_ordenAtencion o ON d.dig_id_orden=o.ordenAten_id WHERE d.dig_nhcl=@Nhcl"),
             ("Medicamentos", @"SELECT '' AS Codigo, RTRIM(p.prod_descripcion) AS Descripcion, ISNULL(m.med_fecha, GETDATE()) AS Fecha, ISNULL(m.med_id_orden, 0) AS IdOrden, 1 AS NumeroVeces FROM vt_medicinas m INNER JOIN vt_productos p ON m.med_idProdu=p.prod_id WHERE m.med_nhcl=@Nhcl AND m.med_tipo='M'"),
             ("Insumos", @"SELECT '' AS Codigo, RTRIM(p.prod_descripcion) AS Descripcion, ISNULL(m.med_fecha, GETDATE()) AS Fecha, ISNULL(m.med_id_orden, 0) AS IdOrden, 1 AS NumeroVeces FROM vt_medicinas m INNER JOIN vt_productos p ON m.med_idProdu=p.prod_id WHERE m.med_nhcl=@Nhcl AND m.med_tipo='I'"),
-            ("Fisioterapia", @"SELECT '' AS Codigo, RTRIM(p.prod_descripcion) AS Descripcion, ISNULL(m.fisioO_fecha, GETDATE()) AS Fecha, ISNULL(m.fisioO_id_orden, 0) AS IdOrden, 1 AS NumeroVeces FROM vt_fisioterapia_ordenes m INNER JOIN vt_productos p ON m.fisioO_idProdu=p.prod_id WHERE m.fisioO_nhcl=@Nhcl"),
-            ("Imagenología", @"SELECT '' AS Codigo, RTRIM(p.prod_descripcion) AS Descripcion, ISNULL(m.rxO_fecha, GETDATE()) AS Fecha, ISNULL(m.rxO_id_orden, 0) AS IdOrden, 1 AS NumeroVeces FROM vt_rxOrdenes m INNER JOIN vt_productos p ON m.rxO_idProdu=p.prod_id WHERE m.rxO_nhcl=@Nhcl"),
+            ("Fisioterapia", @"SELECT CAST(p.CODIGO AS varchar(30)) AS Codigo, RTRIM(p.NOMBRE) AS Descripcion, ISNULL(m.fisioO_fecha, GETDATE()) AS Fecha, ISNULL(m.fisioO_id_orden, 0) AS IdOrden, 1 AS NumeroVeces FROM vt_fisioterapia_ordenes m INNER JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON m.fisioO_idProdu=p.CODIGO WHERE m.fisioO_nhcl=@Nhcl"),
+            ("Imagenología", @"SELECT CAST(p.CODIGO AS varchar(30)) AS Codigo, RTRIM(p.NOMBRE) AS Descripcion, ISNULL(m.rxO_fecha, GETDATE()) AS Fecha, ISNULL(m.rxO_id_orden, 0) AS IdOrden, 1 AS NumeroVeces FROM vt_rxOrdenes m INNER JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON m.rxO_idProdu=p.CODIGO WHERE m.rxO_nhcl=@Nhcl"),
             ("Procedimientos", @"SELECT '' AS Codigo, RTRIM(p.prod_descripcion) AS Descripcion, ISNULL(m.proc_fecha, GETDATE()) AS Fecha, ISNULL(m.proc_idOrden, 0) AS IdOrden, 1 AS NumeroVeces FROM vt_procedimientos m INNER JOIN vt_productos p ON m.proc_idProdu=p.prod_id WHERE m.proc_nhcl=@Nhcl"),
-            ("Laboratorio", @"SELECT '' AS Codigo, RTRIM(p.lab_descripcion) AS Descripcion, ISNULL(m.labO_fecha, GETDATE()) AS Fecha, ISNULL(m.labO_id_orden, 0) AS IdOrden, 1 AS NumeroVeces FROM vt_labOrdenes m INNER JOIN vt_pruebas_laboratorio p ON m.labO_idProdu=p.lab_id WHERE m.labO_nhcl=@Nhcl")
+            ("Laboratorio", @"SELECT CAST(p.CODIGO AS varchar(30)) AS Codigo, RTRIM(p.NOMBRE) AS Descripcion, ISNULL(m.labO_fecha, GETDATE()) AS Fecha, ISNULL(m.labO_id_orden, 0) AS IdOrden, 1 AS NumeroVeces FROM vt_labOrdenes m INNER JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON m.labO_idProdu=p.CODIGO WHERE m.labO_nhcl=@Nhcl")
         };
 
         foreach (var (categoria, sql) in consultas)
@@ -670,8 +678,38 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
 
     public async Task<bool> MarcarDespachoProcesadoAsync(int idOrden) => await _db.ExecuteAsync("UPDATE vt_ordenAtencion SET ordenAten_etapa='Procesado',ordenAten_fechaProcesado=GETDATE() WHERE ordenAten_id=@IdOrden",new{IdOrden=idOrden})>0;
 
-    public async Task<List<FisioterapiaOrdenDto>> ObtenerFisioterapiaAsync(int idOrden,int nhcl) =>
-        (await _db.QueryAsync<FisioterapiaOrdenDto>(@"SELECT f.sec AS Sec,f.fisioO_nhcl AS Nhcl,f.fisioO_id_orden AS IdOrden,f.fisioO_idProdu AS IdProducto,RTRIM(ISNULL(p.prod_descripcion,'')) AS Descripcion,RTRIM(ISNULL(f.fisoO_observaciones,'')) AS Observaciones,TRY_CAST(f.fisioO_cantidad AS decimal(18,2)) AS Cantidad,f.fisioO_fecha AS Fecha FROM vt_fisioterapia_ordenes f LEFT JOIN vt_productos p ON f.fisioO_idProdu=p.prod_id WHERE f.fisioO_id_orden=@IdOrden AND f.fisioO_nhcl=@Nhcl AND ISNULL(f.fisioO_estado,'A')='A' ORDER BY f.fisioO_fecha DESC",new{IdOrden=idOrden,Nhcl=nhcl})).ToList();
+    public async Task<List<FisioterapiaOrdenDto>> ObtenerCatalogoFisioterapiaAsync() =>
+        (await _db.QueryAsync<FisioterapiaOrdenDto>(@"
+            SELECT
+                p.CODIGO AS IdProducto,
+                RTRIM(ISNULL(p.NOMBRE, '')) AS Descripcion,
+                CAST(ISNULL(p.VALOR_UNITARIO, 0.00) AS decimal(18,2)) AS Precio
+            FROM VeterinariaFacturacion.dbo.PRODUCTO p
+            INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
+            WHERE ISNULL(p.ESTADO, 1) = 1
+              AND p.IDUSUARIO = @IdUsuario
+              AND UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) LIKE '%FISIOTERAPIA%'
+            ORDER BY p.NOMBRE ASC", new { IdUsuario = UsuarioFacturacion })).ToList();
+
+    public async Task<List<FisioterapiaOrdenDto>> ObtenerFisioterapiaAsync(int idOrden, int nhcl) =>
+        (await _db.QueryAsync<FisioterapiaOrdenDto>(@"
+            SELECT
+                f.sec AS Sec,
+                f.fisioO_nhcl AS Nhcl,
+                f.fisioO_id_orden AS IdOrden,
+                f.fisioO_idProdu AS IdProducto,
+                RTRIM(COALESCE(p.NOMBRE COLLATE DATABASE_DEFAULT, NULLIF(RTRIM(f.fisoO_observaciones), ''), 'Sesión de Fisioterapia')) AS Descripcion,
+                RTRIM(ISNULL(f.fisoO_observaciones, '')) AS Observaciones,
+                TRY_CAST(f.fisioO_cantidad AS decimal(18,2)) AS Cantidad,
+                CAST(ISNULL(p.VALOR_UNITARIO, 0.00) AS decimal(18,2)) AS Precio,
+                f.fisioO_fecha AS Fecha
+            FROM vt_fisioterapia_ordenes f
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON f.fisioO_idProdu = p.CODIGO
+            WHERE f.fisioO_id_orden = @IdOrden
+              AND f.fisioO_nhcl = @Nhcl
+              AND ISNULL(f.fisioO_estado, 'A') = 'A'
+            ORDER BY f.fisioO_fecha DESC", new { IdOrden = idOrden, Nhcl = nhcl })).ToList();
 
     public async Task<bool> GuardarFisioterapiaAsync(FisioterapiaOrdenDto x) => await _db.ExecuteAsync(@"INSERT INTO vt_fisioterapia_ordenes(fisioO_nhcl,fisioO_idProdu,fisoO_observaciones,fisioO_cantidad,fisioO_id_orden,fisioO_estado,fisioO_fecha) VALUES(@Nhcl,@IdProducto,@Observaciones,@Cantidad,@IdOrden,'A',@Fecha)",x)>0;
 

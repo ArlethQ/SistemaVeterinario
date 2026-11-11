@@ -238,7 +238,7 @@
 
     private PacienteHeaderDto? Paciente { get; set; }
     private List<OrdenActivaResumenDto> OrdenesActivas { get; set; } = new();
-    private List<GrupoLaboratorioCatalogoDto> GruposLaboratorio { get; set; } = GrupoLaboratorioCatalogoDto.ObtenerGruposOficiales();
+    private List<GrupoLaboratorioCatalogoDto> GruposLaboratorio { get; set; } = new();
     private List<PruebaCatalogoDto> CatalogoPruebas { get; set; } = new();
     private List<OrdenLaboratorioItemDto> OrdenesActuales { get; set; } = new();
     private List<DiagnosticoCie10Dto> DiagnosticosOrden { get; set; } = new();
@@ -247,6 +247,16 @@
     {
         CargandoInicial = true;
         await Task.Yield();
+
+        if (!GruposLaboratorio.Any())
+        {
+            GruposLaboratorio = await LabService.ObtenerSubcategoriasLaboratorioAsync();
+            GrupoSeleccionado = GruposLaboratorio.FirstOrDefault(g => g.GrupoId > 0)?.GrupoId ?? 0;
+        }
+        else if (!GruposLaboratorio.Any(g => g.GrupoId == GrupoSeleccionado))
+        {
+            GrupoSeleccionado = GruposLaboratorio.FirstOrDefault(g => g.GrupoId > 0)?.GrupoId ?? 0;
+        }
 
         OrdenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
 

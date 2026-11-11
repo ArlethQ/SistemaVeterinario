@@ -78,20 +78,17 @@
                     <span class="badge bg-info text-dark">@CatalogoEstudios.Count estudios</span>
                 </div>
                 <div class="card-body">
-                    <!-- Selector de Modalidad (Reemplaza rbt_rayosx, rbt_ecografia, rbt_otrosRx) -->
-                    <div class="btn-group w-100 mb-3" role="group">
-                        <button type="button" class="btn btn-sm @(ModalidadSeleccionada == "RX" ? "btn-primary fw-bold" : "btn-outline-primary")"
-                                @onclick='() => SeleccionarModalidadAsync("RX")'>
-                            ☢️ Rayos X (RX)
-                        </button>
-                        <button type="button" class="btn btn-sm @(ModalidadSeleccionada == "ECOS" ? "btn-primary fw-bold" : "btn-outline-primary")"
-                                @onclick='() => SeleccionarModalidadAsync("ECOS")'>
-                            🔊 Ecografía (ECOS)
-                        </button>
-                        <button type="button" class="btn btn-sm @(ModalidadSeleccionada == "TODOS" ? "btn-primary fw-bold" : "btn-outline-primary")"
-                                @onclick='() => SeleccionarModalidadAsync("TODOS")'>
-                            📋 Todos los Estudios
-                        </button>
+                    <!-- Selector de Subcategoría / Modalidad (dinámico desde PRODUCTOSUBTIPO) -->
+                    <div class="d-flex flex-wrap gap-1 mb-3">
+                        @foreach (var sub in SubcategoriasImagenologia)
+                        {
+                            var val = sub.GrupoId > 0 ? sub.GrupoId.ToString() : "TODOS";
+                            <button type="button"
+                                    class="btn btn-sm @(ModalidadSeleccionada == val ? "btn-primary fw-bold" : "btn-outline-primary") flex-fill"
+                                    @onclick="() => SeleccionarModalidadAsync(val)">
+                                <i class="bi @sub.Icono me-1"></i>@sub.NombreGrupo
+                            </button>
+                        }
                     </div>
 
                     <div class="input-group input-group-sm mb-2">
@@ -217,6 +214,7 @@
     private bool EsError { get; set; }
 
     private PacienteHeaderDto? Paciente { get; set; }
+    private List<GrupoLaboratorioCatalogoDto> SubcategoriasImagenologia { get; set; } = new();
     private List<PruebaCatalogoDto> CatalogoEstudios { get; set; } = new();
     private List<OrdenImagenItemDto> OrdenesActuales { get; set; } = new();
     private List<DiagnosticoCie10Dto> DiagnosticosOrden { get; set; } = new();
@@ -225,6 +223,11 @@
     {
         CargandoInicial = true;
         await Task.Yield();
+
+        if (!SubcategoriasImagenologia.Any())
+        {
+            SubcategoriasImagenologia = await LabService.ObtenerSubcategoriasImagenologiaAsync();
+        }
 
         if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
         {
