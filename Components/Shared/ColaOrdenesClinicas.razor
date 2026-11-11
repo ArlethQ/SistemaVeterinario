@@ -23,7 +23,7 @@
         <div class="table-responsive">
             <table class="table table-sm table-hover align-middle mb-0">
                 <thead>
-                    <tr><th scope="col">Hora de asignación</th><th scope="col">Orden</th><th scope="col">Paciente</th>@if (Triaje) { <th scope="col">Especie</th> }<th scope="col">Asignado a</th><th scope="col">Estado</th><th scope="col">Acción</th></tr>
+                    <tr><th scope="col">Hora de asignación</th><th scope="col">Orden</th><th scope="col">Paciente</th>@if (Triaje) { <th scope="col">Especie</th><th scope="col">Especialidad</th> }<th scope="col">Asignado a</th><th scope="col">Estado</th><th scope="col">Acción</th></tr>
                 </thead>
                 <tbody>
                     @foreach (var orden in _ordenes)
@@ -32,8 +32,8 @@
                             <td>@orden.FechaAsignacion.ToString("HH:mm:ss")</td>
                             <td>#@orden.IdOrden @orden.Turno</td>
                             <td>@orden.Mascota <small class="text-muted">NHCL #@orden.Nhcl</small></td>
-                            @if (Triaje) { <td>@orden.Especie</td> }
-                            <td>@(Triaje && string.IsNullOrWhiteSpace(orden.Medico) ? orden.Enfermero : orden.Medico)</td>
+                            @if (Triaje) { <td>@orden.Especie</td><td>@orden.Especialidad</td> }
+                            <td>@(Triaje ? (string.IsNullOrWhiteSpace(orden.Enfermero) ? "Disponible" : orden.Enfermero) : orden.Medico)</td>
                             <td>@(orden.Estado.Trim() == "E" ? "En atención" : "En espera")</td>
                             <td>
                                 <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">Abrir <span class="visually-hidden">orden #@orden.IdOrden</span></a>

@@ -242,11 +242,11 @@
                                     </select>
                                 </div>
                                 <div class="col-md-3 d-flex align-items-end">
-                                    <label class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_nuevaOrden.TriajeMedico" /><span class="form-check-label ms-2 fw-bold">Triaje</span></label>
+                                    <label class="form-check mb-2"><input type="checkbox" class="form-check-input" checked="@(_nuevaOrden.IdEspecialidad > 0)" disabled /><span class="form-check-label ms-2 fw-bold">Triaje</span></label>
                                 </div>
                             }
 
-                            @if (_nuevaOrden.EsProcedimiento || _nuevaOrden.TriajeMedico)
+                            @if (_nuevaOrden.EsProcedimiento || _nuevaOrden.IdEspecialidad > 0)
                             {
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">@(_nuevaOrden.EsProcedimiento ? "3. Semáforo Triaje" : (EsTipoConsultaEspecialidad ? "5. Semáforo Triaje" : "4. Semáforo Triaje"))</label>
@@ -389,13 +389,15 @@
                                         <td>
                                             <div class="d-flex flex-column align-items-start gap-1">
                                                 <span class="badge @ObtenerBadgeEtapa(o.Etapa)">@o.Etapa</span>
+                                                @if (!o.EsProcedimiento && o.IdEspecialidad > 0)
+                                                {
+                                                    <span class="badge bg-info text-dark" style="font-size:0.65rem;">
+                                                        @(string.IsNullOrWhiteSpace(o.Enfermero) ? "Triaje pendiente" : $"Triaje: {o.Enfermero}")
+                                                    </span>
+                                                }
                                                 @if (o.Estado == "A")
                                                 {
                                                     <div class="d-flex align-items-center gap-1">
-                                                        @if (_especialidades.Any(e => e.Id == o.IdEspecialidad && e.RequiereTriaje))
-                                                        {
-                                                            <span class="badge bg-info text-dark" style="font-size:0.65rem;">📋 En triaje</span>
-                                                        }
                                                         <span class="badge bg-warning text-dark" style="font-size:0.65rem;">⏳ En espera</span>
                                                         <span role="button"
                                                               class="badge bg-success text-white shadow-sm"
@@ -442,7 +444,10 @@
                                                     @onchange="(e) => EjecutarAccionDropboxAsync(o, e)">
                                                 <option value="">⚡ Módulos / Acciones...</option>
                                                 <optgroup label="Módulos Clínicos">
-                                                    <option value="triaje">📋 Triaje de Ingreso</option>
+                                                    @if (Permisos.Permite("admision/triaje"))
+                                                    {
+                                                        <option value="triaje">📋 Triaje de Ingreso</option>
+                                                    }
                                                     <option value="soap">🩺 Ficha Médica SOAP</option>
                                                     <option value="kardex">💊 Kardex Enfermería</option>
                                                     <option value="hosp">🏥 Hospitalización 24h</option>
@@ -1176,8 +1181,6 @@
         return resultado;
     }
 
-    private bool EspecialidadRequiereTriaje =>
-        _especialidades.FirstOrDefault(e => e.Id == _nuevaOrden.IdEspecialidad)?.RequiereTriaje ?? true;
 
     private async Task CrearOrdenAtencionAsync()
     {
@@ -1245,7 +1248,7 @@
                 _nuevaOrden.ColorTriaje = "green";
             }
         }
-        else if (!EspecialidadRequiereTriaje && !_nuevaOrden.TriajeMedico)
+        else if (_nuevaOrden.IdEspecialidad <= 0)
         {
             _nuevaOrden.ColorTriaje = string.Empty;
         }

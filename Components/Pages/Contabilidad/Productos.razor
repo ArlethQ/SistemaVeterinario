@@ -1,4 +1,5 @@
 @page "/contabilidad/productos"
+@using ClosedXML.Excel
 @using System.ComponentModel.DataAnnotations
 @using System.Globalization
 @using System.Net.Http.Json
@@ -92,7 +93,7 @@
 
 
 
-        <button type="button" class="quick-action-card" @onclick="ExportarProductosCsvAsync">
+        <button type="button" class="quick-action-card" @onclick="ExportarProductosExcelAsync">
             <span class="quick-action-icon quick-action-icon-blue"><i class="bi bi-download"></i></span>
             <span>
                 <strong>Exportar todos</strong>
@@ -944,7 +945,7 @@
                 <div>
                     <span class="modal-kicker">Carga masiva</span>
                     <h3 id="importacionProductosTitulo">Importar productos desde Excel</h3>
-                    <p>Descarga el modelo, edítalo en Excel y vuelve a cargarlo en formato CSV.</p>
+                    <p>Descarga el modelo, edítalo en Excel y vuelve a cargarlo en formato Excel.</p>
                 </div>
                 <button type="button" class="modal-close" @onclick="CerrarImportacion" aria-label="Cerrar modal">
                     <span aria-hidden="true">&times;</span>
@@ -969,12 +970,12 @@
                         <span>2</span>
                         <div>
                             <strong>Edita y carga el archivo</strong>
-                            <p>Guárdalo como CSV UTF-8 separado por punto y coma.</p>
+                            <p>Guárdalo como archivo .xlsx.</p>
                         </div>
                         <label class="import-file-button">
                             <i class="bi bi-upload"></i>
                             Seleccionar archivo
-                            <InputFile accept=".csv,text/csv" OnChange="ImportarProductosAsync" />
+                            <InputFile accept=".xlsx,.csv" OnChange="ImportarProductosAsync" />
                         </label>
                     </article>
                 </div>
@@ -2007,17 +2008,14 @@
     {
         const string contenido =
             "Codigo;Nombre;Tipo;PrecioBase;Precio2;Precio3;Categoria;Subcategoria;AplicaIVA;TarifaIVA;Observacion\r\n" +
-            "=\"PROD-001\";Producto de ejemplo;PRODUCTO;10.50;;;Tecnologia;;SI;15;Descripcion opcional\r\n" +
-            "=\"SERV-001\";Servicio de ejemplo;SERVICIO;25.00;;;;;NO;;Descripcion opcional";
+            "PROD-001;Producto de ejemplo;PRODUCTO;10.50;;;Tecnologia;;SI;15;Descripcion opcional\r\n" +
+            "SERV-001;Servicio de ejemplo;SERVICIO;25.00;;;;;NO;;Descripcion opcional";
 
-        await JS.InvokeVoidAsync(
-            "numericaUi.downloadTextFile",
-            "Modelo_importacion_productos.csv",
-            "\uFEFF" + contenido,
-            "text/csv;charset=utf-8");
+        await DescargarExcelAsync("Modelo_importacion_productos.xlsx",
+            contenido.Split("\r\n").Select(SepararCsv));
     }
 
-    private async Task ExportarProductosCsvAsync()
+    private async Task ExportarProductosExcelAsync()
     {
         var productosExportar = await Http.GetFromJsonAsync<List<ProductoDto>>($"api/e-contax/productos?userId={usuarioLogueadoId}") ?? productos;
 
@@ -2027,8 +2025,10 @@
             return;
         }
 
-        var sb = new StringBuilder();
-        sb.AppendLine("Codigo;Nombre;Tipo;PrecioBase;Precio2;Precio3;Categoria;Subcategoria;AplicaIVA;TarifaIVA;Observacion");
+        var filas = new List<List<string>>
+        {
+            SepararCsv("Codigo;Nombre;Tipo;PrecioBase;Precio2;Precio3;Categoria;Subcategoria;AplicaIVA;TarifaIVA;Observacion")
+        };
 
         foreach (var p in OrdenarProductosClasificados(productosExportar))
         {
@@ -2054,36 +2054,36 @@
 
             var observacion = p.Observacion ?? string.Empty;
 
-            codigo = EscapeCsvField(codigo, forceExcelText: true);
-            nombre = EscapeCsvField(nombre);
-            observacion = EscapeCsvField(observacion);
-            cat = EscapeCsvField(cat);
-            subcat = EscapeCsvField(subcat);
-
-            sb.AppendLine($"{codigo};{nombre};{tipo};{precioBase};{precio2};{precio3};{cat};{subcat};{aplicaIva};{tarifaIva};{observacion}");
+            filas.Add([codigo, nombre, tipo, precioBase, precio2, precio3, cat, subcat, aplicaIva, tarifaIva ?? string.Empty, observacion]);
         }
 
-        await JS.InvokeVoidAsync(
-            "numericaUi.downloadTextFile",
-            $"Productos_{DateTime.Now:yyyyMMdd_HHmmss}.csv",
-            "\uFEFF" + sb.ToString(),
-            "text/csv;charset=utf-8"
-        );
+        await DescargarExcelAsync($"Productos_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx", filas);
     }
 
-    private static string EscapeCsvField(string field, bool forceExcelText = false)
+    private async Task DescargarExcelAsync(string nombre, IEnumerable<List<string>> filas)
     {
-        if (string.IsNullOrEmpty(field)) return forceExcelText ? "=\"\"" : string.Empty;
-        if (forceExcelText)
+        using var libro = new XLWorkbook();
+        var hoja = libro.Worksheets.Add("Productos");
+        int fila = 1;
+        foreach (var campos in filas)
         {
-            var cleanField = field.Replace("\"", "\"\"");
-            return $"=\"{cleanField}\"";
+            for (int i = 0; i < campos.Count; i++)
+            {
+                var celda = hoja.Cell(fila, i + 1);
+                if (fila > 1 && (i is 3 or 4 or 5) && decimal.TryParse(campos[i], NumberStyles.Number, CultureInfo.InvariantCulture, out var precio))
+                    celda.Value = precio;
+                else
+                    celda.Value = campos[i];
+            }
+            fila++;
         }
-        if (field.Contains(";") || field.Contains("\"") || field.Contains("\n") || field.Contains("\r"))
-        {
-            return "\"" + field.Replace("\"", "\"\"") + "\"";
-        }
-        return field;
+        hoja.Row(1).Style.Font.Bold = true;
+
+        using var contenido = new MemoryStream();
+        libro.SaveAs(contenido);
+        contenido.Position = 0;
+        using var referencia = new DotNetStreamReference(contenido);
+        await JS.InvokeVoidAsync("numericaUi.downloadExcelFile", nombre, referencia);
     }
 
 
@@ -2100,9 +2100,10 @@
         if (archivo is null)
             return;
 
-        if (!string.Equals(Path.GetExtension(archivo.Name), ".csv", StringComparison.OrdinalIgnoreCase))
+        var extension = Path.GetExtension(archivo.Name).ToLowerInvariant();
+        if (extension is not (".xlsx" or ".csv"))
         {
-            mensajeImportacion = "Selecciona el modelo guardado en formato CSV.";
+            mensajeImportacion = "Selecciona un archivo .xlsx o .csv.";
             erroresImportacion = 1;
             return;
         }
@@ -2123,11 +2124,37 @@
         try
         {
             using var stream = archivo.OpenReadStream(maxSize);
-            using var reader = new StreamReader(stream, Encoding.UTF8, true);
-            var contenido = await reader.ReadToEndAsync();
-            var lineas = contenido.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            List<List<string>> filas;
+            if (extension == ".xlsx")
+            {
+                using var contenido = new MemoryStream();
+                await stream.CopyToAsync(contenido);
+                contenido.Position = 0;
+                using var libro = new XLWorkbook(contenido);
+                var hoja = libro.Worksheet(1);
+                var encabezados = SepararCsv("Codigo;Nombre;Tipo;PrecioBase;Precio2;Precio3;Categoria;Subcategoria;AplicaIVA;TarifaIVA;Observacion");
+                if (encabezados.Where((titulo, i) => !titulo.Equals(hoja.Cell(1, i + 1).GetString().Trim(), StringComparison.OrdinalIgnoreCase)).Any())
+                    throw new InvalidOperationException("Usa las columnas del modelo de importación.");
 
-            if (lineas.Length < 2)
+                filas = hoja.RowsUsed().Where(fila => fila.RowNumber() > 1)
+                    .Select(fila => encabezados.Select((_, i) =>
+                    {
+                        var celda = fila.Cell(i + 1);
+                        return i == 0
+                            ? celda.GetFormattedString(CultureInfo.InvariantCulture)
+                            : celda.Value.ToString(CultureInfo.InvariantCulture);
+                    }).ToList()).ToList();
+            }
+            else
+            {
+                using var reader = new StreamReader(stream, Encoding.UTF8, true);
+                var contenido = await reader.ReadToEndAsync();
+                filas = contenido.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Skip(1).Select(SepararCsv).ToList();
+            }
+
+            filas.RemoveAll(campos => campos.All(string.IsNullOrWhiteSpace));
+            if (filas.Count == 0)
             {
                 mensajeImportacion = "El archivo no contiene productos para importar.";
                 erroresImportacion = 1;
@@ -2139,12 +2166,8 @@
             subcategoriasFaltantes.Clear();
             filasImportacionPendientes = new List<List<string>>();
 
-            for (var index = 1; index < lineas.Length; index++)
+            foreach (var campos in filas)
             {
-                var campos = SepararCsv(lineas[index]);
-                if (campos.All(string.IsNullOrWhiteSpace))
-                    continue;
-
                 filasImportacionPendientes.Add(campos);
 
                 var categoria = Campo(campos, 6);

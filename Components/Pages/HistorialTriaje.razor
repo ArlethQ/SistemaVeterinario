@@ -1,0 +1,110 @@
+@inject IConsultaExternaService ConsultaService
+
+@inject ILogger<HistorialTriaje> Logger
+
+<section aria-label="Historial de triaje">
+    <h2 class="h5 mb-3">Historial de triajes</h2>
+    @if (_cargando)
+    {
+        <p role="status">Cargando historial…</p>
+    }
+    else if (_error)
+    {
+        <p class="alert alert-danger" role="alert">No se pudo cargar el historial de triaje.</p>
+    }
+    else if (_registros.Count == 0)
+    {
+        <p>Esta mascota aún no tiene triajes registrados.</p>
+    }
+    else
+    {
+        @if (_registros.FirstOrDefault(r => r.Orden == _ordenSeleccionada) is { } seleccionado)
+        {
+            <button type="button" class="btn btn-sm btn-outline-secondary mb-3" @onclick="() => _ordenSeleccionada = null">Volver al historial</button>
+            @if (!seleccionado.PuedeEditar)
+            {
+                <p class="alert alert-info">La anamnesis ya está guardada. Este triaje está en modo de solo lectura.</p>
+            }
+            <TriajeIngreso @key="(Nhcl, _ordenSeleccionada)" Nhcl="@Nhcl" IdOrden="@_ordenSeleccionada" ModoModal="true"
+                           DesdeHistorial="true" SoloLectura="@(!seleccionado.PuedeEditar)" OnGuardado="ActualizarHistorialAsync" />
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th scope="col">Fecha</th><th scope="col">Orden</th><th scope="col">Registrado por</th>
+                            <th scope="col">Peso (kg)</th><th scope="col">Temperatura (°C)</th><th scope="col">FC</th>
+                            <th scope="col">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var registro in _registros)
+                        {
+                            <tr class="@(registro.Orden == _ordenSeleccionada ? "table-active" : null)">
+                                <td>@registro.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td>#@registro.Orden</td>
+                                <td>@registro.RegistradoPor</td>
+                                <td>@(registro.Peso?.ToString("0.##") ?? "—")</td>
+                                <td>@(registro.Temperatura?.ToString("0.#") ?? "—")</td>
+                                <td>@(registro.FrecuenciaCardiaca?.ToString() ?? "—")</td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => _ordenSeleccionada = registro.Orden">
+                                        @(registro.PuedeEditar ? "Editar" : "Ver")
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public int Nhcl { get; set; }
+    private int? _ordenSeleccionada;
+
+    private List<TriajeHistorialDto> _registros = [];
+
+    private bool _cargando;
+    private bool _error;
+    private int _revision;
+    private int _nhclCargado;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_nhclCargado == Nhcl) return;
+        _nhclCargado = Nhcl;
+        _ordenSeleccionada = null;
+        var revision = ++_revision;
+        var nhcl = Nhcl;
+        _cargando = true;
+        _error = false;
+        try
+        {
+            var registros = await ConsultaService.ObtenerHistorialTriajeAsync(nhcl);
+
+            if (revision != _revision) return;
+            _registros = registros;
+
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error al cargar el historial de triaje del paciente {Nhcl}", nhcl);
+            if (revision == _revision) _error = true;
+        }
+        finally
+        {
+            if (revision == _revision) _cargando = false;
+        }
+    }
+
+    private async Task ActualizarHistorialAsync(FichaMedicaCompletaDto ficha)
+    {
+        var registros = await ConsultaService.ObtenerHistorialTriajeAsync(ficha.MedNhcl);
+        if (Nhcl == ficha.MedNhcl) _registros = registros;
+    }
+}

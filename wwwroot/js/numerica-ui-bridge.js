@@ -110,6 +110,18 @@
         ui.toggleBodyScrollLock(false);
     };
 
+    ui.downloadExcelFile = async function (fileName, stream) {
+        const blob = new Blob([await stream.arrayBuffer()], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
     ui.downloadTextFile = function (fileName, content, mimeType) {
         const blob = new Blob([content || ""], { type: mimeType || "text/plain;charset=utf-8" });
         const url = URL.createObjectURL(blob);

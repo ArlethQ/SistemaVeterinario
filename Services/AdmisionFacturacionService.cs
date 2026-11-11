@@ -914,6 +914,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             throw new InvalidOperationException("La consulta requiere un médico tratante.");
         }
 
+        orden.TriajeMedico = !orden.EsProcedimiento && orden.IdEspecialidad > 0;
+
         string etapaInicial = orden.EsProcedimiento ? "Consulta" : orden.TipoDespacho switch
         {
             1 => "Imagenología",
@@ -1096,6 +1098,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    o.ordenAten_nhcl AS Nhcl,
                    ISNULL(o.ordenAten_turno, '') AS Turno,
                    ISNULL(p.mas_nombre, '') AS Mascota,
+                   o.ordenAten_esp_numero AS IdEspecialidad,
+                   ISNULL(e.es_descripcion, '') AS Especialidad,
+                   ISNULL(es.especie_descripcion, '') AS Especie,
                    ISNULL(u.user_nombre, '') AS Medico,
                    ISNULL(enf.user_nombre, '') AS Enfermero,
                    ISNULL(o.ordenAten_estado, 'A') AS Estado,
@@ -1105,6 +1110,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                            CAST(CAST(o.ordenAten_fecha AS date) AS datetime))) AS FechaAsignacion
             FROM vt_ordenAtencion o
             LEFT JOIN vt_pacientes p ON p.mas_nhcl = o.ordenAten_nhcl
+            LEFT JOIN vt_especialidades e ON e.es_id = o.ordenAten_esp_numero
+            LEFT JOIN vt_especie es ON es.especie_id = p.mas_especie
             LEFT JOIN vt_usuarios u ON u.user_numero = o.ordenAten_idMedico
             LEFT JOIN vt_usuarios enf ON enf.user_numero = o.ordenAten_idEnfermero
             OUTER APPLY (
@@ -1124,9 +1131,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
               AND (
                    (@Triaje = 0 AND (@Rol <> 2 OR o.ordenAten_idMedico = @Usuario))
                    OR (@Triaje = 1 AND (
-                        (@Rol = 1)
-                        OR (o.ordenAten_esProcedimiento = 1 AND o.ordenAten_idEnfermero = @Usuario)
-                        OR (ISNULL(o.ordenAten_esProcedimiento, 0) = 0 AND o.ordenAten_triajeMedico = 1 AND o.ordenAten_idMedico = @Usuario)
+                        (@Rol = 1 OR EXISTS (SELECT 1 FROM vt_usuarios enfermero
+                            JOIN vt_tipos_usuarios tipo ON tipo.tipuser_numero = enfermero.user_tipouser_numero
+                            WHERE enfermero.user_numero = @Usuario AND enfermero.user_estado = 'A'
+                                AND UPPER(tipo.tipuser_descripcion) LIKE '%ENFERMER%'))
+                        AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
+                        AND o.ordenAten_esp_numero > 0
+                        AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                        AND NOT EXISTS (SELECT 1 FROM vt_vitacora v
+                            WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id))
                    ))
               )
             ORDER BY FechaAsignacion, o.ordenAten_id;";
