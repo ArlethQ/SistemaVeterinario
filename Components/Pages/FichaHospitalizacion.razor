@@ -22,9 +22,6 @@
                                @onfocus="() => _mostrarSugerenciasOrden = !string.IsNullOrWhiteSpace(_filtroOrden)"
                                @onblur="CerrarSugerenciasOrdenConRetrasoAsync"
                                @onkeydown="BuscarOrdenesConEnterAsync" />
-                        <button class="btn btn-outline-primary" @onclick="BuscarOrdenesAsync" disabled="@_buscandoOrdenes">
-                            @(_buscandoOrdenes ? "Buscando..." : "Buscar")
-                        </button>
                     </div>
                     @if (_mostrarSugerenciasOrden && _ordenesActivas.Count > 0 && !string.IsNullOrWhiteSpace(_filtroOrden))
                     {
@@ -180,9 +177,6 @@
                                 <span class="input-group-text fw-bold">🔎 Catálogo:</span>
                                 <input type="text" class="form-control" autocomplete="off" placeholder="Buscar fármaco, alimento o fluido..."
                                        @bind="_busquedaBc" @bind:event="oninput" @bind:after="BuscarCatalogoAutoAsync" @onkeydown="BuscarCatalogoConEnterAsync" />
-                                <button class="btn btn-primary" @onclick="BuscarCatalogoBcAsync" disabled="@_buscandoCatalogo">
-                                    @(_buscandoCatalogo ? "Buscando..." : "Buscar")
-                                </button>
                             </div>
                         </div>
                         @if (_resultadosBc.Count > 0)

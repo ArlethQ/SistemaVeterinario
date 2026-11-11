@@ -28,7 +28,6 @@
                 {
                     <button class="btn btn-outline-danger" disabled="@(!_partes.Any() || _cargando)" @onclick="ExportarPartesPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>Imprimir consolidado</button>
                 }
-                <button class="btn btn-primary" disabled="@_cargando" @onclick="CargarAsync">@(_cargando ? "Consultando..." : "Consultar")</button>
             </div>
         </div>
 
@@ -60,7 +59,6 @@
                         <label class="form-label small fw-semibold">Diagnóstico CIE-10</label>
                         <div class="input-group">
                             <input class="form-control" autocomplete="off" placeholder="Buscar por código o descripción" @bind="_filtroDiagnostico" @bind:event="oninput" @bind:after="BuscarDiagnosticosAutoAsync" @onkeydown="BuscarDiagnosticoConEnterAsync" />
-                            <button class="btn btn-outline-primary" @onclick="BuscarDiagnosticosAsync">Buscar</button>
                             @if (!string.IsNullOrWhiteSpace(_codigoDiagnostico)) { <button class="btn btn-outline-secondary" @onclick="LimpiarDiagnosticoAsync">Quitar filtro</button> }
                         </div>
                         @if (!string.IsNullOrWhiteSpace(_codigoDiagnostico))
