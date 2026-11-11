@@ -67,17 +67,6 @@
                     </div>
                     <div class="d-flex align-items-center gap-2 flex-shrink-0">
                         <b title="Pacientes en espera" style="flex-shrink:0;">@med.EnEspera</b>
-                        @if (sigOrden is not null)
-                        {
-                            <span role="button"
-                                  tabindex="0"
-                                  class="badge bg-success text-white border-0 shadow-sm d-inline-flex align-items-center gap-1"
-                                  style="padding: 5px 10px; font-size: 0.68rem; font-weight: 700; border-radius: 7px; cursor: pointer; white-space: nowrap; user-select: none;"
-                                  title="Hacer pasar a @sigOrden.Mascota a atención"
-                                  @onclick="() => PasarTurnoAAtencionAsync(sigOrden)">
-                                ▶ Pasar
-                            </span>
-                        }
                     </div>
                 </div>
             }
@@ -399,13 +388,6 @@
                                                 {
                                                     <div class="d-flex align-items-center gap-1">
                                                         <span class="badge bg-warning text-dark" style="font-size:0.65rem;">⏳ En espera</span>
-                                                        <span role="button"
-                                                              class="badge bg-success text-white shadow-sm"
-                                                              style="font-size:0.65rem; padding: 4px 8px; cursor:pointer; user-select:none;"
-                                                              title="Hacer pasar al paciente con el doctor"
-                                                              @onclick="() => PasarTurnoAAtencionAsync(o)">
-                                                            ▶ Pasar
-                                                        </span>
                                                     </div>
                                                 }
                                                 else if (o.Estado == "E")
@@ -455,10 +437,6 @@
                                                     <option value="proforma">💲 Proforma / Facturación</option>
                                                 </optgroup>
                                                 <optgroup label="Gestión de la Orden">
-                                                    @if (o.Estado == "A")
-                                                    {
-                                                        <option value="pasar">▶️ Hacer pasar a consulta</option>
-                                                    }
                                                     @if (o.Estado == "E")
                                                     {
                                                         <option value="finalizar">✅ Finalizar atención</option>
@@ -505,11 +483,7 @@
                             </div>
                             <div class="text-end">
                                 <time class="d-block">@orden.Hora</time>
-                                @if (etapa.Clave == "ESPERA")
-                                {
-                                    <span role="button" class="badge bg-success text-white mt-1 d-inline-block" style="font-size:0.6rem; padding: 3px 7px; cursor:pointer;" @onclick="() => PasarTurnoAAtencionAsync(orden)">▶ Pasar</span>
-                                }
-                                else if (etapa.Clave == "FINALIZADO")
+                                @if (etapa.Clave == "FINALIZADO")
                                 {
                                     <span role="button" class="badge bg-outline-secondary border text-secondary mt-1 d-inline-block" style="font-size:0.58rem; padding: 2px 6px; cursor:pointer;" title="Reabrir orden y devolver a espera" @onclick="() => DevolverAEsperaAsync(orden)">↺ Reabrir</span>
                                 }
@@ -657,18 +631,6 @@
             .OrderBy(o => o.IdOrden)
             .FirstOrDefault();
 
-    private async Task PasarTurnoAAtencionAsync(OrdenAtencionResumenDto orden)
-    {
-        bool ok = await AdmisionService.CambiarEstadoOrdenAsync(orden.IdOrden, "E", string.IsNullOrWhiteSpace(orden.Etapa) ? "Consulta" : orden.Etapa);
-        if (ok)
-        {
-            _esError = false;
-            _mensajeAlerta = $"▶ Orden #{orden.IdOrden} ({orden.Mascota}) pasó a atención con Dr(a). {orden.Medico}.";
-            KardexService.InvalidarCacheOrdenesActivas();
-            await CargarOrdenesAsync();
-        }
-    }
-
     private async Task FinalizarTurnoAsync(OrdenAtencionResumenDto orden)
     {
         bool ok = await AdmisionService.CambiarEstadoOrdenAsync(orden.IdOrden, "T", orden.Etapa);
@@ -717,9 +679,6 @@
                 break;
             case "proforma":
                 NavManager.NavigateTo($"/facturacion/proformas?ordenId={o.IdOrden}");
-                break;
-            case "pasar":
-                await PasarTurnoAAtencionAsync(o);
                 break;
             case "finalizar":
                 await FinalizarTurnoAsync(o);

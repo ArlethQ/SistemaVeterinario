@@ -91,7 +91,7 @@
     }
 
     <div class="clinical-tabs mb-3 no-print">
-        <button class="clinical-tab @ClaseTab("turno")" @onclick='() => _tab="turno"'><span class="tab-number">1</span><span><strong>Paso de turno</strong><small>Entrega clínica SOAP</small></span></button>
+        <button class="clinical-tab @ClaseTab("turno")" @onclick='() => _tab="turno"'><span class="tab-number">1</span><span><strong>Entrega clínica</strong><small>Resumen SOAP</small></span></button>
         <button class="clinical-tab @ClaseTab("examenes")" @onclick='() => _tab="examenes"'><span class="tab-number">2</span><span><strong>Exámenes e interconsultas</strong><small>Solicitudes y pendientes</small></span></button>
         <button class="clinical-tab @ClaseTab("transfusion")" @onclick='() => _tab="transfusion"'><span class="tab-number">3</span><span><strong>Transfusión sanguínea</strong><small>Compatibilidad y monitoreo</small></span></button>
     </div>
@@ -100,7 +100,7 @@
     @if (_tab == "turno")
     {
         <div class="card border-0 shadow-sm clinical-card">
-            <div class="card-header section-header section-turno"><span class="section-index">1</span><span><strong>PASO DE TURNO — ENTREGA CLÍNICA ESTRUCTURADA</strong><small>Situación actual, evaluación, plan y pendientes del siguiente equipo.</small></span></div>
+            <div class="card-header section-header section-turno"><span class="section-index">1</span><span><strong>ENTREGA CLÍNICA ESTRUCTURADA</strong><small>Situación actual, evaluación, plan y pendientes del siguiente equipo.</small></span></div>
             <div class="card-body">
                 <div class="row g-2">
                     <div class="col-md-3"><label class="form-label">Fecha y hora</label><InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_turno.Fecha" /></div>
@@ -115,7 +115,7 @@
                     <div class="col-md-4"><label class="form-label">Pendientes</label><InputTextArea class="form-control" rows="2" @bind-Value="_turno.Pendientes" /></div>
                     <div class="col-md-4"><label class="form-label text-danger fw-bold">Alertas y criterios para llamar</label><InputTextArea class="form-control" rows="2" @bind-Value="_turno.Alertas" /></div>
                 </div>
-                <div class="mt-3 d-flex gap-2"><button class="btn btn-primary" @onclick="GuardarTurnoAsync">Guardar paso de turno</button><button class="btn btn-outline-secondary" @onclick="NuevoTurno">Limpiar</button></div>
+                <div class="mt-3 d-flex gap-2"><button class="btn btn-primary" @onclick="GuardarTurnoAsync">Guardar entrega clínica</button><button class="btn btn-outline-secondary" @onclick="NuevoTurno">Limpiar</button></div>
             </div>
         </div>
         <div class="table-responsive mt-3 history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Fecha</th><th>Turno</th><th>Entrega → recibe</th><th>Pendientes/alertas</th><th></th></tr></thead><tbody>
@@ -214,7 +214,7 @@
     private void EditarTurno(PasoTurnoDto x)=>_turno=x;
     private void EditarInter(InterconsultaHospitalariaDto x)=>_inter=x;
     private void EditarTrans(TransfusionDto x){_trans=x;_mon=new(){IdTransfusion=x.Id,FechaHora=DateTime.Now};}
-    private async Task GuardarTurnoAsync()=>await EjecutarAsync(async()=>{await FichasService.GuardarPasoTurnoAsync(_turno,Session.IdUser);await RecargarAsync();NuevoTurno();},"Paso de turno guardado.");
+    private async Task GuardarTurnoAsync()=>await EjecutarAsync(async()=>{await FichasService.GuardarPasoTurnoAsync(_turno,Session.IdUser);await RecargarAsync();NuevoTurno();},"Entrega clínica guardada.");
     private async Task GuardarInterAsync()=>await EjecutarAsync(async()=>{await FichasService.GuardarInterconsultaAsync(_inter,Session.IdUser);await RecargarAsync();NuevaInter();},"Solicitud guardada.");
     private async Task GuardarTransAsync()=>await EjecutarAsync(async()=>{_trans.Id=await FichasService.GuardarTransfusionAsync(_trans,Session.IdUser);await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Transfusión guardada.");
     private async Task AgregarMonAsync()=>await EjecutarAsync(async()=>{_mon.IdTransfusion=_trans.Id;await FichasService.AgregarMonitoreoAsync(_mon,IdOrden,Session.IdUser);await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Control agregado.");
