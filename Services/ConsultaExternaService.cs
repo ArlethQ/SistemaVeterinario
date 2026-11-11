@@ -985,20 +985,25 @@ public class ConsultaExternaService : IConsultaExternaService
     {
         const string sql = @"
             SELECT
-                sec AS Sec,
-                ISNULL(med_id_orden, 0) AS IdOrden,
-                ISNULL(med_nhcl, 0) AS Nhcl,
-                CAST(ISNULL(med_idProdu, '') AS VARCHAR(50)) AS CodigoProd,
-                ISNULL(med_otroMedicamento, '') AS Descripcionamento,
-                ISNULL(med_cantidad, 1) AS Cantidad,
-                ISNULL(med_cantidadLetras, '') AS CantidadLetras,
-                ISNULL(med_indicaciones, '') AS Indicaciones,
-                ISNULL(med_observaciones, '') AS Observaciones,
-                ISNULL(med_fecha, GETDATE()) AS Fecha,
-                ISNULL(med_tipo, 'M') AS Tipo
-            FROM vt_medicinas
-            WHERE med_id_orden = @IdOrden
-            ORDER BY sec ASC";
+                m.sec AS Sec,
+                ISNULL(m.med_id_orden, 0) AS IdOrden,
+                ISNULL(m.med_nhcl, 0) AS Nhcl,
+                CAST(ISNULL(m.med_idProdu, '') AS VARCHAR(50)) AS CodigoProd,
+                COALESCE(
+                    NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(m.med_otroMedicamento, '')), CHAR(13), ''), CHAR(10), ''), ''),
+                    NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), ''), ''),
+                    ''
+                ) AS Descripcionamento,
+                ISNULL(m.med_cantidad, 1) AS Cantidad,
+                ISNULL(m.med_cantidadLetras, '') AS CantidadLetras,
+                ISNULL(m.med_indicaciones, '') AS Indicaciones,
+                ISNULL(m.med_observaciones, '') AS Observaciones,
+                ISNULL(m.med_fecha, GETDATE()) AS Fecha,
+                ISNULL(m.med_tipo, 'M') AS Tipo
+            FROM vt_medicinas m
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON m.med_idProdu = p.CODIGO
+            WHERE m.med_id_orden = @IdOrden
+            ORDER BY m.sec ASC";
 
         var lista = await _db.QueryAsync<RecetaMedicamentoItemDto>(sql, new { IdOrden = idOrden });
         return lista.ToList();
@@ -1114,7 +1119,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 RTRIM(ISNULL(u.user_nombre, '')) AS Medico,
                 ISNULL(CAST(h.indicag_detalle AS VARCHAR(MAX)), '') AS IndicacionesGenerales,
                 ISNULL((SELECT MIN(m.med_fecha) FROM vt_medicinasexterno m WHERE m.med_id_ficha = h.idficha), GETDATE()) AS Fecha,
-                ISNULL((SELECT TOP 1 CAST(m.med_idorden AS VARCHAR(50)) FROM vt_medicinasexterno m WHERE m.med_id_ficha = h.idficha AND ISNULL(m.med_idorden, '') <> '' ORDER BY m.sec), '') AS Serial
+                '' AS Serial
             FROM vt_cabecerareceta h
             LEFT JOIN vt_pacientes p ON h.nhcl = p.mas_nhcl
             LEFT JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
@@ -1226,10 +1231,10 @@ public class ConsultaExternaService : IConsultaExternaService
         {
             await _db.ExecuteAsync(@"
                 INSERT INTO vt_diagnosticosexternos (
-                    dig_nhcl, dig_codigoDiag, dig_id_ficha, dig_descripcion, dig_tipo, dig_orden
+                    dig_nhcl, dig_codigoDiag, dig_id_ficha, dig_descripcion, dig_tipo
                 ) VALUES (
-                    @Nhcl, @Codigo, @IdFicha, @Descripcion, @Tipo, @Serial
-                )", new { dto.Nhcl, Codigo = codigo, IdFicha = idFicha, Descripcion = descripcion.Trim(), Tipo = tipo, Serial = serial });
+                    @Nhcl, @Codigo, @IdFicha, @Descripcion, @Tipo
+                )", new { dto.Nhcl, Codigo = codigo, IdFicha = idFicha, Descripcion = descripcion.Trim(), Tipo = tipo });
             return (true, null);
         }
         catch (Exception ex)
@@ -1250,13 +1255,18 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(m.med_id_ficha, @IdFicha) AS IdOrden,
                 ISNULL(m.med_nhcl, 0) AS Nhcl,
                 CAST(ISNULL(m.med_idProdu, 0) AS VARCHAR(50)) AS CodigoProd,
-                RTRIM(COALESCE(NULLIF(m.med_descripcionprodu, ''), NULLIF(m.med_otroMedicamento, ''), '')) AS Descripcionamento,
-                CASE WHEN RTRIM(ISNULL(m.med_origen, 'F')) = 'O' THEN ISNULL(m.med_cantidad1, 0) ELSE ISNULL(m.med_cantidad, 0) END AS Cantidad,
+                COALESCE(
+                    NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(m.med_otroMedicamento, '')), CHAR(13), ''), CHAR(10), ''), ''),
+                    NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), ''), ''),
+                    ''
+                ) AS Descripcionamento,
+                CASE WHEN ISNULL(m.med_cantidad, 0) > 0 THEN m.med_cantidad ELSE ISNULL(m.med_cantidad1, 0) END AS Cantidad,
                 RTRIM(ISNULL(m.med_indicaciones, '')) AS Indicaciones,
                 ISNULL(m.med_fecha, GETDATE()) AS Fecha,
                 RTRIM(ISNULL(m.med_tipo, 'M')) AS Tipo,
-                RTRIM(ISNULL(m.med_origen, 'F')) AS Origen
+                CASE WHEN ISNULL(m.med_idProdu, 0) > 0 THEN 'F' ELSE 'O' END AS Origen
             FROM vt_medicinasexterno m
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON m.med_idProdu = p.CODIGO
             WHERE m.med_id_ficha = @IdFicha AND ISNULL(m.med_tipo, 'M') = 'M'
             ORDER BY m.sec";
         return (await _db.QueryAsync<RecetaMedicamentoItemDto>(sql, new { IdFicha = idFicha })).ToList();
@@ -1270,19 +1280,20 @@ public class ConsultaExternaService : IConsultaExternaService
         if (string.IsNullOrWhiteSpace(item.Descripcionamento)) return (false, "Ingrese un medicamento.");
         if (string.IsNullOrWhiteSpace(item.Indicaciones)) return (false, "Ingrese las indicaciones del medicamento.");
 
-        var esCatalogo = !string.IsNullOrWhiteSpace(item.CodigoProd) && item.CodigoProd != "0";
-        var codigoProducto = esCatalogo && int.TryParse(item.CodigoProd, out var codigoNumerico) ? codigoNumerico : 0;
+        var codigoProducto = !string.IsNullOrWhiteSpace(item.CodigoProd) && item.CodigoProd != "0" &&
+                             int.TryParse(item.CodigoProd, out var codigoNumerico)
+            ? codigoNumerico
+            : 0;
+        var esCatalogo = codigoProducto > 0;
         try
         {
             await _db.ExecuteAsync(@"
                 INSERT INTO vt_medicinasexterno (
                     med_nhcl, med_idProdu, med_indicaciones, med_cantidad, med_id_ficha,
-                    med_otroMedicamento, med_cantidad1, med_estado, med_fecha, med_tipo,
-                    med_origen, med_descripcionprodu, med_idorden
+                    med_otroMedicamento, med_cantidad1, med_estado, med_fecha, med_tipo
                 ) VALUES (
                     @Nhcl, @CodigoProd, @Indicaciones, @CantidadCatalogo, @IdFicha,
-                    @OtroMedicamento, @CantidadOtro, 'Por Entregar', @Fecha, 'M',
-                    @Origen, @DescripcionCatalogo, @Serial
+                    @OtroMedicamento, @CantidadOtro, 'Por Entregar', @Fecha, 'M'
                 )", new
             {
                 item.Nhcl,
@@ -1290,12 +1301,9 @@ public class ConsultaExternaService : IConsultaExternaService
                 Indicaciones = item.Indicaciones.Trim(),
                 CantidadCatalogo = esCatalogo ? item.Cantidad : 0,
                 IdFicha = idFicha,
-                OtroMedicamento = esCatalogo ? string.Empty : item.Descripcionamento.Trim().ToUpperInvariant(),
+                OtroMedicamento = item.Descripcionamento.Trim().ToUpperInvariant(),
                 CantidadOtro = esCatalogo ? 0 : item.Cantidad,
-                item.Fecha,
-                Origen = esCatalogo ? "F" : "O",
-                DescripcionCatalogo = esCatalogo ? item.Descripcionamento.Trim().ToUpperInvariant() : string.Empty,
-                Serial = serial
+                item.Fecha
             });
             return (true, null);
         }

@@ -351,7 +351,7 @@
     private async Task AgregarMedicamentoAsync()
     {
         var producto = catalogoProductos.FirstOrDefault(x => string.Equals(x.Descripcion.Trim(), nuevoMedicamento.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase));
-        nuevoMedicamento.CodigoProd = producto?.Codigo ?? "0"; nuevoMedicamento.Nhcl = cabecera.Nhcl;
+        nuevoMedicamento.CodigoProd = producto?.Id.ToString() ?? "0"; nuevoMedicamento.Nhcl = cabecera.Nhcl;
         var r = await ConsultaService.AgregarMedicamentoRecetaExternaAsync(cabecera.IdFicha, nuevoMedicamento, cabecera.Serial);
         esError = !r.Ok; mensaje = r.Ok ? "Medicamento agregado." : r.Mensaje ?? "No se pudo agregar.";
         if (r.Ok)

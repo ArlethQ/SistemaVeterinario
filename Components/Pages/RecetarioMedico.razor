@@ -411,6 +411,15 @@
             MensajeAlerta = "Ingrese el medicamento y sus indicaciones posológicas.";
             return;
         }
+        if (string.IsNullOrWhiteSpace(NuevoItem.CodigoProd))
+        {
+            var exacto = _catalogoEFact.FirstOrDefault(p =>
+                string.Equals(p.Descripcion.Trim(), NuevoItem.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (exacto != null)
+            {
+                NuevoItem.CodigoProd = exacto.Id.ToString();
+            }
+        }
         NuevoItem.IdOrden = IdOrden;
         NuevoItem.Nhcl = Nhcl;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
