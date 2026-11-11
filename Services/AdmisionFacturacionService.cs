@@ -31,6 +31,7 @@ public interface IAdmisionFacturacionService
     Task<bool> TieneOrdenActivaHoyAsync(int nhcl, int idEspecialidad, DateTime fecha);
     Task<int> CrearOrdenAtencionAsync(NuevaOrdenAtencionDto orden, int idUsuario, string ipOrigen);
     Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "");
+    Task<List<OrdenPacienteResumenDto>> ObtenerOrdenesPacienteAsync(int nhcl);
     Task<List<OrdenAtencionResumenDto>> ObtenerColaClinicaAsync(bool triaje, int? idOrden = null);
     Task<bool> CambiarEstadoOrdenAsync(int idOrden, string nuevoEstado, string nuevaEtapa);
     Task<bool> CambiarAsignacionOrdenAsync(int idOrden, int idMedico, int idEspecialidad, int idUsuario);
@@ -1090,6 +1091,24 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             _logger.LogError(ex, "Error consultando órdenes de atención en SQL Server");
             throw;
         }
+    }
+
+    public async Task<List<OrdenPacienteResumenDto>> ObtenerOrdenesPacienteAsync(int nhcl)
+    {
+        if (nhcl <= 0) return [];
+        var ordenes = await _db.QueryAsync<OrdenPacienteResumenDto>(@"
+            SELECT o.ordenAten_id AS IdOrden,
+                   ISNULL(o.ordenAten_fecha, GETDATE()) AS Fecha,
+                   ISNULL(o.ordenAten_hora, '') AS Hora,
+                   ISNULL(esp.es_descripcion, 'Consulta General') AS Especialidad,
+                   ISNULL(u.user_nombre, 'Médico') AS Medico,
+                   ISNULL(o.ordenAten_estado, 'A') AS Estado
+            FROM vt_ordenAtencion o
+            LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
+            LEFT JOIN vt_especialidades esp ON o.ordenAten_esp_numero = esp.es_id
+            WHERE o.ordenAten_nhcl = @Nhcl
+            ORDER BY o.ordenAten_id DESC", new { Nhcl = nhcl });
+        return ordenes.ToList();
     }
 
     public async Task<List<OrdenAtencionResumenDto>> ObtenerColaClinicaAsync(bool triaje, int? idOrden = null)

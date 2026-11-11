@@ -297,7 +297,7 @@
                             </select>
                         </div>
                         <div class="col-md-1">
-                            <button class="btn btn-sm btn-success w-100 fw-semibold" @onclick="AgregarMedicamentoMonitoreoAsync" disabled="@_sheet.Cerrada">
+                            <button class="btn btn-sm btn-success w-100 fw-semibold" @onclick="AgregarMedicamentoMonitoreoAsync" disabled="@(_sheet.Cerrada || _guardandoMedicamento)">
                                 ➕ Añadir
                             </button>
                         </div>
@@ -330,7 +330,7 @@
                                 {
                                     @foreach (var m in _sheet.MedicamentosRegistrados)
                                     {
-                                        <tr>
+                                        <tr @key="m.Id">
                                             <td>@m.Id</td>
                                             <td>@m.Codigo</td>
                                             <td class="text-start fw-semibold">@m.Producto</td>
@@ -341,12 +341,42 @@
                                             <td>@m.Hora</td>
                                             <td>@m.Iniciales (@m.Funcion)</td>
                                             <td class="no-print">
-                                                <button class="btn btn-link btn-sm text-danger p-0"
-                                                        @onclick="() => EliminarMedicamentoAsync(m.Id, m.Codigo)" disabled="@_sheet.Cerrada">
-                                                    🗑️ Eliminar
-                                                </button>
+                                                @if (!_sheet.Cerrada)
+                                                {
+                                                    <button type="button" class="btn btn-link btn-sm" @onclick="() => EditarMedicamento(m)" disabled="@_guardandoMedicamento">Editar</button>
+                                                    <button type="button" class="btn btn-link btn-sm text-danger" @onclick="() => EliminarMedicamentoAsync(m)" disabled="@_guardandoMedicamento">Retirar</button>
+                                                }
                                             </td>
                                         </tr>
+                                        @if (!_sheet.Cerrada && _medicamentoEditado is { } edicion && edicion.Id == m.Id)
+                                        {
+                                            <tr class="no-print">
+                                                <td colspan="10" class="text-start">
+                                                    <fieldset class="row g-2 align-items-end p-2" disabled="@_guardandoMedicamento">
+                                                        <legend class="fs-6 mb-1">Editar @m.Producto</legend>
+                                                        <label class="col-sm-2">Cantidad<input type="number" min="1" class="form-control form-control-sm" @bind="edicion.Cantidad" /></label>
+                                                        <label class="col-sm-3">
+                                                            Vía
+                                                            <select class="form-select form-select-sm" @bind="edicion.Via">
+                                                                @if (!_vias.Any(v => v.Via == edicion.Via))
+                                                                {
+                                                                    <option value="@edicion.Via">@edicion.Via</option>
+                                                                }
+                                                                @foreach (var via in _vias)
+                                                                {
+                                                                    <option value="@via.Via">@via.Via</option>
+                                                                }
+                                                            </select>
+                                                        </label>
+                                                        <label class="col-sm-7">Indicaciones<input class="form-control form-control-sm" @bind="edicion.Indicaciones" /></label>
+                                                        <div class="col-12 d-flex gap-2">
+                                                            <button type="button" class="btn btn-sm btn-primary" @onclick="GuardarMedicamentoEditadoAsync">Guardar cambios</button>
+                                                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => _medicamentoEditado = null">Cancelar</button>
+                                                        </div>
+                                                    </fieldset>
+                                                </td>
+                                            </tr>
+                                        }
                                     }
                                 }
                             </tbody>
@@ -460,6 +490,8 @@
     private List<FarmacoStockDto> _farmacosBc = [];
     private string _busquedaFarmaco = string.Empty;
     private MonitoreoMedInputModel _nuevoMed = new();
+    private MonitoreoMedicamentoDto? _medicamentoEditado;
+    private bool _guardandoMedicamento;
 
     private string _nuevaNotaChequeo = string.Empty;
     private TimeOnly _horaObs = TimeOnly.FromDateTime(DateTime.Now);
@@ -550,6 +582,8 @@
 
     private async Task CargarMonitoreoCompletoAsync(int idOrden, int nhcl, int hoja)
     {
+        if (_sheet.IdOrden != idOrden || _sheet.Nhcl != nhcl)
+            _medicamentoEditado = null;
         var tPac = KardexService.ObtenerCabeceraPacienteAsync(idOrden, nhcl);
         var tSheet = HospService.CargarMonitoreoHospitalarioAsync(idOrden, nhcl, hoja, Session.IdUser);
         await Task.WhenAll(tPac, tSheet);
@@ -690,6 +724,7 @@
 
     private async Task AgregarMedicamentoMonitoreoAsync()
     {
+        if (_sheet.Cerrada || _guardandoMedicamento) return;
         if (_paciente is null || string.IsNullOrWhiteSpace(_nuevoMed.NombreProducto))
         {
             _esError = true;
@@ -700,36 +735,90 @@
         _nuevoMed.Nhcl = Nhcl;
         _nuevoMed.Funcionario = _funcionarios.FirstOrDefault(f => f.UserIniciales == _nuevoMed.Iniciales)?.UserNombre ?? _nuevoMed.Iniciales;
 
-        (bool Exito, string Mensaje) res;
+        _guardandoMedicamento = true;
         try
         {
-            res = await HospService.RegistrarMedicamentoMonitoreoAsync(
+            var res = await HospService.RegistrarMedicamentoMonitoreoAsync(
                 _nuevoMed,
                 Session.IdUser,
                 Session.Localidad);
+            _esError = !res.Exito;
+            _mensajeAlerta = res.Mensaje;
+            if (res.Exito)
+            {
+                _nuevoMed.Indicaciones = string.Empty;
+                _nuevoMed.Cantidad = 1;
+                await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, _sheet.Hoja);
+            }
         }
         catch (Exception ex)
         {
             _esError = true;
             _mensajeAlerta = $"No se pudo registrar el producto: {ex.Message}";
-            return;
         }
-
-        _esError = !res.Exito;
-        _mensajeAlerta = res.Mensaje;
-
-        if (res.Exito)
+        finally
         {
-            _nuevoMed.Indicaciones = string.Empty;
-            _nuevoMed.Cantidad = 1;
-            await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, _sheet.Hoja);
+            _guardandoMedicamento = false;
         }
     }
 
-    private async Task EliminarMedicamentoAsync(int idReg, string codigoProd)
+    private void EditarMedicamento(MonitoreoMedicamentoDto item)
     {
-        await HospService.EliminarMedicamentoMonitoreoAsync(idReg, codigoProd, IdOrden);
-        await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, _sheet.Hoja);
+        _medicamentoEditado = new()
+        {
+            Id = item.Id,
+            Cantidad = item.Cantidad,
+            Indicaciones = item.Indicaciones,
+            Via = item.Via
+        };
+    }
+
+    private async Task GuardarMedicamentoEditadoAsync()
+    {
+        if (_medicamentoEditado is not { } item) return;
+        if (item.Cantidad <= 0)
+        {
+            _esError = true;
+            _mensajeAlerta = "La cantidad debe ser mayor que cero.";
+            return;
+        }
+
+        await CambiarMedicamentoAsync(item.Id,
+            (orden, nhcl) => HospService.ActualizarMedicamentoMonitoreoAsync(item.Id, orden, nhcl, item.Cantidad, item.Indicaciones, item.Via),
+            "Medicamento actualizado.", "No se pudo actualizar el medicamento. Revisa la cantidad y el estado del monitoreo.");
+    }
+
+    private async Task EliminarMedicamentoAsync(MonitoreoMedicamentoDto item)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"¿Retirar {item.Producto} del monitoreo?")) return;
+        await CambiarMedicamentoAsync(item.Id, (orden, nhcl) => HospService.EliminarMedicamentoMonitoreoAsync(item.Id, orden, nhcl),
+            "Medicamento retirado.", "No se pudo retirar el medicamento. Revisa si el monitoreo sigue abierto.");
+    }
+
+    private async Task CambiarMedicamentoAsync(int id, Func<int, int, Task<bool>> guardar, string exito, string error)
+    {
+        if (_sheet.Cerrada || _guardandoMedicamento) return;
+        var (orden, nhcl, hoja) = (IdOrden, Nhcl, _sheet.Hoja);
+        _guardandoMedicamento = true;
+        try
+        {
+            _esError = !await guardar(orden, nhcl);
+            _mensajeAlerta = _esError ? error : exito;
+            if (!_esError && IdOrden == orden && Nhcl == nhcl)
+            {
+                if (_medicamentoEditado?.Id == id) _medicamentoEditado = null;
+                await CargarMonitoreoCompletoAsync(orden, nhcl, hoja);
+            }
+        }
+        catch (Exception)
+        {
+            _esError = true;
+            _mensajeAlerta = error;
+        }
+        finally
+        {
+            _guardandoMedicamento = false;
+        }
     }
 
     private async Task AgregarNotaChequeoAsync()

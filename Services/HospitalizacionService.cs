@@ -32,7 +32,8 @@ public interface IHospitalizacionService
     Task<int> CrearNuevaHojaMonitoreoAsync(int idOrden, int nhcl, int idUsuario);
     Task CerrarMonitoreoHospitalarioAsync(int idOrden);
     Task<(bool Exito, string Mensaje)> RegistrarMedicamentoMonitoreoAsync(MonitoreoMedInputModel input, int idUsuario, int idLocalidad);
-    Task EliminarMedicamentoMonitoreoAsync(int idRegistro, string codigoProd, int idOrden);
+    Task<bool> ActualizarMedicamentoMonitoreoAsync(int idRegistro, int idOrden, int nhcl, int cantidad, string indicaciones, string via);
+    Task<bool> EliminarMedicamentoMonitoreoAsync(int idRegistro, int idOrden, int nhcl);
 
     // Notas importantes y Observaciones por hora compartidas
     Task AgregarNotaImportanteAsync(int idOrden, int nhcl, string observacion, string tipo, int idUsuario, int idLocalidad);
@@ -901,8 +902,8 @@ public class HospitalizacionService : IHospitalizacionService
                        ISNULL(RTRIM(codigoprod), '') AS Codigo,
                        iniciales AS Iniciales, funcion AS Funcion
                 FROM hvt_cabMonitoreoMedBC
-                WHERE ordenId = @IdOrden AND modulo = 'Monitoreo'
-                ORDER BY fecha, proddescripcion", new { IdOrden = idOrden });
+                WHERE ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo'
+                ORDER BY fecha, proddescripcion", new { IdOrden = idOrden, Nhcl = nhcl });
 
             var tNotas = _db.QueryAsync<NotaImportanteDto>(@"
                 SELECT id AS Id, idOrden AS IdOrden, ISNULL(nhcl, 0) AS Nhcl, ISNULL(hora, '') AS Hora,
@@ -1113,12 +1114,13 @@ public class HospitalizacionService : IHospitalizacionService
                 med_iva, med_iddinamics, med_medida, med_bodega
             )
             OUTPUT INSERTED.id
-            VALUES (
+            SELECT
                 @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProducto, @Precio, @Stock,
                 @Indicaciones, @Cantidad, @Usuario, @Localidad, @Producto,
                 @Via, 'K', @Iniciales, @Funcion, @Funcionario, 'A', 'Monitoreo',
                 @Iva, @IdBC, @Medida, @Bodega
-            )",
+            WHERE EXISTS (SELECT 1 FROM vt_ordenAtencion WHERE ordenAten_id = @OrdenId AND ordenAten_nhcl = @Nhcl)
+              AND NOT EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @OrdenId AND cierre = 'S')",
             new
             {
                 input.OrdenId,
@@ -1143,12 +1145,35 @@ public class HospitalizacionService : IHospitalizacionService
                 input.Bodega
             });
 
-        return (true, "Medicamento de monitoreo registrado correctamente.");
+        return idInserted > 0
+            ? (true, "Medicamento de monitoreo registrado correctamente.")
+            : (false, "La orden no está disponible o el monitoreo está cerrado.");
     }
 
-    public async Task EliminarMedicamentoMonitoreoAsync(int idRegistro, string codigoProd, int idOrden)
+    public async Task<bool> ActualizarMedicamentoMonitoreoAsync(
+        int idRegistro, int idOrden, int nhcl, int cantidad, string indicaciones, string via)
     {
-        await _db.ExecuteAsync("DELETE FROM hvt_cabMonitoreoMedBC WHERE id = @Id", new { Id = idRegistro });
+        if (cantidad <= 0) return false;
+        await ValidarOrdenPacienteAsync(idOrden, nhcl);
+
+        return await _db.ExecuteAsync(@"
+            UPDATE hvt_cabMonitoreoMedBC
+            SET cantprod = @Cantidad, indicacionesprod = @Indicaciones, via = @Via
+            WHERE id = @Id AND ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo'
+              AND (ISNULL(stockprod, 0) <= 0 OR @Cantidad <= stockprod)
+              AND NOT EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @IdOrden AND cierre = 'S')",
+            new { Id = idRegistro, IdOrden = idOrden, Nhcl = nhcl, Cantidad = cantidad,
+                Indicaciones = indicaciones.Trim().ToUpperInvariant(), Via = via.Trim() }) > 0;
+    }
+
+    public async Task<bool> EliminarMedicamentoMonitoreoAsync(int idRegistro, int idOrden, int nhcl)
+    {
+        await ValidarOrdenPacienteAsync(idOrden, nhcl);
+        return await _db.ExecuteAsync(@"
+            DELETE FROM hvt_cabMonitoreoMedBC
+            WHERE id = @Id AND ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo'
+              AND NOT EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @IdOrden AND cierre = 'S')",
+            new { Id = idRegistro, IdOrden = idOrden, Nhcl = nhcl }) > 0;
     }
 
     // ========================================================================

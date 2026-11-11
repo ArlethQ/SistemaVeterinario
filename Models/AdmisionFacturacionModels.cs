@@ -344,3 +344,13 @@ public class BitacoraAuditoriaDto
     public string Ip { get; set; } = string.Empty;
     public string Hostname { get; set; } = string.Empty;
 }
+
+public sealed class OrdenPacienteResumenDto
+{
+    public int IdOrden { get; set; }
+    public DateTime Fecha { get; set; }
+    public string Hora { get; set; } = string.Empty;
+    public string Especialidad { get; set; } = string.Empty;
+    public string Medico { get; set; } = string.Empty;
+    public string Estado { get; set; } = string.Empty;
+}

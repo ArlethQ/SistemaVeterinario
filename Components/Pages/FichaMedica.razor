@@ -3,6 +3,8 @@
 @page "/consulta/fichamedica/paciente/{Nhcl:int}"
 @inject IConsultaExternaService ConsultaService
 @inject IKardexService KardexService
+@inject IAdmisionFacturacionService AdmisionService
+@inject ILogger<FichaMedica> Logger
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject IJSRuntime JS
@@ -66,6 +68,54 @@
             <div class="spinner-border spinner-border-sm" role="status"></div>
             <span class="fw-semibold small">Cargando historia clínica SOAP y antecedentes...</span>
         </div>
+    }
+
+    @if (Paciente != null && !CargandoInicial)
+    {
+        <details class="card shadow-sm border-0 mb-3 p-3" open>
+            <summary class="fw-semibold text-primary">Historial de órdenes de @Paciente.PacienteNombre</summary>
+            @if (_errorHistorialOrdenes)
+            {
+                <p class="text-danger mt-2 mb-0">No se pudo cargar el historial de órdenes.</p>
+            }
+            else if (_historialOrdenes.Count == 0)
+            {
+                <p class="text-muted mt-2 mb-0">Esta mascota aún no tiene órdenes.</p>
+            }
+            else
+            {
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Orden</th><th>Fecha</th><th>Especialidad</th><th>Médico</th><th>Ficha SOAP</th></tr></thead>
+                        <tbody>
+                            @foreach (var orden in _historialOrdenes)
+                            {
+                                <tr @key="orden.IdOrden" class="@(orden.IdOrden == IdOrden ? "table-active" : null)">
+                                    <td>#@orden.IdOrden</td>
+                                    <td>@orden.Fecha.ToString("dd/MM/yyyy") @orden.Hora</td>
+                                    <td>@orden.Especialidad</td>
+                                    <td>@orden.Medico</td>
+                                    <td>
+                                        @if (orden.Estado.Trim() == "I")
+                                        {
+                                            <span class="text-muted">Anulada</span>
+                                        }
+                                        else if (orden.IdOrden == IdOrden)
+                                        {
+                                            <span class="text-muted">Abierta</span>
+                                        }
+                                        else
+                                        {
+                                            <a class="btn btn-sm btn-outline-primary" href="/consulta/fichamedica/@orden.IdOrden/@Paciente.Nhcl">Abrir</a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </details>
     }
 
     <!-- Cinta de Identificación del Paciente y Semáforo de Temperamento -->
@@ -159,19 +209,19 @@
                         <div class="btn-group w-100 mb-3" role="group">
                             <button type="button" class="btn btn-sm @(Ficha.Temperamento == "TRANQUILO" ? "btn-dark" : "btn-outline-secondary")"
                                     @onclick='() => SeleccionarTemperamento("TRANQUILO", "imagenes/temperamento/blanco.png")'>
-                                ⚪ Se deja tocar
+                                ⚪ Sociable
                             </button>
                             <button type="button" class="btn btn-sm @(Ficha.Temperamento == "NERVIOSO" ? "btn-success" : "btn-outline-success")"
                                     @onclick='() => SeleccionarTemperamento("NERVIOSO", "imagenes/temperamento/verde.png")'>
-                                🟢 Acercarse despacio
+                                🟢 Tímido
                             </button>
                             <button type="button" class="btn btn-sm @(Ficha.Temperamento == "A LA DEFENSIVA" ? "btn-warning text-dark fw-bold" : "btn-outline-warning text-dark")"
                                     @onclick='() => SeleccionarTemperamento("A LA DEFENSIVA", "imagenes/temperamento/amarillo.png")'>
-                                🟡 Evitar tocar si no es necesario
+                                🟡 Defensivo
                             </button>
                             <button type="button" class="btn btn-sm @(Ficha.Temperamento == "AGRESIVO" ? "btn-danger" : "btn-outline-danger")"
                                     @onclick='() => SeleccionarTemperamento("AGRESIVO", "imagenes/temperamento/rojo.png")'>
-                                🔴 Requiere personal capacitado
+                                🔴 Agresivo
                             </button>
                         </div>
 
@@ -644,6 +694,8 @@
     private bool EsError { get; set; }
 
     private PacienteHeaderDto? Paciente { get; set; }
+    private List<OrdenPacienteResumenDto> _historialOrdenes = [];
+    private bool _errorHistorialOrdenes;
     private FichaMedicaCompletaDto Ficha { get; set; } = new();
     private List<DiagnosticoCie10Dto> Diagnosticos { get; set; } = new();
     private List<CatalogoCie10ItemDto> ResultadosCie10 { get; set; } = new();
@@ -795,11 +847,30 @@
     {
         MensajeAlerta = null;
         EsError = false;
+        _historialOrdenes = [];
+        _errorHistorialOrdenes = false;
         Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
         if (Paciente != null && Nhcl <= 0)
         {
             Nhcl = Paciente.Nhcl;
             NhclInput = Nhcl;
+        }
+        if (Paciente is not null)
+        {
+            try
+            {
+                _historialOrdenes = await AdmisionService.ObtenerOrdenesPacienteAsync(Paciente.Nhcl);
+                if (IdOrden <= 0 && _historialOrdenes.FirstOrDefault(o => o.Estado.Trim() != "I") is { } ultimaOrden)
+                {
+                    IdOrden = IdOrdenInput = ultimaOrden.IdOrden;
+                    Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Error al cargar el historial de órdenes de la mascota {Nhcl}", Nhcl);
+                _errorHistorialOrdenes = true;
+            }
         }
         Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
 
@@ -877,10 +948,10 @@
 
     private static string ObtenerTextoTemperamento(string? temperamento) => temperamento?.Trim().ToUpperInvariant() switch
     {
-        "NERVIOSO" => "Acercarse despacio",
-        "A LA DEFENSIVA" => "Evitar tocar si no es necesario",
-        "AGRESIVO" => "Requiere personal capacitado",
-        _ => "Se deja tocar"
+        "NERVIOSO" => "Tímido",
+        "A LA DEFENSIVA" => "Defensivo",
+        "AGRESIVO" => "Agresivo",
+        _ => "Sociable"
     };
 
     private string ObtenerClaseBadgeTemperamento(string temp) => temp?.ToUpper() switch

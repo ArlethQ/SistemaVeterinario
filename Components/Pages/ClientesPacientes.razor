@@ -441,9 +441,9 @@
                                                 <span class="triaje-pill triaje-@(_mascotaResumen.MasColorTriaje ?? "green")">
                                                     <i class="bi bi-shield-fill-check me-1"></i>
                                                     @(_mascotaResumen.MasColorTriaje switch {
-                                                        "red" => "Requiere personal capacitado",
-                                                        "yellow" => "Evitar tocar si no es necesario",
-                                                        _ => "Se deja tocar"
+                                                        "red" => "Agresivo",
+                                                        "yellow" => "Defensivo",
+                                                        _ => "Sociable"
                                                     })
                                                 </span>
 
@@ -1745,16 +1745,6 @@
         }
     }
 
-    private class OrdenPacienteResumenDto
-    {
-        public int IdOrden { get; set; }
-        public DateTime Fecha { get; set; }
-        public string Hora { get; set; } = string.Empty;
-        public string Especialidad { get; set; } = string.Empty;
-        public string Medico { get; set; } = string.Empty;
-        public string Estado { get; set; } = string.Empty;
-    }
-
     private List<OrdenPacienteResumenDto> _ordenesPaciente = new();
     private bool _cargandoOrdenesPaciente;
     private bool _mostrarDropdownOrdenes;
@@ -1783,19 +1773,7 @@
         _cargandoOrdenesPaciente = true;
         try
         {
-            var ordenes = await SqlData.QueryAsync<OrdenPacienteResumenDto>(@"
-                SELECT o.ordenAten_id AS IdOrden,
-                       ISNULL(o.ordenAten_fecha, GETDATE()) AS Fecha,
-                       ISNULL(o.ordenAten_hora, '') AS Hora,
-                       ISNULL(esp.es_descripcion, 'Consulta General') AS Especialidad,
-                       ISNULL(u.user_nombre, 'Médico') AS Medico,
-                       ISNULL(o.ordenAten_estado, 'A') AS Estado
-                FROM vt_ordenAtencion o
-                LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
-                LEFT JOIN vt_especialidades esp ON o.ordenAten_esp_numero = esp.es_id
-                WHERE o.ordenAten_nhcl = @Nhcl
-                ORDER BY o.ordenAten_id DESC", new { Nhcl = nhcl });
-            _ordenesPaciente = ordenes.ToList();
+            _ordenesPaciente = await AdmisionService.ObtenerOrdenesPacienteAsync(nhcl);
         }
         catch
         {
@@ -2449,9 +2427,9 @@
                                 <div class="col-md-5">
                                     <label class="form-label small fw-bold">Semáforo de Temperamento / Triaje</label>
                                     <select class="form-select form-select-sm" @bind="_mascotaEditando.MasColorTriaje">
-                                        <option value="green">🟢 Verde — Se deja tocar</option>
-                                        <option value="yellow">🟡 Amarillo — Evitar tocar si no es necesario</option>
-                                        <option value="red">🔴 Rojo — Requiere personal capacitado</option>
+                                        <option value="green">🟢 Verde — Sociable</option>
+                                        <option value="yellow">🟡 Amarillo — Defensivo</option>
+                                        <option value="red">🔴 Rojo — Agresivo</option>
                                     </select>
                                 </div>
 
@@ -2514,8 +2492,8 @@
 
     private static string ObtenerTextoTriaje(string color) => color switch
     {
-        "red" => "Requiere personal capacitado",
-        "yellow" => "Evitar tocar si no es necesario",
-        _ => "Se deja tocar"
+        "red" => "Agresivo",
+        "yellow" => "Defensivo",
+        _ => "Sociable"
     };
 }
