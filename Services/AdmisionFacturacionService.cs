@@ -1022,7 +1022,6 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             throw new InvalidOperationException("El médico seleccionado no atiende en la sucursal conectada.");
         }
 
-        orden.TriajeMedico = !orden.EsProcedimiento && orden.IdEspecialidad > 0;
 
         string etapaInicial = orden.EsProcedimiento ? "Consulta" : orden.TipoDespacho switch
         {
@@ -1159,7 +1158,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 CASE WHEN ISNULL(o.ordenAten_esProcedimiento,0) = 1 THEN 'Procedimiento' ELSE ISNULL(es.es_descripcion, '') END AS Especialidad,
                 o.ordenAten_idMedico AS IdMedico,
                 ISNULL(u.user_nombre, '') AS Medico,
-                CAST(ISNULL(o.ordenAten_triajeMedico,0) AS BIT) AS TriajeMedico,
+                CAST(ISNULL(o.ordenAten_triajeMedico, CASE WHEN o.ordenAten_esp_numero > 0 THEN 1 ELSE 0 END) AS BIT) AS TriajeMedico,
                 CAST(ISNULL(o.ordenAten_esProcedimiento,0) AS BIT) AS EsProcedimiento,
                 o.ordenAten_idEnfermero AS IdEnfermero,
                 ISNULL(enf.user_nombre,'') AS Enfermero,
@@ -1327,7 +1326,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                             WHERE enfermero.user_numero = @Usuario AND enfermero.user_estado = 'A'
                                 AND UPPER(tipo.tipuser_descripcion) LIKE '%ENFERMER%'))
                         AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
-                        AND o.ordenAten_esp_numero > 0
+                        AND ISNULL(o.ordenAten_triajeMedico, CASE WHEN o.ordenAten_esp_numero > 0 THEN 1 ELSE 0 END) = 1
                         AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                         AND NOT EXISTS (SELECT 1 FROM vt_vitacora v
                             WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id))

@@ -231,11 +231,11 @@
                                     </select>
                                 </div>
                                 <div class="col-md-3 d-flex align-items-end">
-                                    <label class="form-check mb-2"><input type="checkbox" class="form-check-input" checked="@(_nuevaOrden.IdEspecialidad > 0)" disabled /><span class="form-check-label ms-2 fw-bold">Triaje</span></label>
+                                    <label class="form-check mb-2"><input type="checkbox" class="form-check-input" @bind="_nuevaOrden.TriajeMedico" /><span class="form-check-label ms-2 fw-bold">Triaje</span></label>
                                 </div>
                             }
 
-                            @if (_nuevaOrden.EsProcedimiento || _nuevaOrden.IdEspecialidad > 0)
+                            @if (_nuevaOrden.EsProcedimiento || _nuevaOrden.TriajeMedico)
                             {
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">@(_nuevaOrden.EsProcedimiento ? "3. Semáforo Triaje" : (EsTipoConsultaEspecialidad ? "5. Semáforo Triaje" : "4. Semáforo Triaje"))</label>
@@ -250,7 +250,7 @@
                             {
                                 <div class="col-md-6 d-flex align-items-center">
                                     <div class="alert alert-light border small text-muted py-2 px-2 m-0 w-100" style="font-size:0.75rem;">
-                                        <i class="bi bi-info-circle me-1 text-primary"></i>Esta especialidad <strong>no requiere triaje</strong>.
+                                        <i class="bi bi-info-circle me-1 text-primary"></i>Esta orden <strong>no requiere triaje</strong>.
                                     </div>
                                 </div>
                             }
@@ -378,7 +378,7 @@
                                         <td>
                                             <div class="d-flex flex-column align-items-start gap-1">
                                                 <span class="badge @ObtenerBadgeEtapa(o.Etapa)">@o.Etapa</span>
-                                                @if (!o.EsProcedimiento && o.IdEspecialidad > 0)
+                                                @if (!o.EsProcedimiento && o.TriajeMedico)
                                                 {
                                                     <span class="badge bg-info text-dark" style="font-size:0.65rem;">
                                                         @(string.IsNullOrWhiteSpace(o.Enfermero) ? "Triaje pendiente" : $"Triaje: {o.Enfermero}")
@@ -426,7 +426,7 @@
                                                     @onchange="(e) => EjecutarAccionDropboxAsync(o, e)">
                                                 <option value="">⚡ Módulos / Acciones...</option>
                                                 <optgroup label="Módulos Clínicos">
-                                                    @if (Permisos.Permite("admision/triaje"))
+                                                    @if (o.TriajeMedico && !o.EsProcedimiento && Permisos.Permite("admision/triaje"))
                                                     {
                                                         <option value="triaje">📋 Triaje de Ingreso</option>
                                                     }
@@ -595,7 +595,7 @@
     private List<CatalogoItemGenericoDto> _medicosCambio = new();
     private int _cambioEspecialidad, _cambioMedico;
 
-    private NuevaOrdenAtencionDto _nuevaOrden = new();
+    private NuevaOrdenAtencionDto _nuevaOrden = new() { TriajeMedico = true };
     private string _filtroPaciente = string.Empty;
     private string _filtroOrdenTexto = string.Empty;
     private string _filtroEtapa = string.Empty;
@@ -994,6 +994,7 @@
             }
         }
 
+        _nuevaOrden.TriajeMedico = true;
         _mostrarFormularioOrden = true;
     }
     private void CerrarFormularioOrden() => _mostrarFormularioOrden = false;
@@ -1160,7 +1161,6 @@
             }
 
             _nuevaOrden.IdMedico = 0;
-            _nuevaOrden.TriajeMedico = false;
             _nuevaOrden.IdEspecialidad = 0;
             _nuevaOrden.TipoConsulta = 0;
             _nuevaOrden.TipoDespacho = 0;
@@ -1207,7 +1207,7 @@
                 _nuevaOrden.ColorTriaje = "green";
             }
         }
-        else if (_nuevaOrden.IdEspecialidad <= 0)
+        else if (!_nuevaOrden.TriajeMedico)
         {
             _nuevaOrden.ColorTriaje = string.Empty;
         }
