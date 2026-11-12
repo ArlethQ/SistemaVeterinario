@@ -13,12 +13,14 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 
+<NavigationLock OnBeforeInternalNavigation="AntesDeNavegarAsync" ConfirmExternalNavigation="@(_versionCambios != _versionGuardada || Guardando)" />
+
 <PageTitle>e-ForVets - Historia Clínica SOAP y Ficha Médica</PageTitle>
 
 <div class="container-fluid py-3">
     <nav class="nav nav-tabs mb-3" aria-label="Vista de historia clínica">
         <button type="button" class="nav-link @(!_verHistorial ? "active" : null)" aria-pressed="@(!_verHistorial)" @onclick="() => _verHistorial = false">Ficha SOAP</button>
-        <button type="button" class="nav-link @(_verHistorial ? "active" : null)" aria-pressed="@_verHistorial" @onclick="() => _verHistorial = true">Historial de órdenes</button>
+        <button type="button" class="nav-link @(_verHistorial ? "active" : null)" aria-pressed="@_verHistorial" @onclick="VerHistorialAsync">Historial de órdenes</button>
     </nav>
 
     <!-- Encabezado y Acciones -->
@@ -173,7 +175,11 @@
             </li>
         </ul>
 
-    <fieldset disabled="@(!FichaEditable)">
+    @if (_ordenActualCerrada && !FichaEditable)
+    {
+        <p class="small text-muted mb-2">Ficha SOAP finalizada. Solo lectura.</p>
+    }
+    <fieldset disabled="@(!FichaEditable || Guardando)">
     <!-- TAB 1: EXAMEN FÍSICO, CONSTANTES FISIOLÓGICAS Y TRIAJE -->
     @if (TabActiva == 1)
     {
@@ -188,14 +194,14 @@
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Esterilizado</label>
-                                <select class="form-select form-select-sm" @bind="Ficha.Esterilizado">
+                                <select class="form-select form-select-sm" @bind="Ficha.Esterilizado" @bind:after="RegistrarCambioSoapAsync">
                                     <option value="S">SÍ</option>
                                     <option value="N">NO</option>
                                 </select>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Sede / Tipo</label>
-                                <select class="form-select form-select-sm" @bind="Ficha.MedTipo">
+                                <select class="form-select form-select-sm" @bind="Ficha.MedTipo" @bind:after="RegistrarCambioSoapAsync">
                                     <option value="HDEV">Doméstico (Mascotas)</option>
                                     <option value="TUERI">Silvestre (Fauna)</option>
                                 </select>
@@ -226,40 +232,40 @@
                         <div class="row g-2">
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">Peso (kg)</label>
-                                <input type="number" step="0.01" min="0" class="form-control form-control-sm fw-bold text-primary" @bind="Ficha.Peso" />
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm fw-bold text-primary" @bind="Ficha.Peso" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">Temp (°C)</label>
-                                <input type="number" step="0.1" min="0" class="form-control form-control-sm" @bind="Ficha.Temperatura" />
+                                <input type="number" step="0.1" min="0" class="form-control form-control-sm" @bind="Ficha.Temperatura" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">FC (lpm)</label>
-                                <input type="number" min="0" class="form-control form-control-sm" @bind="Ficha.FrecuenciaCardiaca" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="Ficha.FrecuenciaCardiaca" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">FR (rpm)</label>
-                                <input type="number" min="0" class="form-control form-control-sm" @bind="Ficha.FrecuenciaRespiratoria" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="Ficha.FrecuenciaRespiratoria" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">TLLC (seg)</label>
-                                <input type="number" min="0" class="form-control form-control-sm" @bind="Ficha.TiempoLlenadoCapilar" />
+                                <input type="number" min="0" class="form-control form-control-sm" @bind="Ficha.TiempoLlenadoCapilar" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-4">
                                 <label class="form-label small fw-semibold">Deshidratación (%)</label>
-                                <input type="number" min="0" max="100" class="form-control form-control-sm" @bind="Ficha.Deshidratacion" />
+                                <input type="number" min="0" max="100" class="form-control form-control-sm" @bind="Ficha.Deshidratacion" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label small fw-semibold">Condición Corporal (ICC 1-9)</label>
-                                <input type="range" class="form-range" min="1" max="9" @bind="Ficha.IndiceCondicionCorporal" />
+                                <input type="range" class="form-range" min="1" max="9" @bind="Ficha.IndiceCondicionCorporal" @bind:after="RegistrarCambioSoapAsync" />
                                 <div class="text-center small fw-bold text-primary">ICC: @Ficha.IndiceCondicionCorporal / 9</div>
                             </div>
                             <div class="col-6">
                                 <label class="form-label small fw-semibold">Pulso / CP</label>
-                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Cp" placeholder="Fuerte, simétrico, concordante" />
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Cp" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Fuerte, simétrico, concordante" />
                             </div>
                             <div class="col-12 mt-1">
                                 <label class="form-label small fw-semibold">Observaciones triaje <small class="text-muted fw-normal">(opcional)</small></label>
-                                <textarea class="form-control form-control-sm" rows="2" placeholder="Observaciones o notas de triaje..." @bind="Ficha.MedApuntes"></textarea>
+                                <textarea class="form-control form-control-sm" rows="2" placeholder="Observaciones o notas de triaje..." @bind="Ficha.MedApuntes" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync"></textarea>
                             </div>
                         </div>
                     </div>
@@ -276,39 +282,39 @@
                         <div class="row g-2">
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Membranas Mucosas</label>
-                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Mucosas" />
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Mucosas" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Reflejo Tusígeno / Traqueal</label>
-                                <input type="text" class="form-control form-control-sm" @bind="Ficha.ReflejoTusigeno" />
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.ReflejoTusigeno" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Auscultación Cardiopulmonar</label>
-                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Auscultacion" />
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Auscultacion" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Linfonodos Superficiales</label>
-                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Linfonodos" />
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.Linfonodos" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Palpación Abdominal</label>
-                                <input type="text" class="form-control form-control-sm" @bind="Ficha.PalpacionAbdominal" />
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.PalpacionAbdominal" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Palpación Tiroides / Cuello</label>
-                                <input type="text" class="form-control form-control-sm" @bind="Ficha.PalpacionTiroides" />
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.PalpacionTiroides" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Piel, Pelaje y Anexos</label>
-                                <input type="text" class="form-control form-control-sm" @bind="Ficha.PielYAnexos" />
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.PielYAnexos" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">Cavidad Oral y Piezas Dentales</label>
-                                <input type="text" class="form-control form-control-sm" @bind="Ficha.CavidadOral" />
+                                <input type="text" class="form-control form-control-sm" @bind="Ficha.CavidadOral" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" />
                             </div>
                             <div class="col-12">
                                 <label class="form-label small fw-semibold">Otros Hallazgos del Examen Físico</label>
-                                <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.Otros"></textarea>
+                                <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.Otros" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync"></textarea>
                             </div>
                         </div>
                     </div>
@@ -329,43 +335,43 @@
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label small fw-bold text-primary">Motivo Principal de Consulta *</label>
-                        <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.MedMotivo" placeholder="Motivo por el que acude el propietario..."></textarea>
+                        <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.MedMotivo" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Motivo por el que acude el propietario..."></textarea>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-bold text-primary">Antecedentes Médicos Relevantes de la Consulta</label>
-                        <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.MedAntecedente" placeholder="Enfermedades previas, alergias, cirugías..."></textarea>
+                        <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.MedAntecedente" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Enfermedades previas, alergias, cirugías..."></textarea>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label small fw-bold text-indigo">S — SUBJETIVO / ANAMNESIS</label>
-                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedAnamnesis" placeholder="Relato cronológico de signos clínicos, apetito, consumo de agua, micción, defecación..."></textarea>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedAnamnesis" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Relato cronológico de signos clínicos, apetito, consumo de agua, micción, defecación..."></textarea>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-bold text-indigo">O — OBJETIVO (Hallazgos Clínicos y Lista de Problemas)</label>
-                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedObjetivo" placeholder="Alteraciones detectadas en el examen físico y lista depurada de problemas..."></textarea>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedObjetivo" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Alteraciones detectadas en el examen físico y lista depurada de problemas..."></textarea>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label small fw-bold text-indigo">A — ANÁLISIS (Diagnósticos Diferenciales)</label>
-                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedAnalisis" placeholder="Diagnósticos diferenciales ordenados por probabilidad fisiopatológica..."></textarea>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedAnalisis" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Diagnósticos diferenciales ordenados por probabilidad fisiopatológica..."></textarea>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-bold text-indigo">P — PLAN DIAGNÓSTICO (Pruebas Complementarias)</label>
-                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedPlan" placeholder="Exámenes de laboratorio, citología, radiografía, ecografía, interconsultas..."></textarea>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="Ficha.MedPlan" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Exámenes de laboratorio, citología, radiografía, ecografía, interconsultas..."></textarea>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label small fw-bold text-success">PLAN TERAPÉUTICO / TRATAMIENTO INSTAURADO</label>
-                        <textarea class="form-control form-control-sm" rows="3" @bind="Ficha.Tratamiento" placeholder="Terapia intrahospitalaria o ambulatoria..."></textarea>
+                        <textarea class="form-control form-control-sm" rows="3" @bind="Ficha.Tratamiento" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Terapia intrahospitalaria o ambulatoria..."></textarea>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-bold text-success">OBSERVACIONES, RECOMENDACIONES Y APUNTES</label>
-                        <textarea class="form-control form-control-sm" rows="3" @bind="Ficha.ObservacionesYRecomendaciones" placeholder="Recomendaciones generales y signos de alarma..."></textarea>
+                        <textarea class="form-control form-control-sm" rows="3" @bind="Ficha.ObservacionesYRecomendaciones" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Recomendaciones generales y signos de alarma..."></textarea>
                     </div>
 
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">Pronóstico Clínico</label>
-                        <select class="form-select form-select-sm" @bind="Ficha.MedPronostico">
+                        <select class="form-select form-select-sm" @bind="Ficha.MedPronostico" @bind:after="RegistrarCambioSoapAsync">
                             <option value="Bueno">Bueno / Favorable</option>
                             <option value="Reservado">Reservado</option>
                             <option value="Grave">Grave / Desfavorable</option>
@@ -373,14 +379,14 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">¿Candidato a Procedimiento Quirúrgico?</label>
-                        <select class="form-select form-select-sm" @bind="Ficha.RequiereCirugia">
+                        <select class="form-select form-select-sm" @bind="Ficha.RequiereCirugia" @bind:after="RegistrarCambioSoapAsync">
                             <option value="N">No requiere cirugía</option>
                             <option value="S">Sí requiere cirugía</option>
                         </select>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">Estado de alerta clínica</label>
-                        <select class="form-select form-select-sm" @bind="Ficha.EstadoParte" disabled="@(Ficha.RequiereCirugia != "S")">
+                        <select class="form-select form-select-sm" @bind="Ficha.EstadoParte" @bind:after="RegistrarCambioSoapAsync" disabled="@(Ficha.RequiereCirugia != "S")">
                             <option value="PENDIENTE">Pendiente</option>
                             <option value="REALIZADO">Realizado</option>
                         </select>
@@ -394,7 +400,7 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-semibold">Tipo de Consulta *</label>
-                        <select class="form-select form-select-sm" @bind="Ficha.MedTipoConsulta">
+                        <select class="form-select form-select-sm" @bind="Ficha.MedTipoConsulta" @bind:after="RegistrarCambioSoapAsync">
                             <option value="">-- Seleccione tipo de consulta --</option>
                             @foreach (var tipo in TiposConsultaDisponibles)
                             {
@@ -404,7 +410,7 @@
                     </div>
                     <div class="col-md-4 d-flex align-items-end">
                         <div class="form-check mb-1">
-                            <input class="form-check-input" type="checkbox" id="chkRequiereHospitalizacion" @bind="Ficha.RequiereHospitalizacion" />
+                            <input class="form-check-input" type="checkbox" id="chkRequiereHospitalizacion" @bind="Ficha.RequiereHospitalizacion" @bind:after="RegistrarCambioSoapAsync" />
                             <label class="form-check-label small fw-semibold" for="chkRequiereHospitalizacion">
                                 ¿Debe quedarse en hospitalización?
                             </label>
@@ -589,7 +595,7 @@
                                     <i class="bi bi-save me-1"></i>Guardar indicaciones
                                 </button>
                             </div>
-                            <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.IndicacionesGeneralesReceta" placeholder="Cuidados generales para imprimir en la receta..."></textarea>
+                            <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.IndicacionesGeneralesReceta" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Cuidados generales para imprimir en la receta..."></textarea>
                         </div>
 
                         <div class="table-responsive">
@@ -1075,7 +1081,9 @@
     }
 
     private bool FichaCargada => Paciente != null && IdOrden > 0 && !CargandoInicial;
-    private bool FichaEditable => FichaCargada && !_ordenActualCerrada;
+    private bool FichaEditable => FichaCargada && _estadoOrden is ("A" or "E" or "T")
+        && (_estadoOrden != "T" || Session.TipoUser == 1);
+    private string? _estadoOrden;
     private bool _verHistorial;
     private int TabActiva { get; set; } = 1;
     private bool CargandoInicial { get; set; } = true;
@@ -1134,6 +1142,8 @@
     protected override async Task OnParametersSetAsync()
     {
         _ordenActualCerrada = false;
+        _estadoOrden = null;
+        _versionCambios = _versionGuardada = 0;
 
         CargandoInicial = true;
         Paciente = null;
@@ -1212,8 +1222,16 @@
         }
     }
 
+    private async Task VerHistorialAsync()
+    {
+        if (await GuardarCambiosSoapAsync())
+            _verHistorial = true;
+    }
+
     private async Task SeleccionarTabAsync(int tab)
     {
+        if (!await GuardarCambiosSoapAsync()) return;
+
         TabActiva = tab;
         MensajeAlerta = null;
         EsError = false;
@@ -1259,7 +1277,10 @@
             }
         }
 
-        Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
+        _estadoOrden = _historialOrdenes.FirstOrDefault(orden => orden.IdOrden == IdOrden)?.Estado.Trim();
+        _ordenActualCerrada = _estadoOrden == "T";
+        if (!_ordenActualCerrada)
+            Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
 
         if (Paciente == null || IdOrden <= 0)
             return;
@@ -1310,7 +1331,7 @@
         await CargarCatalogoServicioCategoriaAsync(_categoriaServicio);
     }
 
-    private void OnFechaControlChanged(ChangeEventArgs e)
+    private async Task OnFechaControlChanged(ChangeEventArgs e)
     {
         if (DateTime.TryParse(e.Value?.ToString(), out var dt))
         {
@@ -1330,6 +1351,7 @@
         {
             Ficha.MedFechaControl = null;
         }
+        await RegistrarCambioSoapAsync();
     }
 
     private void OnFechaRevacunacionChanged(ChangeEventArgs e)
@@ -1354,10 +1376,11 @@
         }
     }
 
-    private void SeleccionarTemperamento(string temperamento, string rutaImagen)
+    private async Task SeleccionarTemperamento(string temperamento, string rutaImagen)
     {
         Ficha.Temperamento = temperamento;
         Ficha.ColorTriaje = rutaImagen;
+        await RegistrarCambioSoapAsync();
     }
 
     private static string ObtenerTextoTemperamento(string? temperamento) => temperamento?.Trim().ToUpperInvariant() switch
@@ -1375,6 +1398,77 @@
         "AGRESIVO" => "bg-danger",
         _ => "bg-secondary"
     };
+
+    private int _versionCambios;
+    private int _versionGuardada;
+    private readonly SemaphoreSlim _guardadoAutomatico = new(1, 1);
+
+    private async Task RegistrarCambioSoapAsync()
+    {
+        if (!FichaEditable || Guardando)
+            return;
+
+        var ficha = Ficha;
+        var version = ++_versionCambios;
+        await Task.Delay(450);
+        if (ReferenceEquals(ficha, Ficha) && version == _versionCambios && !Guardando)
+            await GuardarCambiosSoapAsync();
+    }
+
+    private async Task<bool> GuardarCambiosSoapAsync()
+    {
+        await _guardadoAutomatico.WaitAsync();
+        try
+        {
+            while (_versionGuardada != _versionCambios)
+            {
+                var version = _versionCambios;
+                if (!FichaEditable || Ficha.Peso < 0 || Ficha.Temperatura < 0 ||
+                    Ficha.FrecuenciaCardiaca < 0 || Ficha.FrecuenciaRespiratoria < 0 ||
+                    Ficha.TiempoLlenadoCapilar < 0 || Ficha.Deshidratacion is < 0 or > 100 ||
+                    !await AdmisionService.PuedeConsultarOrdenAsync(IdOrden, Nhcl) ||
+                    !await ConsultaService.GuardarFichaMedicaAsync(Ficha, Session.IdUser, cerrarOrden: false))
+                {
+                    EsError = true;
+                    MensajeAlerta = ErrorGuardadoAutomatico;
+                    return false;
+                }
+
+                _versionGuardada = version;
+            }
+
+            if (MensajeAlerta == ErrorGuardadoAutomatico)
+            {
+                MensajeAlerta = null;
+                EsError = false;
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error al guardar cambios de la ficha SOAP de la orden {Orden}", IdOrden);
+        }
+        finally
+        {
+            _guardadoAutomatico.Release();
+        }
+
+        EsError = true;
+        MensajeAlerta = ErrorGuardadoAutomatico;
+        return false;
+    }
+
+    private const string ErrorGuardadoAutomatico =
+        "No se guardaron los cambios de la ficha SOAP. Revisa los valores ingresados e inténtalo nuevamente.";
+
+    private async Task AntesDeNavegarAsync(Microsoft.AspNetCore.Components.Routing.LocationChangingContext contexto)
+    {
+        if (Guardando || !await GuardarCambiosSoapAsync())
+        {
+            contexto.PreventNavigation();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
     private async Task GuardarFichaCompletaAsync()
     {
@@ -1400,7 +1494,7 @@
         if (string.IsNullOrWhiteSpace(Ficha.MedTipoConsulta))
             faltantes.Add("Tipo de consulta");
 
-        if (faltantes.Count > 0)
+        if (!_ordenActualCerrada && faltantes.Count > 0)
         {
             EsError = true;
             MensajeAlerta = $"No se puede guardar la ficha SOAP. Complete los campos obligatorios: {string.Join(", ", faltantes)}.";
@@ -1423,7 +1517,7 @@
         Ficha.TiempoLlenadoCapilar = Math.Max(0, Ficha.TiempoLlenadoCapilar);
         Ficha.Deshidratacion = Math.Clamp(Ficha.Deshidratacion, 0, 100);
 
-        if (Ficha.MedFechaControl.HasValue && Ficha.MedFechaControl.Value.Date < DateTime.Today)
+        if (!_ordenActualCerrada && Ficha.MedFechaControl.HasValue && Ficha.MedFechaControl.Value.Date < DateTime.Today)
         {
             EsError = true;
             MensajeAlerta = "La fecha de próximo control sugerido no puede ser anterior al día de hoy.";
@@ -1431,13 +1525,20 @@
         }
 
         Guardando = true;
-        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        if (!await GuardarCambiosSoapAsync())
+        {
+            Guardando = false;
+            return;
+        }
+
+        int idUser = Session.IdUser;
         int ordenCerrada = Ficha.MedOrden;
         bool ok = await ConsultaService.GuardarFichaMedicaAsync(Ficha, idUser);
         if (ok)
         {
             KardexService.InvalidarCacheOrdenesActivas();
-            Session.LimpiarOrdenActiva();
+            if (Session.OrdenActiva == ordenCerrada)
+                Session.LimpiarOrdenActiva();
             _ordenesActivas.RemoveAll(o => o.IdOrdenAtencion == ordenCerrada);
 
             if (_colaOrdenes is not null)
@@ -1445,6 +1546,7 @@
                 await _colaOrdenes.RefrescarAsync();
             }
 
+            _estadoOrden = "T";
             _ordenActualCerrada = true;
             var ordenGuardada = _historialOrdenes.FirstOrDefault(orden => orden.IdOrden == ordenCerrada);
             if (ordenGuardada != null)
@@ -1482,6 +1584,8 @@
 
     private async Task AgregarDiagnosticoAsync()
     {
+        if (!FichaEditable || Guardando) return;
+
         try
         {
             if (string.IsNullOrWhiteSpace(NuevoDiagnostico.CodigoDiag))
@@ -1518,6 +1622,8 @@
 
     private async Task EliminarDiagnosticoAsync(int sec)
     {
+        if (!FichaEditable || Guardando) return;
+
         try
         {
             int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
@@ -1535,6 +1641,8 @@
 
     private async Task AgregarAntecedenteAsync()
     {
+        if (!FichaEditable || Guardando) return;
+
         if (string.IsNullOrWhiteSpace(NuevoAntecedente.Descripcion)) return;
         int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
         int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
@@ -1552,6 +1660,8 @@
 
     private async Task AgregarVacunaAsync()
     {
+        if (!FichaEditable || Guardando) return;
+
         if (NuevaVacuna.IdProducto <= 0)
         {
             EsError = true;
@@ -1582,6 +1692,8 @@
 
     private async Task EliminarVacunaAsync(int vacunaId)
     {
+        if (!FichaEditable || Guardando) return;
+
         int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
         await ConsultaService.EliminarVacunaAsync(vacunaId, idUser);
@@ -1663,6 +1775,8 @@
 
     private async Task AgregarMedicamentoAsync()
     {
+        if (!FichaEditable || Guardando) return;
+
         try
         {
             int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
@@ -1723,6 +1837,8 @@
 
     private async Task EliminarMedicamentoAsync(int sec)
     {
+        if (!FichaEditable || Guardando) return;
+
         try
         {
             int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
@@ -1740,23 +1856,14 @@
 
     private async Task GuardarIndicacionesGeneralesTab3Async()
     {
-        try
+        if (!FichaEditable) return;
+        _versionCambios++;
+        if (await GuardarCambiosSoapAsync())
         {
-            int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
-            int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
-            if (ordenTarget <= 0) return;
-
-            await ConsultaService.GuardarIndicacionesGeneralesAsync(ordenTarget, nhclTarget, Ficha.IndicacionesGeneralesReceta ?? "");
             EsError = false;
             MensajeAlerta = "Indicaciones generales de receta guardadas.";
         }
-        catch (Exception ex)
-        {
-            EsError = true;
-            MensajeAlerta = $"Error al guardar indicaciones: {ex.Message}";
-        }
     }
-
     private async Task OnCategoriaServicioChangedAsync()
     {
         _codigoServicioSeleccionado = string.Empty;
@@ -1843,6 +1950,8 @@
 
     private async Task AgregarServicioOrdenAsync()
     {
+        if (!FichaEditable || Guardando) return;
+
         try
         {
             int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
@@ -1955,6 +2064,8 @@
 
     private async Task EliminarServicioPorCategoriaAsync(string categoria, int sec)
     {
+        if (!FichaEditable || Guardando) return;
+
         try
         {
             int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;

@@ -8,7 +8,7 @@ public interface IConsultaExternaService
     // 1. Ficha Médica / Historia Clínica SOAP (vt_fichamedica)
     Task<FichaMedicaCompletaDto> ObtenerFichaMedicaAsync(int idOrden, int nhcl, bool historica = false);
     Task<List<string>> ObtenerTiposConsultaCatalogoAsync(int idLocalidad = 0);
-    Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario, bool triaje = false, bool editarTriaje = false);
+    Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario, bool triaje = false, bool editarTriaje = false, bool cerrarOrden = true);
 
     Task<List<TriajeHistorialDto>> ObtenerHistorialTriajeAsync(int nhcl);
 
@@ -343,21 +343,26 @@ public class ConsultaExternaService : IConsultaExternaService
                 RTRIM(ISNULL(u.user_nombre, '')) AS RegistradoPor,
                 f.peso AS Peso, f.temperatura AS Temperatura, f.frecuenciacardiaca AS FrecuenciaCardiaca,
                 CASE WHEN NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), f.med_anamnesis))), '') IS NULL
+                    AND (@EsAdmin = 1 OR ISNULL(o.ordenAten_estado, 'A') <> 'T')
                     THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS PuedeEditar
             FROM vt_fichamedica f
+            LEFT JOIN vt_ordenAtencion o ON o.ordenAten_id = f.med_orden AND o.ordenAten_nhcl = f.med_nhcl
             {MarcaRegistroTriaje}
             LEFT JOIN vt_usuarios u ON u.user_numero = COALESCE(marca.Usuario, f.med_iduser)
             WHERE f.med_nhcl = @Nhcl AND f.med_orden > 0 AND {FiltroRegistroTriaje}
                 AND f.sec = (SELECT MAX(actual.sec) FROM vt_fichamedica actual
                     WHERE actual.med_nhcl = f.med_nhcl AND actual.med_orden = f.med_orden)
             ORDER BY Fecha DESC, Orden DESC
-            """, new { Nhcl = nhcl })).ToList();
+            """, new { Nhcl = nhcl, EsAdmin = _session.TipoUser == 1 })).ToList();
     }
 
-    public async Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario, bool triaje = false, bool editarTriaje = false)
+    public async Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario, bool triaje = false, bool editarTriaje = false, bool cerrarOrden = true)
     {
         try
         {
+            if (!_session.IsAuthenticated || _session.IdUser != idUsuario)
+                return false;
+
             dto.MedIdUser = idUsuario;
 
             // Asegurar que MedNhcl, MedCliente y MedEspecie esten resueltos
@@ -394,6 +399,15 @@ public class ConsultaExternaService : IConsultaExternaService
             if (triaje && editarTriaje)
             {
                 comandos.Add(($"""
+                    IF EXISTS (
+                        SELECT 1 FROM vt_ordenAtencion WITH (UPDLOCK, HOLDLOCK)
+                        WHERE ordenAten_id = @MedOrden AND ordenAten_nhcl = @MedNhcl AND ordenAten_estado = 'T'
+                    ) AND NOT EXISTS (
+                        SELECT 1 FROM vt_usuarios
+                        WHERE user_numero = @MedIdUser AND user_estado = 'A' AND user_tipouser_numero = 1
+                    )
+                        THROW 50001, 'La ficha SOAP finalizada es de solo lectura.', 1;
+
                     IF NOT EXISTS (
                         SELECT 1 FROM vt_fichamedica f WITH (UPDLOCK, HOLDLOCK)
                         {MarcaRegistroTriaje}
@@ -415,7 +429,8 @@ public class ConsultaExternaService : IConsultaExternaService
                     IF NOT EXISTS (
                         SELECT 1 FROM vt_ordenAtencion o WITH (UPDLOCK, HOLDLOCK)
                         WHERE o.ordenAten_id = @MedOrden AND o.ordenAten_nhcl = @MedNhcl
-                          AND o.ordenAten_esp_numero > 0 AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
+                          AND ISNULL(o.ordenAten_triajeMedico, CASE WHEN o.ordenAten_esp_numero > 0 THEN 1 ELSE 0 END) = 1
+                          AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
                           AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                     ) OR NOT EXISTS (
                         SELECT 1 FROM vt_usuarios u
@@ -436,9 +451,22 @@ public class ConsultaExternaService : IConsultaExternaService
                         @MedIdUser, GETDATE(), '127.0.0.1', 'BlazorClient');", dto));
             }
 
+            if (!triaje)
+            {
+                comandos.Add(("""
+                    IF NOT EXISTS (
+                        SELECT 1 FROM vt_ordenAtencion WITH (UPDLOCK, HOLDLOCK)
+                        WHERE ordenAten_id = @MedOrden AND ordenAten_nhcl = @MedNhcl
+                            AND (ISNULL(ordenAten_estado, 'A') IN ('A', 'E')
+                                OR (@EsAdmin = 1 AND ordenAten_estado = 'T'))
+                    )
+                        THROW 50001, 'La orden no permite editar la ficha SOAP.', 1;
+                    """, new { dto.MedOrden, dto.MedNhcl, EsAdmin = _session.TipoUser == 1 }));
+            }
+
             var existeSec = await _db.ExecuteScalarAsync<int?>(
-                "SELECT TOP 1 sec FROM vt_fichamedica WHERE med_orden = @MedOrden AND (@EditarTriaje = 0 OR med_nhcl = @MedNhcl) ORDER BY sec DESC",
-                new { dto.MedOrden, dto.MedNhcl, EditarTriaje = editarTriaje });
+                "SELECT TOP 1 sec FROM vt_fichamedica WHERE med_orden = @MedOrden AND med_nhcl = @MedNhcl ORDER BY sec DESC",
+                new { dto.MedOrden, dto.MedNhcl });
 
             if (editarTriaje && (!existeSec.HasValue || existeSec.Value <= 0)) return false;
 
@@ -500,7 +528,7 @@ public class ConsultaExternaService : IConsultaExternaService
                         WHERE sec = @Sec", dto));
                 }
                 else
-                    await _db.ExecuteAsync(sqlUpdate, dto);
+                    comandos.Add((sqlUpdate, dto));
             }
             else
             {
@@ -527,10 +555,11 @@ public class ConsultaExternaService : IConsultaExternaService
                         @Tratamiento, @ObservacionesYRecomendaciones, @MedApuntes, @Temperamento, @MedPronostico, @MedFechaControlStr, @ContpSi, @ContpNo, 'A', @RequiereCirugia, @RequiereHospitalizacion, @EstadoParte
                     )";
 
-                if (triaje)
-                    comandos.Add((sqlInsert, dto));
-                else
-                    await _db.ExecuteAsync(sqlInsert, dto);
+                comandos.Add(("""
+                    IF EXISTS (SELECT 1 FROM vt_fichamedica WHERE med_orden = @MedOrden AND med_nhcl = @MedNhcl)
+                        THROW 50001, 'La ficha SOAP cambió durante el guardado. Intente nuevamente.', 1;
+                    """, dto));
+                comandos.Add((sqlInsert, dto));
             }
 
             // Actualizar color de triaje y esterilizado en vt_pacientes
@@ -547,13 +576,9 @@ public class ConsultaExternaService : IConsultaExternaService
                 else
                     colorCode = "green";
 
-                if (triaje && !editarTriaje)
+                if (!editarTriaje)
                     comandos.Add(("UPDATE vt_pacientes SET mas_castrado = @Esterilizado, mas_colortriaje = @ColorCode WHERE mas_nhcl = @MedNhcl",
                         new { dto.Esterilizado, ColorCode = colorCode, dto.MedNhcl }));
-                else if (!triaje)
-                    await _db.ExecuteAsync(
-                        "UPDATE vt_pacientes SET mas_castrado = @Esterilizado, mas_colortriaje = @ColorCode WHERE mas_nhcl = @MedNhcl",
-                        new { dto.Esterilizado, ColorCode = colorCode, dto.MedNhcl });
             }
 
             if (triaje)
@@ -562,23 +587,29 @@ public class ConsultaExternaService : IConsultaExternaService
                 return true;
             }
 
-            // Actualizar indicaciones generales de receta siempre
-            await GuardarIndicacionesGeneralesAsync(dto.MedOrden, dto.MedNhcl, dto.IndicacionesGeneralesReceta ?? "");
+            comandos.Add((@"
+                DELETE FROM vt_IndicacionesGenerales WHERE indicag_id_orden = @MedOrden;
+                IF NULLIF(LTRIM(RTRIM(@IndicacionesGeneralesReceta)), '') IS NOT NULL
+                    INSERT INTO vt_IndicacionesGenerales (indicag_nhcl, indicag_detalle, indicag_id_orden)
+                    VALUES (@MedNhcl, LTRIM(RTRIM(@IndicacionesGeneralesReceta)), @MedOrden);", dto));
 
-            // Al guardar la ficha SOAP, cerrar la orden para que salga de la cola del día y pase al historial
-            if (dto.MedOrden > 0)
+            if (cerrarOrden)
             {
-                await _db.ExecuteAsync(@"
+                comandos.Add((@"
                     UPDATE vt_ordenAtencion
                     SET ordenAten_estado = 'T',
                         ordenAten_etapa = 'Procesado',
                         ordenAten_fechaProcesado = ISNULL(ordenAten_fechaProcesado, GETDATE())
-                    WHERE ordenAten_id = @IdOrden
-                      AND ISNULL(ordenAten_estado, 'A') <> 'I';",
-                    new { IdOrden = dto.MedOrden });
+                    WHERE ordenAten_id = @MedOrden
+                      AND ISNULL(ordenAten_estado, 'A') IN ('A', 'E');", dto));
+
+                comandos.Add((@"
+                    INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
+                    VALUES (CONCAT('Ficha Médica SOAP guardada Orden #', @MedOrden, ' NHCL #', @MedNhcl),
+                        @MedIdUser, GETDATE(), '127.0.0.1', 'BlazorClient');", dto));
             }
 
-            await _db.RegistrarBitacoraAsync($"Ficha Médica SOAP guardada Orden #{dto.MedOrden} NHCL #{dto.MedNhcl}", idUsuario);
+            await _db.ExecuteBatchAsync(comandos);
             return true;
         }
         catch (Exception ex)
