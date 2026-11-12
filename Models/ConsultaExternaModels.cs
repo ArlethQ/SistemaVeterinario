@@ -69,6 +69,7 @@ public class FichaMedicaCompletaDto
     public string UserNombre { get; set; } = string.Empty;
     public string NombreMedico { get; set; } = string.Empty;
     public string Especialidad { get; set; } = string.Empty;
+    public bool EsExamenFisicoPrecargadoDelDia { get; set; }
 }
 
 public class DiagnosticoCie10Dto
