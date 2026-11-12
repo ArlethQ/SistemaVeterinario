@@ -262,15 +262,19 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     public async Task<bool> CancelarCirugiaAsync(int id,int idUsuario){var ok=await db.ExecuteAsync("UPDATE qvt_calendario_cirugias SET estado='I',fechaelimina=GETDATE(),quienelimina=@Usuario WHERE sec=@Id AND estado='A'",new{Id=id,Usuario=idUsuario})>0;if(ok)await db.RegistrarBitacoraAsync($"Cancela cirugía programada {id}",idUsuario);return ok;}
 
     public async Task<List<SelectorClinicoDto>> ObtenerMedicosAsync()=>(await db.QueryAsync<SelectorClinicoDto>(@"
-        SELECT CONVERT(int,user_numero) Id,RTRIM(user_nombre) Descripcion,CONVERT(int,ISNULL(user_esp_numero,0)) IdRelacionado
-        FROM vt_usuarios
-        WHERE user_estado='A'
+        SELECT CONVERT(int,u.user_numero) Id,
+               RTRIM(u.user_nombre) + CASE WHEN UPPER(ISNULL(t.tipuser_descripcion,'')) LIKE '%ENFERMER%' THEN ' (Enfermería)' ELSE '' END Descripcion,
+               CONVERT(int,ISNULL(u.user_esp_numero,0)) IdRelacionado
+        FROM vt_usuarios u
+        LEFT JOIN vt_tipos_usuarios t ON t.tipuser_numero=u.user_tipouser_numero
+        WHERE u.user_estado='A'
           AND (
-              ISNULL(user_tipouser_numero,0)=2
-              OR ISNULL(user_esp_numero,0)>0
-              OR UPPER(LTRIM(RTRIM(ISNULL(user_tipomedico,'')))) IN ('P','L','E')
+              ISNULL(u.user_tipouser_numero,0) IN (2, 11)
+              OR UPPER(ISNULL(t.tipuser_descripcion,'')) LIKE '%ENFERMER%'
+              OR ISNULL(u.user_esp_numero,0)>0
+              OR UPPER(LTRIM(RTRIM(ISNULL(u.user_tipomedico,'')))) IN ('P','L','E')
           )
-        ORDER BY user_nombre")).ToList();
+        ORDER BY u.user_nombre")).ToList();
     public async Task<List<SelectorClinicoDto>> ObtenerLocalidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,loc_id) Id,RTRIM(loc_descripcion) Descripcion FROM vt_localidades WHERE loc_estado='A' ORDER BY loc_descripcion")).ToList();
     public async Task<List<SelectorClinicoDto>> ObtenerEspecialidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,es_id) Id,RTRIM(es_descripcion) Descripcion FROM vt_especialidades ORDER BY es_descripcion")).ToList();
     public async Task<List<SelectorClinicoDto>> BuscarPacientesAsync(string filtro)=>(await db.QueryAsync<SelectorClinicoDto>("SELECT TOP 100 mas_nhcl Id,RTRIM(mas_nombre)+' · NHCL '+CAST(mas_nhcl AS varchar(20)) Descripcion,mas_idcliente IdRelacionado FROM vt_pacientes WHERE mas_estado='A' AND (@Filtro='' OR mas_nombre LIKE '%'+@Filtro+'%' OR CAST(mas_nhcl AS varchar(20)) LIKE '%'+@Filtro+'%') ORDER BY mas_nombre",new{Filtro=filtro?.Trim()??""})).ToList();
