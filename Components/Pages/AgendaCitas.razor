@@ -440,67 +440,6 @@
                     }
                     <h6>2. Detalles de la cita</h6>
                     <div class="row g-2">
-                        <div class="col-md-6">
-                            <label>Médico veterinario *</label>
-                            <select class="form-select" value="@_idMedicoFiltro" disabled="@(!_puedeVerAgendaCompleta)" @onchange="OnMedicoFormChanged">
-                                @if (MedicosFormulario.Count == 0)
-                                {
-                                    <option value="0">-- Sin médicos en esta especialidad --</option>
-                                }
-                                @foreach(var m in MedicosFormulario)
-                                {
-                                    <option value="@m.Id">@m.Descripcion</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label>Tipo de consulta *</label>
-                            <select id="selectTipoConsultaCita" class="form-select" value="@_nuevaCita.CiTipoConsulta" @onchange="OnTipoConsultaChanged">
-                                <option value="1">Consulta General</option>
-                                <option value="2">Especialidad</option>
-                                <option value="3">Cirugía Programada</option>
-                                <option value="4">Control / Revisión</option>
-                                <option value="5">Imagen / Ecografía</option>
-                            </select>
-                            @if (_nuevaCita.CiTipoConsulta == 2)
-                            {
-                                <div class="mt-2">
-                                    <label class="text-primary fw-bold"><i class="bi bi-award-fill me-1"></i>Especialidad *</label>
-                                    <select class="form-select border-primary" value="@_nuevaCita.CiEspecialidad" @onchange="OnEspecialidadCitaChanged">
-                                        @foreach (var esp in _especialidades)
-                                        {
-                                            <option value="@esp.Id">[@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)] @esp.Descripcion</option>
-                                        }
-                                    </select>
-                                </div>
-                            }
-                            <select class="d-none">
-                                <option value="1">Consulta General</option>
-                                <option value="2">Especialidad</option>
-                                <option value="3">Cirugía Programada</option>
-                                <option value="4">Control / Revisión</option>
-                                <option value="5">Imagen / Ecografía</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label>Fecha *</label>
-                            <InputDate class="form-control" @bind-Value="_nuevaCita.CiFecha" @bind-Value:after="OnFechaFormChanged" />
-                        </div>
-                        <div class="col-md-6">
-                            <label>Hora *</label>
-                            <div class="input-group">
-                                <InputText class="form-control text-center fw-bold" @bind-Value="_nuevaCita.CiHora" placeholder="08:00" readonly="@(_nuevaCita.CiFecha.Date >= AhoraClinica.Date)" />
-                                <select class="form-select" style="max-width: 140px;" value="@_nuevaCita.CiHora" @onchange="OnHoraSelectChanged">
-                                    <option value="">Turnos libres</option>
-                                    @foreach (var h in ObtenerHorasLibresParaFormulario())
-                                    {
-                                        <option value="@h">@h</option>
-                                    }
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6"><label>Propietario *</label><InputText class="form-control" @bind-Value="_nuevaCita.CiNombre" /></div>
-                        <div class="col-md-6"><label>Paciente *</label><InputText class="form-control" @bind-Value="_nuevaCita.CiNombreMas" /></div>
                         <div class="col-12"><label>Motivo / Observaciones</label><InputTextArea class="form-control" rows="3" @bind-Value="_nuevaCita.CiObservacion" /></div>
                     </div>
                     <div class="drawer-actions"><button type="button" class="btn btn-secondary" @onclick="CerrarFormularioCita">Cancelar</button><button type="submit" class="btn btn-primary">Guardar cita</button></div>
@@ -916,10 +855,20 @@
     private int _especialidadAgenda;
     private Dictionary<int, List<CatalogoItemGenericoDto>> _medicosPorSucursal = new();
 
+    private static bool MedicoTieneEspecialidad(CatalogoItemGenericoDto medico, int idEspecialidad)
+    {
+        if (idEspecialidad <= 0) return true;
+        if (medico.IdPadre == idEspecialidad) return true;
+        if (string.IsNullOrWhiteSpace(medico.Codigo)) return false;
+        return medico.Codigo
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(s => int.TryParse(s, out var id) && id == idEspecialidad);
+    }
+
     private List<CatalogoItemGenericoDto> SucursalesDisponibles =>
         _especialidadAgenda <= 0
             ? _sucursales
-            : _sucursales.Where(s => _medicosPorSucursal.TryGetValue(s.Id, out var meds) && meds.Any(m => m.IdPadre == _especialidadAgenda)).ToList();
+            : _sucursales.Where(s => _medicosPorSucursal.TryGetValue(s.Id, out var meds) && meds.Any(m => MedicoTieneEspecialidad(m, _especialidadAgenda))).ToList();
 
     private List<CatalogoItemGenericoDto> MedicosDisponibles
     {
@@ -930,7 +879,7 @@
                 : (_medicosPorSucursal.TryGetValue(_sucursalAgenda, out var meds) ? meds : []);
 
             if (_especialidadAgenda > 0)
-                lista = lista.Where(m => m.IdPadre == _especialidadAgenda).ToList();
+                lista = lista.Where(m => MedicoTieneEspecialidad(m, _especialidadAgenda)).ToList();
 
             return lista;
         }
@@ -1026,7 +975,7 @@
 
     private List<CatalogoItemGenericoDto> MedicosFormulario =>
         _nuevaCita.CiTipoConsulta == 2 && _nuevaCita.CiEspecialidad > 0
-            ? _medicosAgenda.Where(m => m.IdPadre == _nuevaCita.CiEspecialidad).ToList()
+            ? _medicosAgenda.Where(m => MedicoTieneEspecialidad(m, _nuevaCita.CiEspecialidad)).ToList()
             : _medicosAgenda;
 
     private async Task OnTipoConsultaChanged(ChangeEventArgs e)
@@ -1645,6 +1594,11 @@
                 _nuevaCita.CiHora = $"{ts.Hours:D2}:{ts.Minutes:D2}";
             }
 
+            if (_nuevaCita.CiNhcl <= 0 || string.IsNullOrWhiteSpace(_nuevaCita.CiNombreMas) || string.IsNullOrWhiteSpace(_nuevaCita.CiNombre))
+            {
+                _errorFormulario = "Selecciona un paciente existente o registra uno nuevo.";
+                return;
+            }
             if (_idMedicoFiltro <= 0)
             {
                 _errorFormulario = "No hay médicos veterinarios registrados en la especialidad seleccionada.";

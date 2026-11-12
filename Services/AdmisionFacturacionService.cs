@@ -1503,7 +1503,30 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             EsAdmin = EsRolSinRestriccionSucursal(_session.TipoUser),
             UsuarioSesion = _session.IdUser
         });
-        return medicos.ToList();
+        var lista = medicos.ToList();
+        if (lista.Count > 0)
+        {
+            var esps = (await _db.QueryAsync<(int IdUsuario, int IdEspecialidad)>(@"
+                SELECT ue_idUsuario AS IdUsuario, ue_idEspecialidad AS IdEspecialidad
+                FROM vt_usuarioEspecialidades
+                WHERE ISNULL(ue_estado, 'A') = 'A'
+                  AND ue_idEspecialidad > 0")).ToLookup(x => x.IdUsuario, x => x.IdEspecialidad);
+
+            foreach (var m in lista)
+            {
+                var ids = new HashSet<int>();
+                if (m.IdPadre.GetValueOrDefault() > 0)
+                    ids.Add(m.IdPadre!.Value);
+                foreach (var espId in esps[m.Id])
+                    ids.Add(espId);
+
+                if (m.IdPadre.GetValueOrDefault() <= 0 && ids.Count > 0)
+                    m.IdPadre = ids.First();
+
+                m.Codigo = string.Join(",", ids);
+            }
+        }
+        return lista;
     }
 
     private async Task<bool> PuedeUsarSucursalAgendaAsync(int idLocalidad)
