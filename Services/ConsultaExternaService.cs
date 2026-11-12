@@ -507,8 +507,9 @@ public class ConsultaExternaService : IConsultaExternaService
                     IF NOT EXISTS (
                         SELECT 1 FROM vt_ordenAtencion o WITH (UPDLOCK, HOLDLOCK)
                         WHERE o.ordenAten_id = @MedOrden AND o.ordenAten_nhcl = @MedNhcl
-                          AND ISNULL(o.ordenAten_triajeMedico, CASE WHEN o.ordenAten_esp_numero > 0 THEN 1 ELSE 0 END) = 1
-                          AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
+                          AND (ISNULL(o.ordenAten_triajeMedico, CASE WHEN o.ordenAten_esp_numero > 0 THEN 1 ELSE 0 END) = 1
+                              OR (ISNULL(o.ordenAten_esProcedimiento, 0) = 1 AND (o.ordenAten_idEnfermero = @MedIdUser OR EXISTS (
+                                  SELECT 1 FROM vt_usuarios WHERE user_numero = @MedIdUser AND user_tipouser_numero = 1))))
                           AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                     ) OR NOT EXISTS (
                         SELECT 1 FROM vt_usuarios u

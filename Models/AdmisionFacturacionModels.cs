@@ -133,6 +133,18 @@ public class CatalogoItemGenericoDto
 // Reemplaza: vt_OrdenesMenu.aspx.vb, vt_RecepcionPaciente.aspx.vb, vt_verOrdenes.aspx.vb
 // =========================================================================
 
+public sealed class ProcedimientoTriajeDto
+{
+    public int Id { get; set; }
+    public string Codigo { get; set; } = "";
+    public string Descripcion { get; set; } = "";
+    public string Subgrupo { get; set; } = "";
+    public int Cantidad { get; set; }
+    public string Observaciones { get; set; } = "";
+    public decimal? Precio { get; set; }
+    public string Estado { get; set; } = "";
+}
+
 public class NuevaOrdenAtencionDto
 {
     public int Nhcl { get; set; }
@@ -347,6 +359,7 @@ public class BitacoraAuditoriaDto
 
 public sealed class OrdenPacienteResumenDto
 {
+    public bool EsProcedimiento { get; set; }
     public int IdOrden { get; set; }
     public DateTime Fecha { get; set; }
     public string Hora { get; set; } = string.Empty;

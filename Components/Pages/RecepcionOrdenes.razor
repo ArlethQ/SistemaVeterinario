@@ -407,7 +407,7 @@
                                                     @onchange="(e) => EjecutarAccionDropboxAsync(o, e)">
                                                 <option value="">⚡ Módulos / Acciones...</option>
                                                 <optgroup label="Módulos Clínicos">
-                                                    @if (o.TriajeMedico && !o.EsProcedimiento && Permisos.Permite("admision/triaje"))
+                                                    @if ((o.TriajeMedico || o.EsProcedimiento) && Permisos.Permite("admision/triaje"))
                                                     {
                                                         <option value="triaje">📋 Triaje de Ingreso</option>
                                                     }
@@ -1293,6 +1293,7 @@
         _esError = false;
         string vinculoCita = (CitaOrigenId.HasValue && CitaOrigenId.Value > 0) ? $" (Vinculada a Cita #{CitaOrigenId.Value})" : "";
         _mensajeAlerta = $"Orden #{idCreada}{asignacionTexto} generada para {_nuevaOrden.NombreMascota} (NHCL #{_nuevaOrden.Nhcl}){vinculoCita}.";
+        _nuevaOrden.EsProcedimiento = false;
         _mostrarFormularioOrden = false;
         CitaOrigenId = null;
     }

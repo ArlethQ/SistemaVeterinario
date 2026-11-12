@@ -33,6 +33,9 @@ public interface IAdmisionFacturacionService
     Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "");
     Task<List<OrdenPacienteResumenDto>> ObtenerOrdenesPacienteAsync(int nhcl);
     Task<bool> PuedeConsultarOrdenAsync(int idOrden, int nhcl);
+    Task<List<ProcedimientoTriajeDto>> ObtenerProcedimientosTriajeAsync(int idOrden, int nhcl);
+    Task<List<CatalogoOperativoDto>> ObtenerCatalogoProcedimientosTriajeAsync(int idOrden, int nhcl, int? idProducto = null);
+    Task<bool> AgregarProcedimientoTriajeAsync(int idOrden, int nhcl, int idProducto, int cantidad, string observaciones, bool desdeHistorial, bool desdeSoap);
     Task<List<SelectorClinicoDto>> BuscarMascotasConOrdenesVisiblesAsync(string filtro);
     Task<List<OrdenAtencionResumenDto>> ObtenerColaClinicaAsync(bool triaje, int? idOrden = null);
     Task<bool> CambiarEstadoOrdenAsync(int idOrden, string nuevoEstado, string nuevaEtapa);
@@ -1216,7 +1219,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    ISNULL(o.ordenAten_hora, '') AS Hora,
                    ISNULL(esp.es_descripcion, 'Consulta General') AS Especialidad,
                    ISNULL(u.user_nombre, 'Médico') AS Medico,
-                   ISNULL(o.ordenAten_estado, 'A') AS Estado
+                   ISNULL(o.ordenAten_estado, 'A') AS Estado,
+                   CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento
             FROM vt_ordenAtencion o
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             LEFT JOIN vt_especialidades esp ON o.ordenAten_esp_numero = esp.es_id
@@ -1277,6 +1281,114 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             }) > 0;
     }
 
+    public async Task<List<CatalogoOperativoDto>> ObtenerCatalogoProcedimientosTriajeAsync(int idOrden, int nhcl, int? idProducto = null)
+    {
+        if (nhcl <= 0 || !await PuedeConsultarOrdenAsync(idOrden, nhcl))
+            return [];
+
+        return (await _db.QueryAsync<CatalogoOperativoDto>("""
+            SELECT p.CODIGO AS Id, COALESCE(NULLIF(RTRIM(p.CODIGO_PRINCIPAL), ''), CAST(p.CODIGO AS varchar(30))) AS Codigo,
+                RTRIM(ISNULL(p.NOMBRE, '')) AS Descripcion, p.IDSUBTIPO AS IdSubgrupo,
+                RTRIM(ISNULL(s.DESCRIPCION, '')) AS Subgrupo, p.VALOR_UNITARIO AS Precio
+            FROM VeterinariaFacturacion.dbo.PRODUCTO p
+            JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
+            WHERE p.IDUSUARIO = @IdUsuario AND ISNULL(p.ESTADO, 1) = 1
+                AND UPPER(LTRIM(RTRIM(t.DESCRIPCION))) IN ('PROCEDIMIENTO', 'PROCEDIMIENTOS', 'SERVICIOS')
+                AND (@IdProducto IS NULL OR p.CODIGO = @IdProducto)
+            ORDER BY p.NOMBRE
+            """, new { IdProducto = idProducto, IdUsuario = 1_000_000 + Math.Max(1, _session.Localidad) })).ToList();
+    }
+
+    public async Task<List<ProcedimientoTriajeDto>> ObtenerProcedimientosTriajeAsync(int idOrden, int nhcl)
+    {
+        if (nhcl <= 0 || !await PuedeConsultarOrdenAsync(idOrden, nhcl))
+            return [];
+
+        var columnas = await ObtenerColumnasTablaAsync("vt_procedimientos");
+        var cantidad = columnas.Contains("proc_cantidad") ? "ISNULL(p.proc_cantidad, 1)" : "1";
+        var observaciones = columnas.Contains("proc_observaciones") ? "ISNULL(CONVERT(nvarchar(250), p.proc_observaciones), '')" : "''";
+        var estado = columnas.Contains("proc_estado") ? "ISNULL(CONVERT(nvarchar(30), p.proc_estado), '')" : "''";
+        var precio = columnas.Contains("proc_precio") ? "p.proc_precio" : "NULL";
+        return (await _db.QueryAsync<ProcedimientoTriajeDto>($"""
+            SELECT p.proc_idProdu AS Id, ISNULL(producto.CODIGO_PRINCIPAL, '') AS Codigo,
+                COALESCE(producto.NOMBRE, CONCAT('Procedimiento #', p.proc_idProdu)) AS Descripcion,
+                ISNULL(subtipo.DESCRIPCION, '') AS Subgrupo, {cantidad} AS Cantidad,
+                {observaciones} AS Observaciones, {estado} AS Estado, {precio} AS Precio
+            FROM vt_procedimientos p
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO producto ON producto.CODIGO = p.proc_idProdu
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO subtipo ON subtipo.IDSUBTIPO = producto.IDSUBTIPO
+            WHERE p.proc_idOrden = @IdOrden AND p.proc_nhcl = @Nhcl
+            ORDER BY p.proc_fecha, p.proc_idProdu
+            """, new { IdOrden = idOrden, Nhcl = nhcl })).ToList();
+    }
+
+    public async Task<bool> AgregarProcedimientoTriajeAsync(int idOrden, int nhcl, int idProducto, int cantidad, string observaciones, bool desdeHistorial, bool desdeSoap)
+    {
+        if (nhcl <= 0 || idProducto <= 0 || cantidad <= 0 || observaciones.Length > 250)
+            return false;
+
+        var procedimiento = (await ObtenerCatalogoProcedimientosTriajeAsync(idOrden, nhcl, idProducto)).SingleOrDefault();
+        if (procedimiento is null)
+            return false;
+
+        var columnas = await ObtenerColumnasTablaAsync("vt_procedimientos");
+        if ((cantidad != 1 && !columnas.Contains("proc_cantidad")) ||
+            (observaciones.Length > 0 && !columnas.Contains("proc_observaciones")))
+            return false;
+        (string Columna, string Valor)[] opcionales =
+        [
+            ("proc_descripcion", "LEFT(@Descripcion, 250)"),
+            ("proc_cantidad", "@Cantidad"),
+            ("proc_estado", "'Por Entregar'"),
+            ("proc_observaciones", "@Observaciones"),
+            ("proc_precio", "@Precio")
+        ];
+        var camposDisponibles = opcionales.Where(campo => columnas.Contains(campo.Columna)).ToArray();
+        var columnasOpcionales = string.Concat(camposDisponibles.Select(campo => ", " + campo.Columna));
+        var valoresOpcionales = string.Concat(camposDisponibles.Select(campo => ", " + campo.Valor));
+
+        return await _db.ExecuteAsync($"""
+            INSERT INTO vt_procedimientos (proc_idOrden, proc_nhcl, proc_idProdu, proc_fecha{columnasOpcionales})
+            SELECT o.ordenAten_id, o.ordenAten_nhcl, @IdProducto, GETDATE(){valoresOpcionales}
+            FROM vt_ordenAtencion o WITH (UPDLOCK, HOLDLOCK)
+            WHERE o.ordenAten_id = @IdOrden AND o.ordenAten_nhcl = @Nhcl
+              AND {AlcanceOrden}
+              AND (
+                  (@DesdeSoap = 1 AND (ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E') OR (@Rol = 1 AND o.ordenAten_estado = 'T')))
+                  OR (@DesdeSoap = 0 AND ISNULL(o.ordenAten_esProcedimiento, 0) = 1
+                      AND (@Rol = 1 OR o.ordenAten_idEnfermero = @UsuarioSesion)
+                      AND EXISTS (
+                  SELECT 1 FROM vt_usuarios u
+                  JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
+                  WHERE u.user_numero = @UsuarioSesion AND u.user_estado = 'A'
+                      AND (t.tipuser_numero = 1 OR UPPER(t.tipuser_descripcion) LIKE '%ENFERMER%')
+              )
+              AND (
+                  (@DesdeHistorial = 0
+                      AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                      AND NOT EXISTS (SELECT 1 FROM vt_vitacora v
+                          WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id)))
+                  OR (@DesdeHistorial = 1
+                      AND (ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E') OR (@Rol = 1 AND o.ordenAten_estado = 'T'))
+                      AND EXISTS (SELECT 1 FROM vt_fichamedica f
+                          WHERE f.med_orden = o.ordenAten_id AND f.med_nhcl = o.ordenAten_nhcl
+                              AND f.sec = (SELECT MAX(actual.sec) FROM vt_fichamedica actual
+                                  WHERE actual.med_orden = f.med_orden AND actual.med_nhcl = f.med_nhcl)
+                              AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), f.med_anamnesis))), '') IS NULL))
+              )
+                  ))
+              AND NOT EXISTS (SELECT 1 FROM vt_procedimientos p WITH (UPDLOCK, HOLDLOCK)
+                  WHERE p.proc_idOrden = @IdOrden AND p.proc_nhcl = @Nhcl AND p.proc_idProdu = @IdProducto);
+            """, new
+        {
+            IdOrden = idOrden, Nhcl = nhcl, IdProducto = idProducto, DesdeHistorial = desdeHistorial, DesdeSoap = desdeSoap,
+            procedimiento.Descripcion, Precio = procedimiento.Precio ?? 0m, Cantidad = cantidad, Observaciones = observaciones,
+            Rol = _session.TipoUser, UsuarioSesion = _session.IdUser,
+            VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0
+        }) > 0;
+    }
+
     public async Task<List<OrdenAtencionResumenDto>> ObtenerColaClinicaAsync(bool triaje, int? idOrden = null)
     {
         if (!_session.IsAuthenticated) return [];
@@ -1292,6 +1404,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    ISNULL(u.user_nombre, '') AS Medico,
                    ISNULL(enf.user_nombre, '') AS Enfermero,
                    ISNULL(o.ordenAten_estado, 'A') AS Estado,
+                   CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento,
                    COALESCE(asignacion.Fecha, historica.Fecha,
                        DATEADD(second, DATEDIFF(second, CAST('00:00' AS time),
                            COALESCE(TRY_CONVERT(time, o.ordenAten_hora), CAST('00:00' AS time))),
@@ -1325,8 +1438,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                             JOIN vt_tipos_usuarios tipo ON tipo.tipuser_numero = enfermero.user_tipouser_numero
                             WHERE enfermero.user_numero = @Usuario AND enfermero.user_estado = 'A'
                                 AND UPPER(tipo.tipuser_descripcion) LIKE '%ENFERMER%'))
-                        AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
-                        AND ISNULL(o.ordenAten_triajeMedico, CASE WHEN o.ordenAten_esp_numero > 0 THEN 1 ELSE 0 END) = 1
+                        AND (ISNULL(o.ordenAten_triajeMedico, CASE WHEN o.ordenAten_esp_numero > 0 THEN 1 ELSE 0 END) = 1
+                            OR (ISNULL(o.ordenAten_esProcedimiento, 0) = 1 AND (@Rol = 1 OR o.ordenAten_idEnfermero = @Usuario)))
                         AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                         AND NOT EXISTS (SELECT 1 FROM vt_vitacora v
                             WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id))

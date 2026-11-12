@@ -251,6 +251,14 @@ else
             </div>
 
             </fieldset>
+
+            @if (_esOrdenProcedimiento && _ficha.MedOrden > 0 && _ficha.MedNhcl > 0)
+            {
+                <ProcedimientosTriaje @key="(_ficha.MedOrden, _ficha.MedNhcl)"
+                                      IdOrden="@_ficha.MedOrden" Nhcl="@_ficha.MedNhcl"
+                                      DesdeHistorial="@DesdeHistorial" SoloLectura="@(SoloLectura || _guardando)" />
+            }
+
             <!-- Botones de Acción -->
             <div class="d-flex justify-content-between align-items-center mt-4 pt-2 border-top">
                 @if (Permisos.Permite("consulta/fichamedica"))
@@ -289,6 +297,7 @@ else
 
     private PacienteHeaderDto? _paciente;
     private int _especialidad;
+    private bool _esOrdenProcedimiento;
     private FichaMedicaCompletaDto _ficha = new();
     private List<string> _tiposConsultaCatalogo = [];
     private IEnumerable<string> TiposConsultaDisponibles =>
@@ -308,6 +317,7 @@ else
 
         _cargando = true;
         _paciente = null;
+        _esOrdenProcedimiento = false;
         _mensajeAlerta = null;
         if ((IdOrden ?? 0) > 0 || (ModoModal && (Nhcl ?? 0) > 0))
             await CargarDatosAsync();
@@ -340,6 +350,7 @@ else
             }
             Nhcl = nh = orden.Nhcl;
             _especialidad = orden.IdEspecialidad;
+            _esOrdenProcedimiento = orden.EsProcedimiento;
         }
 
         _paciente = await KardexService.ObtenerEncabezadoPacienteAsync(ord, nh);
@@ -352,6 +363,10 @@ else
         {
             Session.SeleccionarOrden(ord, Nhcl ?? (_paciente?.Nhcl ?? 0), _paciente?.PacienteNombre);
         }
+
+        if (DesdeHistorial && _paciente is not null)
+            _esOrdenProcedimiento = (await AdmisionService.ObtenerOrdenesPacienteAsync(Nhcl ?? _paciente.Nhcl))
+                .Any(orden => orden.IdOrden == ord && orden.EsProcedimiento);
 
         _tiposConsultaCatalogo = await ConsultaService.ObtenerTiposConsultaCatalogoAsync(Session.Localidad);
         _ficha = await ConsultaService.ObtenerFichaMedicaAsync(ord, Nhcl ?? (_paciente?.Nhcl ?? 0), historica: DesdeHistorial);
