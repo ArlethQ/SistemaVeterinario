@@ -182,27 +182,13 @@
                             {
                                 <div class="col-md-12">
                                     <label class="form-label small fw-bold">2. Tipo de consulta</label>
-                                    <select class="form-select form-select-sm" value="@_tipoConsulta" @onchange="OnTipoConsultaChangedAsync" disabled="@EsDesdeCita">
-                                        <option value="1">Consulta General</option>
-                                        <option value="2">Especialidad</option>
-                                        <option value="3">Cirugía Programada</option>
-                                        <option value="4">Control / Revisión</option>
-                                        <option value="5">Imagen / Ecografía</option>
+                                    <select class="form-select form-select-sm" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync" disabled="@EsDesdeCita">
+                                        @foreach (var esp in _especialidades)
+                                        {
+                                            <option value="@esp.Id">[@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)] @esp.Descripcion</option>
+                                        }
                                     </select>
                                 </div>
-
-                                @if (EsTipoConsultaEspecialidad)
-                                {
-                                    <div class="col-md-12">
-                                        <label class="form-label small fw-bold text-primary"><i class="bi bi-award-fill me-1"></i>3. Especialidad requerida</label>
-                                        <select class="form-select form-select-sm border-primary" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync" disabled="@EsDesdeCita">
-                                            @foreach (var esp in _especialidades)
-                                            {
-                                                <option value="@esp.Id">[@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)] @esp.Descripcion</option>
-                                            }
-                                        </select>
-                                    </div>
-                                }
                             }
 
                             <div class="col-md-12 d-flex align-items-end">
@@ -224,7 +210,7 @@
                             else
                             {
                                 <div class="col-md-9">
-                                    <label class="form-label small fw-bold">@(EsTipoConsultaEspecialidad ? "4. Médico tratante asignado" : "3. Médico tratante asignado")</label>
+                                    <label class="form-label small fw-bold">3. Médico tratante asignado</label>
                                     <select class="form-select form-select-sm" @bind="_nuevaOrden.IdMedico" disabled="@EsDesdeCita">
                                         <option value="0">Seleccione un médico</option>
                                         @foreach (var med in _medicosDisponibles)
@@ -241,7 +227,7 @@
                             @if (_nuevaOrden.EsProcedimiento || _nuevaOrden.TriajeMedico)
                             {
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold">@(_nuevaOrden.EsProcedimiento ? "3. Semáforo Triaje" : (EsTipoConsultaEspecialidad ? "5. Semáforo Triaje" : "4. Semáforo Triaje"))</label>
+                                    <label class="form-label small fw-bold">@(_nuevaOrden.EsProcedimiento ? "3. Semáforo Triaje" : "4. Semáforo Triaje")</label>
                                     <select class="form-select form-select-sm" @bind="_nuevaOrden.ColorTriaje">
                                         <option value="green">🟢 Verde — Estándar</option>
                                         <option value="yellow">🟡 Amarillo — Prioritario</option>
@@ -258,14 +244,6 @@
                                 </div>
                             }
 
-                            <div class="col-md-6">
-                                <label class="form-label small fw-bold">Fecha Atención</label>
-                                <InputDate class="form-control form-control-sm" @bind-Value="_nuevaOrden.FechaOrden" />
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small fw-bold">Hora Ingreso</label>
-                                <InputText class="form-control form-control-sm" @bind-Value="_nuevaOrden.HoraOrden" />
-                            </div>
                         </div>
 
                         <button type="submit" class="btn btn-success w-100 mt-3 fw-bold" disabled="@(_nuevaOrden.Nhcl == 0)">
@@ -564,7 +542,7 @@
     private List<CatalogoItemGenericoDto> _especialidades = new();
     private List<CatalogoItemGenericoDto> _todosMedicos = new();
     private List<CatalogoItemGenericoDto> _medicosDisponibles = new();
-    private int _tipoConsulta = 1;
+    private int _tipoConsulta = 2;
     private bool EsTipoConsultaEspecialidad => _tipoConsulta == 2;
     private List<CatalogoItemGenericoDto> _enfermeros = new();
     private List<ConteoMedicoEsperaDto> _conteoMedicos = new();
@@ -889,8 +867,12 @@
             }
             else
             {
-                _nuevaOrden.IdEspecialidad = _especialidades.FirstOrDefault()?.Id ?? 0;
+                var medGen = _especialidades.FirstOrDefault(x =>
+                    string.Equals(x.Codigo, "MG", StringComparison.OrdinalIgnoreCase) ||
+                    x.Descripcion.Contains("MEDICINA GENERAL", StringComparison.OrdinalIgnoreCase));
+                _nuevaOrden.IdEspecialidad = medGen?.Id ?? _especialidades.FirstOrDefault()?.Id ?? 0;
             }
+            SincronizarTipoPorEspecialidad(_nuevaOrden.IdEspecialidad);
 
             _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad);
             AplicarProfesionalPreseleccionado();
@@ -1116,11 +1098,49 @@
         return _especialidades.FirstOrDefault()?.Id ?? 0;
     }
 
+    private void SincronizarTipoPorEspecialidad(int idEsp)
+    {
+        var esp = _especialidades.FirstOrDefault(e => e.Id == idEsp);
+        if (esp == null)
+        {
+            _nuevaOrden.TipoConsulta = 2;
+            _nuevaOrden.TipoDespacho = TipoDespachoPreseleccionado ?? 0;
+            return;
+        }
+
+        if (string.Equals(esp.Codigo, "MG", StringComparison.OrdinalIgnoreCase) ||
+            esp.Descripcion.Contains("MEDICINA GENERAL", StringComparison.OrdinalIgnoreCase))
+        {
+            _nuevaOrden.TipoConsulta = 1;
+            _nuevaOrden.TipoDespacho = TipoDespachoPreseleccionado ?? 0;
+        }
+        else if (string.Equals(esp.Codigo, "CIR", StringComparison.OrdinalIgnoreCase) ||
+                 esp.Descripcion.Contains("CIRUGIA", StringComparison.OrdinalIgnoreCase))
+        {
+            _nuevaOrden.TipoConsulta = 3;
+            _nuevaOrden.TipoDespacho = TipoDespachoPreseleccionado ?? 4;
+        }
+        else if (string.Equals(esp.Codigo, "IMG", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(esp.Codigo, "RX", StringComparison.OrdinalIgnoreCase) ||
+                 esp.Descripcion.Contains("IMAGEN", StringComparison.OrdinalIgnoreCase) ||
+                 esp.Descripcion.Contains("ECOGRAFIA", StringComparison.OrdinalIgnoreCase))
+        {
+            _nuevaOrden.TipoConsulta = 5;
+            _nuevaOrden.TipoDespacho = TipoDespachoPreseleccionado ?? 1;
+        }
+        else
+        {
+            _nuevaOrden.TipoConsulta = 2;
+            _nuevaOrden.TipoDespacho = TipoDespachoPreseleccionado ?? 0;
+        }
+    }
+
     private async Task CambiarEspecialidadAsync(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out int idEsp))
         {
             _nuevaOrden.IdEspecialidad = idEsp;
+            SincronizarTipoPorEspecialidad(idEsp);
             _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(idEsp);
             _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
             if (_medicosDisponibles.Count == 0)
@@ -1175,6 +1195,10 @@
             _mensajeAlerta = "Seleccione primero un paciente (NHCL) de la lista.";
             return;
         }
+
+        var ahora = DateTime.UtcNow.AddHours(-5);
+        _nuevaOrden.FechaOrden = ahora.Date;
+        _nuevaOrden.HoraOrden = ahora.ToString("HH:mm");
 
         if (_nuevaOrden.EsProcedimiento)
         {
