@@ -1,7 +1,6 @@
 @page "/consulta/fichamedica"
 @page "/consulta/fichamedica/{IdOrden:int}/{Nhcl:int}"
 @page "/consulta/fichamedica/paciente/{Nhcl:int}"
-@inject IGestionMigradaService GestionService
 @inject IConsultaExternaService ConsultaService
 @inject IKardexService KardexService
 @inject IAdmisionFacturacionService AdmisionService
@@ -1046,7 +1045,7 @@
 
         try
         {
-            var mascotas = await GestionService.BuscarPacientesAsync(nombre);
+            var mascotas = await AdmisionService.BuscarMascotasConOrdenesVisiblesAsync(nombre);
             if (version == _versionBusquedaMascota)
                 _mascotasHistorial = mascotas;
         }
@@ -1164,15 +1163,7 @@
                 }
             }
 
-            if (IdOrden <= 0 && Nhcl > 0)
-            {
-                var ordenPaciente = _ordenesActivas.FirstOrDefault(o => o.Nhcl == Nhcl);
-                if (ordenPaciente != null)
-                {
-                    IdOrden = ordenPaciente.IdOrdenAtencion;
-                }
-            }
-            else if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
+            if (IdOrden <= 0 && Nhcl <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
             {
                 var activa = _ordenesActivas.FirstOrDefault(o => o.IdOrdenAtencion == Session.OrdenActiva.Value);
                 if (activa != null)
@@ -1236,17 +1227,26 @@
         EsError = false;
         _historialOrdenes = [];
         _errorHistorialOrdenes = false;
-        Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
-        if (Paciente != null && Nhcl <= 0)
+        if (IdOrden > 0 && !await AdmisionService.PuedeConsultarOrdenAsync(IdOrden, Nhcl))
         {
-            Nhcl = Paciente.Nhcl;
+            EsError = true;
+            MensajeAlerta = "No tienes acceso a esta orden en las sucursales asignadas.";
+            return;
         }
-        if (Paciente is not null)
+
+        if (IdOrden > 0)
+        {
+            Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
+            if (Paciente != null)
+                Nhcl = Paciente.Nhcl;
+        }
+
+        if (Nhcl > 0)
         {
             try
             {
-                _historialOrdenes = await AdmisionService.ObtenerOrdenesPacienteAsync(Paciente.Nhcl);
-                if (IdOrden <= 0 && _historialOrdenes.FirstOrDefault(o => o.Estado.Trim() != "I") is { } ultimaOrden)
+                _historialOrdenes = await AdmisionService.ObtenerOrdenesPacienteAsync(Nhcl);
+                if (IdOrden <= 0 && _historialOrdenes.FirstOrDefault(orden => orden.Estado.Trim() != "I") is { } ultimaOrden)
                 {
                     IdOrden = ultimaOrden.IdOrden;
                     Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
@@ -1258,6 +1258,7 @@
                 _errorHistorialOrdenes = true;
             }
         }
+
         Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
 
         if (Paciente == null || IdOrden <= 0)
@@ -1379,6 +1380,13 @@
     {
         if (!FichaEditable || Guardando)
             return;
+
+        if (!await AdmisionService.PuedeConsultarOrdenAsync(IdOrden, Nhcl))
+        {
+            EsError = true;
+            MensajeAlerta = "No tienes acceso a esta orden en las sucursales asignadas.";
+            return;
+        }
 
         if (Ficha.MedOrden <= 0) Ficha.MedOrden = IdOrden;
         if (Ficha.MedNhcl <= 0) Ficha.MedNhcl = Nhcl;

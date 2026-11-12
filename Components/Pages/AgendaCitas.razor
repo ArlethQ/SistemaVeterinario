@@ -24,11 +24,39 @@
             </div>
         </div>
         <div class="d-flex gap-2 align-items-center agenda-toolbar">
-            <button class="btn btn-outline-secondary btn-sm" @onclick="DiaAnterior">‹</button>
-            <input type="date" class="form-control form-control-sm" value="@_fechaAgenda.ToString("yyyy-MM-dd")" @onchange="CambiarFechaAsync" />
-            <button class="btn btn-outline-secondary btn-sm" @onclick="DiaSiguiente">›</button>
-            <button class="btn btn-outline-secondary btn-sm" @onclick="IrHoy">Hoy</button>
-            <button class="btn btn-primary btn-sm" @onclick="AbrirFormularioCita">+ Agendar cita</button>
+            <div>
+                <label for="agenda-sucursal" class="form-label small mb-0">Sucursal</label>
+                <select id="agenda-sucursal" class="form-select form-select-sm" @bind="_sucursalAgenda" @bind:after="CambiarSucursalAsync">
+                    @if (_sucursales.Count == 0)
+                    {
+                        <option value="0">Sin sucursales asignadas</option>
+                    }
+                    else
+                    {
+                        <option value="0">Todas las sucursales</option>
+                    }
+                    @foreach (var sucursal in _sucursales)
+                    {
+                        <option value="@sucursal.Id">@sucursal.Descripcion</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="agenda-medico" class="form-label small mb-0">Médico</label>
+                <select id="agenda-medico" class="form-select form-select-sm" value="@_medicoAgenda"
+                        disabled="@(!_puedeVerAgendaCompleta || _cargandoInicial)" @onchange="CambiarMedicoAsync">
+                    <option value="0">Seleccionar médico</option>
+                    @foreach (var medico in _medicosAgenda)
+                    {
+                        <option value="@medico.Id">@medico.Descripcion</option>
+                    }
+                </select>
+            </div>
+            <button class="btn btn-primary btn-sm" disabled="@(_sucursalAgenda <= 0 || _medicoAgenda <= 0 || _cargandoInicial)" @onclick="AbrirFormularioCita">+ Agendar cita</button>
+            @if (_puedeVerAgendaCompleta && Permisos.Permite("programacion/clinica"))
+            {
+                <a class="btn btn-outline-primary btn-sm" href="@($"/programacion/clinica?medico={_medicoAgenda}")">Registrar turnos</a>
+            }
             <button class="btn btn-outline-danger btn-sm" @onclick="ExportarPdfAgendaAsync">
                 <i class="bi bi-file-earmark-pdf-fill me-1"></i>Exportar Agenda PDF
             </button>
@@ -63,84 +91,123 @@
     </div>
 
     <nav class="agenda-tabs mb-3">
-        <button class="@(_vistaAgenda == "agenda" ? "active" : "")" @onclick='() => _vistaAgenda = "agenda"'>Agenda diaria</button>
+        <button class="@(_vistaAgenda == "agenda" ? "active" : "")" @onclick='() => _vistaAgenda = "agenda"'>Calendario</button>
         <button class="@(_vistaAgenda == "tabla" ? "active" : "")" @onclick='() => _vistaAgenda = "tabla"'>Citas programadas <span>@_citas.Count</span></button>
         <button class="@(_vistaAgenda == "historial" ? "active" : "")" @onclick="AbrirHistorialAsync">Historial y filtros</button>
     </nav>
 
-    <div class="@(_vistaAgenda == "agenda" ? "row g-3 agenda-workspace" : "d-none")">
-        <div class="col-xl-9">
-            <section class="calendar-card">
-                <header><span>│</span><strong>Médicos Veterinarios</strong></header>
-                <div class="calendar-grid calendar-doctors" style="--doctor-count:@MedicosAgenda.Count">
-                    <div class="time-header"></div>
-                    @foreach (var medico in MedicosAgenda)
-                    {
-                        <div class="calendar-doctor"><span>@Iniciales(medico.Descripcion)</span><div><strong>@medico.Descripcion</strong><small>Médico veterinario</small></div></div>
-                    }
-                </div>
-                <div class="calendar-scroll">
-                    @foreach (var hora in HorasAgenda)
-                    {
-                        bool receso = hora.StartsWith("13:");
-                        <div class="calendar-grid calendar-row @(receso ? "lunch-row" : "")" style="--doctor-count:@MedicosAgenda.Count">
-                            <div class="calendar-time">@hora</div>
-                            @if (receso)
+    @if (_vistaAgenda == "agenda" && !_cargandoInicial)
+    {
+        @if (_sucursales.Count == 0)
+        {
+            <p class="alert alert-light border">No tienes una sucursal activa asignada para consultar turnos.</p>
+        }
+        else if (_sucursalAgenda <= 0)
+        {
+            <p class="alert alert-light border mb-2">Elige una sucursal para ver turnos libres y agendar.</p>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <label for="agenda-fecha-todas" class="form-label mb-0">Fecha</label>
+                <input id="agenda-fecha-todas" type="date" class="form-control form-control-sm w-auto"
+                       value="@_fechaAgenda.ToString("yyyy-MM-dd")" @onchange="CambiarFechaAsync" />
+                <button type="button" class="btn btn-outline-primary btn-sm" @onclick='() => _vistaAgenda = "tabla"'>
+                    Ver citas del día (@_citas.Count)
+                </button>
+            </div>
+        }
+        else if (_medicosAgenda.Count == 0)
+        {
+            <p class="alert alert-light border">No hay médicos asignados a esta sucursal.</p>
+        }
+        else if (_medicoAgenda <= 0)
+        {
+            <p class="alert alert-light border">Selecciona un médico para consultar su disponibilidad.</p>
+        }
+        else
+        {
+            <div class="row g-3 agenda-workspace">
+                <div class="col-lg-4">
+                    <section class="day-list-card agenda-panel-horas">
+                        <header class="agenda-panel-cabecera">
+                            <h6 class="mb-1">Turnos disponibles</h6>
+                            <div class="text-muted small text-capitalize">@_fechaAgenda.ToString("dddd d 'de' MMMM", CulturaAgenda)</div>
+                        </header>
+                        <div class="list-group list-group-flush agenda-lista-horas">
+                            @foreach (var slot in HorasLibresDelDia)
                             {
-                                <div class="calendar-lunch">13:00 Receso / Almuerzo</div>
+                                <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between"
+                                        @onclick="() => AbrirDesdeCasilla(_medicoAgenda, slot.Hora)">
+                                    <strong class="agenda-hora">@slot.Hora</strong><span class="text-success small">Disponible <i class="bi bi-chevron-right ms-1" aria-hidden="true"></i></span>
+                                </button>
                             }
-                            else
+                            @if (!HayHorasLibres)
                             {
-                                @foreach (var medico in MedicosAgenda)
-                                {
-                                    var cita = ObtenerCita(medico.Id, hora);
-                                    if (cita is null)
-                                    {
-                                        var slot = ObtenerSlot(medico.Id, hora);
-                                        if (slot?.Bloqueado != true)
-                                        {
-                                            <button type="button" class="calendar-slot free" title="Seleccionar @hora para agendar con @medico.Descripcion" @onclick="() => AbrirDesdeCasilla(medico.Id, hora)"><span>+</span></button>
-                                        }
-                                        else
-                                        {
-                                            <span class="calendar-slot" title="@slot.MotivoEstado"></span>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <button type="button" class="calendar-slot appointment @ClaseEstadoCita(cita.CiEstadoCita)" @onclick="() => VerDetalleCita(cita)">
-                                            <span class="appointment-photo">@if (!string.IsNullOrEmpty(ObtenerFotoPaciente(cita.CiNhcl))) { <img src="@ObtenerFotoPaciente(cita.CiNhcl)" alt="Foto de @cita.CiNombreMas" /> } else { <b>@Iniciales(cita.CiNombreMas)</b> }</span>
-                                            <span><strong>@cita.CiNombreMas @if(cita.CiNhcl > 0){<small>(#@cita.CiNhcl)</small>}</strong><small>@cita.CiNombre</small><em>@TextoTipoConsultaCita(cita)</em></span>
-                                        </button>
-                                    }
-                                }
+                                <p class="text-muted p-3 mb-0">
+                                    @(_fechaAgenda.Date < AhoraClinica.Date
+                                        ? "Esta fecha ya pasó. Selecciona una fecha actual o futura."
+                                        : _slots.Count == 0
+                                            ? $"Este médico no tiene turnos registrados para este día en {NombreSucursal(_sucursalAgenda)}."
+                                            : "Los turnos de este día están ocupados, bloqueados o ya pasaron.")
+                                </p>
                             }
                         </div>
-                    }
+                    </section>
                 </div>
-                <footer class="calendar-legend"><span class="confirmed">Confirmada</span><span class="pending">Por confirmar</span><span class="waiting">Agendada</span><span class="cancelled">Cancelada</span></footer>
-            </section>
-        </div>
-        <div class="col-xl-3">
-            <section class="day-list-card">
-                <header><strong>Citas del día (@_citas.Count)</strong></header>
-                <div class="day-list">
-                    @foreach (var cita in _citas.OrderBy(c => c.CiHora))
-                    {
-                        <button type="button" class="day-appointment" @onclick="() => VerDetalleCita(cita)"><time>@cita.CiHora</time><span class="mini-pet">@if(!string.IsNullOrEmpty(ObtenerFotoPaciente(cita.CiNhcl))){<img src="@ObtenerFotoPaciente(cita.CiNhcl)" alt="Foto de @cita.CiNombreMas"/>}else{<b>@Iniciales(cita.CiNombreMas)</b>}</span><span><strong>@cita.CiNombreMas</strong><small>@cita.CiNombre</small></span><em class="@ClaseEstadoCita(cita.CiEstadoCita)">@TextoEstadoCita(cita.CiEstadoCita)</em></button>
-                    }
+                <div class="col-lg-8">
+                    <section class="calendar-card agenda-calendario">
+                        <header class="agenda-panel-cabecera d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                            <h6 class="text-capitalize mb-0">@_fechaAgenda.ToString("MMMM yyyy", CulturaAgenda)</h6>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                            <label class="visually-hidden" for="agenda-fecha">Ir a fecha</label>
+                            <input id="agenda-fecha" type="date" class="form-control form-control-sm w-auto"
+                                   value="@_fechaAgenda.ToString("yyyy-MM-dd")" @onchange="CambiarFechaAsync" />
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" aria-label="Mes anterior" @onclick="() => CambiarMesAsync(-1)">‹</button>
+                                <button type="button" class="btn btn-outline-secondary" @onclick="IrHoy">Hoy</button>
+                                <button type="button" class="btn btn-outline-secondary" aria-label="Mes siguiente" @onclick="() => CambiarMesAsync(1)">›</button>
+                            </div>
+                            </div>
+                        </header>
+                        <div class="agenda-mes">
+                            @foreach (var dia in DiasSemana)
+                            {
+                                <strong class="agenda-dia-semana">@dia</strong>
+                            }
+                            @for (var espacio = 0; espacio < DesfaseMes; espacio++)
+                            {
+                                <span class="agenda-dia-vacio" aria-hidden="true"></span>
+                            }
+                            @foreach (var fecha in FechasMes)
+                            {
+                                var libres = ObtenerHorasLibres(fecha).Count();
+                                <button type="button" class="agenda-dia @(libres > 0 ? "agenda-dia-libre" : "")"
+                                        aria-pressed="@(fecha == _fechaAgenda.Date)"
+                                        aria-label="@fecha.ToString("D", CulturaAgenda), @libres horas libres"
+                                        @onclick="() => SeleccionarFechaAsync(fecha)">
+                                    <strong>@fecha.Day</strong>
+                                    @if (libres > 0)
+                                    {
+                                        <small><i class="bi bi-circle-fill" aria-hidden="true"></i> @libres libres</small>
+                                    }
+                                </button>
+                            }
+                        </div>
+                        <footer class="agenda-leyenda">
+                            <span><i class="bi bi-circle-fill text-success" aria-hidden="true"></i> Con disponibilidad</span>
+                            <span><i class="bi bi-circle text-secondary" aria-hidden="true"></i> Sin turnos libres</span>
+                        </footer>
+                    </section>
                 </div>
-            </section>
-        </div>
-    </div>
+            </div>
+        }
+    }
 
     @if (_vistaAgenda == "tabla")
     {
         <section class="scheduled-table-card">
-            <header><div><small>PROGRAMACIÓN DEL DÍA</small><h5>Citas programadas</h5></div><div><span>@_fechaAgenda.ToString("dd/MM/yyyy")</span><button class="btn btn-primary btn-sm" @onclick="AbrirFormularioCita">+ Agendar cita</button></div></header>
+            <header><div><small>PROGRAMACIÓN DEL DÍA</small><h5>Citas programadas</h5></div><div><span>@_fechaAgenda.ToString("dd/MM/yyyy")</span><button class="btn btn-primary btn-sm" disabled="@(_sucursalAgenda <= 0 || _medicoAgenda <= 0 || _cargandoInicial)" @onclick="AbrirFormularioCita">+ Agendar cita</button></div></header>
             <div class="table-responsive">
                 <table class="table align-middle mb-0">
-                    <thead><tr><th>Hora</th><th>Paciente</th><th>Propietario / Contacto</th><th>Médico</th><th>Tipo / Motivo</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
+                    <thead><tr><th>Hora</th><th>Paciente</th><th>Propietario / Contacto</th><th>Médico</th><th>Sucursal</th><th>Tipo / Motivo</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
                     <tbody>
                         @foreach (var cita in _citas.OrderBy(c => c.CiHora))
                         {
@@ -149,6 +216,7 @@
                                 <td><div class="scheduled-patient"><span class="appointment-photo">@if(!string.IsNullOrEmpty(ObtenerFotoPaciente(cita.CiNhcl))){<img src="@ObtenerFotoPaciente(cita.CiNhcl)" alt="Foto de @cita.CiNombreMas"/>}else{<b>@Iniciales(cita.CiNombreMas)</b>}</span><div><strong>@cita.CiNombreMas</strong><small>@(cita.CiNhcl > 0 ? $"NHCL #{cita.CiNhcl}" : "Sin NHCL")</small></div></div></td>
                                 <td><strong>@cita.CiNombre</strong><small>@cita.CiTelefono</small></td>
                                 <td><strong>@cita.NombreMedico</strong><small>@cita.Especialidad</small></td>
+                                <td>@NombreSucursal(cita.CiLocalidad)</td>
                                 <td><strong>@TextoTipoConsultaCita(cita)</strong><small>@cita.CiObservacion</small></td>
                                 <td><span class="table-status @ClaseEstadoCita(cita.CiEstadoCita)">@TextoEstadoCita(cita.CiEstadoCita)</span></td>
                                 <td class="text-end">
@@ -190,17 +258,27 @@
             <div class="p-3 row g-2">
                 <div class="col-md-2"><label>Desde</label><InputDate class="form-control" @bind-Value="_historialDesde" @bind-Value:after="CargarHistorialAsync" /></div>
                 <div class="col-md-2"><label>Hasta</label><InputDate class="form-control" @bind-Value="_historialHasta" @bind-Value:after="CargarHistorialAsync" /></div>
-                <div class="col-md-4"><label>Médico</label><select class="form-select" @bind="_historialMedico" @bind:after="CargarHistorialAsync"><option value="0">Todos</option>@foreach(var m in _medicos){<option value="@m.Id">@m.Descripcion</option>}</select></div>
+                <div class="col-md-4">
+                    <label for="historial-sucursal">Sucursal</label>
+                    <select id="historial-sucursal" class="form-select" @bind="_sucursalHistorial" @bind:after="CambiarSucursalHistorialAsync">
+                        <option value="0">Todas las sucursales disponibles</option>
+                        @foreach (var sucursal in _sucursales)
+                        {
+                            <option value="@sucursal.Id">@sucursal.Descripcion</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4"><label>Médico</label><select class="form-select" @bind="_historialMedico" @bind:after="CargarHistorialAsync"><option value="0">Todos</option>@foreach(var m in _medicosHistorial){<option value="@m.Id">@m.Descripcion</option>}</select></div>
                 <div class="col-md-4"><label>Paciente / propietario / NHCL</label><input class="form-control" autocomplete="off" placeholder="Escriba para filtrar..." @bind="_historialTexto" @bind:event="oninput" /></div>
             </div>
-            <div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Fecha/hora</th><th>Paciente</th><th>Propietario</th><th>Médico</th><th>Estado</th><th>Motivo cancelación</th><th></th></tr></thead><tbody>
+            <div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Fecha/hora</th><th>Paciente</th><th>Propietario</th><th>Médico</th><th>Sucursal</th><th>Estado</th><th>Motivo cancelación</th><th></th></tr></thead><tbody>
                 @foreach (var cita in HistorialFiltrado)
                 {
                     <tr>
                         <td>@cita.CiFecha.ToString("dd/MM/yyyy") @cita.CiHora</td>
                         <td>@cita.CiNombreMas <small>#@cita.CiNhcl</small></td>
                         <td>@cita.CiNombre</td>
-                        <td>@cita.NombreMedico</td>
+                        <td>@cita.NombreMedico</td><td>@NombreSucursal(cita.CiLocalidad)</td>
                         <td>@TextoEstadoCita(cita.CiEstadoCita)</td>
                         <td>@cita.CiMotivoCancelacion</td>
                         <td>
@@ -259,7 +337,7 @@
                     <div class="row g-2">
                         <div class="col-md-6">
                             <label>Médico veterinario *</label>
-                            <select class="form-select" value="@_idMedicoFiltro" @onchange="OnMedicoFormChanged">
+                            <select class="form-select" value="@_idMedicoFiltro" disabled="@(!_puedeVerAgendaCompleta)" @onchange="OnMedicoFormChanged">
                                 @if (MedicosFormulario.Count == 0)
                                 {
                                     <option value="0">-- Sin médicos en esta especialidad --</option>
@@ -306,12 +384,12 @@
                         <div class="col-md-6">
                             <label>Hora *</label>
                             <div class="input-group">
-                                <InputText class="form-control text-center fw-bold" @bind-Value="_nuevaCita.CiHora" placeholder="08:00" />
-                                <select class="form-select" style="max-width: 140px;" @onchange="OnHoraSelectChanged">
+                                <InputText class="form-control text-center fw-bold" @bind-Value="_nuevaCita.CiHora" placeholder="08:00" readonly="@(_nuevaCita.CiFecha.Date >= AhoraClinica.Date)" />
+                                <select class="form-select" style="max-width: 140px;" value="@_nuevaCita.CiHora" @onchange="OnHoraSelectChanged">
                                     <option value="">Turnos libres</option>
                                     @foreach (var h in ObtenerHorasLibresParaFormulario())
                                     {
-                                        <option value="@h" selected="@(h == _nuevaCita.CiHora)">@h</option>
+                                        <option value="@h">@h</option>
                                     }
                                 </select>
                             </div>
@@ -360,6 +438,7 @@
             </div>
             <div class="detail-grid">
                 <div><small>Fecha</small><strong>@_citaDetalle.CiFecha.ToString("dd/MM/yyyy")</strong></div>
+                <div><small>Sucursal</small><strong>@NombreSucursal(_citaDetalle.CiLocalidad)</strong></div>
                 <div><small>Hora</small><strong>@_citaDetalle.CiHora</strong></div>
                 <div><small>Médico veterinario</small><strong>@_citaDetalle.NombreMedico</strong></div>
                 <div><small>Tipo de consulta</small><strong>@TextoTipoConsultaCita(_citaDetalle)</strong></div>
@@ -433,7 +512,7 @@
                 </div>
                 <div class="detail-observation">
                     <label class="small text-muted fw-bold mb-1">Médico Veterinario</label>
-                    <select class="form-select" @bind="_reagendaMedico" disabled="@(SessionState.TipoUser == 2)">
+                    <select class="form-select" @bind="_reagendaMedico" disabled="@(!_puedeVerAgendaCompleta)">
                         @foreach (var m in _medicos)
                         {
                             <option value="@m.Id">@m.Descripcion</option>
@@ -721,15 +800,45 @@
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
 
     private List<CatalogoItemGenericoDto> _medicos = new();
+    private List<CatalogoItemGenericoDto> _medicosAgenda = [];
+    private List<CatalogoItemGenericoDto> _medicosHistorial = [];
     private List<CatalogoItemGenericoDto> _especialidades = new();
     private List<PacienteMascotaDto> _pacientes = new();
-    private List<SlotHorarioMedicoDto> _slots = new();
-    private Dictionary<int, List<SlotHorarioMedicoDto>> _slotsPorMedico = new();
+    private List<SlotHorarioMedicoDto> _slots => _slotsMes.GetValueOrDefault(_fechaAgenda.Date) ?? [];
+    private Dictionary<DateTime, List<SlotHorarioMedicoDto>> _slotsMes = [];
+    private List<SlotHorarioMedicoDto> _slotsFormulario = [];
+    private List<CatalogoItemGenericoDto> _sucursales = [];
+    private int _sucursalAgenda;
+    private int _sucursalHistorial;
+    private int _versionHistorial;
+
+    private string NombreSucursal(int id) =>
+        _sucursales.FirstOrDefault(sucursal => sucursal.Id == id)?.Descripcion ?? $"Sucursal #{id}";
+
+    private int _medicoAgenda;
+    private int _versionAgenda;
+    private ILookup<DateTime, CitaMedicaDto> _citasMes = Array.Empty<CitaMedicaDto>().ToLookup(cita => cita.CiFecha.Date);
+    private bool _puedeVerAgendaCompleta;
+    private static DateTime AhoraClinica => DateTime.UtcNow.AddHours(-5);
+    private static readonly System.Globalization.CultureInfo CulturaAgenda = new("es-EC");
+    private static readonly string[] DiasSemana = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+    private DateTime InicioMes => new(_fechaAgenda.Year, _fechaAgenda.Month, 1);
+    private int DesfaseMes => ((int)InicioMes.DayOfWeek + 6) % 7;
+    private IEnumerable<DateTime> FechasMes => Enumerable.Range(0, DateTime.DaysInMonth(_fechaAgenda.Year, _fechaAgenda.Month))
+        .Select(dia => InicioMes.AddDays(dia));
+    private IEnumerable<SlotHorarioMedicoDto> HorasLibresDelDia => ObtenerHorasLibres(_fechaAgenda);
+    private bool HayHorasLibres => !_cargandoInicial && HorasLibresDelDia.Any();
+
+    private IEnumerable<SlotHorarioMedicoDto> ObtenerHorasLibres(DateTime fecha) =>
+        (_slotsMes.GetValueOrDefault(fecha.Date) ?? []).Where(slot => EsHoraLibre(slot, fecha));
+
+    private static bool EsHoraLibre(SlotHorarioMedicoDto slot, DateTime fecha) =>
+        slot.Disponible && TimeSpan.TryParse(slot.Hora, out var hora) && fecha.Date.Add(hora) >= AhoraClinica;
     private List<CitaMedicaDto> _citas = new();
 
     private CitaMedicaDto _nuevaCita = new();
-    private int _idMedicoFiltro = 1;
-    private DateTime _fechaAgenda = DateTime.Today;
+    private int _idMedicoFiltro;
+    private DateTime _fechaAgenda = AhoraClinica.Date;
     private bool _cargandoInicial = true;
     private string _mensaje = string.Empty;
     private string _mensajeModal = string.Empty;
@@ -746,16 +855,12 @@
     private int _reagendaMedico;
     private string _vistaAgenda = "agenda";
     private IEnumerable<CitaMedicaDto> HistorialFiltrado => _historial.Where(c => _historialMedico == 0 || c.CiUsuario == _historialMedico).Where(c => string.IsNullOrWhiteSpace(_historialTexto) || c.CiNombre.Contains(_historialTexto, StringComparison.OrdinalIgnoreCase) || c.CiNombreMas.Contains(_historialTexto, StringComparison.OrdinalIgnoreCase) || c.CiNhcl.ToString().Contains(_historialTexto));
-    private bool PuedeEditar(CitaMedicaDto cita) => SessionState.TipoUser != 2 || cita.CiUsuario == SessionState.IdUser;
+    private bool PuedeEditar(CitaMedicaDto cita) => _puedeVerAgendaCompleta || cita.CiUsuario == SessionState.IdUser;
     private int CitasConfirmadas => _citas.Count(c => c.CiEstadoCita == "C");
     private int CitasCanceladas => _citas.Count(c => c.CiEstadoCita == "X");
     private int CitasPendientes => _citas.Count(c => c.CiEstadoCita is not ("C" or "X" or "A"));
-    private List<CatalogoItemGenericoDto> MedicosAgenda => _medicos.ToList();
-    private static readonly string[] HorasAgenda = Enumerable.Range(16, 20).Select(i => $"{i / 2:D2}:{(i % 2) * 30:D2}").ToArray();
 
     private int Porcentaje(int cantidad) => _citas.Count == 0 ? 0 : (int)Math.Round(cantidad * 100d / _citas.Count);
-    private CitaMedicaDto? ObtenerCita(int medicoId, string hora) => _citas.FirstOrDefault(c => c.CiUsuario == medicoId && c.CiHora == hora && c.CiEstado != "I");
-    private SlotHorarioMedicoDto? ObtenerSlot(int medicoId, string hora) => _slotsPorMedico.GetValueOrDefault(medicoId)?.FirstOrDefault(s => s.Hora == hora);
     private static string Iniciales(string texto)
     {
         var partes = (texto ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -777,10 +882,10 @@
 
     private List<CatalogoItemGenericoDto> MedicosFormulario =>
         _nuevaCita.CiTipoConsulta == 2 && _nuevaCita.CiEspecialidad > 0
-            ? _medicos.Where(m => m.IdPadre == _nuevaCita.CiEspecialidad).ToList()
-            : _medicos;
+            ? _medicosAgenda.Where(m => m.IdPadre == _nuevaCita.CiEspecialidad).ToList()
+            : _medicosAgenda;
 
-    private void OnTipoConsultaChanged(ChangeEventArgs e)
+    private async Task OnTipoConsultaChanged(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out int tipo))
         {
@@ -804,15 +909,16 @@
             {
                 if (_idMedicoFiltro <= 0)
                 {
-                    _idMedicoFiltro = _medicos.FirstOrDefault()?.Id ?? 1;
+                    _idMedicoFiltro = _medicosAgenda.FirstOrDefault()?.Id ?? 0;
                     _nuevaCita.CiUsuario = _idMedicoFiltro;
                 }
                 _nuevaCita.CiEspecialidad = ResolverEspecialidadPorTipo(tipo, _idMedicoFiltro);
             }
+            await OnFechaFormChanged();
         }
     }
 
-    private void OnEspecialidadCitaChanged(ChangeEventArgs e)
+    private async Task OnEspecialidadCitaChanged(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out int idEsp))
         {
@@ -820,14 +926,7 @@
             _idMedicoFiltro = MedicosFormulario.FirstOrDefault()?.Id ?? 0;
             _nuevaCita.CiUsuario = _idMedicoFiltro;
             _errorFormulario = string.Empty;
-            if (_idMedicoFiltro > 0)
-            {
-                var libre = ObtenerHorasLibresParaFormulario().FirstOrDefault();
-                if (!string.IsNullOrEmpty(libre))
-                {
-                    _nuevaCita.CiHora = libre;
-                }
-            }
+            await OnFechaFormChanged();
         }
     }
 
@@ -880,96 +979,84 @@
         get
         {
             var fecha = _nuevaCita.CiFecha == default ? _fechaAgenda : _nuevaCita.CiFecha;
-            if (fecha.Date < DateTime.Today) return true;
-            if (fecha.Date == DateTime.Today && TimeSpan.TryParse(_nuevaCita.CiHora, out var t))
+            if (fecha.Date < AhoraClinica.Date) return true;
+            if (fecha.Date == AhoraClinica.Date && TimeSpan.TryParse(_nuevaCita.CiHora, out var t))
             {
-                return t < DateTime.Now.TimeOfDay;
+                return t < AhoraClinica.TimeOfDay;
             }
             return false;
         }
     }
 
-    private IEnumerable<string> ObtenerHorasLibresParaFormulario()
-    {
-        var fecha = _nuevaCita.CiFecha == default ? _fechaAgenda : _nuevaCita.CiFecha;
-        var ocupadas = _citas
-            .Where(c => c.CiUsuario == _idMedicoFiltro && c.CiFecha.Date == fecha.Date && c.CiEstado != "I" && c.CiEstadoCita != "X")
-            .Select(c => (c.CiHora ?? "").Trim().PadLeft(5, '0').Substring(0, Math.Min(5, (c.CiHora ?? "").Trim().PadLeft(5, '0').Length)))
-            .ToHashSet();
-
-        foreach (var h in HorasAgenda)
-        {
-            if (!ocupadas.Contains(h))
-            {
-                yield return h;
-            }
-        }
-    }
+    private IEnumerable<string> ObtenerHorasLibresParaFormulario() =>
+        _slotsFormulario.Where(slot => EsHoraLibre(slot, _nuevaCita.CiFecha)).Select(slot => slot.Hora);
 
     private void OnHoraSelectChanged(ChangeEventArgs e)
     {
-        var sel = e.Value?.ToString();
-        if (!string.IsNullOrWhiteSpace(sel))
-        {
-            _nuevaCita.CiHora = sel;
-            _errorFormulario = string.Empty;
-        }
+        _nuevaCita.CiHora = e.Value?.ToString() ?? "";
+        _errorFormulario = string.Empty;
     }
 
-    private void OnMedicoFormChanged(ChangeEventArgs e)
+    private async Task OnMedicoFormChanged(ChangeEventArgs e)
     {
-        if (int.TryParse(e.Value?.ToString(), out int idMed) && idMed > 0)
+        if (int.TryParse(e.Value?.ToString(), out int idMed) && MedicosFormulario.Any(m => m.Id == idMed))
         {
             _idMedicoFiltro = idMed;
-            _errorFormulario = string.Empty;
-            var libre = ObtenerHorasLibresParaFormulario().FirstOrDefault();
-            if (!string.IsNullOrEmpty(libre))
-            {
-                _nuevaCita.CiHora = libre;
-            }
+            _nuevaCita.CiUsuario = idMed;
+            await OnFechaFormChanged();
         }
     }
 
     private async Task OnFechaFormChanged()
     {
         _errorFormulario = string.Empty;
-        var fecha = _nuevaCita.CiFecha == default ? _fechaAgenda : _nuevaCita.CiFecha;
-        if (fecha.Date != _fechaAgenda.Date)
+        _slotsFormulario = [];
+        var cita = _nuevaCita;
+        var fecha = cita.CiFecha.Date;
+        var medico = _idMedicoFiltro;
+        if (fecha < AhoraClinica.Date || medico <= 0)
+            return;
+
+        cita.CiHora = "";
+        try
         {
-            _citas = await AdmisionService.ObtenerCitasPorFechaAsync(fecha.Date, fecha.Date, 0);
+            var slots = await AdmisionService.ObtenerSlotsHorarioMedicoAsync(medico, fecha, cita.CiLocalidad);
+            if (ReferenceEquals(cita, _nuevaCita) && fecha == cita.CiFecha.Date && medico == _idMedicoFiltro)
+            {
+                _slotsFormulario = slots;
+                cita.CiHora = ObtenerHorasLibresParaFormulario().FirstOrDefault() ?? "";
+            }
         }
-        var libre = ObtenerHorasLibresParaFormulario().FirstOrDefault();
-        if (!string.IsNullOrEmpty(libre))
+        catch (Exception)
         {
-            _nuevaCita.CiHora = libre;
+            if (ReferenceEquals(cita, _nuevaCita) && fecha == cita.CiFecha.Date && medico == _idMedicoFiltro)
+                _errorFormulario = "No se pudieron cargar los turnos libres.";
         }
     }
 
     private void AbrirFormularioCita()
     {
-        _errorFormulario = string.Empty;
-        if (_idMedicoFiltro <= 0) _idMedicoFiltro = _medicos.FirstOrDefault()?.Id ?? 1;
-        var horaLibre = ObtenerHorasLibresParaFormulario().FirstOrDefault() ?? "08:00";
-        _nuevaCita = new CitaMedicaDto 
-        { 
-            CiFecha = _fechaAgenda, 
-            CiHora = horaLibre, 
-            CiUsuario = _idMedicoFiltro, 
-            CiLocalidad = SessionState.Localidad 
-        };
-        _mostrarFormularioCita = true;
+        if (_sucursalAgenda > 0 && _medicoAgenda > 0 && !_cargandoInicial)
+            PrepararFormularioCita(HorasLibresDelDia.FirstOrDefault()?.Hora ?? "");
     }
 
     private void AbrirDesdeCasilla(int medicoId, string hora)
     {
+        if (medicoId == _medicoAgenda && HorasLibresDelDia.Any(slot => slot.Hora == hora))
+            PrepararFormularioCita(hora);
+    }
+
+    private void PrepararFormularioCita(string hora)
+    {
         _errorFormulario = string.Empty;
-        _idMedicoFiltro = medicoId;
-        _nuevaCita = new CitaMedicaDto 
-        { 
-            CiFecha = _fechaAgenda, 
-            CiHora = hora, 
-            CiUsuario = medicoId, 
-            CiLocalidad = SessionState.Localidad 
+        _idMedicoFiltro = _medicoAgenda;
+        _slotsFormulario = _slotsMes.GetValueOrDefault(_fechaAgenda.Date) ?? [];
+        _nuevaCita = new CitaMedicaDto
+        {
+            CiFecha = _fechaAgenda,
+            CiHora = hora,
+            CiUsuario = _medicoAgenda,
+            CiLocalidad = _sucursalAgenda
         };
         _mostrarFormularioCita = true;
     }
@@ -1025,6 +1112,12 @@
             return;
         }
 
+        if (cita.CiLocalidad != SessionState.Localidad)
+        {
+            MostrarErrorCita($"Para generar la orden, abre Recepción con {NombreSucursal(cita.CiLocalidad)} como sucursal activa.");
+            return;
+        }
+
         string horaNorm = string.IsNullOrWhiteSpace(cita.CiHora) ? DateTime.Now.ToString("HH:mm") : cita.CiHora.Trim();
         string fechaNorm = (cita.CiFecha == default ? DateTime.Today : cita.CiFecha).ToString("yyyy-MM-dd");
         
@@ -1044,7 +1137,36 @@
     }
     private Task ConfirmarCitaDetalleAsync(int idCita) => CambiarEstadoCitaAsync(idCita, "C");
     private async Task AbrirHistorialAsync(){_vistaAgenda="historial";if(_historial.Count==0)await CargarHistorialAsync();}
-    private async Task CargarHistorialAsync(){if(_historialHasta<_historialDesde){_mensaje="El rango de historial no es válido.";return;}_historial=await AdmisionService.ObtenerCitasPorFechaAsync(_historialDesde,_historialHasta,0);}
+    private async Task CambiarSucursalHistorialAsync()
+    {
+        var sucursal = _sucursalHistorial;
+        var medicos = await ObtenerMedicosVisiblesAsync(sucursal);
+        if (sucursal != _sucursalHistorial)
+            return;
+
+        _medicosHistorial = medicos;
+        if (!_medicosHistorial.Any(medico => medico.Id == _historialMedico))
+            _historialMedico = 0;
+
+        await CargarHistorialAsync();
+    }
+
+    private async Task CargarHistorialAsync()
+    {
+        var version = ++_versionHistorial;
+        _historial = [];
+        if (_historialHasta < _historialDesde)
+        {
+            _mensajeEsError = true;
+            _mensaje = "El rango de historial no es válido.";
+            return;
+        }
+
+        var citas = await AdmisionService.ObtenerCitasPorFechaAsync(_historialDesde, _historialHasta,
+            _historialMedico, _sucursalHistorial > 0 ? _sucursalHistorial : null);
+        if (version == _versionHistorial)
+            _historial = citas;
+    }
     private void AbrirReagendar(CitaMedicaDto c){_mensajeModal="";_citaReagendar=c;_reagendaFecha=c.CiFecha;_reagendaHora=c.CiHora;_reagendaMedico=c.CiUsuario;}
     private void AbrirCancelar(CitaMedicaDto c){_mensajeModal="";_citaCancelar=c;_motivoCancelacion="";}
     private async Task ReagendarAsync()
@@ -1054,7 +1176,7 @@
         try
         {
             int idUser = SessionState.IdUser > 0 ? SessionState.IdUser : (SessionState.UsuarioActual?.IdUsuario ?? 1);
-            int localidad = _citaReagendar.CiLocalidad > 0 ? _citaReagendar.CiLocalidad : SessionState.Localidad;
+            int localidad = _citaReagendar.CiLocalidad > 0 ? _citaReagendar.CiLocalidad : _sucursalAgenda;
             var ok = await AdmisionService.ReagendarCitaAsync(_citaReagendar.CiId, _reagendaFecha, _reagendaHora, _reagendaMedico, localidad, idUser);
             if (!ok)
             {
@@ -1066,6 +1188,9 @@
 
             _fechaAgenda = _reagendaFecha;
             _idMedicoFiltro = _reagendaMedico;
+            _medicoAgenda = _reagendaMedico;
+            _sucursalAgenda = localidad;
+            await ActualizarMedicosAgendaAsync();
             _citaReagendar = null;
             _citaDetalle = null;
             await CargarAgendaAsync();
@@ -1107,62 +1232,136 @@
             MostrarErrorCita($"Error al cancelar la cita: {ex.Message}");
         }
     }
-    private async Task DiaAnterior() { _fechaAgenda = _fechaAgenda.AddDays(-1); await CargarAgendaAsync(); }
-    private async Task DiaSiguiente() { _fechaAgenda = _fechaAgenda.AddDays(1); await CargarAgendaAsync(); }
-    private async Task IrHoy() { _fechaAgenda = DateTime.Today; await CargarAgendaAsync(); }
+    private Task CambiarMesAsync(int meses) => SeleccionarFechaAsync(InicioMes.AddMonths(meses));
+    private Task IrHoy() => SeleccionarFechaAsync(AhoraClinica.Date);
 
     protected override async Task OnInitializedAsync()
     {
-        _cargandoInicial = true;
-        await Task.Yield();
-
         var tEsp = AdmisionService.ObtenerEspecialidadesAsync();
-        var tMed = AdmisionService.ObtenerMedicosPorEspecialidadAsync(0);
+        var tMed = AdmisionService.ObtenerMedicosAgendaAsync();
         var tPac = AdmisionService.BuscarMascotasAsync(string.Empty);
-        await Task.WhenAll(tMed, tPac);
+        var tPermiso = AdmisionService.PuedeVerAgendaCompletaAsync();
+        var tSucursales = AdmisionService.ObtenerSucursalesAgendaAsync();
+        await Task.WhenAll(tEsp, tMed, tPac, tPermiso, tSucursales);
+        _puedeVerAgendaCompleta = await tPermiso;
+        _sucursales = await tSucursales;
+        _sucursalAgenda = _sucursales.Any(sucursal => sucursal.Id == SessionState.Localidad)
+            ? SessionState.Localidad
+            : _sucursales.FirstOrDefault()?.Id ?? 0;
 
         _especialidades = await tEsp;
-        _medicos = await tMed;
-        _pacientes = await tPac;
-        _idMedicoFiltro = _medicos.FirstOrDefault()?.Id ?? 1;
+        _medicos = (await tMed).Where(m => _puedeVerAgendaCompleta || m.Id == SessionState.IdUser).ToList();
+        if (!_puedeVerAgendaCompleta && _medicos.Count == 0 && SessionState.IsAuthenticated)
+            _medicos.Add(new() { Id = SessionState.IdUser, Descripcion = SessionState.NombreUsuario });
 
+        _pacientes = await tPac;
+        _medicosHistorial = _medicos;
+        await ActualizarMedicosAgendaAsync();
         await CargarAgendaAsync();
-        _cargandoInicial = false;
+    }
+
+    private async Task CambiarSucursalAsync()
+    {
+        _cargandoInicial = true;
+        _citas = [];
+        _slotsMes = [];
+        await ActualizarMedicosAgendaAsync();
+        await CargarAgendaAsync();
+    }
+
+    private async Task<List<CatalogoItemGenericoDto>> ObtenerMedicosVisiblesAsync(int sucursal)
+    {
+        if (sucursal <= 0)
+            return _medicos;
+
+        return await AdmisionService.ObtenerMedicosAgendaAsync(sucursal);
+    }
+
+    private async Task ActualizarMedicosAgendaAsync()
+    {
+        var sucursal = _sucursalAgenda;
+        var medicos = await ObtenerMedicosVisiblesAsync(sucursal);
+        if (sucursal != _sucursalAgenda)
+            return;
+
+        _medicosAgenda = medicos;
+        if (!_medicosAgenda.Any(medico => medico.Id == _medicoAgenda))
+            _medicoAgenda = _puedeVerAgendaCompleta ? 0 : _medicosAgenda.FirstOrDefault()?.Id ?? 0;
     }
 
     private async Task CargarAgendaAsync()
     {
-        var tareasSlots = _medicos.ToDictionary(m => m.Id, m => AdmisionService.ObtenerSlotsHorarioMedicoAsync(m.Id, _fechaAgenda, SessionState.Localidad));
-        var tCitas = AdmisionService.ObtenerCitasPorFechaAsync(_fechaAgenda, _fechaAgenda, 0);
-        await Task.WhenAll(tareasSlots.Values.Cast<Task>().Append(tCitas));
-        _slotsPorMedico = tareasSlots.ToDictionary(x => x.Key, x => x.Value.Result);
-        _slots = _slotsPorMedico.GetValueOrDefault(_idMedicoFiltro) ?? [];
-        _citas = await tCitas;
+        var version = ++_versionAgenda;
+        var medico = _medicoAgenda;
+        var inicio = InicioMes;
+        var hasta = inicio.AddMonths(1).AddDays(-1);
+        var localidad = _sucursalAgenda;
+        _cargandoInicial = true;
+        _citas = [];
+        _citasMes = _citas.ToLookup(cita => cita.CiFecha.Date);
+        _slotsMes = [];
 
-        var medicoObj = _medicos.FirstOrDefault(m => m.Id == _idMedicoFiltro);
-        _nuevaCita.CiUsuario = _idMedicoFiltro;
-        _nuevaCita.NombreMedico = medicoObj?.Descripcion ?? "Médico";
-        _nuevaCita.CiFecha = _fechaAgenda;
-        _nuevaCita.CiLocalidad = SessionState.Localidad;
+        try
+        {
+            if (_sucursales.Count == 0 || (localidad > 0 && medico <= 0))
+                return;
+
+            var citas = AdmisionService.ObtenerCitasPorFechaAsync(inicio, hasta, medico, localidad > 0 ? localidad : null);
+            if (localidad > 0)
+            {
+                var horarios = AdmisionService.ObtenerSlotsHorarioMedicoPorRangoAsync(medico, inicio, hasta, localidad);
+                await Task.WhenAll(citas, horarios);
+                if (version == _versionAgenda)
+                    _slotsMes = await horarios;
+            }
+
+            var citasMes = await citas;
+            if (version != _versionAgenda)
+                return;
+
+            _citasMes = citasMes.ToLookup(cita => cita.CiFecha.Date);
+            ActualizarCitasDelDia();
+        }
+        catch (Exception)
+        {
+            if (version == _versionAgenda)
+            {
+                _mensajeEsError = true;
+                _mensaje = "No se pudo cargar la disponibilidad del médico.";
+            }
+        }
+        finally
+        {
+            if (version == _versionAgenda)
+                _cargandoInicial = false;
+        }
     }
+
+    private void ActualizarCitasDelDia() => _citas = _citasMes[_fechaAgenda.Date].ToList();
 
     private async Task CambiarMedicoAsync(ChangeEventArgs e)
     {
-        if (int.TryParse(e.Value?.ToString(), out int idMed))
+        if (int.TryParse(e.Value?.ToString(), out int idMed) && _puedeVerAgendaCompleta &&
+            (idMed == 0 || _medicosAgenda.Any(medico => medico.Id == idMed)))
         {
-            _idMedicoFiltro = idMed;
+            _medicoAgenda = idMed;
             await CargarAgendaAsync();
         }
     }
 
-    private async Task CambiarFechaAsync(ChangeEventArgs e)
+    private Task SeleccionarFechaAsync(DateTime fecha)
     {
-        if (DateTime.TryParse(e.Value?.ToString(), out var fec))
-        {
-            _fechaAgenda = fec;
-            await CargarAgendaAsync();
-        }
+        var recargarMes = fecha.Year != _fechaAgenda.Year || fecha.Month != _fechaAgenda.Month;
+        _fechaAgenda = fecha.Date;
+        if (recargarMes)
+            return CargarAgendaAsync();
+
+        ActualizarCitasDelDia();
+        return Task.CompletedTask;
     }
+
+    private Task CambiarFechaAsync(ChangeEventArgs e) =>
+        DateTime.TryParse(e.Value?.ToString(), out var fecha) ? SeleccionarFechaAsync(fecha) : Task.CompletedTask;
 
     private void SeleccionarHoraLibre(string hora)
     {
@@ -1192,10 +1391,10 @@
         try
         {
             int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
-            var medicoObj = _medicos.FirstOrDefault(m => m.Id == _idMedicoFiltro);
+            var medicoObj = _medicosAgenda.FirstOrDefault(m => m.Id == _idMedicoFiltro);
             _nuevaCita.CiUsuario = _idMedicoFiltro;
             _nuevaCita.NombreMedico = medicoObj?.Descripcion ?? "Médico";
-            _nuevaCita.CiLocalidad = SessionState.Localidad;
+
 
             if (_nuevaCita.CiFecha == default)
                 _nuevaCita.CiFecha = _fechaAgenda;
@@ -1210,18 +1409,32 @@
                 _errorFormulario = "No hay médicos veterinarios registrados en la especialidad seleccionada.";
                 return;
             }
+            if (string.IsNullOrWhiteSpace(_nuevaCita.CiHora))
+            {
+                _errorFormulario = "Selecciona una hora disponible o cambia la fecha de la cita.";
+                return;
+            }
+
+            if (_nuevaCita.CiFecha.Date >= AhoraClinica.Date &&
+                !ObtenerHorasLibresParaFormulario().Contains(_nuevaCita.CiHora))
+            {
+                _errorFormulario = "Selecciona un turno disponible para el médico y la fecha.";
+                return;
+            }
             _nuevaCita.CiEspecialidad = ResolverEspecialidadCita(_nuevaCita);
             int idCita = await AdmisionService.AgendarCitaAsync(_nuevaCita, idUser);
             _mensaje = $"Cita #{idCita} agendada para {_nuevaCita.CiNombreMas} a las {_nuevaCita.CiHora} con {_nuevaCita.NombreMedico}.";
             _mensajeEsError = false;
 
             _fechaAgenda = _nuevaCita.CiFecha;
+            _medicoAgenda = _idMedicoFiltro;
+            _sucursalAgenda = _nuevaCita.CiLocalidad;
             _nuevaCita = new CitaMedicaDto 
             { 
                 CiFecha = _fechaAgenda, 
                 CiHora = "08:00", 
                 CiUsuario = _idMedicoFiltro, 
-                CiLocalidad = SessionState.Localidad 
+                CiLocalidad = _sucursalAgenda
             };
             await CargarAgendaAsync();
             _mostrarFormularioCita = false;

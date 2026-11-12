@@ -32,15 +32,20 @@ public interface IAdmisionFacturacionService
     Task<int> CrearOrdenAtencionAsync(NuevaOrdenAtencionDto orden, int idUsuario, string ipOrigen);
     Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "");
     Task<List<OrdenPacienteResumenDto>> ObtenerOrdenesPacienteAsync(int nhcl);
+    Task<bool> PuedeConsultarOrdenAsync(int idOrden, int nhcl);
+    Task<List<SelectorClinicoDto>> BuscarMascotasConOrdenesVisiblesAsync(string filtro);
     Task<List<OrdenAtencionResumenDto>> ObtenerColaClinicaAsync(bool triaje, int? idOrden = null);
     Task<bool> CambiarEstadoOrdenAsync(int idOrden, string nuevoEstado, string nuevaEtapa);
     Task<bool> CambiarAsignacionOrdenAsync(int idOrden, int idMedico, int idEspecialidad, int idUsuario);
     Task<bool> AnularOrdenAsync(int idOrden, int idUsuario);
 
     // 3. Agenda de Citas Médicas (vt_administracionCitasnew)
+    Task<bool> PuedeVerAgendaCompletaAsync();
+    Task<List<CatalogoItemGenericoDto>> ObtenerSucursalesAgendaAsync();
+    Task<List<CatalogoItemGenericoDto>> ObtenerMedicosAgendaAsync(int? idLocalidad = null);
     Task<Dictionary<DateTime, List<SlotHorarioMedicoDto>>> ObtenerSlotsHorarioMedicoPorRangoAsync(int idMedico, DateTime desde, DateTime hasta, int idLocalidad);
     Task<List<SlotHorarioMedicoDto>> ObtenerSlotsHorarioMedicoAsync(int idMedico, DateTime fecha, int idLocalidad);
-    Task<List<CitaMedicaDto>> ObtenerCitasPorFechaAsync(DateTime fechaDesde, DateTime fechaHasta, int idMedico = 0);
+    Task<List<CitaMedicaDto>> ObtenerCitasPorFechaAsync(DateTime fechaDesde, DateTime fechaHasta, int idMedico = 0, int? idLocalidad = null);
     Task<int> AgendarCitaAsync(CitaMedicaDto cita, int idUsuario);
     Task<bool> ActualizarEstadoCitaAsync(int idCita, string nuevoEstado);
     Task<bool> ReagendarCitaAsync(int idCita, DateTime fecha, string hora, int idMedico, int idLocalidad, int idUsuario);
@@ -64,11 +69,18 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     private readonly ISqlDataService _db;
     private readonly SessionStateService _session;
     private const string PrefijoAsignacion = "Asignación de orden #";
+    private const string SucursalesAsignadas = @"SELECT ul_idLocalidad
+        FROM vt_usuarioLocalidades
+        WHERE ul_idUsuario = @UsuarioSesion AND ISNULL(ul_estado, 'A') = 'A'";
+    private const string AlcanceOrden = @"(@Rol = 1 OR (
+        o.ordenAten_idlocalidad IN (" + SucursalesAsignadas + @")
+        AND (@Rol <> 2 OR o.ordenAten_idMedico = @UsuarioSesion)))";
     private const string PermisoEditarCita = @" AND EXISTS (
         SELECT 1 FROM vt_usuarios actor
         WHERE actor.user_numero = @UsuarioSesion AND actor.user_estado = 'A'
-          AND (actor.user_tipouser_numero <> 2 OR (vt_citas.ci_usuario = @UsuarioSesion
-               AND (@MedicoDestino IS NULL OR @MedicoDestino = @UsuarioSesion))))";
+          AND (@AgendaCompleta = 1 OR (vt_citas.ci_usuario = @UsuarioSesion
+               AND (@MedicoDestino IS NULL OR @MedicoDestino = @UsuarioSesion))))
+        AND (@EsAdmin = 1 OR ISNULL(vt_citas.ci_localidad, 1) IN (" + SucursalesAsignadas + "))";
     private readonly ILogger<AdmisionFacturacionService> _logger;
     private readonly Dictionary<string, HashSet<string>> _columnCache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -1035,7 +1047,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "")
     {
-        const string sql = @"
+        if (!_session.IsAuthenticated) return [];
+
+        string sql = $@"
             SELECT TOP 150
                 o.ordenAten_id AS IdOrden,
                 ISNULL(NULLIF(RTRIM(o.ordenAten_turno), ''), ISNULL(NULLIF(RTRIM(es.es_codigo), ''), 'GEN') + '-01') AS Turno,
@@ -1072,6 +1086,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             LEFT JOIN vt_usuarios enf ON o.ordenAten_idEnfermero = enf.user_numero
             WHERE o.ordenAten_fecha = @Fecha
+              AND {AlcanceOrden}
               AND ISNULL(o.ordenAten_estado, 'A') <> 'I'
               AND (@Etapa = '' OR o.ordenAten_etapa = @Etapa)
               AND (@Filtro = '' OR o.ordenAten_nombre LIKE '%' + @Filtro + '%' OR p.mas_nombre LIKE '%' + @Filtro + '%' OR ISNULL(o.ordenAten_turno, '') LIKE '%' + @Filtro + '%' OR CAST(o.ordenAten_id AS VARCHAR) = @Filtro)
@@ -1083,7 +1098,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             {
                 Fecha = fecha.Date,
                 Filtro = filtro?.Trim() ?? string.Empty,
-                Etapa = etapa?.Trim() ?? string.Empty
+                Etapa = etapa?.Trim() ?? string.Empty,
+                Rol = _session.TipoUser, UsuarioSesion = _session.IdUser
             })).ToList();
             return res;
         }
@@ -1096,8 +1112,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<List<OrdenPacienteResumenDto>> ObtenerOrdenesPacienteAsync(int nhcl)
     {
-        if (nhcl <= 0) return [];
-        var ordenes = await _db.QueryAsync<OrdenPacienteResumenDto>(@"
+        if (!_session.IsAuthenticated || nhcl <= 0) return [];
+        var ordenes = await _db.QueryAsync<OrdenPacienteResumenDto>($@"
             SELECT o.ordenAten_id AS IdOrden,
                    ISNULL(o.ordenAten_fecha, GETDATE()) AS Fecha,
                    ISNULL(o.ordenAten_hora, '') AS Hora,
@@ -1107,16 +1123,46 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             FROM vt_ordenAtencion o
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             LEFT JOIN vt_especialidades esp ON o.ordenAten_esp_numero = esp.es_id
-            WHERE o.ordenAten_nhcl = @Nhcl
-            ORDER BY o.ordenAten_id DESC", new { Nhcl = nhcl });
+            WHERE o.ordenAten_nhcl = @Nhcl AND {AlcanceOrden}
+            ORDER BY o.ordenAten_id DESC", new { Nhcl = nhcl, Rol = _session.TipoUser, UsuarioSesion = _session.IdUser });
         return ordenes.ToList();
+    }
+
+    public async Task<List<SelectorClinicoDto>> BuscarMascotasConOrdenesVisiblesAsync(string filtro)
+    {
+        if (!_session.IsAuthenticated || string.IsNullOrWhiteSpace(filtro))
+            return [];
+
+        var pacientes = await _db.QueryAsync<SelectorClinicoDto>($@"
+            SELECT TOP 100 p.mas_nhcl AS Id,
+                   RTRIM(p.mas_nombre) + ' · NHCL ' + CAST(p.mas_nhcl AS varchar(20)) AS Descripcion
+            FROM vt_pacientes p
+            WHERE p.mas_estado = 'A' AND p.mas_nombre LIKE '%' + @Filtro + '%'
+              AND (@Rol = 1 OR EXISTS (
+                    SELECT 1 FROM vt_ordenAtencion o
+                    WHERE o.ordenAten_nhcl = p.mas_nhcl AND {AlcanceOrden}))
+            ORDER BY p.mas_nombre, p.mas_nhcl",
+            new { Filtro = filtro.Trim(), Rol = _session.TipoUser, UsuarioSesion = _session.IdUser });
+        return pacientes.ToList();
+    }
+
+    public async Task<bool> PuedeConsultarOrdenAsync(int idOrden, int nhcl)
+    {
+        if (!_session.IsAuthenticated || idOrden <= 0)
+            return false;
+
+        return await _db.ExecuteScalarAsync<int>($@"
+            SELECT COUNT(*) FROM vt_ordenAtencion o
+            WHERE o.ordenAten_id = @IdOrden AND (@Nhcl <= 0 OR o.ordenAten_nhcl = @Nhcl)
+              AND {AlcanceOrden}",
+            new { IdOrden = idOrden, Nhcl = nhcl, Rol = _session.TipoUser, UsuarioSesion = _session.IdUser }) > 0;
     }
 
     public async Task<List<OrdenAtencionResumenDto>> ObtenerColaClinicaAsync(bool triaje, int? idOrden = null)
     {
         if (!_session.IsAuthenticated) return [];
 
-        const string sql = @"
+        string sql = $@"
             SELECT o.ordenAten_id AS IdOrden,
                    o.ordenAten_nhcl AS Nhcl,
                    ISNULL(o.ordenAten_turno, '') AS Turno,
@@ -1151,6 +1197,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             WHERE ((@IdOrden IS NOT NULL AND o.ordenAten_id = @IdOrden)
                 OR (@IdOrden IS NULL AND o.ordenAten_fecha >= @Hoy AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
                     AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')))
+              AND {AlcanceOrden}
               AND (
                    (@Triaje = 0 AND (@Rol <> 2 OR o.ordenAten_idMedico = @Usuario))
                    OR (@Triaje = 1 AND (
@@ -1174,12 +1221,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             IdOrden = idOrden,
             Rol = _session.TipoUser,
             Usuario = _session.IdUser,
+            UsuarioSesion = _session.IdUser,
             PrefijoAsignacion
         })).ToList();
     }
 
     public async Task<bool> CambiarEstadoOrdenAsync(int idOrden, string nuevoEstado, string nuevaEtapa)
     {
+        if (!await PuedeConsultarOrdenAsync(idOrden, 0)) return false;
+
         try
         {
             const string sql = @"
@@ -1202,7 +1252,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<bool> CambiarAsignacionOrdenAsync(int idOrden, int idMedico, int idEspecialidad, int idUsuario)
     {
-        if (idOrden <= 0 || idMedico <= 0 || idEspecialidad <= 0) return false;
+        if (idMedico <= 0 || idEspecialidad <= 0 || !await PuedeConsultarOrdenAsync(idOrden, 0)) return false;
         var columnas = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
         string anterior = columnas.Contains("ordenaten_anteriorIdMed") ? "ordenaten_anteriorIdMed=ordenAten_idMedico," : string.Empty;
         string updateTurnoSql = @"
@@ -1248,6 +1298,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<bool> AnularOrdenAsync(int idOrden, int idUsuario)
     {
+        if (!await PuedeConsultarOrdenAsync(idOrden, 0)) return false;
+
         var columnas = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
         string auditoria = columnas.Contains("ordenAten_borra") ? ", ordenAten_borra=@IdUsuario" : string.Empty;
         int rows = await _db.ExecuteAsync($"UPDATE vt_ordenAtencion SET ordenAten_estado='I'{auditoria} WHERE ordenAten_id=@IdOrden AND ISNULL(ordenAten_estado,'A')<>'I'", new { IdOrden = idOrden, IdUsuario = idUsuario });
@@ -1259,6 +1311,82 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     // 3. AGENDA DE CITAS MÉDICAS (vt_administracionCitasnew)
     // =========================================================================
 
+    public async Task<bool> PuedeVerAgendaCompletaAsync()
+    {
+        if (!_session.IsAuthenticated || _session.TipoUser == 2)
+            return false;
+        if (_session.TipoUser == 1)
+            return true;
+
+        var rol = await _db.ExecuteScalarAsync<string>(@"
+            SELECT tipuser_descripcion
+            FROM vt_tipos_usuarios
+            WHERE tipuser_numero = @Rol", new { Rol = _session.TipoUser });
+
+        return rol?.Contains("recepci", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerSucursalesAgendaAsync()
+    {
+        if (!_session.IsAuthenticated)
+            return [];
+
+        var sucursales = await _db.QueryAsync<CatalogoItemGenericoDto>($@"
+            SELECT loc_id AS Id, RTRIM(ISNULL(loc_descripcion, '')) AS Descripcion
+            FROM vt_localidades
+            WHERE ISNULL(loc_estado, 'A') = 'A'
+              AND (@EsAdmin = 1 OR loc_id IN ({SucursalesAsignadas}))
+            ORDER BY loc_descripcion", new { EsAdmin = _session.TipoUser == 1, UsuarioSesion = _session.IdUser });
+        return sucursales.ToList();
+    }
+
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerMedicosAgendaAsync(int? idLocalidad = null)
+    {
+        if (!_session.IsAuthenticated ||
+            (idLocalidad.HasValue && !await PuedeUsarSucursalAgendaAsync(idLocalidad.Value)))
+            return [];
+
+        var medicos = await _db.QueryAsync<CatalogoItemGenericoDto>($@"
+            SELECT u.user_numero AS Id, RTRIM(u.user_nombre) AS Descripcion,
+                   ISNULL(u.user_esp_numero, 0) AS IdPadre
+            FROM vt_usuarios u
+            WHERE u.user_estado = 'A'
+              AND (@AgendaCompleta = 1 OR u.user_numero = @UsuarioSesion)
+              AND (
+                    ((u.user_tipouser_numero = 2 OR UPPER(LTRIM(RTRIM(ISNULL(u.user_tipomedico, '')))) IN ('P', 'L', 'E'))
+                     AND ((@IdLocalidad IS NULL AND @EsAdmin = 1) OR EXISTS (
+                         SELECT 1 FROM vt_usuarioLocalidades ul
+                         WHERE ul.ul_idUsuario = u.user_numero AND ISNULL(ul.ul_estado, 'A') = 'A'
+                           AND (@IdLocalidad IS NULL OR ul.ul_idLocalidad = @IdLocalidad)
+                           AND (@EsAdmin = 1 OR ul.ul_idLocalidad IN ({SucursalesAsignadas})))))
+                    OR EXISTS (
+                         SELECT 1 FROM vt_horariosMedicos h
+                         WHERE h.hr_iduser = u.user_numero
+                           AND (@IdLocalidad IS NULL OR h.hr_localidad = @IdLocalidad)
+                           AND (@EsAdmin = 1 OR h.hr_localidad IN ({SucursalesAsignadas})))
+                  )
+            ORDER BY u.user_nombre", new
+        {
+            IdLocalidad = idLocalidad,
+            AgendaCompleta = await PuedeVerAgendaCompletaAsync(),
+            EsAdmin = _session.TipoUser == 1,
+            UsuarioSesion = _session.IdUser
+        });
+        return medicos.ToList();
+    }
+
+    private async Task<bool> PuedeUsarSucursalAgendaAsync(int idLocalidad)
+    {
+        if (!_session.IsAuthenticated || idLocalidad <= 0)
+            return false;
+
+        return await _db.ExecuteScalarAsync<int>($@"
+            SELECT COUNT(*) FROM vt_localidades
+            WHERE loc_id = @IdLocalidad AND ISNULL(loc_estado, 'A') = 'A'
+              AND (@EsAdmin = 1 OR loc_id IN ({SucursalesAsignadas}))",
+            new { IdLocalidad = idLocalidad, EsAdmin = _session.TipoUser == 1, UsuarioSesion = _session.IdUser }) > 0;
+    }
+
     public async Task<List<SlotHorarioMedicoDto>> ObtenerSlotsHorarioMedicoAsync(int idMedico, DateTime fecha, int idLocalidad)
     {
         var dias = await ObtenerSlotsHorarioMedicoPorRangoAsync(idMedico, fecha, fecha, idLocalidad);
@@ -1269,8 +1397,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         int idMedico, DateTime desde, DateTime hasta, int idLocalidad)
     {
         Dictionary<DateTime, List<SlotHorarioMedicoDto>> dias = [];
-        if (!_session.IsAuthenticated || idMedico <= 0 || (_session.TipoUser == 2 && idMedico != _session.IdUser) ||
-            hasta.Date < desde.Date || (hasta.Date - desde.Date).Days >= 31)
+        if (!_session.IsAuthenticated || idMedico <= 0 || (idMedico != _session.IdUser && !await PuedeVerAgendaCompletaAsync()) ||
+            hasta.Date < desde.Date || (hasta.Date - desde.Date).Days >= 31 || !await PuedeUsarSucursalAgendaAsync(idLocalidad))
             return dias;
 
         var columnas = await ObtenerColumnasTablaAsync("vt_horariosMedicos");
@@ -1279,7 +1407,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             return dias;
 
         var parametros = new { IdMedico = idMedico, IdLocalidad = idLocalidad, Desde = desde.Date, Hasta = hasta.Date };
-        string dia = columnas.Contains("hr_dia2") ? "hr_dia2" : "hr_dia";
+        string dia = columnas.Contains("hr_dia2") ? "COALESCE(NULLIF(LTRIM(RTRIM(hr_dia2)), ''), hr_dia)" : "hr_dia";
         string inicio = columnas.Contains("hr_vigencia_desde") ? "hr_vigencia_desde" : "CAST(NULL AS date)";
         string fin = columnas.Contains("hr_vigencia_hasta") ? "hr_vigencia_hasta" : "CAST(NULL AS date)";
         var bloques = (await _db.QueryAsync<(string Dia, string Desde, string Hasta, int Intervalo, DateTime? Inicio, DateTime? Fin)>($@"
@@ -1300,7 +1428,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                   AND cal_fecha>=@Desde AND cal_fecha<DATEADD(day, 1, @Hasta) {estado}", parametros)).ToList();
         }
 
-        var citas = (await ObtenerCitasPorFechaAsync(desde, hasta, idMedico))
+        var citas = (await ObtenerCitasPorFechaAsync(desde, hasta, idMedico, idLocalidad))
             .Where(c => c.CiLocalidad == idLocalidad && c.CiEstado != "I" && c.CiEstadoCita != "X")
             .ToLookup(c => c.CiFecha.Date);
         var bloqueosPorDia = bloqueos.ToLookup(b => b.Fecha);
@@ -1376,11 +1504,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         return columnas;
     }
 
-    public async Task<List<CitaMedicaDto>> ObtenerCitasPorFechaAsync(DateTime fechaDesde, DateTime fechaHasta, int idMedico = 0)
+    public async Task<List<CitaMedicaDto>> ObtenerCitasPorFechaAsync(DateTime fechaDesde, DateTime fechaHasta, int idMedico = 0, int? idLocalidad = null)
     {
         if (!_session.IsAuthenticated)
             return [];
-        if (_session.TipoUser == 2)
+        if (!await PuedeVerAgendaCompletaAsync())
         {
             if (idMedico != 0 && idMedico != _session.IdUser)
                 return [];
@@ -1423,6 +1551,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LEFT JOIN vt_especialidades e ON {colEspExpr} = e.es_id
             WHERE c.ci_fecha >= @Desde AND c.ci_fecha < DATEADD(day, 1, @Hasta)
               AND (@IdMedico = 0 OR c.ci_usuario = @IdMedico)
+              AND (@IdLocalidad IS NULL OR ISNULL(c.ci_localidad, 1) = @IdLocalidad)
+              AND (@EsAdmin = 1 OR ISNULL(c.ci_localidad, 1) IN ({SucursalesAsignadas}))
             ORDER BY c.ci_fecha, c.ci_hora;";
 
         try
@@ -1431,7 +1561,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             {
                 Desde = fechaDesde.Date,
                 Hasta = fechaHasta.Date,
-                IdMedico = idMedico
+                IdMedico = idMedico, IdLocalidad = idLocalidad, EsAdmin = _session.TipoUser == 1, UsuarioSesion = _session.IdUser
             })).ToList();
             return res;
         }
@@ -1444,14 +1574,25 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<int> AgendarCitaAsync(CitaMedicaDto cita, int idUsuario)
     {
-        if (!_session.IsAuthenticated || (_session.TipoUser == 2 && cita.CiUsuario != _session.IdUser))
+        if (!_session.IsAuthenticated || (cita.CiUsuario != _session.IdUser && !await PuedeVerAgendaCompletaAsync()))
             throw new InvalidOperationException("No tiene permiso para agendar una cita para ese médico.");
+        if (!await PuedeUsarSucursalAgendaAsync(cita.CiLocalidad))
+            throw new InvalidOperationException("No tiene acceso a la sucursal seleccionada.");
 
         try
         {
             if (TimeSpan.TryParse(cita.CiHora, out var tsHora))
             {
                 cita.CiHora = $"{tsHora.Hours:D2}:{tsHora.Minutes:D2}";
+            }
+
+            var ahoraClinica = DateTime.UtcNow.AddHours(-5);
+            if (cita.CiFecha.Date >= ahoraClinica.Date)
+            {
+                var slots = await ObtenerSlotsHorarioMedicoAsync(cita.CiUsuario, cita.CiFecha, cita.CiLocalidad);
+                if (!slots.Any(slot => slot.Disponible && slot.Hora == cita.CiHora &&
+                    TimeSpan.TryParse(slot.Hora, out var hora) && cita.CiFecha.Date.Add(hora) >= ahoraClinica))
+                    throw new InvalidOperationException("Ese turno ya no está disponible para el médico y la fecha seleccionados.");
             }
 
             int superpuestas = await _db.ExecuteScalarAsync<int>(@"
@@ -1540,7 +1681,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
             int rows = await _db.ExecuteAsync(
                 $"UPDATE vt_citas SET {string.Join(", ", cambios)} WHERE ci_id = @IdCita{PermisoEditarCita}",
-                new { IdCita = idCita, Estado = nuevoEstado, MedicoDestino = (int?)null, UsuarioSesion = _session.IdUser });
+                new { IdCita = idCita, Estado = nuevoEstado, MedicoDestino = (int?)null, UsuarioSesion = _session.IdUser, AgendaCompleta = await PuedeVerAgendaCompletaAsync(), EsAdmin = _session.TipoUser == 1 });
             return rows > 0;
         }
         catch (Exception ex)
@@ -1552,7 +1693,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<bool> ReagendarCitaAsync(int idCita, DateTime fecha, string hora, int idMedico, int idLocalidad, int idUsuario)
     {
-        if (!_session.IsAuthenticated || (_session.TipoUser == 2 && idMedico != _session.IdUser)) return false;
+        if (!await PuedeUsarSucursalAgendaAsync(idLocalidad) ||
+            (idMedico != _session.IdUser && !await PuedeVerAgendaCompletaAsync()))
+            return false;
         if (idCita <= 0 || idMedico <= 0 || idLocalidad <= 0 || !TimeSpan.TryParse(hora, out var horaNueva)) return false;
         string horaNormalizada = $"{horaNueva.Hours:D2}:{horaNueva.Minutes:D2}";
         int cruces = await _db.ExecuteScalarAsync<int>(@"SELECT COUNT(1) FROM vt_citas
@@ -1567,7 +1710,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         string extra = "," + string.Join(',', adicionales);
         int rows = await _db.ExecuteAsync($@"UPDATE vt_citas SET ci_fecha=@Fecha,ci_hora=@Hora,ci_usuario=@IdMedico,
             ci_localidad=@IdLocalidad,ci_estado='A'{extra} WHERE ci_id=@IdCita AND ISNULL(ci_estado,'A')='A'{PermisoEditarCita}",
-            new { IdCita = idCita, Fecha = fecha.Date, Hora = horaNormalizada, IdMedico = idMedico, IdLocalidad = idLocalidad, IdUsuario = idUsuario, MedicoDestino = idMedico, UsuarioSesion = _session.IdUser });
+            new { IdCita = idCita, Fecha = fecha.Date, Hora = horaNormalizada, IdMedico = idMedico, IdLocalidad = idLocalidad, IdUsuario = idUsuario, MedicoDestino = idMedico, UsuarioSesion = _session.IdUser, AgendaCompleta = await PuedeVerAgendaCompletaAsync(), EsAdmin = _session.TipoUser == 1 });
         if (rows <= 0) return false;
 
         var confirmacion = await _db.QueryFirstOrDefaultAsync<CitaMedicaDto>(@"
@@ -1603,7 +1746,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             if (columnas.Contains("ci_refeliminacion")) cambios.Add("ci_refeliminacion=@Motivo");
             if (columnas.Contains("ci_delete")) cambios.Add("ci_delete=@IdUsuario");
             if (columnas.Contains("ci_HoraModificacion")) cambios.Add("ci_HoraModificacion=GETDATE()");
-            int rows = await _db.ExecuteAsync($"UPDATE vt_citas SET {string.Join(',', cambios)} WHERE ci_id=@IdCita{PermisoEditarCita}", new { IdCita = idCita, Motivo = motivoNormalizado, IdUsuario = usuarioAuditoria, MedicoDestino = (int?)null, UsuarioSesion = _session.IdUser });
+            int rows = await _db.ExecuteAsync($"UPDATE vt_citas SET {string.Join(',', cambios)} WHERE ci_id=@IdCita{PermisoEditarCita}", new { IdCita = idCita, Motivo = motivoNormalizado, IdUsuario = usuarioAuditoria, MedicoDestino = (int?)null, UsuarioSesion = _session.IdUser, AgendaCompleta = await PuedeVerAgendaCompletaAsync(), EsAdmin = _session.TipoUser == 1 });
             if (rows > 0)
             {
                 try
