@@ -38,7 +38,7 @@
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 1px;
-    background: #dce6ef;
+    background: #bdcddd;
 }
 .agenda-dia-semana {
     padding: .65rem .125rem;
@@ -103,19 +103,15 @@
     .agenda-lista-horas { max-height: 13rem; }
 }
 
-.agenda-semana-scroll {
-    max-height: 38rem;
-    overflow: auto;
+.agenda-semana-contenedor {
+    border-radius: 0 0 .7rem .7rem;
+    overflow: clip;
 }
 .agenda-semana {
     display: grid;
-    grid-template-columns: 3.6rem repeat(7, minmax(7.4rem, 1fr));
-    min-width: 55.4rem;
+    grid-template-columns: minmax(2.6rem, 4.5%) repeat(7, minmax(0, 1fr));
 }
 .agenda-semana-cabecera {
-    position: sticky;
-    top: 0;
-    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -136,19 +132,11 @@
     background: #e5f0fb;
     box-shadow: inset 0 -2px #0b70df;
 }
-.agenda-columna-hora {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-}
-.agenda-semana-cabecera.agenda-columna-hora {
-    z-index: 2;
-}
 .agenda-semana-hora,
 .agenda-semana-celda {
-    min-height: 2.5rem;
-    border-right: 1px solid #e1e9f0;
-    border-bottom: 1px solid #e1e9f0;
+    min-height: 2.2rem;
+    border-right: 1px solid #bfcfdd;
+    border-bottom: 1px solid #cbd8e3;
 }
 .agenda-semana-hora {
     padding: .5rem .3rem;
@@ -199,7 +187,7 @@
 }
 .agenda-semana-libre {
     width: 100%;
-    min-height: 2rem;
+    min-height: 1.7rem;
     padding: 0;
     border: 0;
     border-radius: .2rem;
@@ -243,8 +231,7 @@
     top: calc(100% + .5rem);
     right: 0;
     width: min(25rem, calc(100vw - 2.5rem));
-    max-height: 65vh;
-    overflow: auto;
+    overflow: visible;
     box-shadow: 0 10px 28px rgba(25, 61, 101, .18);
 }
 @media (max-width: 700px) {
@@ -257,4 +244,34 @@
     .agenda-selector-panel {
         right: .5rem;
     }
+}
+
+.agenda-semana-cabecera {
+    border-right-color: #bfcfdd;
+    border-bottom-color: #aebfd0;
+    color: #294661;
+    font-weight: 650;
+}
+.agenda-semana-cabecera:focus-visible,
+.agenda-semana-libre:focus-visible,
+.agenda-evento:focus-visible {
+    outline: 2px solid #1769ad;
+    outline-offset: -2px;
+}
+.agenda-semana-celda,
+.agenda-evento {
+    min-width: 0;
+}
+.agenda-selector-panel {
+    border: 1px solid #bfcfdd;
+}
+.agenda-selector-panel .agenda-mes {
+    border-block: 1px solid #bdcddd;
+}
+@media (max-width: 700px) {
+    .agenda-semana-cabecera { flex-direction: column; gap: 0; font-size: .65rem; }
+    .agenda-semana-hora { padding-inline: .1rem; font-size: .65rem; }
+    .agenda-semana-celda { padding: .12rem; }
+    .agenda-evento { padding: .2rem .15rem; font-size: .63rem; border-left-width: .14rem; }
+    .agenda-selector-panel { width: min(25rem, calc(100vw - 3.5rem)); }
 }

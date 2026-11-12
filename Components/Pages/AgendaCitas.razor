@@ -204,6 +204,11 @@
                                                     }
                                                 </button>
                                             }
+                                            @for (var espacio = (DesfaseMes + DateTime.DaysInMonth(_fechaAgenda.Year, _fechaAgenda.Month)) % 7;
+                                                espacio > 0 && espacio < 7; espacio++)
+                                            {
+                                                <span class="agenda-dia-vacio" aria-hidden="true"></span>
+                                            }
                                         </div>
                                         <div class="agenda-leyenda">
                                             <span><i class="bi bi-circle-fill text-success" aria-hidden="true"></i> Con disponibilidad</span>
@@ -219,7 +224,7 @@
                                 .Concat((_slotsMes.GetValueOrDefault(dia.Fecha) ?? []).Select(slot => slot.Hora)))
                                 .Distinct(StringComparer.Ordinal).OrderBy(hora => hora, StringComparer.Ordinal);
                         }
-                        <div class="agenda-semana-scroll">
+                        <div class="agenda-semana-contenedor">
                             <div class="agenda-semana">
                                 <div class="agenda-semana-cabecera agenda-columna-hora">Hora</div>
                                 @foreach (var dia in semana)
