@@ -1100,7 +1100,7 @@
             if (_medicosDisponibles.Count == 0)
             {
                 _esError = true;
-                _mensajeAlerta = "No existen médicos registrados para esta especialidad.";
+                _mensajeAlerta = "No existen médicos registrados para esta especialidad en la sucursal actual.";
             }
             else
             {
@@ -1192,10 +1192,10 @@
                 ? await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad)
                 : await ObtenerMedicosEnHorarioAsync(0);
 
-            if (medicosEnHorario.Count > 0 && !medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
+            if (medicosEnHorario.Count == 0 || !medicosEnHorario.Any(m => m.Id == _nuevaOrden.IdMedico))
             {
                 _esError = true;
-                _mensajeAlerta = "El médico seleccionado no tiene un horario de atención disponible en la fecha indicada.";
+                _mensajeAlerta = "El médico seleccionado no atiende en la sucursal actual o no tiene un horario de atención disponible.";
                 return;
             }
         }
@@ -1265,7 +1265,7 @@
     private async Task CargarOrdenesAsync()
     {
         _ordenes = await AdmisionService.ObtenerOrdenesDelDiaAsync(_fechaConsulta, _filtroOrdenTexto, _filtroEtapa);
-        _conteoMedicos = await AdmisionService.ObtenerConteoMedicosEsperaAsync(_fechaConsulta, 0);
+        _conteoMedicos = await AdmisionService.ObtenerConteoMedicosEsperaAsync(_fechaConsulta, SessionState.Localidad);
         if (SessionState.TipoUser == 2)
         {
             _ordenes = _ordenes.Where(o => o.IdMedico == SessionState.IdUser).ToList();

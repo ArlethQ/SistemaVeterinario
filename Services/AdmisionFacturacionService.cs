@@ -25,8 +25,8 @@ public interface IAdmisionFacturacionService
 
     // 2. Recepción y Órdenes de Atención (vt_OrdenesMenu)
     Task<List<CatalogoItemGenericoDto>> ObtenerEspecialidadesAsync();
-    Task<List<CatalogoItemGenericoDto>> ObtenerMedicosPorEspecialidadAsync(int idEspecialidad);
-    Task<List<CatalogoItemGenericoDto>> ObtenerEnfermerosAsync();
+    Task<List<CatalogoItemGenericoDto>> ObtenerMedicosPorEspecialidadAsync(int idEspecialidad, int? idLocalidad = null);
+    Task<List<CatalogoItemGenericoDto>> ObtenerEnfermerosAsync(int? idLocalidad = null);
     Task<List<ConteoMedicoEsperaDto>> ObtenerConteoMedicosEsperaAsync(DateTime fecha, int idLocalidad);
     Task<bool> TieneOrdenActivaHoyAsync(int nhcl, int idEspecialidad, DateTime fecha);
     Task<int> CrearOrdenAtencionAsync(NuevaOrdenAtencionDto orden, int idUsuario, string ipOrigen);
@@ -74,7 +74,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         FROM vt_usuarioLocalidades
         WHERE ul_idUsuario = @UsuarioSesion AND ISNULL(ul_estado, 'A') = 'A'";
     private const string AlcanceOrden = @"(@VeTodasSucursales = 1 OR (
-        o.ordenAten_idlocalidad IN (" + SucursalesAsignadas + @")
+        o.ordenAten_idlocalidad = @LocalidadSesion
+        AND o.ordenAten_idlocalidad IN (" + SucursalesAsignadas + @")
         AND (@Rol <> 2 OR o.ordenAten_idMedico = @UsuarioSesion)))";
     private const string PermisoEditarCita = @" AND EXISTS (
         SELECT 1 FROM vt_usuarios actor
@@ -825,23 +826,97 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
     }
 
-    public async Task<List<CatalogoItemGenericoDto>> ObtenerMedicosPorEspecialidadAsync(int idEspecialidad)
+    private int ResolverLocalidadActiva(int? idLocalidad = null) =>
+        idLocalidad.GetValueOrDefault() > 0
+            ? idLocalidad!.Value
+            : (_session.Localidad > 0 ? _session.Localidad : 1);
+
+    private async Task<bool> MedicoAtiendeEnLocalidadAsync(int idMedico, int idLocalidad)
     {
+        if (idMedico <= 0 || idLocalidad <= 0) return false;
+
+        return await _db.ExecuteScalarAsync<int>(@"
+            SELECT COUNT(1)
+            FROM vt_usuarios u
+            WHERE u.user_numero = @IdMedico
+              AND u.user_estado = 'A'
+              AND (
+                  EXISTS (
+                      SELECT 1 FROM vt_horariosMedicos h
+                      WHERE h.hr_iduser = u.user_numero
+                        AND h.hr_localidad = @IdLocalidad
+                  )
+                  OR (
+                      NOT EXISTS (
+                          SELECT 1 FROM vt_horariosMedicos programado
+                          WHERE programado.hr_iduser = u.user_numero
+                            AND programado.hr_localidad > 0
+                      )
+                      AND EXISTS (
+                          SELECT 1 FROM vt_usuarioLocalidades ul
+                          WHERE ul.ul_idUsuario = u.user_numero
+                            AND ul.ul_idLocalidad = @IdLocalidad
+                            AND ISNULL(ul.ul_estado, 'A') = 'A'
+                      )
+                  )
+              )", new { IdMedico = idMedico, IdLocalidad = idLocalidad }) > 0;
+    }
+
+    private async Task<bool> EnfermeroAtiendeEnLocalidadAsync(int idEnfermero, int idLocalidad)
+    {
+        if (idEnfermero <= 0 || idLocalidad <= 0) return false;
+
+        return await _db.ExecuteScalarAsync<int>(@"
+            SELECT COUNT(1)
+            FROM vt_usuarios u
+            WHERE u.user_numero = @IdEnfermero
+              AND u.user_estado = 'A'
+              AND EXISTS (
+                  SELECT 1 FROM vt_usuarioLocalidades ul
+                  WHERE ul.ul_idUsuario = u.user_numero
+                    AND ul.ul_idLocalidad = @IdLocalidad
+                    AND ISNULL(ul.ul_estado, 'A') = 'A'
+              )", new { IdEnfermero = idEnfermero, IdLocalidad = idLocalidad }) > 0;
+    }
+
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerMedicosPorEspecialidadAsync(int idEspecialidad, int? idLocalidad = null)
+    {
+        int localidadObjetivo = ResolverLocalidadActiva(idLocalidad);
         try
         {
             return (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
                 SELECT DISTINCT u.user_numero AS Id, u.user_nombre AS Descripcion, ISNULL(u.user_esp_numero, 0) AS IdPadre
                 FROM vt_usuarios u
                 LEFT JOIN vt_usuarioEspecialidades ue ON ue.ue_idUsuario = u.user_numero AND ISNULL(ue.ue_estado, 'A') = 'A'
-                WHERE user_estado = 'A'
+                WHERE u.user_estado = 'A'
                   AND u.user_tipouser_numero = 2
-                  AND UPPER(LTRIM(RTRIM(ISNULL(user_tipomedico, '')))) IN ('P', 'L', 'E')
+                  AND UPPER(LTRIM(RTRIM(ISNULL(u.user_tipomedico, '')))) IN ('P', 'L', 'E')
                   AND (
                       @IdEsp = 0 
                       OR ue.ue_idEspecialidad = @IdEsp 
                       OR (ue.ue_idEspecialidad IS NULL AND u.user_esp_numero = @IdEsp)
                   )
-                ORDER BY user_nombre", new { IdEsp = idEspecialidad })).ToList();
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM vt_horariosMedicos h
+                          WHERE h.hr_iduser = u.user_numero
+                            AND h.hr_localidad = @IdLocalidad
+                      )
+                      OR (
+                          NOT EXISTS (
+                              SELECT 1 FROM vt_horariosMedicos programado
+                              WHERE programado.hr_iduser = u.user_numero
+                                AND programado.hr_localidad > 0
+                          )
+                          AND EXISTS (
+                              SELECT 1 FROM vt_usuarioLocalidades ul
+                              WHERE ul.ul_idUsuario = u.user_numero
+                                AND ul.ul_idLocalidad = @IdLocalidad
+                                AND ISNULL(ul.ul_estado, 'A') = 'A'
+                          )
+                      )
+                  )
+                ORDER BY u.user_nombre", new { IdEsp = idEspecialidad, IdLocalidad = localidadObjetivo })).ToList();
         }
         catch (Exception ex)
         {
@@ -850,14 +925,22 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
     }
 
-    public async Task<List<CatalogoItemGenericoDto>> ObtenerEnfermerosAsync()
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerEnfermerosAsync(int? idLocalidad = null)
     {
+        int localidadObjetivo = ResolverLocalidadActiva(idLocalidad);
         return (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
-            SELECT u.user_numero AS Id,RTRIM(u.user_nombre) AS Descripcion
+            SELECT u.user_numero AS Id, RTRIM(u.user_nombre) AS Descripcion
             FROM vt_usuarios u
-            INNER JOIN vt_tipos_usuarios t ON t.tipuser_numero=u.user_tipouser_numero
-            WHERE u.user_estado='A' AND UPPER(t.tipuser_descripcion) LIKE '%ENFERMER%'
-            ORDER BY u.user_nombre")).ToList();
+            INNER JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
+            WHERE u.user_estado = 'A'
+              AND UPPER(t.tipuser_descripcion) LIKE '%ENFERMER%'
+              AND EXISTS (
+                  SELECT 1 FROM vt_usuarioLocalidades ul
+                  WHERE ul.ul_idUsuario = u.user_numero
+                    AND ul.ul_idLocalidad = @IdLocalidad
+                    AND ISNULL(ul.ul_estado, 'A') = 'A'
+              )
+            ORDER BY u.user_nombre", new { IdLocalidad = localidadObjetivo })).ToList();
     }
 
     public async Task<List<ConteoMedicoEsperaDto>> ObtenerConteoMedicosEsperaAsync(DateTime fecha, int idLocalidad)
@@ -912,12 +995,18 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<int> CrearOrdenAtencionAsync(NuevaOrdenAtencionDto orden, int idUsuario, string ipOrigen)
     {
+        if (_session.Localidad > 0)
+        {
+            orden.IdLocalidad = _session.Localidad;
+        }
         if (orden.IdLocalidad <= 0) throw new InvalidOperationException("La localidad de la orden es obligatoria.");
         if (orden.TipoDespacho is < 0 or > 4) throw new InvalidOperationException("El tipo de despacho seleccionado no es válido.");
         if (orden.EsProcedimiento)
         {
             if (!orden.IdEnfermero.HasValue || orden.IdEnfermero.Value <= 0)
                 throw new InvalidOperationException("El procedimiento requiere un enfermero responsable.");
+            if (!await EnfermeroAtiendeEnLocalidadAsync(orden.IdEnfermero.Value, orden.IdLocalidad))
+                throw new InvalidOperationException("El enfermero seleccionado no pertenece a la sucursal conectada.");
 
             orden.IdMedico = 0;
             orden.TriajeMedico = false;
@@ -927,6 +1016,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         else if (orden.IdMedico <= 0)
         {
             throw new InvalidOperationException("La consulta requiere un médico tratante.");
+        }
+        else if (!await MedicoAtiendeEnLocalidadAsync(orden.IdMedico, orden.IdLocalidad))
+        {
+            throw new InvalidOperationException("El médico seleccionado no atiende en la sucursal conectada.");
         }
 
         orden.TriajeMedico = !orden.EsProcedimiento && orden.IdEspecialidad > 0;
@@ -1088,6 +1181,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LEFT JOIN vt_usuarios enf ON o.ordenAten_idEnfermero = enf.user_numero
             WHERE o.ordenAten_fecha = @Fecha
               AND {AlcanceOrden}
+              AND (@LocalidadSesion <= 0 OR o.ordenAten_idlocalidad = @LocalidadSesion)
               AND ISNULL(o.ordenAten_estado, 'A') <> 'I'
               AND (@Etapa = '' OR o.ordenAten_etapa = @Etapa)
               AND (@Filtro = '' OR o.ordenAten_nombre LIKE '%' + @Filtro + '%' OR p.mas_nombre LIKE '%' + @Filtro + '%' OR ISNULL(o.ordenAten_turno, '') LIKE '%' + @Filtro + '%' OR CAST(o.ordenAten_id AS VARCHAR) = @Filtro)
@@ -1102,6 +1196,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 Etapa = etapa?.Trim() ?? string.Empty,
                 Rol = _session.TipoUser,
                 VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
+                LocalidadSesion = _session.Localidad,
                 UsuarioSesion = _session.IdUser
             })).ToList();
             return res;
@@ -1132,6 +1227,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 Nhcl = nhcl,
                 Rol = _session.TipoUser,
                 VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
+                LocalidadSesion = _session.Localidad,
                 UsuarioSesion = _session.IdUser
             });
         return ordenes.ToList();
@@ -1156,6 +1252,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 Filtro = filtro.Trim(),
                 Rol = _session.TipoUser,
                 VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
+                LocalidadSesion = _session.Localidad,
                 UsuarioSesion = _session.IdUser
             });
         return pacientes.ToList();
@@ -1176,6 +1273,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 Nhcl = nhcl,
                 Rol = _session.TipoUser,
                 VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
+                LocalidadSesion = _session.Localidad,
                 UsuarioSesion = _session.IdUser
             }) > 0;
     }
@@ -1218,6 +1316,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             ) historica
             WHERE ((@IdOrden IS NOT NULL AND o.ordenAten_id = @IdOrden)
                 OR (@IdOrden IS NULL AND o.ordenAten_fecha >= @Hoy AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
+                    AND (@LocalidadSesion <= 0 OR o.ordenAten_idlocalidad = @LocalidadSesion)
                     AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')))
               AND {AlcanceOrden}
               AND (
@@ -1243,6 +1342,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             IdOrden = idOrden,
             Rol = _session.TipoUser,
             VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
+            LocalidadSesion = _session.Localidad,
             Usuario = _session.IdUser,
             UsuarioSesion = _session.IdUser,
             PrefijoAsignacion
@@ -1276,6 +1376,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     public async Task<bool> CambiarAsignacionOrdenAsync(int idOrden, int idMedico, int idEspecialidad, int idUsuario)
     {
         if (idMedico <= 0 || idEspecialidad <= 0 || !await PuedeConsultarOrdenAsync(idOrden, 0)) return false;
+        int localidadOrden = await _db.ExecuteScalarAsync<int>(
+            "SELECT ISNULL(ordenAten_idlocalidad, 0) FROM vt_ordenAtencion WHERE ordenAten_id = @IdOrden",
+            new { IdOrden = idOrden });
+        int localidadValidar = localidadOrden > 0 ? localidadOrden : ResolverLocalidadActiva();
+        if (!await MedicoAtiendeEnLocalidadAsync(idMedico, localidadValidar)) return false;
         var columnas = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
         string anterior = columnas.Contains("ordenaten_anteriorIdMed") ? "ordenaten_anteriorIdMed=ordenAten_idMedico," : string.Empty;
         string updateTurnoSql = @"
