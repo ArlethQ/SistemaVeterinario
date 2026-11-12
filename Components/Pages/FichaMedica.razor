@@ -1,6 +1,7 @@
 @page "/consulta/fichamedica"
 @page "/consulta/fichamedica/{IdOrden:int}/{Nhcl:int}"
 @page "/consulta/fichamedica/paciente/{Nhcl:int}"
+@inject IGestionMigradaService GestionService
 @inject IConsultaExternaService ConsultaService
 @inject IKardexService KardexService
 @inject IAdmisionFacturacionService AdmisionService
@@ -16,6 +17,11 @@
 <PageTitle>e-ForVets - Historia Clínica SOAP y Ficha Médica</PageTitle>
 
 <div class="container-fluid py-3">
+    <nav class="nav nav-tabs mb-3" aria-label="Vista de historia clínica">
+        <button type="button" class="nav-link @(!_verHistorial ? "active" : null)" aria-pressed="@(!_verHistorial)" @onclick="() => _verHistorial = false">Ficha SOAP</button>
+        <button type="button" class="nav-link @(_verHistorial ? "active" : null)" aria-pressed="@_verHistorial" @onclick="() => _verHistorial = true">Historial de órdenes</button>
+    </nav>
+
     <!-- Encabezado y Acciones -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-white p-3 rounded shadow-sm border-start border-4 border-primary">
         <div>
@@ -25,39 +31,57 @@
             <small class="text-muted">Examen físico general, metodología clínica orientada a problemas (SOAP), diagnósticos CIE-10, antecedentes y vacunación.</small>
         </div>
         <div class="d-flex flex-wrap gap-2 align-items-center mt-2 mt-xl-0">
-            <!-- Selector Dropbox de Órdenes -->
-            <div class="d-flex align-items-center gap-1">
-                <label class="small fw-bold text-secondary text-nowrap mb-0">Órdenes:</label>
-                <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;"
-                        value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
-                    <option value="0">-- Seleccionar Orden --</option>
-                    @foreach (var ord in OrdenesVisibles)
-                    {
-                        <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | @ord.Paciente | Dr(a). @ord.Medico</option>
-                    }
-                </select>
+            <div class="position-relative">
+                <input type="search" class="form-control form-control-sm" aria-label="Buscar por nombre de mascota"
+                       placeholder="Nombre de mascota" autocomplete="off"
+                       @bind="_nombreMascotaHistorial" @bind:event="oninput" @bind:after="BuscarMascotasHistorialAsync" />
+                @if (_errorBusquedaMascota || _mascotasHistorial != null)
+                {
+                    <div class="list-group position-absolute start-0 mt-1 shadow"
+                         style="z-index: 1050; width: min(22rem, 85vw); max-height: 16rem; overflow-y: auto;">
+                        @if (_errorBusquedaMascota || _mascotasHistorial is { Count: 0 })
+                        {
+                            <span class="list-group-item small" role="status">
+                                @(_errorBusquedaMascota ? "No se pudo buscar la mascota." : "No se encontraron mascotas.")
+                            </span>
+                        }
+                        else if (_mascotasHistorial != null)
+                        {
+                            @foreach (var mascota in _mascotasHistorial)
+                            {
+                                <button type="button" class="list-group-item list-group-item-action"
+                                        @onclick="() => AbrirHistorialMascotaAsync(mascota)">@mascota.Descripcion</button>
+                            }
+                        }
+                    </div>
+                }
             </div>
-
-            <!-- Búsqueda Manual por Orden / NHCL con autocomplete -->
-            <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPorInputAsync" />
-            @if (Paciente != null)
-            {
-                <button class="btn btn-sm btn-success" @onclick="GuardarFichaCompletaAsync" disabled="@Guardando">
-                    <i class="bi bi-floppy-fill me-1"></i>@(Guardando ? "Guardando..." : "Guardar Ficha SOAP")
-                </button>
-                <button class="btn btn-sm btn-outline-danger" @onclick="ExportarPdfAsync">
-                    <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF Historia
-                </button>
-                <button class="btn btn-sm btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/consulta/imprimir-fichas/{Ficha.MedNhcl}")'>
-                    <i class="bi bi-collection-fill me-1"></i>Lotes / Seguros
-                </button>
-                <button class="btn btn-sm btn-outline-primary" @onclick='() => Nav.NavigateTo($"/consulta/recetario/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
-                    <i class="bi bi-prescription2 me-1"></i>Ir a Recetario
-                </button>
-            }
+            <button class="btn btn-sm btn-success" @onclick="GuardarFichaCompletaAsync" disabled="@(Guardando || !FichaEditable)">
+                <i class="bi bi-floppy-fill me-1"></i>@(Guardando ? "Guardando..." : "Guardar Ficha SOAP")
+            </button>
+            <button class="btn btn-sm btn-outline-danger" disabled="@(!FichaCargada)" @onclick="ExportarPdfAsync">
+                <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF Historia
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" disabled="@(!FichaCargada)" @onclick='() => Nav.NavigateTo($"/consulta/imprimir-fichas/{Ficha.MedNhcl}")'>
+                <i class="bi bi-collection-fill me-1"></i>Lotes / Seguros
+            </button>
+            <button class="btn btn-sm btn-outline-primary" disabled="@(!FichaCargada)" @onclick='() => Nav.NavigateTo($"/consulta/recetario/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
+                <i class="bi bi-prescription2 me-1"></i>Ir a Recetario
+            </button>
         </div>
     </div>
 
+    @if (!_verHistorial && _mascotaConsultada != null && Paciente?.Nhcl != _mascotaConsultada.Id)
+    {
+        <p class="small text-primary" role="status">Historial seleccionado: @_mascotaConsultada.Descripcion</p>
+    }
+
+    <div hidden="@(!_verHistorial)">
+        <HistorialOrdenesSoap @key="Nhcl" @ref="_historialSoap" NhclActual="@(Paciente?.Nhcl ?? 0)" NombreActual="@Paciente?.PacienteNombre"
+                             OrdenActual="@IdOrden" OrdenActualCerrada="@_ordenActualCerrada" OrdenesActuales="@_historialOrdenes" ErrorActual="@_errorHistorialOrdenes" />
+    </div>
+
+    <div hidden="@_verHistorial">
     <ColaOrdenesClinicas @ref="_colaOrdenes" OrdenSeleccionada="@IdOrden" />
 
     @if (!string.IsNullOrEmpty(MensajeAlerta))
@@ -76,73 +100,6 @@
         </div>
     }
 
-    @if (Paciente != null && !CargandoInicial)
-    {
-        <details class="card shadow-sm border-0 mb-3 p-3" open>
-            <summary class="fw-semibold text-primary">Historial de órdenes de @Paciente.PacienteNombre</summary>
-            @if (_errorHistorialOrdenes)
-            {
-                <p class="text-danger mt-2 mb-0">No se pudo cargar el historial de órdenes.</p>
-            }
-            else if (_historialOrdenes.Count == 0)
-            {
-                <p class="text-muted mt-2 mb-0">Esta mascota aún no tiene órdenes.</p>
-            }
-            else
-            {
-                <div class="table-responsive mt-2">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead><tr><th>Orden</th><th>Fecha</th><th>Especialidad</th><th>Médico</th><th>Estado</th><th>Ficha SOAP</th></tr></thead>
-                        <tbody>
-                            @foreach (var orden in _historialOrdenes)
-                            {
-                                var estadoOrd = orden.Estado.Trim();
-                                <tr @key="orden.IdOrden" class="@(orden.IdOrden == IdOrden ? "table-active" : null)">
-                                    <td>#@orden.IdOrden</td>
-                                    <td>@orden.Fecha.ToString("dd/MM/yyyy") @orden.Hora</td>
-                                    <td>@orden.Especialidad</td>
-                                    <td>@orden.Medico</td>
-                                    <td>
-                                        @if (estadoOrd == "T")
-                                        {
-                                            <span class="badge bg-success">Finalizada</span>
-                                        }
-                                        else if (estadoOrd == "E")
-                                        {
-                                            <span class="badge bg-primary">En atención</span>
-                                        }
-                                        else if (estadoOrd == "I")
-                                        {
-                                            <span class="badge bg-secondary">Anulada</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-warning text-dark">En espera</span>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (estadoOrd == "I")
-                                        {
-                                            <span class="text-muted">Anulada</span>
-                                        }
-                                        else if (orden.IdOrden == IdOrden)
-                                        {
-                                            <span class="text-muted">Abierta</span>
-                                        }
-                                        else
-                                        {
-                                            <a class="btn btn-sm btn-outline-primary" href="/consulta/fichamedica/@orden.IdOrden/@Paciente.Nhcl">Abrir</a>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
-        </details>
-    }
-
     <!-- Cinta de Identificación del Paciente y Semáforo de Temperamento + 4 Pestañas Clínicas -->
     @if (Paciente == null && !CargandoInicial)
     {
@@ -151,7 +108,7 @@
                 <i class="bi bi-clipboard2-pulse fs-1 d-block mb-2 text-primary opacity-75"></i>
                 <h5 class="text-dark">Ninguna orden clínica abierta</h5>
                 <p class="small mb-0">
-                    Selecciona <strong>Abrir</strong> en la <strong>Cola de órdenes del día</strong> o busca una orden para iniciar la atención SOAP.
+                    Selecciona una mascota por nombre o abre una orden en la <strong>Cola de órdenes del día</strong> para iniciar la atención SOAP.
                 </p>
             </div>
         </div>
@@ -189,30 +146,35 @@
             </div>
         </div>
 
+    }
+
+    @if (!CargandoInicial)
+    {
         <!-- Navegación por Pestañas Clínicas -->
         <ul class="nav nav-tabs mb-3 fw-semibold">
             <li class="nav-item">
-                <button class="nav-link @(TabActiva == 1 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(1)">
+                <button class="nav-link @(TabActiva == 1 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTabAsync(1)">
                     <i class="bi bi-heart-pulse me-1"></i>1. Examen Físico, Constantes y Temperamento
                 </button>
             </li>
             <li class="nav-item">
-                <button class="nav-link @(TabActiva == 2 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(2)">
+                <button class="nav-link @(TabActiva == 2 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTabAsync(2)">
                     <i class="bi bi-journal-medical me-1"></i>2. Evaluación Clínica SOAP & Plan
                 </button>
             </li>
             <li class="nav-item">
-                <button class="nav-link @(TabActiva == 3 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(3)">
+                <button class="nav-link @(TabActiva == 3 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTabAsync(3)">
                     <i class="bi bi-tags-fill me-1"></i>3. Diagnósticos CIE-10 (@Diagnosticos.Count) y Prescripción (@RecetaItems.Count)
                 </button>
             </li>
             <li class="nav-item">
-                <button class="nav-link @(TabActiva == 4 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTab(4)">
+                <button class="nav-link @(TabActiva == 4 ? "active text-primary border-bottom-0" : "text-secondary")" @onclick="() => SeleccionarTabAsync(4)">
                     <i class="bi bi-shield-plus me-1"></i>4. Antecedentes (@Antecedentes.Count) y Carnet Vacunas (@Vacunas.Count)
                 </button>
             </li>
         </ul>
 
+    <fieldset disabled="@(!FichaEditable)">
     <!-- TAB 1: EXAMEN FÍSICO, CONSTANTES FISIOLÓGICAS Y TRIAJE -->
     @if (TabActiva == 1)
     {
@@ -1052,19 +1014,70 @@
             </div>
         </div>
     }
+    </fieldset>
     }
+    </div>
 </div>
 
 @code {
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
 
-    private int IdOrdenInput { get; set; }
-    private int NhclInput { get; set; }
     private List<OrdenActivaResumenDto> _ordenesActivas = new();
-    private IEnumerable<OrdenActivaResumenDto> OrdenesVisibles => Nhcl > 0
-        ? _ordenesActivas.Where(o => o.Nhcl == Nhcl)
-        : _ordenesActivas;
+    private HistorialOrdenesSoap? _historialSoap;
+    private SelectorClinicoDto? _mascotaConsultada;
+    private string _nombreMascotaHistorial = "";
+    private List<SelectorClinicoDto>? _mascotasHistorial;
+    private int _versionBusquedaMascota;
+    private bool _errorBusquedaMascota;
+
+    private async Task BuscarMascotasHistorialAsync()
+    {
+        var version = ++_versionBusquedaMascota;
+        var nombre = _nombreMascotaHistorial.Trim();
+        _mascotasHistorial = null;
+        _errorBusquedaMascota = false;
+        if (nombre.Length == 0)
+            return;
+
+        await Task.Delay(250);
+        if (version != _versionBusquedaMascota)
+            return;
+
+        try
+        {
+            var mascotas = await GestionService.BuscarPacientesAsync(nombre);
+            if (version == _versionBusquedaMascota)
+                _mascotasHistorial = mascotas;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error al buscar mascotas para el historial SOAP");
+            if (version == _versionBusquedaMascota)
+                _errorBusquedaMascota = true;
+        }
+    }
+
+    private async Task AbrirHistorialMascotaAsync(SelectorClinicoDto mascota)
+    {
+        _versionBusquedaMascota++;
+        _mascotasHistorial = null;
+        _nombreMascotaHistorial = mascota.Descripcion;
+        _mascotaConsultada = mascota;
+        if (!FichaEditable && !CargandoInicial && (!FichaCargada || Paciente?.Nhcl != mascota.Id))
+        {
+            _verHistorial = false;
+            Nav.NavigateTo($"/consulta/fichamedica/paciente/{mascota.Id}");
+            return;
+        }
+
+        if (_historialSoap != null)
+            await _historialSoap.VerOrdenesAsync(mascota);
+    }
+
+    private bool FichaCargada => Paciente != null && IdOrden > 0 && !CargandoInicial;
+    private bool FichaEditable => FichaCargada && !_ordenActualCerrada;
+    private bool _verHistorial;
     private int TabActiva { get; set; } = 1;
     private bool CargandoInicial { get; set; } = true;
     private bool Guardando { get; set; }
@@ -1117,148 +1130,104 @@
     private List<OrdenImagenItemDto> OrdenesImagen { get; set; } = new();
     private List<FisioterapiaOrdenDto> OrdenesFisio { get; set; } = new();
 
-    private bool _fichaRecienCerrada;
+    private bool _ordenActualCerrada;
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_fichaRecienCerrada && IdOrden <= 0 && Nhcl <= 0)
-        {
-            _fichaRecienCerrada = false;
-            CargandoInicial = false;
-            return;
-        }
-        _fichaRecienCerrada = false;
+        _ordenActualCerrada = false;
 
         CargandoInicial = true;
+        Paciente = null;
+        Ficha = new();
+        Diagnosticos = [];
+        RecetaItems = [];
+        Antecedentes = [];
+        Vacunas = [];
+        OrdenesLab = [];
+        OrdenesImagen = [];
+        OrdenesFisio = [];
+        if (TabActiva == 3)
+            TabActiva = 1;
+
         await Task.Yield();
 
-        if (_ordenesActivas.Count == 0)
+        try
         {
-            _ordenesActivas = (await KardexService.ObtenerOrdenesActivasAsync(top: 50))
-                .Where(o => o.Estado.Trim() != "T" && o.Estado.Trim() != "I")
-                .ToList();
-            if (Session.TipoUser == 2)
+            if (_ordenesActivas.Count == 0)
             {
-                _ordenesActivas = _ordenesActivas.Where(o => o.IdMedico == Session.IdUser).ToList();
+                _ordenesActivas = (await KardexService.ObtenerOrdenesActivasAsync(top: 50))
+                    .Where(o => o.Estado.Trim() != "T" && o.Estado.Trim() != "I")
+                    .ToList();
+                if (Session.TipoUser == 2)
+                {
+                    _ordenesActivas = _ordenesActivas.Where(o => o.IdMedico == Session.IdUser).ToList();
+                }
             }
-        }
 
-        if (IdOrden <= 0 && Nhcl > 0)
-        {
-            var ordenPaciente = _ordenesActivas.FirstOrDefault(o => o.Nhcl == Nhcl);
-            if (ordenPaciente != null)
+            if (IdOrden <= 0 && Nhcl > 0)
             {
-                IdOrden = ordenPaciente.IdOrdenAtencion;
+                var ordenPaciente = _ordenesActivas.FirstOrDefault(o => o.Nhcl == Nhcl);
+                if (ordenPaciente != null)
+                {
+                    IdOrden = ordenPaciente.IdOrdenAtencion;
+                }
             }
-        }
-        else if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
-        {
-            var activa = _ordenesActivas.FirstOrDefault(o => o.IdOrdenAtencion == Session.OrdenActiva.Value);
-            if (activa != null)
+            else if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
             {
-                IdOrden = activa.IdOrdenAtencion;
-                Nhcl = activa.Nhcl;
+                var activa = _ordenesActivas.FirstOrDefault(o => o.IdOrdenAtencion == Session.OrdenActiva.Value);
+                if (activa != null)
+                {
+                    IdOrden = activa.IdOrdenAtencion;
+                    Nhcl = activa.Nhcl;
+                }
+                else
+                {
+                    Session.LimpiarOrdenActiva();
+                }
+            }
+
+            if (IdOrden > 0 || Nhcl > 0)
+            {
+                await CargarDatosCompletosAsync();
+
+                if (Paciente != null && !_ordenesActivas.Any(o => o.IdOrdenAtencion == IdOrden))
+                {
+                    _ordenesActivas.Insert(0, new OrdenActivaResumenDto
+                    {
+                        OrdenAtencionId = IdOrden,
+                        Nhcl = Nhcl,
+                        Paciente = Paciente.PacienteNombre,
+                        Cliente = Paciente.PropietarioNombre,
+                        Especie = Paciente.Especie,
+                        Sexo = Paciente.Sexo
+                    });
+                }
             }
             else
             {
-                Session.LimpiarOrdenActiva();
+                Paciente = null;
             }
         }
-
-        if (IdOrden > 0 || Nhcl > 0)
+        catch (Exception ex)
         {
-            IdOrdenInput = IdOrden;
-            NhclInput = Nhcl;
-            await CargarDatosCompletosAsync();
-
-            if (Paciente != null && !_ordenesActivas.Any(o => o.IdOrdenAtencion == IdOrden))
-            {
-                _ordenesActivas.Insert(0, new OrdenActivaResumenDto
-                {
-                    OrdenAtencionId = IdOrden,
-                    Nhcl = Nhcl,
-                    Paciente = Paciente.PacienteNombre,
-                    Cliente = Paciente.PropietarioNombre,
-                    Especie = Paciente.Especie,
-                    Sexo = Paciente.Sexo
-                });
-            }
-        }
-        else
-        {
+            Logger.LogError(ex, "No se pudo cargar la ficha SOAP de la orden {Orden} para NHCL {Nhcl}", IdOrden, Nhcl);
             Paciente = null;
+            EsError = true;
+            MensajeAlerta = "No se pudo cargar la ficha SOAP. Recarga la página para intentarlo de nuevo.";
         }
-        CargandoInicial = false;
-    }
-
-    private async Task CargarPorInputAsync()
-    {
-        if (IdOrdenInput <= 0 && NhclInput > 0)
+        finally
         {
-            var ordenPaciente = _ordenesActivas.FirstOrDefault(o => o.Nhcl == NhclInput);
-            if (ordenPaciente != null)
-            {
-                IdOrdenInput = ordenPaciente.IdOrdenAtencion;
-            }
-        }
-
-        if (IdOrdenInput > 0 || NhclInput > 0)
-        {
-            IdOrden = IdOrdenInput;
-            Nhcl = NhclInput;
-            CargandoInicial = true;
-            await Task.Yield();
-            await CargarDatosCompletosAsync();
-
-            if (Paciente != null && !_ordenesActivas.Any(o => o.IdOrdenAtencion == IdOrden))
-            {
-                _ordenesActivas.Insert(0, new OrdenActivaResumenDto
-                {
-                    OrdenAtencionId = IdOrden,
-                    Nhcl = Nhcl,
-                    Paciente = Paciente.PacienteNombre,
-                    Cliente = Paciente.PropietarioNombre,
-                    Especie = Paciente.Especie,
-                    Sexo = Paciente.Sexo
-                });
-            }
-
             CargandoInicial = false;
-            Nav.NavigateTo($"/consulta/fichamedica/{IdOrden}/{Nhcl}", replace: true);
         }
     }
 
-    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var ordenId) && ordenId > 0)
-        {
-            var ord = _ordenesActivas.FirstOrDefault(o => o.IdOrdenAtencion == ordenId);
-            IdOrden = ordenId;
-            IdOrdenInput = ordenId;
-            Nhcl = ord?.Nhcl ?? 0;
-            NhclInput = Nhcl;
-
-            CargandoInicial = true;
-            await Task.Yield();
-            await CargarDatosCompletosAsync();
-            CargandoInicial = false;
-            Nav.NavigateTo($"/consulta/fichamedica/{IdOrden}/{Nhcl}", replace: true);
-        }
-    }
-
-    private async Task OnInputKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await CargarPorInputAsync();
-        }
-    }
-
-    private void SeleccionarTab(int tab)
+    private async Task SeleccionarTabAsync(int tab)
     {
         TabActiva = tab;
         MensajeAlerta = null;
         EsError = false;
+        if (tab == 3 && FichaEditable)
+            await CargarCatalogosPrescripcionAsync();
     }
 
     private async Task CargarDatosCompletosAsync()
@@ -1271,7 +1240,6 @@
         if (Paciente != null && Nhcl <= 0)
         {
             Nhcl = Paciente.Nhcl;
-            NhclInput = Nhcl;
         }
         if (Paciente is not null)
         {
@@ -1280,7 +1248,7 @@
                 _historialOrdenes = await AdmisionService.ObtenerOrdenesPacienteAsync(Paciente.Nhcl);
                 if (IdOrden <= 0 && _historialOrdenes.FirstOrDefault(o => o.Estado.Trim() != "I") is { } ultimaOrden)
                 {
-                    IdOrden = IdOrdenInput = ultimaOrden.IdOrden;
+                    IdOrden = ultimaOrden.IdOrden;
                     Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
                 }
             }
@@ -1291,6 +1259,9 @@
             }
         }
         Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
+
+        if (Paciente == null || IdOrden <= 0)
+            return;
 
         var tFicha = ConsultaService.ObtenerFichaMedicaAsync(IdOrden, Nhcl);
         var tDiag = ConsultaService.ObtenerDiagnosticosOrdenAsync(IdOrden);
@@ -1318,7 +1289,10 @@
         OrdenesLab = await tLab;
         OrdenesImagen = await tImg;
         OrdenesFisio = await tFisio;
+    }
 
+    private async Task CargarCatalogosPrescripcionAsync()
+    {
         if (_catalogoMedicamentos.Count == 0)
         {
             try
@@ -1403,6 +1377,9 @@
 
     private async Task GuardarFichaCompletaAsync()
     {
+        if (!FichaEditable || Guardando)
+            return;
+
         if (Ficha.MedOrden <= 0) Ficha.MedOrden = IdOrden;
         if (Ficha.MedNhcl <= 0) Ficha.MedNhcl = Nhcl;
         if (Ficha.MedCliente <= 0 && Paciente != null) Ficha.MedCliente = Paciente.ClienteCodigo;
@@ -1460,43 +1437,17 @@
                 await _colaOrdenes.RefrescarAsync();
             }
 
-            // Cerrar la ficha actual y las 4 pestañas para habilitar el siguiente paciente
-            _fichaRecienCerrada = true;
-            IdOrden = 0;
-            Nhcl = 0;
-            IdOrdenInput = 0;
-            NhclInput = 0;
-            Paciente = null;
-            _historialOrdenes = [];
-            Ficha = new();
-            Diagnosticos = [];
-            ResultadosCie10 = [];
-            FiltroCie10 = string.Empty;
-            NuevoDiagnostico = new();
-            RecetaItems = [];
-            NuevoMedicamento = new();
-            _mostrarSugerenciasMed = false;
-            Antecedentes = [];
-            NuevoAntecedente = new();
-            Vacunas = [];
-            NuevaVacuna = new();
-            OrdenesLab = [];
-            OrdenesImagen = [];
-            OrdenesFisio = [];
-            _mostrarSugerenciasServicio = false;
-            TabActiva = 1;
+            _ordenActualCerrada = true;
+            var ordenGuardada = _historialOrdenes.FirstOrDefault(orden => orden.IdOrden == ordenCerrada);
+            if (ordenGuardada != null)
+                ordenGuardada.Estado = "T";
         }
         Guardando = false;
 
         EsError = !ok;
         MensajeAlerta = ok
-            ? $"Historia Clínica SOAP de la Orden #{ordenCerrada} guardada y cerrada exitosamente. Ya puede abrir el siguiente paciente desde la cola."
+            ? $"Historia Clínica SOAP de la Orden #{ordenCerrada} guardada y cerrada exitosamente."
             : "Ocurrió un error al guardar la Ficha Médica.";
-
-        if (ok)
-        {
-            Nav.NavigateTo("/consulta/fichamedica", replace: true);
-        }
     }
 
     private async Task BuscarCie10AutoAsync()
