@@ -91,7 +91,7 @@
     </div>
 
     <nav class="agenda-tabs mb-3">
-        <button class="@(_vistaAgenda == "agenda" ? "active" : "")" @onclick='() => _vistaAgenda = "agenda"'>Calendario</button>
+        <button class="@(_vistaAgenda == "agenda" ? "active" : "")" @onclick='() => _vistaAgenda = "agenda"'>Agenda semanal</button>
         <button class="@(_vistaAgenda == "tabla" ? "active" : "")" @onclick='() => _vistaAgenda = "tabla"'>Citas programadas <span>@_citas.Count</span></button>
         <button class="@(_vistaAgenda == "historial" ? "active" : "")" @onclick="AbrirHistorialAsync">Historial y filtros</button>
     </nav>
@@ -125,78 +125,152 @@
         else
         {
             <div class="row g-3 agenda-workspace">
-                <div class="col-lg-4">
+                <div class="col-12">
                     <section class="day-list-card agenda-panel-horas">
-                        <header class="agenda-panel-cabecera">
-                            <h6 class="mb-1">Turnos disponibles</h6>
-                            <div class="text-muted small text-capitalize">@_fechaAgenda.ToString("dddd d 'de' MMMM", CulturaAgenda)</div>
-                        </header>
-                        <div class="list-group list-group-flush agenda-lista-horas">
-                            @foreach (var slot in HorasLibresDelDia)
+                        <header class="agenda-panel-cabecera d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <div>
+                                <h6 class="mb-1">Agenda semanal</h6>
+                                <div class="text-muted small">@InicioSemana(_fechaAgenda).ToString("dd MMM", CulturaAgenda) – @InicioSemana(_fechaAgenda).AddDays(6).ToString("dd MMM yyyy", CulturaAgenda)</div>
+                            </div>
+                            @if (_slots.Any(slot => !slot.Bloqueado))
                             {
-                                <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between"
-                                        @onclick="() => AbrirDesdeCasilla(_medicoAgenda, slot.Hora)">
-                                    <strong class="agenda-hora">@slot.Hora</strong><span class="text-success small">Disponible <i class="bi bi-chevron-right ms-1" aria-hidden="true"></i></span>
-                                </button>
+                                <span class="text-muted small">
+                                    @_fechaAgenda.ToString("dd/MM") · @(_slots.Count(slot => !slot.Bloqueado && slot.CitaExistente != null))
+                                    de @(_slots.Count(slot => !slot.Bloqueado)) turnos reservados
+                                </span>
                             }
-                            @if (!HayHorasLibres)
-                            {
-                                <p class="text-muted p-3 mb-0">
-                                    @(_fechaAgenda.Date < AhoraClinica.Date
-                                        ? "Esta fecha ya pasó. Selecciona una fecha actual o futura."
-                                        : _slots.Count == 0
-                                            ? $"Este médico no tiene turnos registrados para este día en {NombreSucursal(_sucursalAgenda)}."
-                                            : "Los turnos de este día están ocupados, bloqueados o ya pasaron.")
-                                </p>
-                            }
-                        </div>
-                    </section>
-                </div>
-                <div class="col-lg-8">
-                    <section class="calendar-card agenda-calendario">
-                        <header class="agenda-panel-cabecera d-flex flex-wrap gap-2 align-items-center justify-content-between">
-                            <h6 class="text-capitalize mb-0">@_fechaAgenda.ToString("MMMM yyyy", CulturaAgenda)</h6>
-                            <div class="d-flex flex-wrap align-items-center gap-2">
-                            <label class="visually-hidden" for="agenda-fecha">Ir a fecha</label>
-                            <input id="agenda-fecha" type="date" class="form-control form-control-sm w-auto"
-                                   value="@_fechaAgenda.ToString("yyyy-MM-dd")" @onchange="CambiarFechaAsync" />
                             <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-secondary" aria-label="Mes anterior" @onclick="() => CambiarMesAsync(-1)">‹</button>
+                                <button type="button" class="btn btn-outline-secondary" aria-label="Semana anterior"
+                                        @onclick="() => SeleccionarFechaAsync(_fechaAgenda.AddDays(-7))">‹</button>
                                 <button type="button" class="btn btn-outline-secondary" @onclick="IrHoy">Hoy</button>
-                                <button type="button" class="btn btn-outline-secondary" aria-label="Mes siguiente" @onclick="() => CambiarMesAsync(1)">›</button>
+                                <button type="button" class="btn btn-outline-secondary" aria-label="Semana siguiente"
+                                        @onclick="() => SeleccionarFechaAsync(_fechaAgenda.AddDays(7))">›</button>
                             </div>
+                            <div class="agenda-selector-fecha" @onkeydown="CerrarSelectorFechaConTecla">
+                                <button type="button" class="btn btn-outline-primary btn-sm"
+                                        aria-expanded="@_mostrarSelectorFecha" aria-controls="agenda-selector-fecha"
+                                        @onclick="() => _mostrarSelectorFecha = !_mostrarSelectorFecha">
+                                    <i class="bi bi-calendar3 me-1" aria-hidden="true"></i>Ir a fecha
+                                </button>
+                                @if (_mostrarSelectorFecha)
+                                {
+                                    <section id="agenda-selector-fecha" class="calendar-card agenda-calendario agenda-selector-panel">
+                                        <div class="agenda-panel-cabecera d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                                            <h6 class="text-capitalize mb-0">@_fechaAgenda.ToString("MMMM yyyy", CulturaAgenda)</h6>
+                                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                            <label class="visually-hidden" for="agenda-fecha">Ir a fecha</label>
+                                            <input id="agenda-fecha" type="date" class="form-control form-control-sm w-auto"
+                                                   value="@_fechaAgenda.ToString("yyyy-MM-dd")" @onchange="ElegirFechaCalendarioAsync" />
+                                            <div class="btn-group btn-group-sm">
+                                                <button type="button" class="btn btn-outline-secondary" aria-label="Mes anterior" @onclick="() => CambiarMesAsync(-1)">‹</button>
+                                                <button type="button" class="btn btn-outline-secondary" @onclick="() => ElegirFechaCalendarioAsync(AhoraClinica.Date)">Hoy</button>
+                                                <button type="button" class="btn btn-outline-secondary" aria-label="Mes siguiente" @onclick="() => CambiarMesAsync(1)">›</button>
+                                            </div>
+                                            </div>
+                                        </div>
+                                        <div class="agenda-mes">
+                                            @foreach (var dia in DiasSemana)
+                                            {
+                                                <strong class="agenda-dia-semana">@dia</strong>
+                                            }
+                                            @for (var espacio = 0; espacio < DesfaseMes; espacio++)
+                                            {
+                                                <span class="agenda-dia-vacio" aria-hidden="true"></span>
+                                            }
+                                            @foreach (var fecha in FechasMes)
+                                            {
+                                                var libres = ObtenerHorasLibres(fecha).Count();
+                                                var citas = _citasMes[fecha].Count(cita => cita.CiEstado != "I" && cita.CiEstadoCita != "X");
+                                                var turnos = _slotsMes.GetValueOrDefault(fecha) ?? [];
+                                                var total = turnos.Count(slot => !slot.Bloqueado);
+                                                var reservados = turnos.Count(slot => !slot.Bloqueado && slot.CitaExistente != null);
+                                                <button type="button" class="agenda-dia @(libres > 0 ? "agenda-dia-libre" : "")"
+                                                        aria-pressed="@(fecha == _fechaAgenda.Date)"
+                                                        aria-label="@fecha.ToString("D", CulturaAgenda), @citas citas, @libres horas libres"
+                                                        @onclick="() => ElegirFechaCalendarioAsync(fecha)">
+                                                    <strong>@fecha.Day</strong>
+                                                    @if (citas > 0)
+                                                    {
+                                                        <small class="agenda-dia-citas">@citas citas</small>
+                                                    }
+                                                    @if (libres > 0)
+                                                    {
+                                                        <small><i class="bi bi-circle-fill" aria-hidden="true"></i> @libres libres</small>
+                                                    }
+                                                    @if (total > 0 && reservados > 0)
+                                                    {
+                                                        <progress class="agenda-dia-ocupacion" value="@reservados" max="@total"
+                                                                  aria-label="@reservados de @total turnos reservados"></progress>
+                                                    }
+                                                </button>
+                                            }
+                                        </div>
+                                        <div class="agenda-leyenda">
+                                            <span><i class="bi bi-circle-fill text-success" aria-hidden="true"></i> Con disponibilidad</span>
+                                            <span><i class="bi bi-circle text-secondary" aria-hidden="true"></i> Sin turnos libres</span>
+                                        </div>
+                                    </section>
+                                }
                             </div>
                         </header>
-                        <div class="agenda-mes">
-                            @foreach (var dia in DiasSemana)
-                            {
-                                <strong class="agenda-dia-semana">@dia</strong>
-                            }
-                            @for (var espacio = 0; espacio < DesfaseMes; espacio++)
-                            {
-                                <span class="agenda-dia-vacio" aria-hidden="true"></span>
-                            }
-                            @foreach (var fecha in FechasMes)
-                            {
-                                var libres = ObtenerHorasLibres(fecha).Count();
-                                <button type="button" class="agenda-dia @(libres > 0 ? "agenda-dia-libre" : "")"
-                                        aria-pressed="@(fecha == _fechaAgenda.Date)"
-                                        aria-label="@fecha.ToString("D", CulturaAgenda), @libres horas libres"
-                                        @onclick="() => SeleccionarFechaAsync(fecha)">
-                                    <strong>@fecha.Day</strong>
-                                    @if (libres > 0)
+                        @{
+                            var semana = ObtenerSemanaAgenda();
+                            var horas = semana.SelectMany(dia => dia.Citas.Select(grupo => grupo.Key)
+                                .Concat((_slotsMes.GetValueOrDefault(dia.Fecha) ?? []).Select(slot => slot.Hora)))
+                                .Distinct(StringComparer.Ordinal).OrderBy(hora => hora, StringComparer.Ordinal);
+                        }
+                        <div class="agenda-semana-scroll">
+                            <div class="agenda-semana">
+                                <div class="agenda-semana-cabecera agenda-columna-hora">Hora</div>
+                                @foreach (var dia in semana)
+                                {
+                                    <button type="button" class="agenda-semana-cabecera agenda-semana-dia"
+                                            aria-pressed="@(dia.Fecha == _fechaAgenda.Date)"
+                                            @onclick="() => SeleccionarFechaAsync(dia.Fecha)">
+                                        <span>@dia.Fecha.ToString("ddd", CulturaAgenda)</span>
+                                        <strong>@dia.Fecha.Day</strong>
+                                    </button>
+                                }
+                                @foreach (var hora in horas)
+                                {
+                                    <time class="agenda-columna-hora agenda-semana-hora">@hora</time>
+                                    @foreach (var dia in semana)
                                     {
-                                        <small><i class="bi bi-circle-fill" aria-hidden="true"></i> @libres libres</small>
+                                        <div class="agenda-semana-celda @(dia.Fecha == _fechaAgenda.Date ? "agenda-semana-seleccion" : "")">
+                                            @foreach (var cita in dia.Citas[hora])
+                                            {
+                                                <button type="button" class="agenda-evento @ClaseEstadoCita(cita.CiEstadoCita)"
+                                                        @key="cita.CiId" @onclick="() => VerDetalleCita(cita)">
+                                                    <strong>@cita.CiNombreMas</strong>
+                                                    <span>@TextoTipoConsultaCita(cita)</span>
+                                                    @if (!string.IsNullOrWhiteSpace(cita.CiObservacion))
+                                                    {
+                                                        <small>@cita.CiObservacion</small>
+                                                    }
+                                                    <small>@TextoEstadoCita(cita.CiEstadoCita)</small>
+                                                </button>
+                                            }
+                                            @if (dia.Libres.Contains(hora))
+                                            {
+                                                <button type="button" class="agenda-semana-libre"
+                                                        aria-label="Agendar el @dia.Fecha.ToString("D", CulturaAgenda) a las @hora"
+                                                        title="Agendar a las @hora"
+                                                        @onclick="() => AbrirDesdeCasilla(dia.Fecha, hora)">
+                                                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                                                </button>
+                                            }
+                                        </div>
                                     }
-                                </button>
-                            }
+                                }
+                            </div>
                         </div>
-                        <footer class="agenda-leyenda">
-                            <span><i class="bi bi-circle-fill text-success" aria-hidden="true"></i> Con disponibilidad</span>
-                            <span><i class="bi bi-circle text-secondary" aria-hidden="true"></i> Sin turnos libres</span>
-                        </footer>
+                        @if (!horas.Any())
+                        {
+                            <p class="text-muted small p-3 mb-0">No hay citas ni turnos libres para esta semana.</p>
+                        }
                     </section>
                 </div>
+
             </div>
         }
     }
@@ -827,10 +901,26 @@
     private IEnumerable<DateTime> FechasMes => Enumerable.Range(0, DateTime.DaysInMonth(_fechaAgenda.Year, _fechaAgenda.Month))
         .Select(dia => InicioMes.AddDays(dia));
     private IEnumerable<SlotHorarioMedicoDto> HorasLibresDelDia => ObtenerHorasLibres(_fechaAgenda);
-    private bool HayHorasLibres => !_cargandoInicial && HorasLibresDelDia.Any();
 
     private IEnumerable<SlotHorarioMedicoDto> ObtenerHorasLibres(DateTime fecha) =>
         (_slotsMes.GetValueOrDefault(fecha.Date) ?? []).Where(slot => EsHoraLibre(slot, fecha));
+
+    private static DateTime InicioSemana(DateTime fecha) =>
+        fecha.Date.AddDays(-((int)fecha.DayOfWeek + 6) % 7);
+
+    private (DateTime Fecha, ILookup<string, CitaMedicaDto> Citas, HashSet<string> Libres)[] ObtenerSemanaAgenda()
+    {
+        var lunes = InicioSemana(_fechaAgenda);
+        return Enumerable.Range(0, 7).Select(indice =>
+        {
+            var fecha = lunes.AddDays(indice);
+            var citas = _citasMes[fecha].Where(cita => cita.CiEstado != "I" && cita.CiEstadoCita != "X")
+                .ToLookup(cita => TimeSpan.TryParse(cita.CiHora, out var hora)
+                ? $"{hora.Hours:D2}:{hora.Minutes:D2}" : cita.CiHora);
+            var libres = ObtenerHorasLibres(fecha).Select(slot => slot.Hora).ToHashSet(StringComparer.Ordinal);
+            return (fecha, citas, libres);
+        }).ToArray();
+    }
 
     private static bool EsHoraLibre(SlotHorarioMedicoDto slot, DateTime fecha) =>
         slot.Disponible && TimeSpan.TryParse(slot.Hora, out var hora) && fecha.Date.Add(hora) >= AhoraClinica;
@@ -1037,23 +1127,23 @@
     private void AbrirFormularioCita()
     {
         if (_sucursalAgenda > 0 && _medicoAgenda > 0 && !_cargandoInicial)
-            PrepararFormularioCita(HorasLibresDelDia.FirstOrDefault()?.Hora ?? "");
+            PrepararFormularioCita(_fechaAgenda, HorasLibresDelDia.FirstOrDefault()?.Hora ?? "");
     }
 
-    private void AbrirDesdeCasilla(int medicoId, string hora)
+    private void AbrirDesdeCasilla(DateTime fecha, string hora)
     {
-        if (medicoId == _medicoAgenda && HorasLibresDelDia.Any(slot => slot.Hora == hora))
-            PrepararFormularioCita(hora);
+        if (ObtenerHorasLibres(fecha).Any(slot => slot.Hora == hora))
+            PrepararFormularioCita(fecha, hora);
     }
 
-    private void PrepararFormularioCita(string hora)
+    private void PrepararFormularioCita(DateTime fecha, string hora)
     {
         _errorFormulario = string.Empty;
         _idMedicoFiltro = _medicoAgenda;
-        _slotsFormulario = _slotsMes.GetValueOrDefault(_fechaAgenda.Date) ?? [];
+        _slotsFormulario = _slotsMes.GetValueOrDefault(fecha.Date) ?? [];
         _nuevaCita = new CitaMedicaDto
         {
-            CiFecha = _fechaAgenda,
+            CiFecha = fecha,
             CiHora = hora,
             CiUsuario = _medicoAgenda,
             CiLocalidad = _sucursalAgenda
@@ -1232,6 +1322,23 @@
             MostrarErrorCita($"Error al cancelar la cita: {ex.Message}");
         }
     }
+    private bool _mostrarSelectorFecha;
+
+    private Task ElegirFechaCalendarioAsync(DateTime fecha)
+    {
+        _mostrarSelectorFecha = false;
+        return SeleccionarFechaAsync(fecha);
+    }
+
+    private Task ElegirFechaCalendarioAsync(ChangeEventArgs e) =>
+        DateTime.TryParse(e.Value?.ToString(), out var fecha) ? ElegirFechaCalendarioAsync(fecha) : Task.CompletedTask;
+
+    private void CerrarSelectorFechaConTecla(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            _mostrarSelectorFecha = false;
+    }
+
     private Task CambiarMesAsync(int meses) => SeleccionarFechaAsync(InicioMes.AddMonths(meses));
     private Task IrHoy() => SeleccionarFechaAsync(AhoraClinica.Date);
 
@@ -1293,8 +1400,8 @@
     {
         var version = ++_versionAgenda;
         var medico = _medicoAgenda;
-        var inicio = InicioMes;
-        var hasta = inicio.AddMonths(1).AddDays(-1);
+        var inicio = InicioSemana(InicioMes);
+        var hasta = InicioSemana(InicioMes.AddMonths(1).AddDays(-1)).AddDays(6);
         var localidad = _sucursalAgenda;
         _cargandoInicial = true;
         _citas = [];

@@ -1354,6 +1354,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
               AND (@AgendaCompleta = 1 OR u.user_numero = @UsuarioSesion)
               AND (
                     ((u.user_tipouser_numero = 2 OR UPPER(LTRIM(RTRIM(ISNULL(u.user_tipomedico, '')))) IN ('P', 'L', 'E'))
+                     AND (@IdLocalidad IS NULL OR NOT EXISTS (
+                         SELECT 1 FROM vt_horariosMedicos programado
+                         WHERE programado.hr_iduser = u.user_numero
+                           AND programado.hr_localidad > 0))
                      AND ((@IdLocalidad IS NULL AND @EsAdmin = 1) OR EXISTS (
                          SELECT 1 FROM vt_usuarioLocalidades ul
                          WHERE ul.ul_idUsuario = u.user_numero AND ISNULL(ul.ul_estado, 'A') = 'A'
@@ -1398,7 +1402,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         Dictionary<DateTime, List<SlotHorarioMedicoDto>> dias = [];
         if (!_session.IsAuthenticated || idMedico <= 0 || (idMedico != _session.IdUser && !await PuedeVerAgendaCompletaAsync()) ||
-            hasta.Date < desde.Date || (hasta.Date - desde.Date).Days >= 31 || !await PuedeUsarSucursalAgendaAsync(idLocalidad))
+            hasta.Date < desde.Date || (hasta.Date - desde.Date).Days >= 42 || !await PuedeUsarSucursalAgendaAsync(idLocalidad))
             return dias;
 
         var columnas = await ObtenerColumnasTablaAsync("vt_horariosMedicos");
