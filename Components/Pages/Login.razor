@@ -2,6 +2,7 @@
 @layout Layout.PublicLayout
 @inject IAuthService AuthService
 @inject NavigationManager Nav
+@implements IDisposable
 
 <PageTitle>e-ForVets - Iniciar sesión</PageTitle>
 
@@ -17,11 +18,37 @@
             <div class="form-heading"><span>Bienvenido de nuevo</span><h2>Iniciar sesión</h2><p>Ingresa tus credenciales para continuar.</p></div>
             @if (!string.IsNullOrWhiteSpace(_mensajeError)) { <div class="auth-alert">@_mensajeError</div> }
             <form @onsubmit="IngresarAsync" @onsubmit:preventDefault>
-                <label>Usuario o correo electrónico<input autocomplete="username" @bind="_username" placeholder="Ingresa tu usuario" /></label>
+                <label>
+                    Usuario o correo electrónico
+                    <input autocomplete="username" @bind="_username" @bind:event="oninput" @bind:after="OnUsuarioCambiadoAsync" placeholder="Ingresa tu usuario" />
+                </label>
                 <label>Contraseña<span class="password-control"><input type="@(_mostrarClave ? "text" : "password")" autocomplete="current-password" @bind="_password" placeholder="Ingresa tu contraseña" /><button type="button" @onclick="() => _mostrarClave = !_mostrarClave">@(_mostrarClave ? "Ocultar" : "Mostrar")</button></span></label>
                 <div class="form-options"><span></span><a href="/olvide-contrasena">¿Olvidaste tu contraseña?</a></div>
-                <label>Veterinaria / Sucursal<select @bind="_localidad">@foreach (var localidad in _localidades) { <option value="@localidad.Id">@localidad.Descripcion</option> }</select></label>
-                <button type="submit" disabled="@_cargando">@(_cargando ? "Validando credenciales..." : "Ingresar")</button>
+                <label>
+                    Veterinaria / Sucursal
+                    <select @bind="_localidad" disabled="@(_buscandoLocalidades || _localidades.Count == 0)">
+                        @if (_buscandoLocalidades)
+                        {
+                            <option value="0">Buscando sucursales asignadas...</option>
+                        }
+                        else if (string.IsNullOrWhiteSpace(_username))
+                        {
+                            <option value="0">Ingresa tu usuario para ver sucursales</option>
+                        }
+                        else if (_localidades.Count == 0)
+                        {
+                            <option value="0">No hay sucursales asignadas para este usuario</option>
+                        }
+                        else
+                        {
+                            @foreach (var localidad in _localidades)
+                            {
+                                <option value="@localidad.Id">@localidad.Descripcion</option>
+                            }
+                        }
+                    </select>
+                </label>
+                <button type="submit" disabled="@(_cargando || _localidades.Count == 0 || _localidad <= 0)">@(_cargando ? "Validando credenciales..." : "Ingresar")</button>
             </form>
             <p class="register-prompt">Las cuentas son administradas por personal autorizado.</p>
         </div>
@@ -34,19 +61,73 @@
 
     private string _username = string.Empty;
     private string _password = string.Empty;
-    private int _localidad = 1;
+    private int _localidad;
     private List<CatalogoItemGenericoDto> _localidades = [];
     private string? _mensajeError;
     private bool _cargando;
+    private bool _buscandoLocalidades;
     private bool _mostrarClave;
+    private CancellationTokenSource? _ctsDebounce;
 
-    protected override async Task OnInitializedAsync()
+    private async Task OnUsuarioCambiadoAsync()
     {
-        _localidades = await AuthService.ObtenerLocalidadesUsuarioAsync();
-        if (_localidades.Count > 0) _localidad = _localidades[0].Id;
+        _ctsDebounce?.Cancel();
+        _ctsDebounce = new CancellationTokenSource();
+        var token = _ctsDebounce.Token;
+
+        var usuarioActual = _username?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(usuarioActual))
+        {
+            _localidades = [];
+            _localidad = 0;
+            _buscandoLocalidades = false;
+            return;
+        }
+
+        try
+        {
+            _buscandoLocalidades = true;
+            await Task.Delay(250, token);
+            var locs = await AuthService.ObtenerLocalidadesPorUsuarioAsync(usuarioActual);
+            if (!token.IsCancellationRequested)
+            {
+                _localidades = locs;
+                if (_localidades.Any(l => l.Id == _localidad))
+                {
+                    // Conserva la localidad previamente seleccionada si sigue siendo válida
+                }
+                else
+                {
+                    _localidad = _localidades.FirstOrDefault()?.Id ?? 0;
+                }
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            // Cancelación esperada por debounce
+        }
+        catch
+        {
+            _localidades = [];
+            _localidad = 0;
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                _buscandoLocalidades = false;
+                StateHasChanged();
+            }
+        }
     }
 
     private async Task IngresarAsync() {
+        if (_localidad <= 0 || _localidades.Count == 0)
+        {
+            _mensajeError = "Debes ingresar un usuario válido con al menos una sucursal asignada.";
+            return;
+        }
+
         _mensajeError = null; _cargando = true;
         try
         {
@@ -56,6 +137,12 @@
         }
         catch { _mensajeError = "No fue posible iniciar sesión. Inténtalo nuevamente más tarde."; }
         finally { _cargando = false; }
+    }
+
+    public void Dispose()
+    {
+        _ctsDebounce?.Cancel();
+        _ctsDebounce?.Dispose();
     }
 
     private static bool EsRutaLocalSegura(string? ruta) => !string.IsNullOrWhiteSpace(ruta)

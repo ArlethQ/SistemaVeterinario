@@ -182,6 +182,7 @@ public interface IAuthService
     Task<List<UsuarioAdministracionModel>> ObtenerUsuariosAdministracionAsync();
     Task<List<CatalogoItemGenericoDto>> ObtenerEspecialidadesUsuarioAsync();
     Task<List<CatalogoItemGenericoDto>> ObtenerLocalidadesUsuarioAsync();
+    Task<List<CatalogoItemGenericoDto>> ObtenerLocalidadesPorUsuarioAsync(string username);
     Task<List<int>> ObtenerLocalidadesAsignadasAsync(int idUser);
     Task<List<int>> ObtenerEspecialidadesAsignadasAsync(int idUser);
     Task<(bool Exito, string Mensaje)> GuardarUsuarioAdministracionAsync(UsuarioAdministracionModel usuario, string? claveTemporal, int adminId);
@@ -1123,6 +1124,64 @@ public class AuthService : IAuthService
     {
         try { return (await _sql.QueryAsync<CatalogoItemGenericoDto>("SELECT loc_id AS Id, RTRIM(loc_descripcion) AS Descripcion FROM vt_localidades WHERE loc_estado='A' ORDER BY loc_descripcion")).ToList(); }
         catch { return []; }
+    }
+
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerLocalidadesPorUsuarioAsync(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return [];
+        const string sql = @"
+            SELECT DISTINCT
+                l.loc_id AS Id,
+                RTRIM(l.loc_descripcion) AS Descripcion
+            FROM vt_localidades l
+            INNER JOIN vt_usuarios u ON (
+                UPPER(LTRIM(RTRIM(u.user_login))) = UPPER(LTRIM(RTRIM(@Username)))
+                OR (NULLIF(LTRIM(RTRIM(u.user_email)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(u.user_email))) = UPPER(LTRIM(RTRIM(@Username))))
+            )
+            WHERE u.user_estado = 'A'
+              AND ISNULL(l.loc_estado, 'A') = 'A'
+              AND (
+                    EXISTS (
+                        SELECT 1
+                        FROM vt_usuarioLocalidades ul
+                        WHERE ul.ul_idUsuario = u.user_numero
+                          AND ul.ul_idLocalidad = l.loc_id
+                          AND ISNULL(ul.ul_estado, 'A') = 'A'
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM EMPRESA e
+                        WHERE e.estado = 1
+                          AND (
+                                e.idEmpresa = l.idEmpresa
+                                OR (
+                                    NULLIF(LTRIM(RTRIM(e.ruc)), '') IS NOT NULL
+                                    AND LTRIM(RTRIM(e.ruc)) = LTRIM(RTRIM(l.loc_ruc))
+                                )
+                          )
+                          AND (
+                                e.idTitular = u.idUsuarioFacturacion
+                                OR EXISTS (
+                                    SELECT 1
+                                    FROM Usuarios uf
+                                    WHERE uf.IdUsuario = e.idTitular
+                                      AND uf.Estado = 1
+                                      AND NULLIF(LTRIM(RTRIM(uf.Email)), '') IS NOT NULL
+                                      AND UPPER(LTRIM(RTRIM(uf.Email))) = UPPER(LTRIM(RTRIM(u.user_email)))
+                                )
+                          )
+                    )
+              )
+            ORDER BY Descripcion";
+        try
+        {
+            var res = await _sql.QueryAsync<CatalogoItemGenericoDto>(sql, new { Username = username.Trim() });
+            return res.ToList();
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     public async Task<List<int>> ObtenerLocalidadesAsignadasAsync(int idUser) =>
