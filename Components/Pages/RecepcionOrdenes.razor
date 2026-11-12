@@ -137,32 +137,35 @@
                     }
 
                     <!-- Selector rápido de paciente -->
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold"><span class="step-dot">1</span> Buscar paciente</label>
-                        <div class="patient-search-tabs"><span class="active">Por nombre / NHCL</span><span>Por cédula</span><span>Por código</span></div>
-                        <div class="input-group input-group-sm">
-                            <input type="text" class="form-control" placeholder="Ej: 5001, MAX, Mendoza..."
-                                   @bind="_filtroPaciente" @bind:event="oninput" @onkeyup="BuscarPacientesAsync" />
-                        </div>
+                    @if (!EsDesdeCita)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold"><span class="step-dot">1</span> Buscar paciente</label>
+                            <div class="patient-search-tabs"><span class="active">Por nombre / NHCL</span><span>Por cédula</span><span>Por código</span></div>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" placeholder="Ej: 5001, MAX, Mendoza..."
+                                       @bind="_filtroPaciente" @bind:event="oninput" @onkeyup="BuscarPacientesAsync" />
+                            </div>
 
-                        <div class="list-group list-group-flush border rounded mt-1" style="max-height:155px; overflow-y:auto;">
-                            @foreach (var pac in _pacientesEncontrados)
-                            {
-                                bool sel = _nuevaOrden.Nhcl == pac.MasNhcl;
-                                <button type="button"
-                                        class="list-group-item list-group-item-action py-1 px-2 d-flex justify-content-between align-items-center @(sel ? "active" : "")"
-                                        @onclick="() => SeleccionarPacienteParaOrden(pac)">
-                                    <div>
-                                        <strong>#@pac.MasNhcl — @pac.MasNombre</strong>
-                                        <small class="d-block @(sel ? "text-light" : "text-muted")">@pac.ClienteNombre (@pac.EspecieDescripcion)</small>
-                                    </div>
-                                    <span class="badge @(pac.MasOrigen == "T" ? "bg-success" : "bg-info")">
-                                        @(pac.MasOrigen == "T" ? "Silvestre" : "Doméstico")
-                                    </span>
-                                </button>
-                            }
+                            <div class="list-group list-group-flush border rounded mt-1" style="max-height:155px; overflow-y:auto;">
+                                @foreach (var pac in _pacientesEncontrados)
+                                {
+                                    bool sel = _nuevaOrden.Nhcl == pac.MasNhcl;
+                                    <button type="button"
+                                            class="list-group-item list-group-item-action py-1 px-2 d-flex justify-content-between align-items-center @(sel ? "active" : "")"
+                                            @onclick="() => SeleccionarPacienteParaOrden(pac)">
+                                        <div>
+                                            <strong>#@pac.MasNhcl — @pac.MasNombre</strong>
+                                            <small class="d-block @(sel ? "text-light" : "text-muted")">@pac.ClienteNombre (@pac.EspecieDescripcion)</small>
+                                        </div>
+                                        <span class="badge @(pac.MasOrigen == "T" ? "bg-success" : "bg-info")">
+                                            @(pac.MasOrigen == "T" ? "Silvestre" : "Doméstico")
+                                        </span>
+                                    </button>
+                                }
+                            </div>
                         </div>
-                    </div>
+                    }
 
                     <EditForm Model="_nuevaOrden" OnValidSubmit="CrearOrdenAtencionAsync">
                         <DataAnnotationsValidator />
@@ -179,7 +182,7 @@
                             {
                                 <div class="col-md-12">
                                     <label class="form-label small fw-bold">2. Tipo de consulta</label>
-                                    <select class="form-select form-select-sm" value="@_tipoConsulta" @onchange="OnTipoConsultaChangedAsync">
+                                    <select class="form-select form-select-sm" value="@_tipoConsulta" @onchange="OnTipoConsultaChangedAsync" disabled="@EsDesdeCita">
                                         <option value="1">Consulta General</option>
                                         <option value="2">Especialidad</option>
                                         <option value="3">Cirugía Programada</option>
@@ -192,7 +195,7 @@
                                 {
                                     <div class="col-md-12">
                                         <label class="form-label small fw-bold text-primary"><i class="bi bi-award-fill me-1"></i>3. Especialidad requerida</label>
-                                        <select class="form-select form-select-sm border-primary" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync">
+                                        <select class="form-select form-select-sm border-primary" value="@_nuevaOrden.IdEspecialidad" @onchange="CambiarEspecialidadAsync" disabled="@EsDesdeCita">
                                             @foreach (var esp in _especialidades)
                                             {
                                                 <option value="@esp.Id">[@(string.IsNullOrWhiteSpace(esp.Codigo) ? "GEN" : esp.Codigo)] @esp.Descripcion</option>
@@ -203,13 +206,13 @@
                             }
 
                             <div class="col-md-12 d-flex align-items-end">
-                                <label class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_nuevaOrden.EsProcedimiento" /><span class="form-check-label ms-2 fw-bold">Procedimiento</span></label>
+                                <label class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_nuevaOrden.EsProcedimiento" disabled="@EsDesdeCita" /><span class="form-check-label ms-2 fw-bold">Procedimiento</span></label>
                             </div>
                             @if (_nuevaOrden.EsProcedimiento)
                             {
                                 <div class="col-md-12">
                                     <label class="form-label small fw-bold">2. Enfermero responsable *</label>
-                                    <select class="form-select form-select-sm" @bind="_nuevaOrden.IdEnfermero">
+                                    <select class="form-select form-select-sm" @bind="_nuevaOrden.IdEnfermero" disabled="@EsDesdeCita">
                                         <option value="">Seleccione un enfermero</option>
                                         @foreach (var enfermero in _enfermeros)
                                         {
@@ -222,7 +225,7 @@
                             {
                                 <div class="col-md-9">
                                     <label class="form-label small fw-bold">@(EsTipoConsultaEspecialidad ? "4. Médico tratante asignado" : "3. Médico tratante asignado")</label>
-                                    <select class="form-select form-select-sm" @bind="_nuevaOrden.IdMedico">
+                                    <select class="form-select form-select-sm" @bind="_nuevaOrden.IdMedico" disabled="@EsDesdeCita">
                                         <option value="0">Seleccione un médico</option>
                                         @foreach (var med in _medicosDisponibles)
                                         {
@@ -231,7 +234,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-3 d-flex align-items-end">
-                                    <label class="form-check mb-2"><input type="checkbox" class="form-check-input" @bind="_nuevaOrden.TriajeMedico" /><span class="form-check-label ms-2 fw-bold">Triaje</span></label>
+                                    <label class="form-check mb-2"><input type="checkbox" class="form-check-input" @bind="_nuevaOrden.TriajeMedico" disabled="@EsDesdeCita" /><span class="form-check-label ms-2 fw-bold">Triaje</span></label>
                                 </div>
                             }
 
@@ -556,6 +559,7 @@
     private int? EspecialidadPreseleccionada { get; set; }
     private int? TipoDespachoPreseleccionado { get; set; }
     private int? CitaOrigenId { get; set; }
+    private bool EsDesdeCita => CitaOrigenId.HasValue && CitaOrigenId.Value > 0;
 
     private List<CatalogoItemGenericoDto> _especialidades = new();
     private List<CatalogoItemGenericoDto> _todosMedicos = new();
@@ -889,14 +893,7 @@
             }
 
             _medicosDisponibles = await ObtenerMedicosEnHorarioAsync(_nuevaOrden.IdEspecialidad);
-            if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0 && _medicosDisponibles.Any(m => m.Id == MedicoPreseleccionado.Value))
-            {
-                _nuevaOrden.IdMedico = MedicoPreseleccionado.Value;
-            }
-            else
-            {
-                _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
-            }
+            AplicarProfesionalPreseleccionado();
         }
         else
         {
@@ -918,14 +915,7 @@
                 _medicosDisponibles = enHorario.Count > 0 ? enHorario : _todosMedicos;
             }
 
-            if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0 && _medicosDisponibles.Any(m => m.Id == MedicoPreseleccionado.Value))
-            {
-                _nuevaOrden.IdMedico = MedicoPreseleccionado.Value;
-            }
-            else
-            {
-                _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
-            }
+            AplicarProfesionalPreseleccionado();
         }
 
         if (NhclPreseleccionado.HasValue && NhclPreseleccionado.Value > 0)
@@ -997,7 +987,42 @@
         _nuevaOrden.TriajeMedico = true;
         _mostrarFormularioOrden = true;
     }
-    private void CerrarFormularioOrden() => _mostrarFormularioOrden = false;
+    private void AplicarProfesionalPreseleccionado()
+    {
+        if (MedicoPreseleccionado.HasValue && MedicoPreseleccionado.Value > 0)
+        {
+            var medId = MedicoPreseleccionado.Value;
+            if (_medicosDisponibles.Any(m => m.Id == medId))
+            {
+                _nuevaOrden.IdMedico = medId;
+                return;
+            }
+
+            var medicoCatalogo = _todosMedicos.FirstOrDefault(m => m.Id == medId);
+            if (medicoCatalogo is not null)
+            {
+                _medicosDisponibles.Insert(0, medicoCatalogo);
+                _nuevaOrden.IdMedico = medId;
+                return;
+            }
+
+            if (_enfermeros.Any(e => e.Id == medId))
+            {
+                _nuevaOrden.EsProcedimiento = true;
+                _nuevaOrden.IdEnfermero = medId;
+                _nuevaOrden.IdMedico = 0;
+                return;
+            }
+        }
+
+        _nuevaOrden.IdMedico = _medicosDisponibles.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private void CerrarFormularioOrden()
+    {
+        _mostrarFormularioOrden = false;
+        CitaOrigenId = null;
+    }
 
     private void SeleccionarPacienteParaOrden(PacienteMascotaDto pac)
     {
@@ -1245,6 +1270,7 @@
         string vinculoCita = (CitaOrigenId.HasValue && CitaOrigenId.Value > 0) ? $" (Vinculada a Cita #{CitaOrigenId.Value})" : "";
         _mensajeAlerta = $"Orden #{idCreada}{asignacionTexto} generada para {_nuevaOrden.NombreMascota} (NHCL #{_nuevaOrden.Nhcl}){vinculoCita}.";
         _mostrarFormularioOrden = false;
+        CitaOrigenId = null;
     }
 
     private async Task CambiarFechaTableroAsync(ChangeEventArgs e)
