@@ -147,6 +147,20 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     public async Task<bool> GuardarHorarioAsync(HorarioMedicoDto x,int idUsuario)
     {
         await VerificarColumnasAsync("vt_horariosMedicos", "hr_id", "hr_iduser", "hr_dia", "hr_dia2", "hr_desde", "hr_hasta", "hr_intervalo", "hr_localidad", "hr_piso", "hr_consultorio", "hr_vigencia_desde", "hr_vigencia_hasta");
+        
+        bool esEnfermero = await db.QueryFirstOrDefaultAsync<int>(@"
+            SELECT COUNT(1) FROM vt_usuarios u
+            LEFT JOIN vt_tipos_usuarios t ON t.tipuser_numero=u.user_tipouser_numero
+            WHERE u.user_numero=@IdMedico
+              AND (ISNULL(u.user_tipouser_numero,0)=11 OR UPPER(ISNULL(t.tipuser_descripcion,'')) LIKE '%ENFERMER%')",
+            new { x.IdMedico }) > 0;
+
+        if (esEnfermero)
+        {
+            x.Piso = "General";
+            x.Consultorio = "Área General";
+        }
+
         if(x.IdMedico<=0||x.IdLocalidad<=0||string.IsNullOrWhiteSpace(x.Piso)||string.IsNullOrWhiteSpace(x.Consultorio)||!HoraValida(x.Desde,x.Hasta)||x.VigenciaHasta<x.VigenciaDesde) return false;
         if(!TimeSpan.TryParse(x.Desde,out var desde)||!TimeSpan.TryParse(x.Hasta,out var hasta)) return false;
         var parametros = new { x.Id, x.IdMedico, x.IdLocalidad, x.DiaIngles, Desde=desde, Hasta=hasta };
@@ -263,8 +277,17 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
 
     public async Task<List<SelectorClinicoDto>> ObtenerMedicosAsync()=>(await db.QueryAsync<SelectorClinicoDto>(@"
         SELECT CONVERT(int,u.user_numero) Id,
-               RTRIM(u.user_nombre) + CASE WHEN UPPER(ISNULL(t.tipuser_descripcion,'')) LIKE '%ENFERMER%' THEN ' (Enfermería)' ELSE '' END Descripcion,
-               CONVERT(int,ISNULL(u.user_esp_numero,0)) IdRelacionado
+               RTRIM(u.user_nombre) + CASE 
+                   WHEN UPPER(ISNULL(t.tipuser_descripcion,'')) LIKE '%ENFERMER%' OR ISNULL(u.user_tipouser_numero,0)=11 
+                       THEN ' (Enfermería)' 
+                   ELSE ' (Médico)' 
+               END Descripcion,
+               CONVERT(int,ISNULL(u.user_esp_numero,0)) IdRelacionado,
+               CASE 
+                   WHEN UPPER(ISNULL(t.tipuser_descripcion,'')) LIKE '%ENFERMER%' OR ISNULL(u.user_tipouser_numero,0)=11 
+                       THEN 'Enfermero' 
+                   ELSE 'Medico' 
+               END Rol
         FROM vt_usuarios u
         LEFT JOIN vt_tipos_usuarios t ON t.tipuser_numero=u.user_tipouser_numero
         WHERE u.user_estado='A'
