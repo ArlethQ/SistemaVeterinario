@@ -25,6 +25,7 @@ public interface IGestionMigradaService
     Task<bool> CancelarCirugiaAsync(int id, int idUsuario);
     Task<List<SelectorClinicoDto>> ObtenerMedicosAsync();
     Task<List<SelectorClinicoDto>> ObtenerLocalidadesSelectorAsync();
+    Task<List<UsuarioLocalidadAsignadaDto>> ObtenerLocalidadesAsignadasMedicosAsync();
     Task<List<SelectorClinicoDto>> ObtenerEspecialidadesSelectorAsync();
     Task<List<SelectorClinicoDto>> BuscarPacientesAsync(string filtro);
     Task<List<SelectorClinicoDto>> BuscarProcedimientosAsync(string filtro);
@@ -160,6 +161,15 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
             x.Piso = "General";
             x.Consultorio = "Área General";
         }
+
+        bool tieneLocalidadAsignada = await db.QueryFirstOrDefaultAsync<int>(@"
+            SELECT COUNT(1) FROM vt_usuarioLocalidades ul
+            WHERE ul.ul_idUsuario = @IdMedico
+              AND ul.ul_idLocalidad = @IdLocalidad
+              AND ISNULL(ul.ul_estado, 'A') = 'A'",
+            new { x.IdMedico, x.IdLocalidad }) > 0;
+
+        if (!tieneLocalidadAsignada) return false;
 
         if(x.IdMedico<=0||x.IdLocalidad<=0||string.IsNullOrWhiteSpace(x.Piso)||string.IsNullOrWhiteSpace(x.Consultorio)||!HoraValida(x.Desde,x.Hasta)||x.VigenciaHasta<x.VigenciaDesde) return false;
         if(!TimeSpan.TryParse(x.Desde,out var desde)||!TimeSpan.TryParse(x.Hasta,out var hasta)) return false;
@@ -299,6 +309,13 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
           )
         ORDER BY u.user_nombre")).ToList();
     public async Task<List<SelectorClinicoDto>> ObtenerLocalidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,loc_id) Id,RTRIM(loc_descripcion) Descripcion FROM vt_localidades WHERE loc_estado='A' ORDER BY loc_descripcion")).ToList();
+    public async Task<List<UsuarioLocalidadAsignadaDto>> ObtenerLocalidadesAsignadasMedicosAsync() =>
+        (await db.QueryAsync<UsuarioLocalidadAsignadaDto>(@"
+            SELECT CONVERT(int, ul.ul_idUsuario) AS IdUsuario, CONVERT(int, ul.ul_idLocalidad) AS IdLocalidad
+            FROM vt_usuarioLocalidades ul
+            INNER JOIN vt_localidades l ON l.loc_id = ul.ul_idLocalidad
+            WHERE ISNULL(ul.ul_estado, 'A') = 'A'
+              AND ISNULL(l.loc_estado, 'A') = 'A'")).ToList();
     public async Task<List<SelectorClinicoDto>> ObtenerEspecialidadesSelectorAsync()=>(await db.QueryAsync<SelectorClinicoDto>("SELECT CONVERT(int,es_id) Id,RTRIM(es_descripcion) Descripcion FROM vt_especialidades ORDER BY es_descripcion")).ToList();
     public async Task<List<SelectorClinicoDto>> BuscarPacientesAsync(string filtro)=>(await db.QueryAsync<SelectorClinicoDto>("SELECT TOP 100 mas_nhcl Id,RTRIM(mas_nombre)+' · NHCL '+CAST(mas_nhcl AS varchar(20)) Descripcion,mas_idcliente IdRelacionado FROM vt_pacientes WHERE mas_estado='A' AND (@Filtro='' OR mas_nombre LIKE '%'+@Filtro+'%' OR CAST(mas_nhcl AS varchar(20)) LIKE '%'+@Filtro+'%') ORDER BY mas_nombre",new{Filtro=filtro?.Trim()??""})).ToList();
     public async Task<List<SelectorClinicoDto>> BuscarProcedimientosAsync(string filtro) =>
