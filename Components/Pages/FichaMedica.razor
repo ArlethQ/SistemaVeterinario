@@ -724,11 +724,15 @@
                                 <input type="text" class="form-control form-control-sm" @bind="_observacionServicio" placeholder="Indicaciones o detalle opcional..." />
                             </div>
                             <div class="col-md-1">
-                                <button type="button" class="btn btn-sm btn-primary w-100" @onclick="AgregarServicioOrdenAsync">
+                                <button type="button" class="btn btn-sm btn-primary w-100" @onclick="AgregarServicioOrdenAsync" disabled="@_agregandoServicio">
                                     <i class="bi bi-plus-lg"></i>
                                 </button>
                             </div>
                         </div>
+                        @if (_mensajeServicio is not null)
+                        {
+                            <p class="small @(_errorServicio ? "text-danger" : "text-success")" role="status">@_mensajeServicio</p>
+                        }
 
                         <!-- 3 órdenes distintas por servicio, cada una con su impresión individual -->
                         <div class="row g-3">
@@ -1167,6 +1171,7 @@
         RecetaItems = [];
         Antecedentes = [];
         Vacunas = [];
+        _mensajeServicio = null;
         OrdenesLab = [];
         OrdenesImagen = [];
         OrdenesFisio = [];
@@ -1963,26 +1968,31 @@
         _mostrarSugerenciasServicio = false;
     }
 
+    private bool _agregandoServicio;
+    private bool _errorServicio;
+    private string? _mensajeServicio;
     private async Task AgregarServicioOrdenAsync()
     {
-        if (!FichaEditable || Guardando) return;
+        if (!FichaEditable || Guardando || _agregandoServicio) return;
+        _agregandoServicio = true;
+        _mensajeServicio = null;
 
         try
         {
-            int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
-            int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
+            int ordenTarget = IdOrden;
+            int nhclTarget = Nhcl;
 
             if (ordenTarget <= 0 || nhclTarget <= 0)
             {
-                EsError = true;
-                MensajeAlerta = "No hay una orden activa válida para registrar servicios.";
+                _errorServicio = true;
+                _mensajeServicio = "No hay una orden activa válida para registrar servicios.";
                 return;
             }
 
             if (_cantidadServicio <= 0)
             {
-                EsError = true;
-                MensajeAlerta = "La cantidad del servicio debe ser mayor a cero.";
+                _errorServicio = true;
+                _mensajeServicio = "La cantidad del servicio debe ser mayor a cero.";
                 return;
             }
 
@@ -1996,8 +2006,8 @@
 
             if (servicio is null)
             {
-                EsError = true;
-                MensajeAlerta = $"Seleccione un servicio válido del catálogo de {_categoriaServicio}.";
+                _errorServicio = true;
+                _mensajeServicio = $"Seleccione un servicio válido del catálogo de {_categoriaServicio}.";
                 return;
             }
 
@@ -2006,7 +2016,7 @@
             switch (_categoriaServicio)
             {
                 case "Laboratorio":
-                    await LabImagenService.AgregarOrdenLaboratorioAsync(new OrdenLaboratorioItemDto
+                    if (!await LabImagenService.AgregarOrdenLaboratorioAsync(new OrdenLaboratorioItemDto
                     {
                         IdOrden = ordenTarget,
                         Nhcl = nhclTarget,
@@ -2018,12 +2028,13 @@
                         Estado = "POR REALIZAR",
                         Fecha = DateTime.Now,
                         Precio = servicio.Precio
-                    });
+                    }))
+                        throw new InvalidOperationException("El servicio no se guardó.");
                     OrdenesLab = await LabImagenService.ObtenerOrdenesLaboratorioAsync(ordenTarget, nhclTarget);
                     break;
 
                 case "Imagenología":
-                    await LabImagenService.AgregarOrdenImagenAsync(new OrdenImagenItemDto
+                    if (!await LabImagenService.AgregarOrdenImagenAsync(new OrdenImagenItemDto
                     {
                         IdOrden = ordenTarget,
                         Nhcl = nhclTarget,
@@ -2034,18 +2045,19 @@
                         Estado = "Por Facturar",
                         Fecha = DateTime.Now,
                         Precio = servicio.Precio
-                    });
+                    }))
+                        throw new InvalidOperationException("El servicio no se guardó.");
                     OrdenesImagen = await LabImagenService.ObtenerOrdenesImagenAsync(ordenTarget, nhclTarget);
                     break;
 
                 case "Fisioterapia":
                     if (!int.TryParse(servicio.Codigo, out int idProdFisio) || idProdFisio <= 0)
                     {
-                        EsError = true;
-                        MensajeAlerta = "No se pudo identificar el código de producto de fisioterapia.";
+                        _errorServicio = true;
+                        _mensajeServicio = "No se pudo identificar el código de producto de fisioterapia.";
                         return;
                     }
-                    await AdminClinicaService.GuardarFisioterapiaAsync(new FisioterapiaOrdenDto
+                    if (!await AdminClinicaService.GuardarFisioterapiaAsync(new FisioterapiaOrdenDto
                     {
                         IdOrden = ordenTarget,
                         Nhcl = nhclTarget,
@@ -2055,7 +2067,8 @@
                         Cantidad = _cantidadServicio,
                         Precio = servicio.Precio,
                         Fecha = DateTime.Now
-                    });
+                    }))
+                        throw new InvalidOperationException("El servicio no se guardó.");
                     OrdenesFisio = await AdminClinicaService.ObtenerFisioterapiaAsync(ordenTarget, nhclTarget);
                     break;
             }
@@ -2067,13 +2080,18 @@
             _mostrarSugerenciasServicio = false;
             FiltrarServiciosCategoria();
 
-            EsError = false;
-            MensajeAlerta = $"Servicio de {_categoriaServicio} agregado a la orden #{ordenTarget}.";
+            _errorServicio = false;
+            _mensajeServicio = $"Servicio de {_categoriaServicio} agregado a la orden #{ordenTarget}.";
         }
         catch (Exception ex)
         {
-            EsError = true;
-            MensajeAlerta = $"Error al agregar servicio: {ex.Message}";
+            Logger.LogError(ex, "Error al agregar servicio a la orden {Orden}", IdOrden);
+            _errorServicio = true;
+            _mensajeServicio = "No se pudo completar el registro del servicio.";
+        }
+        finally
+        {
+            _agregandoServicio = false;
         }
     }
 

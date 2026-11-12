@@ -297,7 +297,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 @Estado, @Fecha, @Prioridad, @IdEvolucion
             )";
 
-        await _db.ExecuteAsync(sql, new
+        return await _db.ExecuteAsync(sql, new
         {
             item.Nhcl,
             IdProd = idProdNum,
@@ -308,8 +308,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
             item.Fecha,
             item.Prioridad,
             item.IdEvolucion
-        });
-        return true;
+        }) > 0;
     }
 
     public async Task<bool> ActualizarOrdenesLaboratorioAsync(int idOrden, List<OrdenLaboratorioItemDto> items, int idUsuario)
@@ -394,7 +393,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 @Estado, @Fecha, @IdEvolucion
             )";
 
-        await _db.ExecuteAsync(sql, new
+        return await _db.ExecuteAsync(sql, new
         {
             item.Nhcl,
             IdProd = idProdNum,
@@ -404,8 +403,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
             item.Estado,
             item.Fecha,
             item.IdEvolucion
-        });
-        return true;
+        }) > 0;
     }
 
     public async Task<bool> ActualizarOrdenesImagenAsync(int idOrden, List<OrdenImagenItemDto> items, int idUsuario)

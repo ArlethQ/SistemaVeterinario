@@ -1385,6 +1385,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             IdOrden = idOrden, Nhcl = nhcl, IdProducto = idProducto, DesdeHistorial = desdeHistorial, DesdeSoap = desdeSoap,
             procedimiento.Descripcion, Precio = procedimiento.Precio ?? 0m, Cantidad = cantidad, Observaciones = observaciones,
             Rol = _session.TipoUser, UsuarioSesion = _session.IdUser,
+            LocalidadSesion = _session.Localidad,
             VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0
         }) > 0;
     }
