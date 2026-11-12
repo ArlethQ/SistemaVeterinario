@@ -732,7 +732,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(v.vacuna_fecha, GETDATE()) AS Fecha,
                 v.vacuna_revacunacion AS FechaRevacunacion,
                 ISNULL(v.vacuna_idprod, 0) AS IdProducto,
-                REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), '') AS NombreVacuna,
+                UPPER(REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), '')) AS NombreVacuna,
                 ISNULL(v.vacuna_observacion, '') AS ObservacionVacuna,
                 ISNULL(v.vacuna_tipo, 'Vacunación') AS Tipo,
                 ISNULL(u.user_nombre, 'Médico') AS NombreMedico
@@ -751,7 +751,7 @@ public class ConsultaExternaService : IConsultaExternaService
         const string sql = @"
             SELECT
                 p.CODIGO AS Id,
-                REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE, '')), CHAR(13), ''), CHAR(10), '') AS Descripcion
+                UPPER(REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE, '')), CHAR(13), ''), CHAR(10), '')) AS Descripcion
             FROM VeterinariaFacturacion.dbo.PRODUCTO p
             INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
             WHERE ISNULL(p.ESTADO, 1) = 1

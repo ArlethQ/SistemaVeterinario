@@ -26,6 +26,7 @@ public class SessionStateService
     public string NombreUsuario { get; private set; } = string.Empty;
     public string Iniciales { get; private set; } = string.Empty;
     public bool IsAuthenticated => IdUser > 0 && _lastActivityUtc.HasValue && DateTimeOffset.UtcNow - _lastActivityUtc.Value < SessionTimeout;
+    public bool PuedeVerTodasLasSucursales => TipoUser is 1 or 4 or 12 || (!string.IsNullOrWhiteSpace(LoginUser) && LoginUser.Equals("admin", StringComparison.OrdinalIgnoreCase));
     public int? OrdenActiva { get; private set; }
     public int? NhclActivo { get; private set; }
     public string? PacienteActivo { get; private set; }
@@ -256,35 +257,13 @@ public class AuthService : IAuthService
             WHERE l.loc_id = @IdLocalidad
               AND ISNULL(l.loc_estado, 'A') = 'A'
               AND (
-                    EXISTS (
+                    u.user_tipouser_numero IN (1, 4, 12)
+                    OR EXISTS (
                         SELECT 1
                         FROM vt_usuarioLocalidades ul
                         WHERE ul.ul_idUsuario = u.user_numero
                           AND ul.ul_idLocalidad = l.loc_id
                           AND ISNULL(ul.ul_estado, 'A') = 'A'
-                    )
-                    OR EXISTS (
-                        SELECT 1
-                        FROM EMPRESA e
-                        WHERE e.estado = 1
-                          AND (
-                                e.idEmpresa = l.idEmpresa
-                                OR (
-                                    NULLIF(LTRIM(RTRIM(e.ruc)), '') IS NOT NULL
-                                    AND LTRIM(RTRIM(e.ruc)) = LTRIM(RTRIM(l.loc_ruc))
-                                )
-                          )
-                          AND (
-                                e.idTitular = u.idUsuarioFacturacion
-                                OR EXISTS (
-                                    SELECT 1
-                                    FROM Usuarios uf
-                                    WHERE uf.IdUsuario = e.idTitular
-                                      AND uf.Estado = 1
-                                      AND NULLIF(LTRIM(RTRIM(uf.Email)), '') IS NOT NULL
-                                      AND UPPER(LTRIM(RTRIM(uf.Email))) = UPPER(LTRIM(RTRIM(u.user_email)))
-                                )
-                          )
                     )
               )";
         var localidadDescripcion = await _sql.QueryFirstOrDefaultAsync<string>(
@@ -300,7 +279,7 @@ public class AuthService : IAuthService
 
         LoginAttempts.TryRemove(loginKey, out _);
         await _sql.RegistrarBitacoraAsync($"Ingresa al Sistema: {user.UserNombre}", user.UserNumero);
-        await _session.SetSessionAsync(user, localidad);
+        await _session.SetSessionAsync(user, localidad, localidadDescripcion);
 
         return (true, "Bienvenido", user, false);
     }
@@ -767,12 +746,13 @@ public class AuthService : IAuthService
             "SELECT RTRIM(ISNULL(tipuser_descripcion, '')) FROM vt_tipos_usuarios WHERE tipuser_numero = @IdRol",
             new { IdRol = idRol }) ?? $"#{idRol}";
 
-        if (idRol is 1 or 2 or 11 ||
+        if (idRol is 1 or 2 or 11 or 12 ||
             nombreRol.Contains("Enfermer", StringComparison.OrdinalIgnoreCase) ||
             nombreRol.Contains("Cajer", StringComparison.OrdinalIgnoreCase) ||
-            nombreRol.Trim().Equals("Caja", StringComparison.OrdinalIgnoreCase))
+            nombreRol.Trim().Equals("Caja", StringComparison.OrdinalIgnoreCase) ||
+            nombreRol.Contains("Recep", StringComparison.OrdinalIgnoreCase))
         {
-            return (false, "Los roles predeterminados (Administrador, Médico, Enfermería y Cajero) no se pueden eliminar.");
+            return (false, "Los roles predeterminados (Administrador, Médico, Enfermería, Cajero y Recepcionista) no se pueden eliminar.");
         }
 
         try
@@ -1141,35 +1121,13 @@ public class AuthService : IAuthService
             WHERE u.user_estado = 'A'
               AND ISNULL(l.loc_estado, 'A') = 'A'
               AND (
-                    EXISTS (
+                    u.user_tipouser_numero IN (1, 4, 12)
+                    OR EXISTS (
                         SELECT 1
                         FROM vt_usuarioLocalidades ul
                         WHERE ul.ul_idUsuario = u.user_numero
                           AND ul.ul_idLocalidad = l.loc_id
                           AND ISNULL(ul.ul_estado, 'A') = 'A'
-                    )
-                    OR EXISTS (
-                        SELECT 1
-                        FROM EMPRESA e
-                        WHERE e.estado = 1
-                          AND (
-                                e.idEmpresa = l.idEmpresa
-                                OR (
-                                    NULLIF(LTRIM(RTRIM(e.ruc)), '') IS NOT NULL
-                                    AND LTRIM(RTRIM(e.ruc)) = LTRIM(RTRIM(l.loc_ruc))
-                                )
-                          )
-                          AND (
-                                e.idTitular = u.idUsuarioFacturacion
-                                OR EXISTS (
-                                    SELECT 1
-                                    FROM Usuarios uf
-                                    WHERE uf.IdUsuario = e.idTitular
-                                      AND uf.Estado = 1
-                                      AND NULLIF(LTRIM(RTRIM(uf.Email)), '') IS NOT NULL
-                                      AND UPPER(LTRIM(RTRIM(uf.Email))) = UPPER(LTRIM(RTRIM(u.user_email)))
-                                )
-                          )
                     )
               )
             ORDER BY Descripcion";

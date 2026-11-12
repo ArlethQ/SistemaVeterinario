@@ -68,11 +68,12 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 {
     private readonly ISqlDataService _db;
     private readonly SessionStateService _session;
+    private static bool EsRolSinRestriccionSucursal(int rol) => rol is 1 or 4 or 12;
     private const string PrefijoAsignacion = "Asignación de orden #";
     private const string SucursalesAsignadas = @"SELECT ul_idLocalidad
         FROM vt_usuarioLocalidades
         WHERE ul_idUsuario = @UsuarioSesion AND ISNULL(ul_estado, 'A') = 'A'";
-    private const string AlcanceOrden = @"(@Rol = 1 OR (
+    private const string AlcanceOrden = @"(@VeTodasSucursales = 1 OR (
         o.ordenAten_idlocalidad IN (" + SucursalesAsignadas + @")
         AND (@Rol <> 2 OR o.ordenAten_idMedico = @UsuarioSesion)))";
     private const string PermisoEditarCita = @" AND EXISTS (
@@ -1099,7 +1100,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 Fecha = fecha.Date,
                 Filtro = filtro?.Trim() ?? string.Empty,
                 Etapa = etapa?.Trim() ?? string.Empty,
-                Rol = _session.TipoUser, UsuarioSesion = _session.IdUser
+                Rol = _session.TipoUser,
+                VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
+                UsuarioSesion = _session.IdUser
             })).ToList();
             return res;
         }
@@ -1124,7 +1127,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             LEFT JOIN vt_especialidades esp ON o.ordenAten_esp_numero = esp.es_id
             WHERE o.ordenAten_nhcl = @Nhcl AND {AlcanceOrden}
-            ORDER BY o.ordenAten_id DESC", new { Nhcl = nhcl, Rol = _session.TipoUser, UsuarioSesion = _session.IdUser });
+            ORDER BY o.ordenAten_id DESC", new
+            {
+                Nhcl = nhcl,
+                Rol = _session.TipoUser,
+                VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
+                UsuarioSesion = _session.IdUser
+            });
         return ordenes.ToList();
     }
 
@@ -1138,11 +1147,17 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    RTRIM(p.mas_nombre) + ' · NHCL ' + CAST(p.mas_nhcl AS varchar(20)) AS Descripcion
             FROM vt_pacientes p
             WHERE p.mas_estado = 'A' AND p.mas_nombre LIKE '%' + @Filtro + '%'
-              AND (@Rol = 1 OR EXISTS (
+              AND (@VeTodasSucursales = 1 OR EXISTS (
                     SELECT 1 FROM vt_ordenAtencion o
                     WHERE o.ordenAten_nhcl = p.mas_nhcl AND {AlcanceOrden}))
             ORDER BY p.mas_nombre, p.mas_nhcl",
-            new { Filtro = filtro.Trim(), Rol = _session.TipoUser, UsuarioSesion = _session.IdUser });
+            new
+            {
+                Filtro = filtro.Trim(),
+                Rol = _session.TipoUser,
+                VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
+                UsuarioSesion = _session.IdUser
+            });
         return pacientes.ToList();
     }
 
@@ -1155,7 +1170,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             SELECT COUNT(*) FROM vt_ordenAtencion o
             WHERE o.ordenAten_id = @IdOrden AND (@Nhcl <= 0 OR o.ordenAten_nhcl = @Nhcl)
               AND {AlcanceOrden}",
-            new { IdOrden = idOrden, Nhcl = nhcl, Rol = _session.TipoUser, UsuarioSesion = _session.IdUser }) > 0;
+            new
+            {
+                IdOrden = idOrden,
+                Nhcl = nhcl,
+                Rol = _session.TipoUser,
+                VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
+                UsuarioSesion = _session.IdUser
+            }) > 0;
     }
 
     public async Task<List<OrdenAtencionResumenDto>> ObtenerColaClinicaAsync(bool triaje, int? idOrden = null)
@@ -1220,6 +1242,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             Triaje = triaje,
             IdOrden = idOrden,
             Rol = _session.TipoUser,
+            VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
             Usuario = _session.IdUser,
             UsuarioSesion = _session.IdUser,
             PrefijoAsignacion
@@ -1315,7 +1338,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         if (!_session.IsAuthenticated || _session.TipoUser == 2)
             return false;
-        if (_session.TipoUser == 1)
+        if (EsRolSinRestriccionSucursal(_session.TipoUser))
             return true;
 
         var rol = await _db.ExecuteScalarAsync<string>(@"
@@ -1336,7 +1359,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             FROM vt_localidades
             WHERE ISNULL(loc_estado, 'A') = 'A'
               AND (@EsAdmin = 1 OR loc_id IN ({SucursalesAsignadas}))
-            ORDER BY loc_descripcion", new { EsAdmin = _session.TipoUser == 1, UsuarioSesion = _session.IdUser });
+            ORDER BY loc_descripcion", new { EsAdmin = EsRolSinRestriccionSucursal(_session.TipoUser), UsuarioSesion = _session.IdUser });
         return sucursales.ToList();
     }
 
@@ -1373,7 +1396,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         {
             IdLocalidad = idLocalidad,
             AgendaCompleta = await PuedeVerAgendaCompletaAsync(),
-            EsAdmin = _session.TipoUser == 1,
+            EsAdmin = EsRolSinRestriccionSucursal(_session.TipoUser),
             UsuarioSesion = _session.IdUser
         });
         return medicos.ToList();
@@ -1388,7 +1411,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             SELECT COUNT(*) FROM vt_localidades
             WHERE loc_id = @IdLocalidad AND ISNULL(loc_estado, 'A') = 'A'
               AND (@EsAdmin = 1 OR loc_id IN ({SucursalesAsignadas}))",
-            new { IdLocalidad = idLocalidad, EsAdmin = _session.TipoUser == 1, UsuarioSesion = _session.IdUser }) > 0;
+            new { IdLocalidad = idLocalidad, EsAdmin = EsRolSinRestriccionSucursal(_session.TipoUser), UsuarioSesion = _session.IdUser }) > 0;
     }
 
     public async Task<List<SlotHorarioMedicoDto>> ObtenerSlotsHorarioMedicoAsync(int idMedico, DateTime fecha, int idLocalidad)
@@ -1565,7 +1588,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             {
                 Desde = fechaDesde.Date,
                 Hasta = fechaHasta.Date,
-                IdMedico = idMedico, IdLocalidad = idLocalidad, EsAdmin = _session.TipoUser == 1, UsuarioSesion = _session.IdUser
+                IdMedico = idMedico, IdLocalidad = idLocalidad, EsAdmin = EsRolSinRestriccionSucursal(_session.TipoUser), UsuarioSesion = _session.IdUser
             })).ToList();
             return res;
         }
@@ -1685,7 +1708,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
             int rows = await _db.ExecuteAsync(
                 $"UPDATE vt_citas SET {string.Join(", ", cambios)} WHERE ci_id = @IdCita{PermisoEditarCita}",
-                new { IdCita = idCita, Estado = nuevoEstado, MedicoDestino = (int?)null, UsuarioSesion = _session.IdUser, AgendaCompleta = await PuedeVerAgendaCompletaAsync(), EsAdmin = _session.TipoUser == 1 });
+                new { IdCita = idCita, Estado = nuevoEstado, MedicoDestino = (int?)null, UsuarioSesion = _session.IdUser, AgendaCompleta = await PuedeVerAgendaCompletaAsync(), EsAdmin = EsRolSinRestriccionSucursal(_session.TipoUser) });
             return rows > 0;
         }
         catch (Exception ex)
@@ -1714,7 +1737,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         string extra = "," + string.Join(',', adicionales);
         int rows = await _db.ExecuteAsync($@"UPDATE vt_citas SET ci_fecha=@Fecha,ci_hora=@Hora,ci_usuario=@IdMedico,
             ci_localidad=@IdLocalidad,ci_estado='A'{extra} WHERE ci_id=@IdCita AND ISNULL(ci_estado,'A')='A'{PermisoEditarCita}",
-            new { IdCita = idCita, Fecha = fecha.Date, Hora = horaNormalizada, IdMedico = idMedico, IdLocalidad = idLocalidad, IdUsuario = idUsuario, MedicoDestino = idMedico, UsuarioSesion = _session.IdUser, AgendaCompleta = await PuedeVerAgendaCompletaAsync(), EsAdmin = _session.TipoUser == 1 });
+            new { IdCita = idCita, Fecha = fecha.Date, Hora = horaNormalizada, IdMedico = idMedico, IdLocalidad = idLocalidad, IdUsuario = idUsuario, MedicoDestino = idMedico, UsuarioSesion = _session.IdUser, AgendaCompleta = await PuedeVerAgendaCompletaAsync(), EsAdmin = EsRolSinRestriccionSucursal(_session.TipoUser) });
         if (rows <= 0) return false;
 
         var confirmacion = await _db.QueryFirstOrDefaultAsync<CitaMedicaDto>(@"
@@ -1750,7 +1773,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             if (columnas.Contains("ci_refeliminacion")) cambios.Add("ci_refeliminacion=@Motivo");
             if (columnas.Contains("ci_delete")) cambios.Add("ci_delete=@IdUsuario");
             if (columnas.Contains("ci_HoraModificacion")) cambios.Add("ci_HoraModificacion=GETDATE()");
-            int rows = await _db.ExecuteAsync($"UPDATE vt_citas SET {string.Join(',', cambios)} WHERE ci_id=@IdCita{PermisoEditarCita}", new { IdCita = idCita, Motivo = motivoNormalizado, IdUsuario = usuarioAuditoria, MedicoDestino = (int?)null, UsuarioSesion = _session.IdUser, AgendaCompleta = await PuedeVerAgendaCompletaAsync(), EsAdmin = _session.TipoUser == 1 });
+            int rows = await _db.ExecuteAsync($"UPDATE vt_citas SET {string.Join(',', cambios)} WHERE ci_id=@IdCita{PermisoEditarCita}", new { IdCita = idCita, Motivo = motivoNormalizado, IdUsuario = usuarioAuditoria, MedicoDestino = (int?)null, UsuarioSesion = _session.IdUser, AgendaCompleta = await PuedeVerAgendaCompletaAsync(), EsAdmin = EsRolSinRestriccionSucursal(_session.TipoUser) });
             if (rows > 0)
             {
                 try
