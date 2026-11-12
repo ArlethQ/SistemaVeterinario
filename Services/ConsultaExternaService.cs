@@ -205,6 +205,84 @@ public class ConsultaExternaService : IConsultaExternaService
                 }
             }
 
+            // Si la consulta actual no tiene examen físico guardado aún (consulta nueva o en blanco),
+            // verificar si el paciente ya tuvo una consulta registrada el MISMO DÍA para precargar
+            // el examen físico, constantes y temperamento.
+            bool sinExamenFisico = existente == null || (existente.Peso <= 0 && string.IsNullOrWhiteSpace(existente.MedMotivo) && string.IsNullOrWhiteSpace(existente.MedObjetivo));
+
+            if (!historica && nhcl > 0 && sinExamenFisico)
+            {
+                const string sqlMismoDia = @"
+                    SELECT TOP 1
+                        ISNULL(f.med_tipo, 'HDEV') AS MedTipo,
+                        ISNULL(f.peso, 0) AS Peso,
+                        ISNULL(f.temperatura, 38.5) AS Temperatura,
+                        ISNULL(f.frecuenciacardiaca, 90) AS FrecuenciaCardiaca,
+                        ISNULL(f.frecuenciarespiratoria, 24) AS FrecuenciaRespiratoria,
+                        ISNULL(f.mucosas, 'Rosadas y húmedas') AS Mucosas,
+                        ISNULL(f.tiempollenadocapilar, 2) AS TiempoLlenadoCapilar,
+                        ISNULL(f.deshidratacion, 0) AS Deshidratacion,
+                        ISNULL(f.reflejotusigeno, 'Negativo') AS ReflejoTusigeno,
+                        ISNULL(f.auscultacion, 'Normal sin soplos ni ruidos agregados') AS Auscultacion,
+                        ISNULL(f.palpaciontiroides, 'Sin alteraciones') AS PalpacionTiroides,
+                        ISNULL(f.indicecondicioncorporal, 5) AS IndiceCondicionCorporal,
+                        ISNULL(f.cp, 'Normal') AS Cp,
+                        ISNULL(f.linfonodos, 'Normales / Simétricos') AS Linfonodos,
+                        ISNULL(f.palpacionabdominal, 'Blando, no doloroso') AS PalpacionAbdominal,
+                        ISNULL(f.pielyanexos, 'Íntegra, pelaje normal') AS PielYAnexos,
+                        ISNULL(f.cavidadoral, 'Sin alteraciones') AS CavidadOral,
+                        ISNULL(f.otros, '') AS Otros,
+                        ISNULL(f.temperamento, 'TRANQUILO') AS Temperamento,
+                        ISNULL(f.med_apuntes, '') AS MedApuntes
+                    FROM vt_fichamedica f
+                    LEFT JOIN vt_ordenAtencion o ON o.ordenAten_id = f.med_orden
+                    WHERE f.med_nhcl = @Nhcl
+                      AND f.med_orden <> @IdOrden
+                      AND (
+                          CONVERT(date, f.med_fecha) = @Hoy
+                          OR CONVERT(date, f.med_fecha) = CONVERT(date, GETDATE())
+                          OR CONVERT(date, o.ordenAten_fecha) = @Hoy
+                          OR CONVERT(date, o.ordenAten_fecha) = CONVERT(date, GETDATE())
+                      )
+                      AND (ISNULL(f.peso, 0) > 0 OR ISNULL(f.temperamento, '') <> '' OR ISNULL(f.auscultacion, '') <> '' OR ISNULL(f.palpacionabdominal, '') <> '' OR ISNULL(f.med_apuntes, '') <> '')
+                    ORDER BY f.sec DESC";
+
+                var previaMismoDia = await _db.QueryFirstOrDefaultAsync<dynamic>(sqlMismoDia, new { IdOrden = idOrden, Nhcl = nhcl, Hoy = DateTime.Today });
+                if (previaMismoDia != null)
+                {
+                    dto.MedTipo = previaMismoDia.MedTipo?.ToString() ?? dto.MedTipo;
+                    dto.Peso = Convert.ToDecimal(previaMismoDia.Peso ?? 0);
+                    dto.Temperatura = Convert.ToDecimal(previaMismoDia.Temperatura ?? 38.5m);
+                    dto.FrecuenciaCardiaca = Convert.ToDecimal(previaMismoDia.FrecuenciaCardiaca ?? 90);
+                    dto.FrecuenciaRespiratoria = Convert.ToDecimal(previaMismoDia.FrecuenciaRespiratoria ?? 24);
+                    dto.Mucosas = previaMismoDia.Mucosas?.ToString() ?? dto.Mucosas;
+                    dto.TiempoLlenadoCapilar = Convert.ToInt32(previaMismoDia.TiempoLlenadoCapilar ?? 2);
+                    dto.Deshidratacion = Convert.ToInt32(previaMismoDia.Deshidratacion ?? 0);
+                    dto.ReflejoTusigeno = previaMismoDia.ReflejoTusigeno?.ToString() ?? dto.ReflejoTusigeno;
+                    dto.Auscultacion = previaMismoDia.Auscultacion?.ToString() ?? dto.Auscultacion;
+                    dto.PalpacionTiroides = previaMismoDia.PalpacionTiroides?.ToString() ?? dto.PalpacionTiroides;
+                    dto.IndiceCondicionCorporal = Convert.ToInt32(previaMismoDia.IndiceCondicionCorporal ?? 5);
+                    dto.Cp = previaMismoDia.Cp?.ToString() ?? dto.Cp;
+                    dto.Linfonodos = previaMismoDia.Linfonodos?.ToString() ?? dto.Linfonodos;
+                    dto.PalpacionAbdominal = previaMismoDia.PalpacionAbdominal?.ToString() ?? dto.PalpacionAbdominal;
+                    dto.PielYAnexos = previaMismoDia.PielYAnexos?.ToString() ?? dto.PielYAnexos;
+                    dto.CavidadOral = previaMismoDia.CavidadOral?.ToString() ?? dto.CavidadOral;
+                    dto.Otros = previaMismoDia.Otros?.ToString() ?? dto.Otros;
+                    dto.Temperamento = previaMismoDia.Temperamento?.ToString() ?? dto.Temperamento;
+                    dto.MedApuntes = previaMismoDia.MedApuntes?.ToString() ?? dto.MedApuntes;
+                    dto.EsExamenFisicoPrecargadoDelDia = true;
+
+                    if (dto.Temperamento == "AGRESIVO")
+                        dto.ColorTriaje = "imagenes/temperamento/rojo.png";
+                    else if (dto.Temperamento == "A LA DEFENSIVA")
+                        dto.ColorTriaje = "imagenes/temperamento/amarillo.png";
+                    else if (dto.Temperamento == "NERVIOSO")
+                        dto.ColorTriaje = "imagenes/temperamento/verde.png";
+                    else
+                        dto.ColorTriaje = "imagenes/temperamento/blanco.png";
+                }
+            }
+
             dto.IndicacionesGeneralesReceta = await ObtenerIndicacionesGeneralesAsync(idOrden);
 
             if (string.IsNullOrWhiteSpace(dto.MedTipoConsulta) ||
