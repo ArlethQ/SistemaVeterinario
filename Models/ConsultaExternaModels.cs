@@ -159,6 +159,25 @@ public class OrdenExamenEvolucionDto
 // ============================================================================
 // 3. RECETARIO MÉDICO CON ORDEN Y EXTERNO (Reemplaza vt_recetasnew y vt_RecetassinOrden)
 // ============================================================================
+public sealed class AdvertenciaMedicamentoDto
+{
+    public int Id { get; set; }
+    public string CodigoProducto { get; set; } = "";
+    public string Medicamento { get; set; } = "";
+    public string Motivo { get; set; } = "";
+    public DateTime Inicio { get; set; }
+    public DateTime? Fin { get; set; }
+
+    public bool AplicaA(RecetaMedicamentoItemDto item) =>
+        item.Tipo.Trim() == "M" &&
+        ((!string.IsNullOrWhiteSpace(CodigoProducto) && CodigoProducto != "0" &&
+          string.Equals(CodigoProducto, item.CodigoProd.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+         string.Equals(Medicamento.Trim(), item.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    public bool EstaVigente(DateTime fecha) =>
+        Inicio <= fecha && (!Fin.HasValue || Fin.Value >= fecha);
+}
+
 public class RecetaMedicamentoItemDto
 {
     public int Sec { get; set; }

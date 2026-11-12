@@ -6,6 +6,7 @@
 @inject SessionStateService Session
 @inject IEFactCatalogService EFactCatalog
 @inject IJSRuntime JS
+@inject ILogger<RecetarioMedico> Logger
 
 <PageTitle>e-ForVets - Recetario Médico e Indicaciones</PageTitle>
 
@@ -126,11 +127,91 @@
                     <span class="badge bg-success">@ItemsReceta.Count medicamento(s)</span>
                 </div>
                 <div class="card-body">
+                    @if (EsRecetaHistorica)
+                    {
+                        <div class="alert alert-warning" role="alert">@AvisoRecetaHistorica</div>
+                    }
+
+                    @if (Paciente != null && Nhcl > 0)
+                    {
+                        <section class="border rounded p-3 mb-3">
+                            <h6 class="fw-bold">Advertencias de medicamentos de @Paciente.PacienteNombre</h6>
+                            @if (_errorAdvertencias != null)
+                            {
+                                <p class="text-danger small" role="alert">@_errorAdvertencias</p>
+                            }
+                            @foreach (var aviso in _advertencias)
+                            {
+                                <div @key="aviso.Id" class="small border-bottom py-2">
+                                    <strong>@aviso.Medicamento</strong>
+                                    <span class="badge @(aviso.EstaVigente(HoyClinica) ? "bg-danger" : "bg-secondary")">
+                                        @(aviso.EstaVigente(HoyClinica) ? "No administrar" : aviso.Inicio > HoyClinica ? "Programada" : "Vencida")
+                                    </span>
+                                    <div>@aviso.Motivo</div>
+                                    <div class="text-muted">
+                                        Desde @aviso.Inicio.ToString("dd/MM/yyyy")
+                                        @if (aviso.Fin is DateTime fin)
+                                        {
+                                            <span>hasta @fin.ToString("dd/MM/yyyy") (inclusive)</span>
+                                        }
+                                        else
+                                        {
+                                            <span>· Permanente</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            @if (ItemsReceta.Any(EsMedicamentoSeleccionable))
+                            {
+                                <fieldset disabled="@_guardandoAdvertencia" class="row g-2 mt-1">
+                                    <div class="col-md-6">
+                                        <label for="aviso-medicamento" class="form-label small">Medicamento</label>
+                                        <select id="aviso-medicamento" class="form-select form-select-sm" @bind="_medicamentoAdvertencia">
+                                            <option value="0">Seleccionar medicamento de la receta</option>
+                                            @foreach (var medicamento in ItemsReceta.Where(EsMedicamentoSeleccionable))
+                                            {
+                                                <option value="@medicamento.Sec">@medicamento.Descripcionamento</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="aviso-vigencia" class="form-label small">Vigencia</label>
+                                        <select id="aviso-vigencia" class="form-select form-select-sm" @bind="_advertenciaTemporal">
+                                            <option value="False">Permanente</option>
+                                            <option value="True">Temporal</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="aviso-inicio" class="form-label small">Fecha de inicio</label>
+                                        <input id="aviso-inicio" type="date" class="form-control form-control-sm" @bind="_inicioAdvertencia" />
+                                    </div>
+                                    @if (_advertenciaTemporal)
+                                    {
+                                        <div class="col-md-6">
+                                            <label for="aviso-fin" class="form-label small">Fecha de fin (inclusive)</label>
+                                            <input id="aviso-fin" type="date" class="form-control form-control-sm"
+                                                   min="@_inicioAdvertencia.ToString("yyyy-MM-dd")" @bind="_finAdvertencia" />
+                                        </div>
+                                    }
+                                    <div class="col-12">
+                                        <label for="aviso-motivo" class="form-label small">Motivo</label>
+                                        <textarea id="aviso-motivo" class="form-control form-control-sm" rows="2" maxlength="500" @bind="_motivoAdvertencia"></textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="GuardarAdvertenciaAsync">
+                                            Registrar «No administrar»
+                                        </button>
+                                    </div>
+                                </fieldset>
+                            }
+                        </section>
+                    }
+
                     <!-- Formulario para agregar ítem a la receta -->
                     <div class="row g-2 mb-3 p-2 bg-light rounded border">
                         <div class="col-md-5">
                             <label class="form-label small fw-semibold">Medicamento / Principio Activo / Presentación *</label>
-                            <input type="text" class="form-control form-control-sm" list="listaProductosEFact" @bind="NuevoItem.Descripcionamento"
+                            <input type="text" class="form-control form-control-sm" list="listaProductosEFact" @bind="NuevoItem.Descripcionamento" @bind:event="oninput"
                                    placeholder="Seleccione de Productos e Insumos o escriba..." />
                             <datalist id="listaProductosEFact">
                                 @foreach (var prod in _catalogoEFact)
@@ -138,6 +219,10 @@
                                     <option value="@prod.Descripcion">@prod.Codigo — $@prod.Precio?.ToString("F2")</option>
                                 }
                             </datalist>
+                            @foreach (var aviso in _advertencias.Where(aviso => aviso.EstaVigente(HoyClinica) && aviso.AplicaA(NuevoItem)))
+                            {
+                                <p class="text-danger small mb-0" role="alert">No administrar. @aviso.Motivo</p>
+                            }
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-semibold">Cantidad</label>
@@ -191,7 +276,13 @@
                                         @foreach (var m in ItemsReceta)
                                         {
                                             <tr>
-                                                <td class="fw-bold">@m.Descripcionamento</td>
+                                                <td class="fw-bold">
+                                                    @m.Descripcionamento
+                                                    @if (_advertencias.Any(aviso => aviso.EstaVigente(HoyClinica) && aviso.AplicaA(m)))
+                                                    {
+                                                        <span class="badge bg-danger">No administrar</span>
+                                                    }
+                                                </td>
                                                 <td class="text-center">@m.Cantidad.ToString("N0")</td>
                                                 <td>@m.CantidadLetras</td>
                                                 <td class="text-end">
@@ -236,6 +327,88 @@
 </div>
 
 @code {
+    private static DateTime HoyClinica => DateTime.UtcNow.AddHours(-5).Date;
+    private List<AdvertenciaMedicamentoDto> _advertencias = [];
+    private string? _errorAdvertencias;
+    private bool _guardandoAdvertencia;
+    private int _medicamentoAdvertencia;
+    private bool _advertenciaTemporal;
+    private DateTime _inicioAdvertencia = HoyClinica;
+    private DateTime? _finAdvertencia;
+    private string _motivoAdvertencia = "";
+
+    private static bool EsMedicamentoSeleccionable(RecetaMedicamentoItemDto item) =>
+        item.Sec > 0 && item.Tipo.Trim() == "M" && !string.IsNullOrWhiteSpace(item.Descripcionamento);
+
+    private async Task CargarAdvertenciasAsync(int nhcl)
+    {
+        try
+        {
+            var advertencias = await ConsultaService.ObtenerAdvertenciasMedicamentoAsync(nhcl);
+            if (Nhcl == nhcl)
+                _advertencias = advertencias;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "No se pudieron cargar las advertencias de medicamentos para NHCL {Nhcl}", nhcl);
+            if (Nhcl == nhcl)
+                _errorAdvertencias = "No se pudieron consultar las advertencias de medicamentos.";
+        }
+    }
+
+    private async Task GuardarAdvertenciaAsync()
+    {
+        if (_guardandoAdvertencia || Paciente?.Nhcl != Nhcl || Session.CurrentUser is not { } usuario)
+            return;
+
+        _errorAdvertencias = null;
+        if (!ItemsReceta.Any(item => item.Sec == _medicamentoAdvertencia && EsMedicamentoSeleccionable(item)) ||
+            string.IsNullOrWhiteSpace(_motivoAdvertencia) || _motivoAdvertencia.Trim().Length > 500 ||
+            (_advertenciaTemporal && (!_finAdvertencia.HasValue || _finAdvertencia.Value.Date < _inicioAdvertencia.Date)))
+        {
+            _errorAdvertencias = "Selecciona un medicamento, indica el motivo y, si es temporal, una fecha de fin igual o posterior al inicio.";
+            return;
+        }
+
+        _guardandoAdvertencia = true;
+        var nhcl = Nhcl;
+        var orden = IdOrden;
+        try
+        {
+            var guardada = await ConsultaService.RegistrarAdvertenciaMedicamentoAsync(
+                nhcl, orden, _medicamentoAdvertencia, _motivoAdvertencia, _inicioAdvertencia,
+                _advertenciaTemporal ? _finAdvertencia : null, usuario.UserNumero);
+
+            if (Nhcl != nhcl || IdOrden != orden)
+                return;
+
+            if (!guardada)
+            {
+                _errorAdvertencias = "No se pudo registrar la advertencia para este medicamento.";
+                return;
+            }
+
+            _medicamentoAdvertencia = 0;
+            _motivoAdvertencia = "";
+            await CargarAdvertenciasAsync(nhcl);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "No se pudo registrar la advertencia de medicamento para NHCL {Nhcl}", nhcl);
+            if (Nhcl == nhcl && IdOrden == orden)
+                _errorAdvertencias = "No se pudo guardar la advertencia de medicamentos.";
+        }
+        finally
+        {
+            _guardandoAdvertencia = false;
+        }
+    }
+
+    private const string AvisoRecetaHistorica = "Receta histórica. Consulte al veterinario antes de volver a administrar estos medicamentos.";
+
+    private bool EsRecetaHistorica =>
+        ItemsReceta.Count > 0 && ItemsReceta.All(item => item.Fecha.Date < HoyClinica);
+
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
@@ -351,6 +524,14 @@
 
     private async Task CargarRecetaOrdenAsync()
     {
+        _advertencias = [];
+        _errorAdvertencias = null;
+        _medicamentoAdvertencia = 0;
+        _motivoAdvertencia = "";
+        _inicioAdvertencia = HoyClinica;
+        _finAdvertencia = null;
+        _advertenciaTemporal = false;
+
         Paciente = await KardexService.ObtenerEncabezadoPacienteAsync(IdOrden, Nhcl);
         if (Paciente != null && Nhcl <= 0)
         {
@@ -362,7 +543,7 @@
         var tItems = ConsultaService.ObtenerRecetaOrdenAsync(IdOrden);
         var tInd = ConsultaService.ObtenerIndicacionesGeneralesAsync(IdOrden);
         var tDiag = ConsultaService.ObtenerDiagnosticosOrdenAsync(IdOrden);
-        await Task.WhenAll(tItems, tInd, tDiag);
+        await Task.WhenAll(tItems, tInd, tDiag, CargarAdvertenciasAsync(Paciente?.Nhcl ?? 0));
 
         ItemsReceta = await tItems;
         IndicacionesGenerales = await tInd;
@@ -457,7 +638,14 @@
             MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
             return;
         }
-        var pdfBytes = ReportService.GenerarRecetaMedicaPdf(pac, ItemsReceta, DiagnosticosOrden, IndicacionesGenerales);
+        var indicacionesPdf = EsRecetaHistorica
+            ? $"{AvisoRecetaHistorica}\n\n{IndicacionesGenerales}"
+            : IndicacionesGenerales;
+        var avisosVigentes = _advertencias
+            .Where(aviso => aviso.EstaVigente(HoyClinica) && ItemsReceta.Any(aviso.AplicaA))
+            .Select(aviso => $"No administrar {aviso.Medicamento}. {aviso.Motivo}");
+        indicacionesPdf = string.Join("\n\n", avisosVigentes.Append(indicacionesPdf).Where(texto => !string.IsNullOrWhiteSpace(texto)));
+        var pdfBytes = ReportService.GenerarRecetaMedicaPdf(pac, ItemsReceta, DiagnosticosOrden, indicacionesPdf);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"Receta_e-ForVets_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }
 }

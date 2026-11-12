@@ -36,6 +36,8 @@ public interface IConsultaExternaService
 
     // 5. Recetario Médico e Indicaciones Generales (vt_medicinas + vt_IndicacionesGenerales)
     Task<List<RecetaMedicamentoItemDto>> ObtenerRecetaOrdenAsync(int idOrden);
+    Task<List<AdvertenciaMedicamentoDto>> ObtenerAdvertenciasMedicamentoAsync(int nhcl);
+    Task<bool> RegistrarAdvertenciaMedicamentoAsync(int nhcl, int orden, int sec, string motivo, DateTime inicio, DateTime? fin, int usuario);
     Task<string> ObtenerIndicacionesGeneralesAsync(int idOrden);
     Task<bool> AgregarMedicamentoRecetaAsync(RecetaMedicamentoItemDto item, int idUsuario, int idLocalidad);
     Task<bool> EliminarMedicamentoRecetaAsync(int sec);
@@ -994,6 +996,44 @@ public class ConsultaExternaService : IConsultaExternaService
     // ========================================================================
     // 5. RECETARIO MÉDICO E INDICACIONES GENERALES (vt_medicinas + vt_IndicacionesGenerales)
     // ========================================================================
+    public async Task<List<AdvertenciaMedicamentoDto>> ObtenerAdvertenciasMedicamentoAsync(int nhcl)
+    {
+        if (nhcl <= 0)
+            return [];
+
+        var advertencias = await _db.QueryAsync<AdvertenciaMedicamentoDto>(@"
+            SELECT Id, CodigoProducto, Medicamento, Motivo, Inicio, Fin
+            FROM dbo.vt_advertencias_medicamento
+            WHERE Nhcl = @Nhcl
+            ORDER BY Inicio DESC, Id DESC", new { Nhcl = nhcl });
+        return advertencias.ToList();
+    }
+
+    public async Task<bool> RegistrarAdvertenciaMedicamentoAsync(
+        int nhcl, int orden, int sec, string motivo, DateTime inicio, DateTime? fin, int usuario)
+    {
+        motivo = motivo.Trim();
+        if (nhcl <= 0 || orden <= 0 || sec <= 0 || usuario <= 0 ||
+            motivo.Length is 0 or > 500 || (fin.HasValue && fin.Value.Date < inicio.Date))
+            return false;
+
+        var filas = await _db.ExecuteAsync(@"
+            INSERT INTO dbo.vt_advertencias_medicamento
+                (Nhcl, CodigoProducto, Medicamento, Motivo, Inicio, Fin, UsuarioRegistro)
+            SELECT @Nhcl, LTRIM(RTRIM(CAST(ISNULL(m.med_idProdu, '') AS varchar(50)))),
+                   LEFT(nombre.Medicamento, 300), @Motivo, @Inicio, @Fin, @Usuario
+            FROM vt_medicinas m
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON m.med_idProdu = p.CODIGO
+            CROSS APPLY (SELECT COALESCE(
+                NULLIF(LTRIM(RTRIM(REPLACE(REPLACE(m.med_otroMedicamento, CHAR(13), ''), CHAR(10), ''))), ''),
+                NULLIF(LTRIM(RTRIM(REPLACE(REPLACE(p.NOMBRE COLLATE DATABASE_DEFAULT, CHAR(13), ''), CHAR(10), ''))), '')
+            ) AS Medicamento) nombre
+            WHERE m.med_nhcl = @Nhcl AND m.med_id_orden = @Orden AND m.sec = @Sec
+              AND ISNULL(m.med_tipo, 'M') = 'M' AND nombre.Medicamento IS NOT NULL",
+            new { Nhcl = nhcl, Orden = orden, Sec = sec, Motivo = motivo, Inicio = inicio.Date, Fin = fin?.Date, Usuario = usuario });
+        return filas > 0;
+    }
+
     public async Task<List<RecetaMedicamentoItemDto>> ObtenerRecetaOrdenAsync(int idOrden)
     {
         const string sql = @"

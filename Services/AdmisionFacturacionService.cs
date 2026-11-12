@@ -38,6 +38,7 @@ public interface IAdmisionFacturacionService
     Task<bool> AnularOrdenAsync(int idOrden, int idUsuario);
 
     // 3. Agenda de Citas Médicas (vt_administracionCitasnew)
+    Task<Dictionary<DateTime, List<SlotHorarioMedicoDto>>> ObtenerSlotsHorarioMedicoPorRangoAsync(int idMedico, DateTime desde, DateTime hasta, int idLocalidad);
     Task<List<SlotHorarioMedicoDto>> ObtenerSlotsHorarioMedicoAsync(int idMedico, DateTime fecha, int idLocalidad);
     Task<List<CitaMedicaDto>> ObtenerCitasPorFechaAsync(DateTime fechaDesde, DateTime fechaHasta, int idMedico = 0);
     Task<int> AgendarCitaAsync(CitaMedicaDto cita, int idUsuario);
@@ -1260,74 +1261,85 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<List<SlotHorarioMedicoDto>> ObtenerSlotsHorarioMedicoAsync(int idMedico, DateTime fecha, int idLocalidad)
     {
-        var citasExistentes = await ObtenerCitasPorFechaAsync(fecha.Date, fecha.Date, idMedico);
-        var slots = new List<SlotHorarioMedicoDto>();
+        var dias = await ObtenerSlotsHorarioMedicoPorRangoAsync(idMedico, fecha, fecha, idLocalidad);
+        return dias.GetValueOrDefault(fecha.Date) ?? [];
+    }
 
-        var columnasHorario = await ObtenerColumnasTablaAsync("vt_horariosMedicos");
-        string[] requeridasHorario = ["hr_iduser", "hr_localidad", "hr_dia", "hr_desde", "hr_hasta", "hr_intervalo"];
-        if (requeridasHorario.Any(c => !columnasHorario.Contains(c)))
-        {
-            _logger.LogWarning("No se generaron slots: vt_horariosMedicos no contiene todas las columnas requeridas ({Columnas}).", string.Join(", ", requeridasHorario));
-            return slots;
-        }
+    public async Task<Dictionary<DateTime, List<SlotHorarioMedicoDto>>> ObtenerSlotsHorarioMedicoPorRangoAsync(
+        int idMedico, DateTime desde, DateTime hasta, int idLocalidad)
+    {
+        Dictionary<DateTime, List<SlotHorarioMedicoDto>> dias = [];
+        if (!_session.IsAuthenticated || idMedico <= 0 || (_session.TipoUser == 2 && idMedico != _session.IdUser) ||
+            hasta.Date < desde.Date || (hasta.Date - desde.Date).Days >= 31)
+            return dias;
 
-        string columnaDia = columnasHorario.Contains("hr_dia2") ? "hr_dia2" : "hr_dia";
-        string filtroVigenciaDesde = columnasHorario.Contains("hr_vigencia_desde") ? "AND (hr_vigencia_desde IS NULL OR hr_vigencia_desde<=@Fecha)" : string.Empty;
-        string filtroVigenciaHasta = columnasHorario.Contains("hr_vigencia_hasta") ? "AND (hr_vigencia_hasta IS NULL OR hr_vigencia_hasta>=@Fecha)" : string.Empty;
-        var bloques = (await _db.QueryAsync<(string Desde, string Hasta, int Intervalo)>($@"
-            SELECT RTRIM(hr_desde) Desde, RTRIM(hr_hasta) Hasta, ISNULL(hr_intervalo, 30) Intervalo
+        var columnas = await ObtenerColumnasTablaAsync("vt_horariosMedicos");
+        string[] requeridas = ["hr_iduser", "hr_localidad", "hr_dia", "hr_desde", "hr_hasta", "hr_intervalo"];
+        if (requeridas.Any(c => !columnas.Contains(c)))
+            return dias;
+
+        var parametros = new { IdMedico = idMedico, IdLocalidad = idLocalidad, Desde = desde.Date, Hasta = hasta.Date };
+        string dia = columnas.Contains("hr_dia2") ? "hr_dia2" : "hr_dia";
+        string inicio = columnas.Contains("hr_vigencia_desde") ? "hr_vigencia_desde" : "CAST(NULL AS date)";
+        string fin = columnas.Contains("hr_vigencia_hasta") ? "hr_vigencia_hasta" : "CAST(NULL AS date)";
+        var bloques = (await _db.QueryAsync<(string Dia, string Desde, string Hasta, int Intervalo, DateTime? Inicio, DateTime? Fin)>($@"
+            SELECT RTRIM({dia}), RTRIM(hr_desde), RTRIM(hr_hasta), ISNULL(hr_intervalo, 30), {inicio}, {fin}
             FROM vt_horariosMedicos
-            WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad
-              AND UPPER(RTRIM({columnaDia})) IN (UPPER(@DiaIngles), UPPER(@DiaEspanol))
-              {filtroVigenciaDesde} {filtroVigenciaHasta}
-            ORDER BY TRY_CONVERT(time, hr_desde)", new
-            {
-                IdMedico = idMedico,
-                IdLocalidad = idLocalidad,
-                DiaIngles = fecha.DayOfWeek.ToString(),
-                DiaEspanol = DiaSemanaEspanol(fecha.DayOfWeek),
-                Fecha = fecha.Date
-            })).ToList();
+            WHERE hr_iduser=@IdMedico AND hr_localidad=@IdLocalidad", parametros)).ToList();
 
-        var bloqueos = new List<(string Desde, string Hasta)>();
-        var columnasExcepcion = await ObtenerColumnasTablaAsync("vt_calendarizacionHorariosMedicos");
+        var excepciones = await ObtenerColumnasTablaAsync("vt_calendarizacionHorariosMedicos");
         string[] requeridasExcepcion = ["cal_idmedico", "cal_fecha", "cal_desde", "cal_hasta", "cal_localidad"];
-        if (requeridasExcepcion.All(c => columnasExcepcion.Contains(c)))
+        var bloqueos = new List<(DateTime Fecha, string Desde, string Hasta)>();
+        if (requeridasExcepcion.All(excepciones.Contains))
         {
-            string estado = columnasExcepcion.Contains("cal_estado") ? "AND ISNULL(cal_estado, 'A')='A'" : string.Empty;
-            bloqueos = (await _db.QueryAsync<(string Desde, string Hasta)>($@"
-                SELECT RTRIM(cal_desde) Desde, RTRIM(cal_hasta) Hasta
+            string estado = excepciones.Contains("cal_estado") ? "AND ISNULL(cal_estado, 'A')='A'" : "";
+            bloqueos = (await _db.QueryAsync<(DateTime Fecha, string Desde, string Hasta)>($@"
+                SELECT CAST(cal_fecha AS date), RTRIM(cal_desde), RTRIM(cal_hasta)
                 FROM vt_calendarizacionHorariosMedicos
                 WHERE cal_idmedico=@IdMedico AND cal_localidad=@IdLocalidad
-                  AND CAST(cal_fecha AS date)=@Fecha {estado}", new { IdMedico = idMedico, IdLocalidad = idLocalidad, Fecha = fecha.Date })).ToList();
+                  AND cal_fecha>=@Desde AND cal_fecha<DATEADD(day, 1, @Hasta) {estado}", parametros)).ToList();
         }
 
-        foreach (var bloque in bloques)
+        var citas = (await ObtenerCitasPorFechaAsync(desde, hasta, idMedico))
+            .Where(c => c.CiLocalidad == idLocalidad && c.CiEstado != "I" && c.CiEstadoCita != "X")
+            .ToLookup(c => c.CiFecha.Date);
+        var bloqueosPorDia = bloqueos.ToLookup(b => b.Fecha);
+        for (var fecha = desde.Date; fecha <= hasta.Date; fecha = fecha.AddDays(1))
         {
-            if (!TimeSpan.TryParse(bloque.Desde, out var horaActual) || !TimeSpan.TryParse(bloque.Hasta, out var horaFin)) continue;
-            int intervalo = bloque.Intervalo is >= 5 and <= 240 ? bloque.Intervalo : 30;
-            while (horaActual < horaFin)
+            var slots = new SortedDictionary<string, SlotHorarioMedicoDto>(StringComparer.Ordinal);
+            foreach (var bloque in bloques.Where(b => (b.Inicio == null || b.Inicio.Value.Date <= fecha) &&
+                (b.Fin == null || b.Fin.Value.Date >= fecha) &&
+                (string.Equals(b.Dia, fecha.DayOfWeek.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(b.Dia, DiaSemanaEspanol(fecha.DayOfWeek), StringComparison.OrdinalIgnoreCase))))
             {
-                string textoHora = $"{horaActual.Hours:D2}:{horaActual.Minutes:D2}";
-                var citaEnSlot = citasExistentes.FirstOrDefault(c => c.CiLocalidad == idLocalidad && c.CiHora.StartsWith(textoHora, StringComparison.Ordinal) && c.CiEstado != "I" && c.CiEstadoCita != "X");
-                bool bloqueado = bloqueos.Any(b => EstaEnRango(horaActual, b.Desde, b.Hasta));
-                if (slots.All(s => s.Hora != textoHora))
+                if (!TimeSpan.TryParse(bloque.Desde, out var hora) ||
+                    !(TimeSpan.TryParse(bloque.Hasta, out var limite) || bloque.Hasta == "24:00"))
+                    continue;
+
+                if (bloque.Hasta == "24:00")
+                    limite = TimeSpan.FromDays(1);
+
+                var intervalo = TimeSpan.FromMinutes(bloque.Intervalo is >= 5 and <= 240 ? bloque.Intervalo : 30);
+                for (; hora < limite; hora += intervalo)
                 {
-                    slots.Add(new SlotHorarioMedicoDto
+                    string textoHora = $"{hora.Hours:D2}:{hora.Minutes:D2}";
+                    var cita = citas[fecha].FirstOrDefault(c => TimeSpan.TryParse(c.CiHora, out var horaCita) &&
+                        horaCita.Hours == hora.Hours && horaCita.Minutes == hora.Minutes);
+                    bool bloqueado = bloqueosPorDia[fecha].Any(b => EstaEnRango(hora, b.Desde, b.Hasta));
+                    slots.TryAdd(textoHora, new SlotHorarioMedicoDto
                     {
                         Hora = textoHora,
                         Bloqueado = bloqueado,
-                        Disponible = !bloqueado && citaEnSlot == null,
-                        CitaExistente = citaEnSlot,
-                        MotivoEstado = bloqueado ? "Bloqueo / excepción" : (citaEnSlot != null ? $"Reservado: {citaEnSlot.CiNombreMas} ({citaEnSlot.CiNombre})" : "Disponible")
+                        Disponible = !bloqueado && cita == null,
+                        CitaExistente = cita,
+                        MotivoEstado = bloqueado ? "Bloqueo / excepción" : cita != null ? "Reservado" : "Disponible"
                     });
                 }
-
-                horaActual = horaActual.Add(TimeSpan.FromMinutes(intervalo));
             }
+            dias[fecha] = slots.Values.ToList();
         }
 
-        return slots.OrderBy(s => s.Hora).ToList();
+        return dias;
     }
 
     private static string DiaSemanaEspanol(DayOfWeek dia) => dia switch
@@ -1366,6 +1378,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<List<CitaMedicaDto>> ObtenerCitasPorFechaAsync(DateTime fechaDesde, DateTime fechaHasta, int idMedico = 0)
     {
+        if (!_session.IsAuthenticated)
+            return [];
+        if (_session.TipoUser == 2)
+        {
+            if (idMedico != 0 && idMedico != _session.IdUser)
+                return [];
+            idMedico = _session.IdUser;
+        }
+
         var columnas = await AsegurarColumnaEspecialidadCitasAsync();
         string motivoCancelacion = columnas.Contains("ci_refeliminacion") ? "ISNULL(c.ci_refeliminacion, '')" : "CAST('' AS VARCHAR(250))";
         string colEspExpr = columnas.Contains("ci_especialidad")
@@ -1423,6 +1444,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<int> AgendarCitaAsync(CitaMedicaDto cita, int idUsuario)
     {
+        if (!_session.IsAuthenticated || (_session.TipoUser == 2 && cita.CiUsuario != _session.IdUser))
+            throw new InvalidOperationException("No tiene permiso para agendar una cita para ese médico.");
+
         try
         {
             if (TimeSpan.TryParse(cita.CiHora, out var tsHora))
