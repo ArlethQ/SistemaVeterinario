@@ -87,11 +87,7 @@
     </div>
 
     <div hidden="@_verHistorial">
-    <ColaOrdenesClinicas @ref="_colaOrdenes" OrdenSeleccionada="@IdOrden" />
-    @if (Session.TipoUser == 2)
-    {
-        <ColaOrdenesClinicas Triaje="true" AbrirEnSoap="true" OrdenSeleccionada="@IdOrden" />
-    }
+    <ColaOrdenesClinicas @ref="_colaOrdenes" OrdenSeleccionada="@IdOrden" UnificarConTriaje="@(Session.TipoUser == 2)" />
 
     @if (!string.IsNullOrEmpty(MensajeAlerta))
     {
@@ -612,12 +608,7 @@
                         </div>
 
                         <div class="mb-2">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <label class="form-label small fw-semibold mb-0">Indicaciones Generales de Receta</label>
-                                <SaveButton Type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" OnClick="GuardarIndicacionesGeneralesTab3Async">
-                                    <i class="bi bi-save me-1"></i>Guardar indicaciones
-                                </SaveButton>
-                            </div>
+                            <label class="form-label small fw-semibold mb-0">Indicaciones Generales de Receta</label>
                             <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.IndicacionesGeneralesReceta" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Cuidados generales para imprimir en la receta..."></textarea>
                         </div>
 
@@ -661,7 +652,7 @@
             <div class="col-12">
                 <div class="card shadow-sm border-0">
                     <div class="card-header bg-white fw-bold text-primary d-flex flex-wrap justify-content-between align-items-center gap-2">
-                        <span><i class="bi bi-clipboard2-check me-1"></i>Servicios Médicos (Laboratorio, Imagenología y Fisioterapia)</span>
+                        <span><i class="bi bi-clipboard2-check me-1"></i>Servicios Médicos</span>
                         <div class="d-flex flex-wrap gap-1 small">
                             <span class="badge bg-info text-dark">Lab: @OrdenesLab.Count</span>
                             <span class="badge bg-warning text-dark">Imagen: @OrdenesImagen.Count</span>
@@ -676,8 +667,23 @@
                                     <option value="Laboratorio">Laboratorio</option>
                                     <option value="Imagenología">Imagenología</option>
                                     <option value="Fisioterapia">Fisioterapia</option>
+                                    <option value="Procedimientos">Procedimientos</option>
                                 </select>
                             </div>
+                            @if (_categoriaServicio == "Procedimientos")
+                            {
+                                <div class="col-md-2">
+                                    <label for="subcategoria-procedimientos" class="form-label small fw-semibold">Subcategoría</label>
+                                    <select id="subcategoria-procedimientos" class="form-select form-select-sm"
+                                            @bind="_subcategoriaProcedimiento" @bind:after="LimpiarSeleccionServicio">
+                                        <option value="0">Todas las subcategorías</option>
+                                        @foreach (var grupo in SubcategoriasProcedimientos)
+                                        {
+                                            <option value="@grupo.IdSubcategoria">@grupo.Subcategoria</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
                             <div class="col-md-4 position-relative">
                                 <label class="form-label small fw-semibold">Tipo de Servicio (Catálogo PRODUCTO) *</label>
                                 <div class="input-group input-group-sm">
@@ -711,8 +717,11 @@
                                                 <button type="button"
                                                         class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center @(srv.Codigo == _codigoServicioSeleccionado ? "active" : "")"
                                                         @onclick="() => SeleccionarServicio(srv)">
-                                                    <span><strong>[@srv.Codigo]</strong> @srv.Descripcion</span>
-                                                    <span class="ms-2 @(srv.Codigo == _codigoServicioSeleccionado ? "" : "text-muted")">$@srv.Precio.ToString("N2")</span>
+                                                    <span><strong>[@(srv.CodigoBusqueda ?? srv.Codigo)]</strong> @srv.Descripcion</span>
+                                                    @if (_categoriaServicio != "Procedimientos")
+                                                    {
+                                                        <span class="ms-2 @(srv.Codigo == _codigoServicioSeleccionado ? "" : "text-muted")">$@srv.Precio.ToString("N2")</span>
+                                                    }
                                                 </button>
                                             }
                                         }
@@ -735,7 +744,7 @@
                             }
                             <div class="@(_categoriaServicio == "Laboratorio" ? "col-md-2" : "col-md-3")">
                                 <label class="form-label small fw-semibold">Observaciones</label>
-                                <input type="text" class="form-control form-control-sm" @bind="_observacionServicio" placeholder="Indicaciones o detalle opcional..." />
+                                <input type="text" class="form-control form-control-sm" maxlength="@(_categoriaServicio == "Procedimientos" ? 250 : (int?)null)" @bind="_observacionServicio" placeholder="Indicaciones o detalle opcional..." />
                             </div>
                             <div class="col-md-1">
                                 <SaveButton Type="button" class="btn btn-sm btn-primary w-100" OnClick="AgregarServicioOrdenAsync" Disabled="@_agregandoServicio">
@@ -908,17 +917,14 @@
                                 </div>
                             </div>
                         </div>
+                        @if (FichaCargada)
+                        {
+                            <ProcedimientosTriaje @key="(IdOrden, Nhcl, _versionProcedimientos)" IdOrden="@IdOrden" Nhcl="@Nhcl"
+                                                  SoloLectura="true" />
+                        }
                     </div>
                 </div>
             </div>
-        </div>
-    }
-
-    @if (FichaCargada)
-    {
-        <div hidden="@(TabActiva != 3)">
-            <ProcedimientosTriaje @key="(IdOrden, Nhcl, FichaEditable)" IdOrden="@IdOrden" Nhcl="@Nhcl"
-                                  DesdeSoap="true" SoloLectura="@(!FichaEditable)" />
         </div>
     }
 
@@ -1166,8 +1172,19 @@
     private RecetaMedicamentoItemDto NuevoMedicamento { get; set; } = new();
 
     // Órdenes de Servicio (Laboratorio, Imagenología, Fisioterapia desde PRODUCTO)
-    private sealed record ServicioCatalogoItem(string Codigo, string Descripcion, decimal Precio);
+    private sealed record ServicioCatalogoItem(string Codigo, string Descripcion, decimal Precio, string? CodigoBusqueda = null, int IdSubcategoria = 0, string? Subcategoria = null);
 
+    private int _versionProcedimientos;
+    private int _subcategoriaProcedimiento;
+    private IEnumerable<ServicioCatalogoItem> SubcategoriasProcedimientos =>
+        ServiciosCategoria.Where(s => s.IdSubcategoria > 0 && !string.IsNullOrWhiteSpace(s.Subcategoria))
+            .DistinctBy(s => s.IdSubcategoria).OrderBy(s => s.Subcategoria);
+    private List<ServicioCatalogoItem> ServiciosCategoria =>
+        _cacheServiciosPorCategoria.TryGetValue(_categoriaServicio, out var lista) ? lista : [];
+    private IEnumerable<ServicioCatalogoItem> ServiciosEnSubcategoria =>
+        _categoriaServicio == "Procedimientos" && _subcategoriaProcedimiento > 0
+            ? ServiciosCategoria.Where(s => s.IdSubcategoria == _subcategoriaProcedimiento)
+            : ServiciosCategoria;
     private string _categoriaServicio = "Laboratorio";
     private readonly Dictionary<string, List<ServicioCatalogoItem>> _cacheServiciosPorCategoria = new();
     private List<ServicioCatalogoItem> _serviciosFiltrados = new();
@@ -1201,6 +1218,16 @@
         OrdenesLab = [];
         OrdenesImagen = [];
         OrdenesFisio = [];
+        _cacheServiciosPorCategoria.Remove("Procedimientos");
+        _subcategoriaProcedimiento = 0;
+        if (_categoriaServicio == "Procedimientos")
+        {
+            _codigoServicioSeleccionado = string.Empty;
+            _filtroServicio = string.Empty;
+            _observacionServicio = string.Empty;
+            _cantidadServicio = 1;
+            _mostrarSugerenciasServicio = false;
+        }
         if (TabActiva == 3)
             TabActiva = 1;
 
@@ -1919,18 +1946,10 @@
         }
     }
 
-    private async Task GuardarIndicacionesGeneralesTab3Async()
-    {
-        if (!FichaEditable) return;
-        _versionCambios++;
-        if (await GuardarCambiosSoapAsync())
-        {
-            EsError = false;
-            MensajeAlerta = "Indicaciones generales de receta guardadas.";
-        }
-    }
     private async Task OnCategoriaServicioChangedAsync()
     {
+        _subcategoriaProcedimiento = 0;
+        _mensajeServicio = null;
         _codigoServicioSeleccionado = string.Empty;
         _filtroServicio = string.Empty;
         _mostrarSugerenciasServicio = false;
@@ -1939,11 +1958,11 @@
 
     private async Task CargarCatalogoServicioCategoriaAsync(string categoria)
     {
-        if (!_cacheServiciosPorCategoria.TryGetValue(categoria, out var lista))
+        if (!_cacheServiciosPorCategoria.ContainsKey(categoria))
         {
             try
             {
-                lista = categoria switch
+                var lista = categoria switch
                 {
                     "Laboratorio" => (await LabImagenService.ObtenerCatalogoLaboratorioAsync(0))
                         .Select(x => new ServicioCatalogoItem(x.CodigoProd, x.Descripcion, x.PrecioUnitario))
@@ -1954,18 +1973,29 @@
                     "Fisioterapia" => (await AdminClinicaService.ObtenerCatalogoFisioterapiaAsync())
                         .Select(x => new ServicioCatalogoItem(x.IdProducto.ToString(), x.Descripcion, x.Precio))
                         .ToList(),
+                    "Procedimientos" when IdOrden > 0 && Nhcl > 0 =>
+                        (await AdmisionService.ObtenerCatalogoProcedimientosTriajeAsync(IdOrden, Nhcl))
+                        .Select(x => new ServicioCatalogoItem(x.Id.ToString(), x.Descripcion, 0, x.Codigo, x.IdSubgrupo ?? 0, x.Subgrupo))
+                        .ToList(),
                     _ => []
                 };
-                _cacheServiciosPorCategoria[categoria] = lista;
+                if (categoria != "Procedimientos" || lista.Count > 0)
+                    _cacheServiciosPorCategoria[categoria] = lista;
+                else if (_categoriaServicio == categoria)
+                {
+                    _errorServicio = false;
+                    _mensajeServicio = "No hay procedimientos activos para la sede de esta orden.";
+                }
             }
             catch (Exception ex)
             {
                 Logger.LogWarning(ex, "Error al cargar el catálogo de servicios para {Categoria}", categoria);
-                lista = [];
+                _errorServicio = true;
+                _mensajeServicio = $"No se pudo cargar el catálogo de {categoria}.";
             }
         }
 
-        _serviciosFiltrados = lista;
+        FiltrarServiciosCategoria();
     }
 
     private void OnFiltroServicioInputChanged()
@@ -1977,15 +2007,13 @@
 
     private void FiltrarServiciosCategoria()
     {
-        var lista = _cacheServiciosPorCategoria.TryGetValue(_categoriaServicio, out var cache)
-            ? cache
-            : [];
+        var lista = ServiciosEnSubcategoria;
 
         var texto = _filtroServicio?.Trim() ?? string.Empty;
         _serviciosFiltrados = string.IsNullOrWhiteSpace(texto)
-            ? lista
+            ? lista.ToList()
             : lista.Where(s => s.Descripcion.Contains(texto, StringComparison.OrdinalIgnoreCase)
-                            || s.Codigo.Contains(texto, StringComparison.OrdinalIgnoreCase))
+                            || (s.CodigoBusqueda ?? s.Codigo).Contains(texto, StringComparison.OrdinalIgnoreCase))
                    .ToList();
     }
 
@@ -2041,9 +2069,7 @@
                 return;
             }
 
-            var listaActual = _cacheServiciosPorCategoria.TryGetValue(_categoriaServicio, out var cache)
-                ? cache
-                : [];
+            var listaActual = ServiciosEnSubcategoria;
 
             var servicio = !string.IsNullOrWhiteSpace(_codigoServicioSeleccionado)
                 ? listaActual.FirstOrDefault(s => s.Codigo == _codigoServicioSeleccionado)
@@ -2093,6 +2119,15 @@
                     }))
                         throw new InvalidOperationException("El servicio no se guardó.");
                     OrdenesImagen = await LabImagenService.ObtenerOrdenesImagenAsync(ordenTarget, nhclTarget);
+                    break;
+
+                case "Procedimientos":
+                    if (!int.TryParse(servicio.Codigo, out int idProcedimiento) ||
+                        !await AdmisionService.AgregarProcedimientoTriajeAsync(ordenTarget, nhclTarget,
+                            idProcedimiento, (int)Math.Max(1, Math.Round(_cantidadServicio)),
+                            _observacionServicio.Trim(), desdeHistorial: false, desdeSoap: true))
+                        throw new InvalidOperationException("El procedimiento no se guardó.");
+                    _versionProcedimientos++;
                     break;
 
                 case "Fisioterapia":

@@ -89,20 +89,20 @@
         <div class="table-responsive border border-top-0 rounded-bottom">
             <table class="table table-sm align-middle mb-0">
                 <thead>
-                    <tr><th scope="col">Código</th><th scope="col">Procedimiento</th><th scope="col">Subcategoría</th><th scope="col">Cant.</th><th scope="col">Observaciones</th><th scope="col">Precio unit.</th><th scope="col">Estado</th></tr>
+                    <tr><th scope="col">Procedimiento</th><th scope="col">Subcategoría</th><th scope="col">Cant.</th><th scope="col">Observaciones</th><th scope="col">Precio unit.</th><th scope="col">Estado</th></tr>
                 </thead>
                 <tbody>
                     @foreach (var procedimiento in _registrados)
                     {
-                        <tr><td>@procedimiento.Codigo</td><td>@procedimiento.Descripcion</td><td>@procedimiento.Subgrupo</td><td>@procedimiento.Cantidad</td><td>@procedimiento.Observaciones</td><td>@(procedimiento.Precio?.ToString("N2") ?? "—")</td><td>@procedimiento.Estado</td></tr>
+                        <tr><td>@procedimiento.Descripcion</td><td>@procedimiento.Subgrupo</td><td>@procedimiento.Cantidad</td><td>@procedimiento.Observaciones</td><td>@(procedimiento.Precio?.ToString("N2") ?? "—")</td><td>@procedimiento.Estado</td></tr>
                     }
                     @if (_cargando)
                     {
-                        <tr><td colspan="7" class="text-muted" role="status">Cargando procedimientos…</td></tr>
+                        <tr><td colspan="6" class="text-muted" role="status">Cargando procedimientos…</td></tr>
                     }
                     else if (_registrados.Count == 0)
                     {
-                        <tr><td colspan="7" class="text-muted">Aún no hay procedimientos registrados.</td></tr>
+                        <tr><td colspan="6" class="text-muted">Aún no hay procedimientos registrados.</td></tr>
                     }
                 </tbody>
             </table>

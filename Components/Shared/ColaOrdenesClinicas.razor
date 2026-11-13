@@ -5,7 +5,7 @@
 
 <section class="card shadow-sm border-0 mb-3" aria-label="Cola de órdenes del día">
     <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
-        <h5 class="mb-0">@(Triaje ? "Cola de triaje" : "Cola de consulta") <span class="badge text-bg-secondary">@_ordenes.Count</span></h5>
+        <h5 class="mb-0">@(UnificarConTriaje ? "Cola de órdenes del día" : Triaje ? "Cola de triaje" : "Cola de consulta") <span class="badge text-bg-secondary">@_ordenes.Count</span></h5>
         <button type="button" class="btn btn-sm btn-outline-primary" @onclick="CambiarSonidoAsync" aria-pressed="@(_sonidoActivo ? "true" : "false")">
             @(_sonidoActivo ? "Silenciar avisos" : "Activar avisos sonoros")
         </button>
@@ -23,7 +23,7 @@
         <div class="table-responsive">
             <table class="table table-sm table-hover align-middle mb-0">
                 <thead>
-                    <tr><th scope="col">Hora de asignación</th><th scope="col">Orden</th><th scope="col">Paciente</th>@if (Triaje) { <th scope="col">Especie</th><th scope="col">Especialidad</th> }<th scope="col">Asignado a</th><th scope="col">Estado</th><th scope="col">Acción</th></tr>
+                    <tr><th scope="col">Hora de asignación</th><th scope="col">Orden</th><th scope="col">Paciente</th>@if (Triaje) { <th scope="col">Especie</th><th scope="col">Especialidad</th> }<th scope="col">Asignado a</th>@if (UnificarConTriaje) { <th scope="col">Etapa</th> }<th scope="col">Estado</th><th scope="col">Acción</th></tr>
                 </thead>
                 <tbody>
                     @foreach (var orden in _ordenes)
@@ -34,9 +34,10 @@
                             <td>@orden.Mascota <small class="text-muted">NHCL #@orden.Nhcl</small></td>
                             @if (Triaje) { <td>@orden.Especie</td><td>@orden.Especialidad</td> }
                             <td>@(Triaje && !orden.TriajeMedico ? (string.IsNullOrWhiteSpace(orden.Enfermero) ? "Disponible" : orden.Enfermero) : orden.Medico)</td>
+                            @if (UnificarConTriaje) { <td>@(EsTriaje(orden) ? "Triaje" : "Consulta")</td> }
                             <td>@(orden.Estado.Trim() == "E" ? "En atención" : "En espera")</td>
                             <td>
-                                <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(Triaje && orden.Estado.Trim() == "A" ? "Iniciar triaje" : "Abrir") <span class="visually-hidden">orden #@orden.IdOrden</span></a>
+                                <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(EsTriaje(orden) && orden.Estado.Trim() == "A" ? "Iniciar triaje" : "Abrir") <span class="visually-hidden">orden #@orden.IdOrden</span></a>
                             </td>
                         </tr>
                     }
@@ -49,11 +50,14 @@
 @code {
     [Parameter] public bool Triaje { get; set; }
     [Parameter] public bool AbrirEnSoap { get; set; }
+    [Parameter] public bool UnificarConTriaje { get; set; }
     [Parameter] public int OrdenSeleccionada { get; set; }
 
     private readonly CancellationTokenSource _cancelacion = new();
     private readonly HashSet<(int Id, DateTime Asignacion)> _vistas = [];
     private List<OrdenAtencionResumenDto> _ordenes = [];
+    private HashSet<int> _ordenesTriaje = [];
+    private bool EsTriaje(OrdenAtencionResumenDto orden) => Triaje || _ordenesTriaje.Contains(orden.IdOrden);
     private DateTime _dia;
     private bool _cargada;
     private bool _sonidoActivo;
@@ -143,6 +147,14 @@
         {
             var dia = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Date;
             var ordenes = await AdmisionService.ObtenerColaClinicaAsync(Triaje);
+            if (UnificarConTriaje)
+            {
+                var triajes = await AdmisionService.ObtenerColaClinicaAsync(true);
+                var idsConsulta = ordenes.Select(o => o.IdOrden).ToHashSet();
+                _ordenesTriaje = triajes.Where(o => !idsConsulta.Contains(o.IdOrden)).Select(o => o.IdOrden).ToHashSet();
+                ordenes = ordenes.Concat(triajes.Where(o => _ordenesTriaje.Contains(o.IdOrden)))
+                    .OrderBy(o => o.FechaAsignacion).ThenBy(o => o.IdOrden).ToList();
+            }
             token.ThrowIfCancellationRequested();
             if (dia != _dia)
             {
