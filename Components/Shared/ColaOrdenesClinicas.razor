@@ -62,32 +62,63 @@
     private string RutaOrden(OrdenAtencionResumenDto orden) =>
         $"{(Triaje && !AbrirEnSoap ? "/admision/triaje" : "/consulta/fichamedica")}/{orden.IdOrden}/{orden.Nhcl}";
 
-    public Task RefrescarAsync() =>
-        _cancelacion.IsCancellationRequested ? Task.CompletedTask : ActualizarAsync(_cancelacion.Token);
+    private bool _disposed;
+
+    public Task RefrescarAsync()
+    {
+        if (_disposed) return Task.CompletedTask;
+        try
+        {
+            var token = _cancelacion.Token;
+            return token.IsCancellationRequested ? Task.CompletedTask : ActualizarAsync(token);
+        }
+        catch (ObjectDisposedException)
+        {
+            return Task.CompletedTask;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
+        if (_disposed) return;
         await ActualizarAsync(_cancelacion.Token, permitirSonido: false);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!firstRender || _disposed) return;
+
+        CancellationToken token;
+        try
         {
-            try
+            token = _cancelacion.Token;
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        if (token.IsCancellationRequested) return;
+
+        try
+        {
+            _sonidoActivo = await JS.InvokeAsync<bool>("hosvetColaClinica.obtenerPreferencia");
+            if (_disposed || token.IsCancellationRequested) return;
+            if (_sonidoActivo)
             {
-                _sonidoActivo = await JS.InvokeAsync<bool>("hosvetColaClinica.obtenerPreferencia");
-                if (_sonidoActivo)
-                {
-                    await JS.InvokeVoidAsync("hosvetColaClinica.prepararAutoActivacion");
-                    StateHasChanged();
-                }
+                await JS.InvokeVoidAsync("hosvetColaClinica.prepararAutoActivacion");
+                if (_disposed || token.IsCancellationRequested) return;
+                StateHasChanged();
             }
-            catch (JSException ex)
-            {
-                Logger.LogDebug(ex, "No se pudo restaurar la preferencia de sonido de la cola clínica.");
-            }
-            _ = ActualizarPeriodicamenteAsync(_cancelacion.Token);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or ObjectDisposedException or TaskCanceledException)
+        {
+            Logger.LogDebug(ex, "No se pudo restaurar la preferencia de sonido de la cola clínica.");
+        }
+
+        if (!_disposed && !token.IsCancellationRequested)
+        {
+            _ = ActualizarPeriodicamenteAsync(token);
         }
     }
 
@@ -189,7 +220,13 @@
 
     public void Dispose()
     {
-        _cancelacion.Cancel();
+        if (_disposed) return;
+        _disposed = true;
+        try
+        {
+            _cancelacion.Cancel();
+        }
+        catch (ObjectDisposedException) { }
         _cancelacion.Dispose();
     }
 }
