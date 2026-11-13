@@ -2245,7 +2245,39 @@
     private async Task ExportarPdfAsync()
     {
         if (!ValidarPacienteParaPdf(out var pac)) return;
-        var pdfBytes = ReportService.GenerarFichaMedicaPdf(pac, Ficha, Diagnosticos, RecetaItems);
-        await DescargarPdfDocumentoAsync(pdfBytes, $"HistoriaClinica_Orden_{Ficha.MedOrden}.pdf");
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
+
+        List<ProcedimientoTriajeDto> procedimientos = [];
+        try
+        {
+            if (ordenTarget > 0 && nhclTarget > 0)
+            {
+                procedimientos = await AdmisionService.ObtenerProcedimientosTriajeAsync(ordenTarget, nhclTarget);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se pudieron cargar los procedimientos de triaje para el PDF de la orden {Orden}.", ordenTarget);
+        }
+
+        var sucursal = Session.LocalidadDescripcion?
+            .Replace(" USFQ", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("USFQ", "", StringComparison.OrdinalIgnoreCase)
+            .Trim();
+
+        var extras = new FichaMedicaPdfExtras
+        {
+            Sucursal = sucursal,
+            Antecedentes = Antecedentes,
+            Vacunas = Vacunas,
+            OrdenesLab = OrdenesLab,
+            OrdenesImagen = OrdenesImagen,
+            OrdenesFisio = OrdenesFisio,
+            ProcedimientosTriaje = procedimientos
+        };
+
+        var pdfBytes = ReportService.GenerarFichaMedicaPdf(pac, Ficha, Diagnosticos, RecetaItems, extras);
+        await DescargarPdfDocumentoAsync(pdfBytes, $"HistoriaClinica_Orden_{ordenTarget}.pdf");
     }
 }
