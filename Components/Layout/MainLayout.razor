@@ -1,6 +1,8 @@
 @inherits LayoutComponentBase
+@implements IAsyncDisposable
 @inject SessionStateService Session
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <div class="page">
     <aside class="sidebar">
@@ -24,9 +26,39 @@
 <div id="blazor-error-ui" data-nosnippet>Ha ocurrido un error inesperado. <a href="." class="reload">Recargar</a><span class="dismiss">🗙</span></div>
 
 @code {
+    private DotNetObjectReference<MainLayout>? _dotNetRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Session.IsAuthenticated)
+        {
+            try
+            {
+                _dotNetRef = DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("hosvetSessionWatcher.iniciar", _dotNetRef);
+            }
+            catch (JSException) { }
+        }
+    }
+
+    [JSInvokable]
+    public void OnBrowserSessionCleared()
+    {
+        if (!Session.IsAuthenticated) return;
+        Session.ClearFromBrowserWipe();
+        Nav.NavigateTo("/login", forceLoad: false);
+    }
+
     private async Task CerrarSesion()
     {
+        try { await JS.InvokeVoidAsync("hosvetSessionWatcher.detener"); } catch { }
         await Session.LogoutAsync();
         Nav.NavigateTo("/login");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("hosvetSessionWatcher.detener"); } catch { }
+        _dotNetRef?.Dispose();
     }
 }

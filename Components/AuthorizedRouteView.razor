@@ -3,6 +3,7 @@
 @inject IAuthService AuthService
 @inject NavigationManager Navigation
 @inject ILogger<AuthorizedRouteView> Logger
+@inject IJSRuntime JS
 
 @if (_verificacionInicial)
 {
@@ -63,6 +64,18 @@ else
         var esPublica = EsPaginaPublica(destino.PageType);
         var ruta = RutaDePermiso();
         var autenticado = esPublica || (await Session.RestoreAsync() && await Session.ValidateAndTouchAsync());
+        if (!esPublica && autenticado && _navegadorDisponible)
+        {
+            try
+            {
+                if (!await JS.InvokeAsync<bool>("hosvetSessionWatcher.existe"))
+                {
+                    Session.ClearFromBrowserWipe();
+                    autenticado = false;
+                }
+            }
+            catch (JSException) { }
+        }
 
         if (revision != _revision) return;
 

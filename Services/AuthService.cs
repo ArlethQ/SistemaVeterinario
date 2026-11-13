@@ -9,11 +9,14 @@ public class SessionStateService
     private const string StorageKey = "hosvet.session";
     private static readonly TimeSpan SessionTimeout = TimeSpan.FromMinutes(30);
     private readonly ProtectedLocalStorage _storage;
+    private readonly SessionControlService _control;
     private DateTimeOffset? _lastActivityUtc;
+    private DateTimeOffset _sessionIssuedUtc;
 
-    public SessionStateService(ProtectedLocalStorage storage)
+    public SessionStateService(ProtectedLocalStorage storage, SessionControlService control)
     {
         _storage = storage;
+        _control = control;
     }
 
     public int IdUser { get; private set; }
@@ -25,7 +28,11 @@ public class SessionStateService
     public string LoginUser { get; private set; } = string.Empty;
     public string NombreUsuario { get; private set; } = string.Empty;
     public string Iniciales { get; private set; } = string.Empty;
-    public bool IsAuthenticated => IdUser > 0 && _lastActivityUtc.HasValue && DateTimeOffset.UtcNow - _lastActivityUtc.Value < SessionTimeout;
+    public bool IsAuthenticated =>
+        IdUser > 0 &&
+        _lastActivityUtc.HasValue &&
+        DateTimeOffset.UtcNow - _lastActivityUtc.Value < SessionTimeout &&
+        !_control.IsUserRevoked(IdUser, _sessionIssuedUtc);
     public bool PuedeVerTodasLasSucursales => TipoUser is 1 or 4 or 12 || (!string.IsNullOrWhiteSpace(LoginUser) && LoginUser.Equals("admin", StringComparison.OrdinalIgnoreCase));
     public int? OrdenActiva { get; private set; }
     public int? NhclActivo { get; private set; }
@@ -75,6 +82,7 @@ public class SessionStateService
         LocalidadDescripcion = localidadDesc;
         Apostrofe = localidad == 2 ? "EQ" : "HV";
         _lastActivityUtc = DateTimeOffset.UtcNow;
+        _sessionIssuedUtc = _lastActivityUtc.Value;
         _permisosCache = null;
         await SaveAsync();
         NotifyStateChanged();
@@ -104,6 +112,13 @@ public class SessionStateService
             NombreUsuario = saved.NombreUsuario;
             Iniciales = saved.Iniciales;
             _lastActivityUtc = saved.ExpiresUtc - SessionTimeout;
+            _sessionIssuedUtc = saved.IssuedUtc ?? _lastActivityUtc.Value;
+            if (_control.IsUserRevoked(IdUser, _sessionIssuedUtc))
+            {
+                ClearSession();
+                await _storage.DeleteAsync(StorageKey);
+                return false;
+            }
             NotifyStateChanged();
             return true;
         }
@@ -115,21 +130,34 @@ public class SessionStateService
     }
 
     private DateTimeOffset? _lastPersistedUtc;
-    private (int UserId, PermisosNavegacion Permisos, DateTimeOffset ExpiraUtc)? _permisosCache;
+    private (int UserId, PermisosNavegacion Permisos, DateTimeOffset ExpiraUtc, long Version)? _permisosCache;
 
     internal PermisosNavegacion? ObtenerPermisosCache(int userId) =>
-        _permisosCache is { } c && c.UserId == userId && DateTimeOffset.UtcNow < c.ExpiraUtc
+        _permisosCache is { } c &&
+        c.UserId == userId &&
+        c.Version == _control.PermisosVersion &&
+        DateTimeOffset.UtcNow < c.ExpiraUtc
             ? c.Permisos
             : null;
 
     internal void GuardarPermisosCache(int userId, PermisosNavegacion permisos) =>
-        _permisosCache = (userId, permisos, DateTimeOffset.UtcNow.AddSeconds(20));
+        _permisosCache = (userId, permisos, DateTimeOffset.UtcNow.AddSeconds(20), _control.PermisosVersion);
+
+    internal void InvalidatePermissions() => _control.InvalidatePermissions();
+    internal void RevokeUser(int idUser) => _control.RevokeUser(idUser);
+
+    public void ClearFromBrowserWipe()
+    {
+        if (IdUser <= 0) return;
+        ClearSession();
+        NotifyStateChanged();
+    }
 
     public async Task<bool> ValidateAndTouchAsync()
     {
         if (!IsAuthenticated)
         {
-            ClearSession();
+            await LogoutAsync();
             return false;
         }
 
@@ -154,7 +182,7 @@ public class SessionStateService
         _lastPersistedUtc = DateTimeOffset.UtcNow;
         await _storage.SetAsync(StorageKey, new PersistedSession(
             IdUser, TipoUser, EspUser, Localidad, LocalidadDescripcion, Apostrofe,
-            LoginUser, NombreUsuario, Iniciales, DateTimeOffset.UtcNow.Add(SessionTimeout)));
+            LoginUser, NombreUsuario, Iniciales, DateTimeOffset.UtcNow.Add(SessionTimeout), _sessionIssuedUtc));
     }
 
     private void ClearSession()
@@ -172,6 +200,7 @@ public class SessionStateService
         PacienteActivo = null;
         _lastActivityUtc = null;
         _lastPersistedUtc = null;
+        _sessionIssuedUtc = default;
         _permisosCache = null;
     }
 
@@ -180,7 +209,7 @@ public class SessionStateService
     public sealed record PersistedSession(
         int IdUser, int TipoUser, int EspUser, int Localidad, string LocalidadDescripcion,
         string Apostrofe, string LoginUser, string NombreUsuario, string Iniciales,
-        DateTimeOffset ExpiresUtc);
+        DateTimeOffset ExpiresUtc, DateTimeOffset? IssuedUtc = null);
 }
 
 public interface IAuthService
@@ -297,6 +326,14 @@ public class AuthService : IAuthService
                 $"Acceso rechazado a localidad {localidad}: {user.UserNombre}",
                 user.UserNumero);
             return (false, "El usuario no tiene acceso a la veterinaria o sucursal seleccionada.", null, false);
+        }
+
+        if (await _session.RestoreAsync() && _session.IsAuthenticated && _session.IdUser != user.UserNumero)
+        {
+            await _sql.RegistrarBitacoraAsync(
+                $"Inicio de sesión bloqueado en mismo navegador (sesión activa: {_session.NombreUsuario}): {user.UserNombre}",
+                user.UserNumero);
+            return (false, $"Ya existe una sesión activa en este navegador ({_session.NombreUsuario}). Cierra esa sesión antes de iniciar con otra cuenta.", null, false);
         }
 
         LoginAttempts.TryRemove(loginKey, out _);
@@ -750,6 +787,7 @@ public class AuthService : IAuthService
             var nuevoId = await _sql.ExecuteScalarAsync<int>(sql, new { rol.Id, Descripcion = rol.Descripcion.Trim(), MenuIds = ids });
             if (nuevoId <= 0) return false;
             rol.Id = nuevoId;
+            _session.InvalidatePermissions();
             await _sql.RegistrarBitacoraAsync($"{(esEdicion ? "Actualiza" : "Crea")} rol y permisos predeterminados: {rol.Descripcion.Trim()} ({ids.Length} módulos)", adminId);
             return true;
         }
@@ -835,6 +873,11 @@ public class AuthService : IAuthService
         }
 
         int rol = await ObtenerRolActivoAsync(usuario);
+        if (rol <= 0)
+        {
+            await _session.LogoutAsync();
+            return new(0, []);
+        }
         var menus = rol > 1 ? await ObtenerMenuUsuarioAsync(usuario, rol) : [];
         bool esEnfermeria = rol > 0 && await _sql.ExecuteScalarAsync<int>(@"
             SELECT COUNT(*) FROM vt_tipos_usuarios
@@ -1025,6 +1068,7 @@ public class AuthService : IAuthService
             var result = await _sql.ExecuteAsync(sql, new { IdUser = idUser, TipoUser = tipoUser, MenuIds = ids });
             if (result < 0) return (false, "No se pudieron guardar los cambios en la base de datos.");
 
+            _session.InvalidatePermissions();
             await _sql.RegistrarBitacoraAsync($"Actualiza rol ({tipoUser}) y accesos del usuario {idUser}", adminId);
             return (true, "Rol y permisos actualizados correctamente.");
         }
@@ -1302,6 +1346,7 @@ public class AuthService : IAuthService
         if (!activo && !await PuedeReducirAdministradoresAsync(idUser)) return (false, "No se puede desactivar al último administrador activo.");
         var result = await _sql.ExecuteAsync("UPDATE vt_usuarios SET user_estado=@Estado WHERE user_numero=@IdUser", new { Estado=activo?"A":"I", IdUser=idUser });
         if (result < 0) return (false, "No se pudo actualizar el estado.");
+        if (!activo) _session.RevokeUser(idUser);
         await _sql.RegistrarBitacoraAsync($"{(activo ? "Activa" : "Desactiva")} usuario {idUser}", adminId);
         return (true, activo ? "Usuario activado." : "Usuario desactivado.");
     }
@@ -1318,6 +1363,7 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(nuevaClave) || nuevaClave.Length < 8) return (false, "La contraseña debe tener al menos 8 caracteres.");
         var result = await _sql.ExecuteAsync("UPDATE vt_usuarios SET user_clave=@Clave,user_fechacambio=GETDATE() WHERE user_numero=@IdUser", new { Clave=_sql.HashPasswordSha1(nuevaClave), IdUser=idUser });
         if (result < 0) return (false, "No se pudo restablecer la contraseña.");
+        _session.RevokeUser(idUser);
         await _sql.RegistrarBitacoraAsync($"Restablece contraseña del usuario {idUser}", adminId);
         return (true, "Contraseña restablecida correctamente.");
     }

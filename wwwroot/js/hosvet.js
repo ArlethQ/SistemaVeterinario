@@ -804,3 +804,37 @@ window.hosvetColaClinica = (() => {
         }
     };
 })();
+
+window.hosvetSessionWatcher = (() => {
+    const STORAGE_KEY = 'hosvet.session';
+    let ref = null;
+    let handlersAttached = false;
+
+    function verificar() {
+        if (!ref) return;
+        if (localStorage.getItem(STORAGE_KEY) === null) {
+            ref.invokeMethodAsync('OnBrowserSessionCleared').catch(() => {});
+        }
+    }
+
+    return {
+        iniciar(dotNetRef) {
+            ref = dotNetRef;
+            if (handlersAttached) return;
+            handlersAttached = true;
+            window.addEventListener('storage', (e) => {
+                if (e.key === null || e.key === STORAGE_KEY) verificar();
+            });
+            window.addEventListener('focus', verificar);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') verificar();
+            });
+        },
+        existe() {
+            return localStorage.getItem(STORAGE_KEY) !== null;
+        },
+        detener() {
+            ref = null;
+        }
+    };
+})();

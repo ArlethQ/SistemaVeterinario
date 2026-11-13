@@ -61,6 +61,7 @@ builder.Services.AddControllers()
 
 // Servicios de datos, negocio, inventario y reportería PDF/Excel
 builder.Services.AddScoped<ISqlDataService, SqlDataService>();
+builder.Services.AddSingleton<SessionControlService>();
 builder.Services.AddScoped<SessionStateService>();
 builder.Services.AddScoped<VeterinariaAuthenticationStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(sp =>
