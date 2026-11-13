@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Data;
@@ -8,6 +9,7 @@ using System.Text.RegularExpressions;
 namespace Simetric.Controllers
 {
     [ApiController]
+[Authorize]
     [Route("api/emisores")]
     public class EmisoresController : ControllerBase
     {
@@ -99,7 +101,7 @@ namespace Simetric.Controllers
                 ? "VIGENTE"
                 : string.Equals(resultado.EstadoVigencia, "CADUCADA", StringComparison.OrdinalIgnoreCase) ||
                   resultado.Message.Contains("caducada", StringComparison.OrdinalIgnoreCase) ||
-                  resultado.Message.Contains("caducó", StringComparison.OrdinalIgnoreCase)
+                  resultado.Message.Contains("caducÃ³", StringComparison.OrdinalIgnoreCase)
                     ? "CADUCADA"
                     : string.Equals(resultado.EstadoVigencia, "NO_VIGENTE", StringComparison.OrdinalIgnoreCase) ||
                       string.Equals(resultado.EstadoVigencia, "AUN_NO_VIGENTE", StringComparison.OrdinalIgnoreCase)
@@ -133,7 +135,7 @@ namespace Simetric.Controllers
         {
             var rucNormalizado = new string((ruc ?? string.Empty).Where(char.IsDigit).ToArray());
             if (rucNormalizado.Length != 13)
-                return BadRequest("El RUC debe tener exactamente 13 dígitos.");
+                return BadRequest("El RUC debe tener exactamente 13 dÃ­gitos.");
 
             var resultado = await _cedulaLookupService.ConsultarAsync(
                 rucNormalizado,
@@ -145,7 +147,7 @@ namespace Simetric.Controllers
                 {
                     found = false,
                     mensaje = string.IsNullOrWhiteSpace(resultado.Mensaje)
-                        ? "El SRI no devolvió información para este RUC."
+                        ? "El SRI no devolviÃ³ informaciÃ³n para este RUC."
                         : resultado.Mensaje
                 });
             }
@@ -294,7 +296,7 @@ namespace Simetric.Controllers
         public async Task<IActionResult> Create([FromBody] Emisor model, [FromQuery] bool paraFacturacion = true)
         {
             if (model == null)
-                return BadRequest("Datos inválidos.");
+                return BadRequest("Datos invÃ¡lidos.");
 
             if (model.IdUsuario == null || model.IdUsuario <= 0)
                 return BadRequest("El usuario del emisor es obligatorio.");
@@ -350,7 +352,7 @@ namespace Simetric.Controllers
         public async Task<IActionResult> Update(int id, [FromBody] Emisor model, [FromQuery] bool paraFacturacion = true)
         {
             if (model == null)
-                return BadRequest("Datos inválidos.");
+                return BadRequest("Datos invÃ¡lidos.");
 
             if (model.IdUsuario == null || model.IdUsuario <= 0)
                 return BadRequest("El usuario del emisor es obligatorio.");
@@ -581,38 +583,38 @@ namespace Simetric.Controllers
         private static string? ValidarEmisor(Emisor e)
         {
             if (string.IsNullOrWhiteSpace(e.RazonSocial))
-                return "La razón social es obligatoria.";
+                return "La razÃ³n social es obligatoria.";
 
             if (string.IsNullOrWhiteSpace(e.NomComercial))
                 return "El nombre comercial es obligatorio.";
 
             if (!string.IsNullOrWhiteSpace(e.RazonSocial) && e.RazonSocial.Length > 70)
-                return "La razón social no puede exceder 70 caracteres.";
+                return "La razÃ³n social no puede exceder 70 caracteres.";
 
             if (string.IsNullOrWhiteSpace(e.Ruc))
                 return "El RUC es obligatorio.";
 
             if (!e.Ruc.All(char.IsDigit) || e.Ruc.Length != 13)
-                return "El RUC debe tener exactamente 13 dígitos.";
+                return "El RUC debe tener exactamente 13 dÃ­gitos.";
 
             if (!string.IsNullOrWhiteSpace(e.NomComercial) && e.NomComercial.Length > 100)
                 return "El nombre comercial no puede exceder 100 caracteres.";
             if (!string.IsNullOrWhiteSpace(e.Email) && !e.Email.Contains("@"))
-                return "El formato del correo electrónico no es válido.";
+                return "El formato del correo electrÃ³nico no es vÃ¡lido.";
 
             if (e.Email?.Length > 50)
                 return "El email no puede exceder 50 caracteres.";
             if (string.IsNullOrWhiteSpace(e.DirEstablecimiento))
-                return "La dirección del establecimiento es obligatoria.";
+                return "La direcciÃ³n del establecimiento es obligatoria.";
 
             if (e.DirEstablecimiento.Length > 250)
-                return "La dirección del establecimiento no puede exceder 250 caracteres.";
+                return "La direcciÃ³n del establecimiento no puede exceder 250 caracteres.";
 
             if (string.IsNullOrWhiteSpace(e.DireccionMatriz))
-                return "La dirección matriz es obligatoria.";
+                return "La direcciÃ³n matriz es obligatoria.";
 
             if (e.DireccionMatriz.Length > 255)
-                return "La dirección matriz no puede exceder 255 caracteres.";
+                return "La direcciÃ³n matriz no puede exceder 255 caracteres.";
 
             if (!string.IsNullOrWhiteSpace(e.ClaveInterna) && e.ClaveInterna.Length > 25)
                 return "La clave interna no puede exceder 25 caracteres.";
@@ -625,7 +627,7 @@ namespace Simetric.Controllers
 
             if (!string.IsNullOrWhiteSpace(e.PathCertificado) &&
                 !string.Equals(Path.GetExtension(e.PathCertificado), ".p12", StringComparison.OrdinalIgnoreCase))
-                return "El archivo de firma debe ser un certificado .p12 válido.";
+                return "El archivo de firma debe ser un certificado .p12 vÃ¡lido.";
 
             if (!string.IsNullOrWhiteSpace(e.PathCertificado) && e.PathCertificado.Length > 150)
                 return "La ruta del certificado no puede exceder 150 caracteres.";
@@ -638,19 +640,19 @@ namespace Simetric.Controllers
                 if (!e.LogoImagen.StartsWith("data:image/jpeg;base64,", StringComparison.OrdinalIgnoreCase) &&
                     !e.LogoImagen.StartsWith("data:image/png;base64,", StringComparison.OrdinalIgnoreCase))
                 {
-                    return "El logo debe ser una imagen JPG, JPEG o PNG válida en base64.";
+                    return "El logo debe ser una imagen JPG, JPEG o PNG vÃ¡lida en base64.";
                 }
 
                 var comaIndex = e.LogoImagen.IndexOf(',');
                 if (comaIndex < 0)
-                    return "El formato del logo no es válido.";
+                    return "El formato del logo no es vÃ¡lido.";
 
                 var base64 = e.LogoImagen[(comaIndex + 1)..];
                 if (string.IsNullOrWhiteSpace(base64))
-                    return "El logo no contiene información válida.";
+                    return "El logo no contiene informaciÃ³n vÃ¡lida.";
 
                 if (base64.Length > 2_800_000)
-                    return "El logo excede el tamaño máximo permitido de 2 MB.";
+                    return "El logo excede el tamaÃ±o mÃ¡ximo permitido de 2 MB.";
             }
 
             e.CodEstablecimiento = NormalizarSerie(e.CodEstablecimiento, "001");
@@ -687,7 +689,7 @@ namespace Simetric.Controllers
             e.Telefono = e.Telefono?.Trim();
             e.TiempoEspera = e.TiempoEspera?.Trim();
             
-            e.Email = e.Email?.Trim(); // <--- Añadir esta línea
+            e.Email = e.Email?.Trim(); // <--- AÃ±adir esta lÃ­nea
         }
 
         private static void OcultarClaveProtegida(Emisor e)

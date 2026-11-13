@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Components.Helpers;
@@ -7,6 +8,7 @@ using Simetric.ViewModels;
 namespace Simetric.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/perfil")]
 public class PerfilController : ControllerBase
 {
@@ -32,7 +34,7 @@ public class PerfilController : ControllerBase
         var tiposCliente = await _context.Tipoclientes
             .AsNoTracking()
             .OrderBy(t => t.TclCodigo)
-            .Select(t => new { tclCodigo = t.TclCodigo, descripcion = t.TclCodigo == 1 ? "Persona Natural" : t.TclCodigo == 2 ? "Persona Jurídica" : t.TclDescripcion })
+            .Select(t => new { tclCodigo = t.TclCodigo, descripcion = t.TclCodigo == 1 ? "Persona Natural" : t.TclCodigo == 2 ? "Persona JurÃ­dica" : t.TclDescripcion })
             .ToListAsync();
 
         var tiposIdentificacion = await _context.TipoIdentificacion
@@ -67,7 +69,7 @@ public class PerfilController : ControllerBase
     public async Task<IActionResult> Update(int id, [FromQuery] int? idUsuario, [FromBody] PerfilUpdateDto model)
     {
         if (idUsuario is null or <= 0 || id != idUsuario.Value)
-            return BadRequest("Id de usuario inválido.");
+            return BadRequest("Id de usuario invÃ¡lido.");
 
         var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.IdUsuario == idUsuario.Value);
         if (usuario is null)
@@ -119,7 +121,7 @@ public class PerfilController : ControllerBase
     public async Task<IActionResult> UploadAvatar(int id, [FromQuery] int? idUsuario, IFormFile? file)
     {
         if (idUsuario is null or <= 0 || id != idUsuario.Value)
-            return BadRequest("Id de usuario inválido.");
+            return BadRequest("Id de usuario invÃ¡lido.");
 
         if (file is null || file.Length == 0)
             return BadRequest("Archivo requerido.");

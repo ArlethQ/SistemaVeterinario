@@ -211,13 +211,27 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+// Bloquea el acceso directo por ruta estática a fotografías clínicas.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/PacientesFotos", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+    await next();
+});
+
 // Sirve archivos generados en tiempo de ejecución, como fotografías de pacientes.
 app.UseStaticFiles();
 app.MapStaticAssets();
 
-// Fotografías cargadas después de publicar/compilar, resueltas por NHCL.
-app.MapGet("/pacientes-fotos/{nhcl:int}", (int nhcl, IWebHostEnvironment env) =>
+// Fotografías cargadas después de publicar/compilar, resueltas por NHCL (solo con token firmado).
+app.MapGet("/pacientes-fotos/{nhcl:int}", (int nhcl, long? t, string? s, IWebHostEnvironment env, SessionControlService sessionControl) =>
 {
+    if (!t.HasValue || !sessionControl.ValidarFotoToken(nhcl, t.Value, s))
+        return Results.Unauthorized();
+
     string directorio = Path.Combine(env.WebRootPath, "PacientesFotos");
     if (!Directory.Exists(directorio)) return Results.NotFound();
     string? archivo = Directory.EnumerateFiles(directorio, $"{nhcl}.*").FirstOrDefault();

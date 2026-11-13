@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Data;
@@ -7,6 +8,7 @@ using Simetric.Services;
 namespace Simetric.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/categorias")]
 public class CategoriasController : ControllerBase
 {
@@ -27,7 +29,7 @@ public class CategoriasController : ControllerBase
     public async Task<ActionResult> GetAll([FromQuery] int userId, [FromQuery] bool incluirInactivos = false, [FromQuery] bool backOffice = false)
     {
         var ownerId = await GetOwnerIdAsync(userId, backOffice);
-        if (ownerId is null) return Unauthorized("Sesión no válida.");
+        if (ownerId is null) return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         var query = _db.Productotipos.AsNoTracking().Where(x => x.Idusuario == ownerId.Value);
         if (!incluirInactivos)
@@ -45,7 +47,7 @@ public class CategoriasController : ControllerBase
     public async Task<ActionResult> Create([FromQuery] int userId, [FromBody] CategoriaUpsertDto model, [FromQuery] bool backOffice = false)
     {
         var ownerId = await GetOwnerIdAsync(userId, backOffice);
-        if (ownerId is null) return Unauthorized("Sesión no válida.");
+        if (ownerId is null) return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         var descripcion = (model.Descripcion ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(descripcion)) return BadRequest("La descripcion de la categoria es obligatoria.");
@@ -71,7 +73,7 @@ public class CategoriasController : ControllerBase
     public async Task<ActionResult> Update(int idCategoria, [FromQuery] int userId, [FromBody] CategoriaUpsertDto model, [FromQuery] bool backOffice = false)
     {
         var ownerId = await GetOwnerIdAsync(userId, backOffice);
-        if (ownerId is null) return Unauthorized("Sesión no válida.");
+        if (ownerId is null) return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         var descripcion = (model.Descripcion ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(descripcion)) return BadRequest("La descripcion de la categoria es obligatoria.");
@@ -92,7 +94,7 @@ public class CategoriasController : ControllerBase
     public async Task<ActionResult> Desactivar(int idCategoria, [FromQuery] int userId, [FromQuery] bool backOffice = false)
     {
         var ownerId = await GetOwnerIdAsync(userId, backOffice);
-        if (ownerId is null) return Unauthorized("Sesión no válida.");
+        if (ownerId is null) return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         var entity = await _db.Productotipos.FirstOrDefaultAsync(x => x.Idtipoproducto == idCategoria && x.Idusuario == ownerId.Value);
         if (entity is null) return NotFound("La categoria no existe o no tiene permisos.");
@@ -104,6 +106,7 @@ public class CategoriasController : ControllerBase
 }
 
 [ApiController]
+[Authorize]
 [Route("api/subcategorias")]
 public class SubcategoriasController : ControllerBase
 {
@@ -125,7 +128,7 @@ public class SubcategoriasController : ControllerBase
     public async Task<ActionResult> GetAll([FromQuery] int userId, [FromQuery] bool incluirInactivos = false, [FromQuery] int? categoriaId = null, [FromQuery] bool backOffice = false)
     {
         var ownerId = await GetOwnerIdAsync(userId, backOffice);
-        if (ownerId is null) return Unauthorized("Sesión no válida.");
+        if (ownerId is null) return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         var query = _db.Productosubtipos.AsNoTracking().Where(x => x.Idusuario == ownerId.Value);
         if (!incluirInactivos)
@@ -160,7 +163,7 @@ public class SubcategoriasController : ControllerBase
     public async Task<ActionResult> Desactivar(int idSubcategoria, [FromQuery] int userId, [FromQuery] bool backOffice = false)
     {
         var ownerId = await GetOwnerIdAsync(userId, backOffice);
-        if (ownerId is null) return Unauthorized("Sesión no válida.");
+        if (ownerId is null) return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         var entity = await _db.Productosubtipos.FirstOrDefaultAsync(x => x.Idsubtipo == idSubcategoria && x.Idusuario == ownerId.Value);
         if (entity is null) return NotFound("La subcategoria no existe o no tiene permisos.");
@@ -173,14 +176,14 @@ public class SubcategoriasController : ControllerBase
     private async Task<ActionResult> Save(int? idSubcategoria, int userId, SubcategoriaUpsertDto model, bool backOffice)
     {
         var ownerId = await GetOwnerIdAsync(userId, backOffice);
-        if (ownerId is null) return Unauthorized("Sesión no válida.");
+        if (ownerId is null) return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         var descripcion = (model.Descripcion ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(descripcion)) return BadRequest("La descripcion de la subcategoria es obligatoria.");
         if (!model.IdCategoria.HasValue || model.IdCategoria <= 0) return BadRequest("Debe seleccionar una categoria.");
 
         var categoriaValida = await _db.Productotipos.AnyAsync(x => x.Idtipoproducto == model.IdCategoria.Value && x.Idusuario == ownerId.Value && x.Estado == true);
-        if (!categoriaValida) return BadRequest("La categoria seleccionada no pertenece a su grupo o está inactiva.");
+        if (!categoriaValida) return BadRequest("La categoria seleccionada no pertenece a su grupo o estÃ¡ inactiva.");
 
         var duplicada = await _db.Productosubtipos.AnyAsync(x => x.Idusuario == ownerId.Value && x.Idsubtipo != (idSubcategoria ?? 0) && x.Idtipoproducto == model.IdCategoria.Value && x.Descripcion != null && x.Descripcion.Trim().ToUpper() == descripcion.ToUpper());
         if (duplicada) return BadRequest("Ya existe una subcategoria con esa descripcion para la categoria seleccionada.");

@@ -688,9 +688,9 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
             FROM VeterinariaFacturacion.dbo.PRODUCTO p
             INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
             WHERE ISNULL(p.ESTADO, 1) = 1
-              AND p.IDUSUARIO = @IdUsuario
+              AND p.IDUSUARIO >= 1000000
               AND UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) LIKE '%FISIOTERAPIA%'
-            ORDER BY p.NOMBRE ASC", new { IdUsuario = UsuarioFacturacion })).ToList();
+            ORDER BY p.NOMBRE ASC")).ToList();
 
     public async Task<List<FisioterapiaOrdenDto>> ObtenerFisioterapiaAsync(int idOrden, int nhcl) =>
         (await _db.QueryAsync<FisioterapiaOrdenDto>(@"

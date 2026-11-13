@@ -7,6 +7,7 @@
 @inject SessionStateService SessionState
 @inject NavigationManager NavManager
 @inject IWebHostEnvironment Env
+@inject SessionControlService SessionControl
 @inject ISqlDataService SqlData
 @inject IConsultaExternaService ConsultaService
 
@@ -1965,7 +1966,7 @@
         string directorio = Path.Combine(Env.WebRootPath, "PacientesFotos");
         if (!Directory.Exists(directorio)) return string.Empty;
         string? archivo = Directory.EnumerateFiles(directorio, $"{nhcl}.*").FirstOrDefault();
-        return archivo is null ? string.Empty : $"/pacientes-fotos/{nhcl}?v={File.GetLastWriteTimeUtc(archivo).Ticks}";
+        return archivo is null ? string.Empty : SessionControl.FirmarFotoUrl(nhcl, File.GetLastWriteTimeUtc(archivo).Ticks);
     }
 
     private async Task GuardarFotoMascotaAsync(int nhcl)

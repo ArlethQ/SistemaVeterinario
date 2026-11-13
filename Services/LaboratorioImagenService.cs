@@ -74,11 +74,11 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = s.IDTIPOPRODUCTO
                 WHERE ISNULL(s.ESTADO, 'A') = 'A'
                   AND ISNULL(t.ESTADO, 1) = 1
-                  AND s.IDUSUARIO = @IdUsuario
+                  AND s.IDUSUARIO >= 1000000
                   AND UPPER(LTRIM(RTRIM(t.DESCRIPCION))) = 'LABORATORIO'
                 ORDER BY s.IDSUBTIPO ASC";
 
-            var filas = await _db.QueryAsync<GrupoLaboratorioCatalogoDto>(sql, new { IdUsuario = UsuarioFacturacion });
+            var filas = await _db.QueryAsync<GrupoLaboratorioCatalogoDto>(sql);
             int idx = 1;
             foreach (var f in filas)
             {
@@ -116,11 +116,11 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = s.IDTIPOPRODUCTO
                 WHERE ISNULL(s.ESTADO, 'A') = 'A'
                   AND ISNULL(t.ESTADO, 1) = 1
-                  AND s.IDUSUARIO = @IdUsuario
+                  AND s.IDUSUARIO >= 1000000
                   AND UPPER(LTRIM(RTRIM(t.DESCRIPCION))) LIKE 'IMAGENOLOG%'
                 ORDER BY s.IDSUBTIPO ASC";
 
-            var filas = await _db.QueryAsync<GrupoLaboratorioCatalogoDto>(sql, new { IdUsuario = UsuarioFacturacion });
+            var filas = await _db.QueryAsync<GrupoLaboratorioCatalogoDto>(sql);
             lista.AddRange(filas);
         }
         catch (Exception ex)
@@ -158,7 +158,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
                 LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
                 WHERE ISNULL(p.ESTADO, 1) = 1
-                  AND p.IDUSUARIO = @IdUsuario
+                  AND p.IDUSUARIO >= 1000000
                   AND UPPER(LTRIM(RTRIM(t.DESCRIPCION))) = 'LABORATORIO'
                   AND (@GrupoId = 0 OR CAST(ISNULL(p.IDSUBTIPO, 0) AS INT) = @GrupoId)
                   AND (@Filtro = '' OR p.NOMBRE LIKE '%' + @Filtro + '%' OR CAST(p.CODIGO AS VARCHAR(30)) LIKE '%' + @Filtro + '%' OR ISNULL(p.CODIGO_PRINCIPAL, '') LIKE '%' + @Filtro + '%')
@@ -166,7 +166,6 @@ public class LaboratorioImagenService : ILaboratorioImagenService
 
             var locales = await _db.QueryAsync<PruebaCatalogoDto>(sql, new
             {
-                IdUsuario = UsuarioFacturacion,
                 GrupoId = grupoId,
                 Filtro = filtroTexto?.Trim() ?? ""
             });
@@ -201,14 +200,13 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
                 LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
                 WHERE ISNULL(p.ESTADO, 1) = 1
-                  AND p.IDUSUARIO = @IdUsuario
+                  AND p.IDUSUARIO >= 1000000
                   AND UPPER(LTRIM(RTRIM(t.DESCRIPCION))) LIKE 'IMAGENOLOG%'
                   AND (@Filtro = '' OR p.NOMBRE LIKE '%' + @Filtro + '%' OR CAST(p.CODIGO AS VARCHAR(50)) LIKE '%' + @Filtro + '%' OR ISNULL(p.CODIGO_PRINCIPAL, '') LIKE '%' + @Filtro + '%')
                 ORDER BY p.NOMBRE ASC";
 
             var locales = await _db.QueryAsync<PruebaCatalogoDto>(sql, new
             {
-                IdUsuario = UsuarioFacturacion,
                 Filtro = filtroTexto?.Trim() ?? ""
             });
 
@@ -752,16 +750,16 @@ public class LaboratorioImagenService : ILaboratorioImagenService
 
     public async Task<bool> AnularInformeDiagnosticoAsync(int idInforme, string tipoInforme)
     {
-        var (tabla, prefijo) = tipoInforme switch
+        string sql = tipoInforme switch
         {
-            "Laboratorio" => ("vt_labInformes", "labI"),
-            "Imagen" => ("vt_rxInformes", "rxI"),
-            "Ecografia" => ("vt_ecoInformes", "ecoI"),
-            "Endoscopia" => ("vt_endoInformes", "endoI"),
-            _ => ("vt_medInformes", "medI")
+            "Laboratorio" => "UPDATE vt_labInformes SET estado = 'I' WHERE labI_id = @Id",
+            "Imagen" => "UPDATE vt_rxInformes SET estado = 'I' WHERE rxI_id = @Id",
+            "Ecografia" => "UPDATE vt_ecoInformes SET estado = 'I' WHERE ecoI_id = @Id",
+            "Endoscopia" => "UPDATE vt_endoInformes SET estado = 'I' WHERE endoI_id = @Id",
+            _ => "UPDATE vt_medInformes SET estado = 'I' WHERE medI_id = @Id"
         };
 
-        await _db.ExecuteAsync($"UPDATE {tabla} SET estado = 'I' WHERE {prefijo}_id = @Id", new { Id = idInforme });
+        await _db.ExecuteAsync(sql, new { Id = idInforme });
         return true;
     }
 }

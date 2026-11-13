@@ -2,6 +2,7 @@
 @inject IKardexService KardexService
 @inject IAdmisionFacturacionService AdmisionService
 @inject IWebHostEnvironment Env
+@inject SessionControlService SessionControl
 
 <PageTitle>e-ForVets - Bandeja de Órdenes de Atención</PageTitle>
 
@@ -177,7 +178,7 @@
     private async Task OnFiltroKeyDown(KeyboardEventArgs e){if(e.Key=="Enter")await CargarOrdenesAsync();}
     private int ContarEtapa(string etapa)=>_ordenes.Count(x=>!EsCancelada(x.Estado)&&NormalizarEtapa(x.Etapa).Contains(etapa,StringComparison.OrdinalIgnoreCase));
     private static string InicialPaciente(string nombre)=>string.IsNullOrWhiteSpace(nombre)?"P":nombre.Trim()[0].ToString().ToUpperInvariant();
-    private string ObtenerFotoPaciente(int nhcl){if(nhcl<=0)return string.Empty;string directorio=Path.Combine(Env.WebRootPath,"PacientesFotos");if(!Directory.Exists(directorio))return string.Empty;string? archivo=Directory.EnumerateFiles(directorio,$"{nhcl}.*").FirstOrDefault();return archivo is null?string.Empty:$"/pacientes-fotos/{nhcl}?v={File.GetLastWriteTimeUtc(archivo).Ticks}";}
+    private string ObtenerFotoPaciente(int nhcl){if(nhcl<=0)return string.Empty;string directorio=Path.Combine(Env.WebRootPath,"PacientesFotos");if(!Directory.Exists(directorio))return string.Empty;string? archivo=Directory.EnumerateFiles(directorio,$"{nhcl}.*").FirstOrDefault();return archivo is null?string.Empty:SessionControl.FirmarFotoUrl(nhcl, File.GetLastWriteTimeUtc(archivo).Ticks);}
     private static bool EsHembra(string sexo)=>sexo.Contains("hembra",StringComparison.OrdinalIgnoreCase)||sexo.Equals("H",StringComparison.OrdinalIgnoreCase);
     private static bool EsCancelada(string estado)=>(estado??string.Empty).Trim().Equals("I",StringComparison.OrdinalIgnoreCase)||(estado??string.Empty).Contains("cancel",StringComparison.OrdinalIgnoreCase);
     private static string NormalizarEtapa(string etapa)=>(etapa??string.Empty).Trim().ToLowerInvariant() switch{"consulta" or "en consulta"=>"consulta","hospitalización" or "hospitalizacion" or "hospitalizado"=>"hospital","quirófano" or "quirofano" or "cirugía" or "cirugia" or "en cirugía"=>"cirug","procesado" or "procesada" or "finalizado" or "finalizada"=>"final","pendiente"=>"pend",var valor=>valor};

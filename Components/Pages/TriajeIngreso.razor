@@ -5,6 +5,7 @@
 @inject IAdmisionFacturacionService AdmisionService
 @inject SessionStateService Session
 @inject NavigationManager Nav
+@inject SessionControlService SessionControl
 
 @if (!ModoModal)
 {
@@ -68,7 +69,7 @@
                 <div class="card shadow-sm border-0 mb-3 bg-primary bg-opacity-10 triaje-patient">
                     <div class="card-body py-2 px-3">
                         <div class="triaje-patient-info">
-                            <div class="triaje-avatar"><i class="bi bi-heart-pulse"></i><img src="@($"/pacientes-fotos/{_paciente.Nhcl}")" alt="Foto de @_paciente.PacienteNombre" onerror="this.style.display='none'" /></div>
+                            <div class="triaje-avatar"><i class="bi bi-heart-pulse"></i><img src="@SessionControl.FirmarFotoUrl(_paciente.Nhcl)" alt="Foto de @_paciente.PacienteNombre" onerror="this.style.display='none'" /></div>
                             <div class="triaje-patient-name"><strong>@_paciente.PacienteNombre</strong><small>@_paciente.Especie · @_paciente.Raza · @_paciente.Sexo · @_paciente.EdadTexto</small><span>HC: @_paciente.Nhcl</span></div>
                             <div class="triaje-patient-meta"><i class="bi bi-calendar2-check"></i><span><small>Orden</small><strong>#@_ficha.MedOrden</strong></span></div>
                             <div class="triaje-patient-meta"><i class="bi bi-person-fill"></i><span><small>Propietario</small><strong>@_paciente.PropietarioNombre</strong></span></div>
@@ -177,11 +178,8 @@ else
                     </div>
                 }
                 <div class="col-md-4">
-                    <label class="form-label small fw-semibold">Sede / Tipo</label>
-                    <select class="form-select form-select-sm" @bind="_ficha.MedTipo">
-                        <option value="HDEV">Doméstico (Mascotas)</option>
-                        <option value="TUERI">Silvestre (Fauna)</option>
-                    </select>
+                    <label class="form-label small fw-semibold">Tipo</label>
+                    <input type="text" class="form-control form-control-sm bg-light" value="@TipoPacienteTexto" readonly disabled />
                 </div>
             </div>
 
@@ -332,6 +330,12 @@ else
         _cargando = false;
     }
 
+    private string TipoPacienteTexto =>
+        string.Equals(_paciente?.Origen, "Silvestre", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(_ficha.MedTipo, "TUERI", StringComparison.OrdinalIgnoreCase)
+            ? "Silvestre (Fauna)"
+            : "Doméstico (Mascotas)";
+
     private async Task CargarDatosAsync()
     {
         _mensajeAlerta = null;
@@ -387,6 +391,12 @@ else
 
         _tiposConsultaCatalogo = await ConsultaService.ObtenerTiposConsultaCatalogoAsync(Session.Localidad);
         _ficha = await ConsultaService.ObtenerFichaMedicaAsync(ord, Nhcl ?? (_paciente?.Nhcl ?? 0), historica: DesdeHistorial);
+        if (_paciente != null)
+        {
+            _ficha.MedTipo = string.Equals(_paciente.Origen, "Silvestre", StringComparison.OrdinalIgnoreCase)
+                ? "TUERI"
+                : "HDEV";
+        }
         if (string.IsNullOrWhiteSpace(_ficha.Temperamento))
         {
             _ficha.Temperamento = "TRANQUILO";

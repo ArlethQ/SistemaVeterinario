@@ -160,30 +160,60 @@ public class SqlDataService : ISqlDataService
         }
     }
 
+    private async Task<T> ExecuteWithDeadlockRetryAsync<T>(Func<Task<T>> operation)
+    {
+        const int maxRetries = 3;
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (SqlException ex) when (ex.Number == 1205 && attempt < maxRetries)
+            {
+                int delayMs = (attempt + 1) * 75 + Random.Shared.Next(15, 60);
+                _logger.LogWarning(ex, "Deadlock SQL (1205) detectado; reintentando operación ({Attempt}/{MaxRetries}) en {DelayMs} ms.", attempt + 1, maxRetries, delayMs);
+                await Task.Delay(delayMs);
+            }
+        }
+    }
+
     public async Task<IEnumerable<T>> QueryAsync<T>(string sql, object? parameters = null)
     {
-        await using var connection = await OpenConnectionFastAsync();
-        return await connection.QueryAsync<T>(sql, parameters, commandTimeout: 15);
+        return await ExecuteWithDeadlockRetryAsync(async () =>
+        {
+            await using var connection = await OpenConnectionFastAsync();
+            return await connection.QueryAsync<T>(sql, parameters, commandTimeout: 15);
+        });
     }
 
     public async Task<T?> QueryFirstOrDefaultAsync<T>(string sql, object? parameters = null)
     {
-        await using var connection = await OpenConnectionFastAsync();
-        return await connection.QueryFirstOrDefaultAsync<T>(sql, parameters, commandTimeout: 15);
+        return await ExecuteWithDeadlockRetryAsync(async () =>
+        {
+            await using var connection = await OpenConnectionFastAsync();
+            return await connection.QueryFirstOrDefaultAsync<T>(sql, parameters, commandTimeout: 15);
+        });
     }
 
     public async Task<T?> ExecuteScalarAsync<T>(string sql, object? parameters = null)
     {
-        await using var connection = await OpenConnectionFastAsync();
-        return await connection.ExecuteScalarAsync<T>(sql, parameters, commandTimeout: 15);
+        return await ExecuteWithDeadlockRetryAsync(async () =>
+        {
+            await using var connection = await OpenConnectionFastAsync();
+            return await connection.ExecuteScalarAsync<T>(sql, parameters, commandTimeout: 15);
+        });
     }
 
     public async Task<int> ExecuteAsync(string sql, object? parameters = null)
     {
         try
         {
-            await using var connection = await OpenConnectionFastAsync();
-            return await connection.ExecuteAsync(sql, parameters, commandTimeout: 15);
+            return await ExecuteWithDeadlockRetryAsync(async () =>
+            {
+                await using var connection = await OpenConnectionFastAsync();
+                return await connection.ExecuteAsync(sql, parameters, commandTimeout: 15);
+            });
         }
         catch (Exception ex)
         {
@@ -196,23 +226,26 @@ public class SqlDataService : ISqlDataService
     {
         try
         {
-            await using var connection = await OpenConnectionFastAsync();
-            await using var transaction = await connection.BeginTransactionAsync();
-            int total = 0;
-            try
+            return await ExecuteWithDeadlockRetryAsync(async () =>
             {
-                foreach (var (sql, parameters) in commands)
+                await using var connection = await OpenConnectionFastAsync();
+                await using var transaction = await connection.BeginTransactionAsync();
+                int total = 0;
+                try
                 {
-                    total += await connection.ExecuteAsync(sql, parameters, transaction, commandTimeout: 15);
+                    foreach (var (sql, parameters) in commands)
+                    {
+                        total += await connection.ExecuteAsync(sql, parameters, transaction, commandTimeout: 15);
+                    }
+                    await transaction.CommitAsync();
+                    return total;
                 }
-                await transaction.CommitAsync();
-                return total;
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -223,16 +256,19 @@ public class SqlDataService : ISqlDataService
 
     public async Task<DataTable> GetDataTableAsync(string sql, params SqlParameter[] parameters)
     {
-        var dt = new DataTable();
-        await using var connection = await OpenConnectionFastAsync();
-        await using var cmd = new SqlCommand(sql, connection) { CommandTimeout = 15 };
-        if (parameters is { Length: > 0 })
+        return await ExecuteWithDeadlockRetryAsync(async () =>
         {
-            cmd.Parameters.AddRange(parameters);
-        }
-        await using var reader = await cmd.ExecuteReaderAsync();
-        dt.Load(reader);
-        return dt;
+            var dt = new DataTable();
+            await using var connection = await OpenConnectionFastAsync();
+            await using var cmd = new SqlCommand(sql, connection) { CommandTimeout = 15 };
+            if (parameters is { Length: > 0 })
+            {
+                cmd.Parameters.AddRange(parameters);
+            }
+            await using var reader = await cmd.ExecuteReaderAsync();
+            dt.Load(reader);
+            return dt;
+        });
     }
 
     public async Task<int> RegistrarBitacoraAsync(string detalle, int idUser, string ip = "127.0.0.1", string hostname = "BlazorClient")

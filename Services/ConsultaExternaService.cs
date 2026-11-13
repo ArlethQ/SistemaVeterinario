@@ -184,13 +184,24 @@ public class ConsultaExternaService : IConsultaExternaService
 
             if (historica) return dto;
 
-            // Cargar triaje de temperamento y castrado desde vt_pacientes
+            // Cargar triaje de temperamento, castrado y origen desde vt_pacientes
             var pac = await _db.QueryFirstOrDefaultAsync<dynamic>(
-                "SELECT mas_colortriaje, mas_castrado FROM vt_pacientes WHERE mas_nhcl = @Nhcl", new { Nhcl = nhcl });
+                "SELECT mas_colortriaje, mas_castrado, mas_origen FROM vt_pacientes WHERE mas_nhcl = @Nhcl", new { Nhcl = nhcl });
             if (pac != null)
             {
                 string colStr = pac.mas_colortriaje?.ToString()?.Trim() ?? "green";
-                dto.Esterilizado = pac.mas_castrado?.ToString()?.Trim() ?? "N";
+                string castradoRaw = (pac.mas_castrado?.ToString() ?? "N").Trim().ToUpperInvariant();
+                dto.Esterilizado = (castradoRaw == "S" || castradoRaw == "SI" || castradoRaw == "SÍ" || castradoRaw == "1" || castradoRaw == "TRUE")
+                    ? "S"
+                    : "N";
+
+                string origenRaw = (pac.mas_origen?.ToString() ?? "M").Trim().ToUpperInvariant();
+                string tipoDesdePaciente = origenRaw == "M" ? "HDEV" : "TUERI";
+                if (existente == null || string.IsNullOrWhiteSpace(dto.MedTipo))
+                {
+                    dto.MedTipo = tipoDesdePaciente;
+                }
+
                 dto.ColorTriaje = colStr;
 
                 // Si no hay temperamento en vt_fichamedica o está en blanco/tranquilo, sincronizar con el semáforo de vt_pacientes
@@ -867,10 +878,10 @@ public class ConsultaExternaService : IConsultaExternaService
             INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
             WHERE ISNULL(p.ESTADO, 1) = 1
               AND ISNULL(t.ESTADO, 1) = 1
-              AND p.IDUSUARIO = @IdUsuario
+              AND p.IDUSUARIO >= 1000000
               AND UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) LIKE '%VACUN%'
             ORDER BY Descripcion ASC";
-        return (await _db.QueryAsync<CatalogoItemGenericoDto>(sql, new { IdUsuario = UsuarioFacturacion })).ToList();
+        return (await _db.QueryAsync<CatalogoItemGenericoDto>(sql)).ToList();
     }
 
     public async Task<bool> AgregarVacunaAsync(VacunaPacienteDto dto, int idUsuario, int idCliente)
@@ -1099,8 +1110,10 @@ public class ConsultaExternaService : IConsultaExternaService
 
     public async Task<bool> EliminarOrdenExamenAsync(int sec, string tipoCategoria)
     {
-        string tabla = tipoCategoria == "LAB" ? "vt_labOrdenes" : "vt_rxOrdenes";
-        await _db.ExecuteAsync($"DELETE FROM {tabla} WHERE sec = @Sec", new { Sec = sec });
+        string sql = tipoCategoria == "LAB"
+            ? "DELETE FROM vt_labOrdenes WHERE sec = @Sec"
+            : "DELETE FROM vt_rxOrdenes WHERE sec = @Sec";
+        await _db.ExecuteAsync(sql, new { Sec = sec });
         return true;
     }
 

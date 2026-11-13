@@ -964,9 +964,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 u.user_nombre AS Medico,
                 ISNULL(e.es_descripcion, 'General') AS Especialidad,
                 COUNT(o.ordenAten_id) AS EnEspera
-            FROM vt_ordenAtencion o
-            INNER JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
-            LEFT JOIN vt_especialidades e ON o.ordenAten_esp_numero = e.es_id
+            FROM vt_ordenAtencion o WITH (NOLOCK)
+            INNER JOIN vt_usuarios u WITH (NOLOCK) ON o.ordenAten_idMedico = u.user_numero
+            LEFT JOIN vt_especialidades e WITH (NOLOCK) ON o.ordenAten_esp_numero = e.es_id
             WHERE o.ordenAten_fecha = @Fecha
               AND o.ordenAten_estado = 'A'
               AND (@IdLocalidad = 0 OR o.ordenAten_idlocalidad = @IdLocalidad)
@@ -1186,26 +1186,26 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(p.mas_colortriaje, 'green') AS ColorTriaje,
                 'N' AS Facturado,
                 '' AS NumFacturaBc
-            FROM vt_ordenAtencion o
-            LEFT JOIN vt_pacientes p ON o.ordenAten_nhcl = p.mas_nhcl
-            LEFT JOIN vt_clientes c ON o.ordenAten_idcliente = c.pa_codigo
-            LEFT JOIN vt_especie esp ON p.mas_especie = esp.especie_id
-            LEFT JOIN vt_especialidades es ON o.ordenAten_esp_numero = es.es_id
-            LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
-            LEFT JOIN vt_usuarios enf ON o.ordenAten_idEnfermero = enf.user_numero
+            FROM vt_ordenAtencion o WITH (NOLOCK)
+            LEFT JOIN vt_pacientes p WITH (NOLOCK) ON o.ordenAten_nhcl = p.mas_nhcl
+            LEFT JOIN vt_clientes c WITH (NOLOCK) ON o.ordenAten_idcliente = c.pa_codigo
+            LEFT JOIN vt_especie esp WITH (NOLOCK) ON p.mas_especie = esp.especie_id
+            LEFT JOIN vt_especialidades es WITH (NOLOCK) ON o.ordenAten_esp_numero = es.es_id
+            LEFT JOIN vt_usuarios u WITH (NOLOCK) ON o.ordenAten_idMedico = u.user_numero
+            LEFT JOIN vt_usuarios enf WITH (NOLOCK) ON o.ordenAten_idEnfermero = enf.user_numero
             OUTER APPLY (
                 SELECT MIN(v.vit_idFechaMod) AS InicioTriaje
-                FROM vt_vitacora v
+                FROM vt_vitacora v WITH (NOLOCK)
                 WHERE v.vit_detalle = CONCAT('Inicio de triaje Orden #', o.ordenAten_id)
             ) triaje
             OUTER APPLY (
                 SELECT MIN(v.vit_idFechaMod) AS FinTriaje
-                FROM vt_vitacora v
+                FROM vt_vitacora v WITH (NOLOCK)
                 WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id)
             ) triajeFinalizado
             OUTER APPLY (
                 SELECT MIN(v.vit_idFechaMod) AS InicioConsulta
-                FROM vt_vitacora v
+                FROM vt_vitacora v WITH (NOLOCK)
                 WHERE v.vit_detalle = CONCAT('Inicio de consulta Orden #', o.ordenAten_id)
             ) consulta
             WHERE o.ordenAten_fecha = @Fecha

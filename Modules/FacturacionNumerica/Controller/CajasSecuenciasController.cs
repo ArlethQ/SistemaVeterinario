@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Data;
@@ -5,6 +6,7 @@ using Simetric.Data;
 namespace Simetric.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/cajas-secuencias")]
 public class CajasSecuenciasController : ControllerBase
 {

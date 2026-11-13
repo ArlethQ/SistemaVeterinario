@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Components.Helpers;
@@ -8,6 +9,7 @@ using Simetric.Services;
 namespace Simetric.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/usuarios-admin")]
 public class UsuariosAdminController : ControllerBase
 {
@@ -74,7 +76,7 @@ public class UsuariosAdminController : ControllerBase
     public async Task<IActionResult> BuscarId([FromQuery] string? valor = null)
     {
         var term = Clean(valor).ToLowerInvariant();
-        if (term == "") return BadRequest("El parámetro 'valor' es obligatorio.");
+        if (term == "") return BadRequest("El parÃ¡metro 'valor' es obligatorio.");
 
         await using var db = await _dbFactory.CreateDbContextAsync();
         var usuarios = await db.Usuarios

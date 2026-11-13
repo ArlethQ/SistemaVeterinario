@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Simetric.DTOs;
 using Simetric.Models;
 using Simetric.Services;
@@ -13,6 +14,7 @@ namespace Simetric.Controllers
 {
 
     [ApiController]
+[Authorize]
     [Route("api/[controller]")]
     [Microsoft.AspNetCore.Authorization.Authorize]
 

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Data;
@@ -7,6 +8,7 @@ using Simetric.Services;
 namespace Simetric.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class ProductosController : ControllerBase
 {
@@ -20,7 +22,7 @@ public class ProductosController : ControllerBase
         _cotizacionSchemaService = cotizacionSchemaService;
     }
 
-    // Métodos de ayuda para la jerarquía
+    // MÃ©todos de ayuda para la jerarquÃ­a
     private static bool IsValidUser(int userId) => userId > 0;
 
     private Task<int?> GetOwnerIdAsync(int userId, bool backOffice) =>
@@ -90,7 +92,7 @@ public class ProductosController : ControllerBase
         if (ownerId is null) return NotFound();
         if (model.Detalles.Count == 0) return BadRequest("Selecciona al menos un producto.");
         if (model.Detalles.Any(x => x.Cantidad < 1 || x.PrecioUnitario < 0 || x.PrecioUnitario > PrecioMaximoPermitido))
-            return BadRequest("Revisa los precios y cantidades de la cotización.");
+            return BadRequest("Revisa los precios y cantidades de la cotizaciÃ³n.");
 
         await _cotizacionSchemaService.EnsureSchemaAsync();
         var codigos = model.Detalles.Select(x => x.CodigoProducto).Distinct().ToList();
@@ -98,7 +100,7 @@ public class ProductosController : ControllerBase
             .Where(x => x.Idusuario == ownerId.Value && x.Estado == true && codigos.Contains(x.Codigo))
             .Select(x => new { x.Codigo, x.Nombre })
             .ToDictionaryAsync(x => x.Codigo, x => x.Nombre ?? "Sin nombre");
-        if (productos.Count != codigos.Count) return BadRequest("Uno o más productos ya no están disponibles.");
+        if (productos.Count != codigos.Count) return BadRequest("Uno o mÃ¡s productos ya no estÃ¡n disponibles.");
 
         var cotizacion = new Cotizacion { IdUsuario = ownerId.Value, FechaCreacion = DateTime.Now };
         foreach (var detalle in model.Detalles)
@@ -123,9 +125,9 @@ public class ProductosController : ControllerBase
     public async Task<ActionResult> Lookups([FromQuery] int userId, [FromQuery] bool backOffice = false)
     {
         if (!IsValidUser(userId))
-            return Unauthorized("Sesión no válida.");
+            return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
-        // ✅ Corregido: Buscar el dueño para traer las categorías correctas
+        // âœ… Corregido: Buscar el dueÃ±o para traer las categorÃ­as correctas
         int? ownerId = await GetOwnerIdAsync(userId, backOffice);
         if (ownerId == null) return NotFound("Usuario no encontrado.");
         var tipos = await _db.Productotipos
@@ -161,13 +163,13 @@ public class ProductosController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<ProductoDto>>> GetAll([FromQuery] int userId, [FromQuery] bool incluirInactivos = false, [FromQuery] bool backOffice = false)
     {
-        if (!IsValidUser(userId)) return Unauthorized("Sesión no válida.");
+        if (!IsValidUser(userId)) return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         int? ownerId = await GetOwnerIdAsync(userId, backOffice);
         if (ownerId == null) return NotFound("Usuario no encontrado.");
         var query = _db.Productos
             .AsNoTracking()
-            .Where(p => p.Idusuario == ownerId); // ✅ Filtro por grupo
+            .Where(p => p.Idusuario == ownerId); // âœ… Filtro por grupo
 
         if (!incluirInactivos)
             query = query.Where(p => p.Estado == true);
@@ -199,13 +201,13 @@ public class ProductosController : ControllerBase
     [HttpGet("{codigo:int}")]
     public async Task<ActionResult> GetByCodigo(int codigo, [FromQuery] int userId, [FromQuery] bool backOffice = false)
     {
-        if (!IsValidUser(userId)) return Unauthorized("Sesión no válida.");
+        if (!IsValidUser(userId)) return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         int? ownerId = await GetOwnerIdAsync(userId, backOffice);
         if (ownerId == null) return NotFound();
         var item = await _db.Productos
             .AsNoTracking()
-            .Where(x => x.Codigo == codigo && x.Idusuario == ownerId) // ✅ Corregido: ownerId
+            .Where(x => x.Codigo == codigo && x.Idusuario == ownerId) // âœ… Corregido: ownerId
             .Select(p => new ProductoDto
             {
                 Codigo = p.Codigo,
@@ -254,7 +256,7 @@ public class ProductosController : ControllerBase
             Porcentajeimpuesto = model.Porcentajeimpuesto,
             Estado = model.Estado ?? true,
             Observacion = model.Observacion,
-            Idusuario = ownerId.Value // ✅ Se guarda para el Jefe
+            Idusuario = ownerId.Value // âœ… Se guarda para el Jefe
         };
 
         try
@@ -270,11 +272,11 @@ public class ProductosController : ControllerBase
             
             if (sqlMsg.Contains("FK_PRODUCTO_IMPUESTO") || sqlMsg.Contains("CODIGOSIMPUESTOS"))
             {
-                return BadRequest("Error al guardar: La tarifa de impuesto (IVA) seleccionada no es válida en el sistema.");
+                return BadRequest("Error al guardar: La tarifa de impuesto (IVA) seleccionada no es vÃ¡lida en el sistema.");
             }
             if (sqlMsg.Contains("duplicate") || sqlMsg.Contains("duplicado") || sqlMsg.Contains("unique") || sqlMsg.Contains("UK_"))
             {
-                return BadRequest("Error al guardar: Ya existe un producto con el mismo código en tu catálogo.");
+                return BadRequest("Error al guardar: Ya existe un producto con el mismo cÃ³digo en tu catÃ¡logo.");
             }
             return BadRequest($"Error al guardar en la base de datos: {sqlMsg}");
         }
@@ -325,13 +327,13 @@ public class ProductosController : ControllerBase
         for (int i = 0; i < models.Count; i++)
         {
             var model = models[i];
-            var fila = i + 2; // Fila real en el CSV (la línea 1 es la cabecera)
+            var fila = i + 2; // Fila real en el CSV (la lÃ­nea 1 es la cabecera)
 
             if (model == null) continue;
 
             NormalizarProducto(model);
 
-            // Validaciones básicas en memoria
+            // Validaciones bÃ¡sicas en memoria
             if (string.IsNullOrWhiteSpace(model.TipoCompravena))
             {
                 result.Errores.Add($"Fila {fila}: Debe seleccionar si el registro es PRODUCTO o SERVICIO.");
@@ -339,7 +341,7 @@ public class ProductosController : ControllerBase
             }
             if (model.TipoCompravena != "PRODUCTO" && model.TipoCompravena != "SERVICIO")
             {
-                result.Errores.Add($"Fila {fila}: Debe seleccionar un tipo válido: PRODUCTO o SERVICIO.");
+                result.Errores.Add($"Fila {fila}: Debe seleccionar un tipo vÃ¡lido: PRODUCTO o SERVICIO.");
                 continue;
             }
             if (string.IsNullOrWhiteSpace(model.Nombre))
@@ -354,7 +356,7 @@ public class ProductosController : ControllerBase
             }
             if (!string.IsNullOrWhiteSpace(model.CodigoPrincipal) && model.CodigoPrincipal.Length > 50)
             {
-                result.Errores.Add($"Fila {fila}: El código no puede exceder 50 caracteres.");
+                result.Errores.Add($"Fila {fila}: El cÃ³digo no puede exceder 50 caracteres.");
                 continue;
             }
             if (!model.ValorUnitario.HasValue)
@@ -374,7 +376,7 @@ public class ProductosController : ControllerBase
             }
             if (!string.IsNullOrWhiteSpace(model.Observacion) && model.Observacion.Length > 250)
             {
-                result.Errores.Add($"Fila {fila}: La observación no puede exceder 250 caracteres.");
+                result.Errores.Add($"Fila {fila}: La observaciÃ³n no puede exceder 250 caracteres.");
                 continue;
             }
             if (model.Codigoimpuesto == "2" && string.IsNullOrWhiteSpace(model.Porcentajeimpuesto))
@@ -383,12 +385,12 @@ public class ProductosController : ControllerBase
                 continue;
             }
 
-            // Validar duplicado de código principal
+            // Validar duplicado de cÃ³digo principal
             if (!string.IsNullOrWhiteSpace(model.CodigoPrincipal))
             {
                 if (existingCodigosSet.Contains(model.CodigoPrincipal) || tempCodigosLote.Contains(model.CodigoPrincipal))
                 {
-                    result.Errores.Add($"Fila {fila}: Ya existe un producto con el código '{model.CodigoPrincipal}' en su catálogo.");
+                    result.Errores.Add($"Fila {fila}: Ya existe un producto con el cÃ³digo '{model.CodigoPrincipal}' en su catÃ¡logo.");
                     continue;
                 }
                 tempCodigosLote.Add(model.CodigoPrincipal);
@@ -398,7 +400,7 @@ public class ProductosController : ControllerBase
             {
                 if (!validCategoriasSet.Contains(model.TipoProducto.Value))
                 {
-                    result.Errores.Add($"Fila {fila}: La categoría seleccionada no es válida para su usuario.");
+                    result.Errores.Add($"Fila {fila}: La categorÃ­a seleccionada no es vÃ¡lida para su usuario.");
                     continue;
                 }
             }
@@ -407,13 +409,13 @@ public class ProductosController : ControllerBase
             {
                 if (!model.TipoProducto.HasValue)
                 {
-                    result.Errores.Add($"Fila {fila}: Debe seleccionar una categoría antes de elegir la subcategoría.");
+                    result.Errores.Add($"Fila {fila}: Debe seleccionar una categorÃ­a antes de elegir la subcategorÃ­a.");
                     continue;
                 }
 
                 if (!validSubtiposSet.Contains((model.Idsubtipo.Value, model.TipoProducto.Value)))
                 {
-                    result.Errores.Add($"Fila {fila}: La subcategoría seleccionada no es válida para su usuario.");
+                    result.Errores.Add($"Fila {fila}: La subcategorÃ­a seleccionada no es vÃ¡lida para su usuario.");
                     continue;
                 }
             }
@@ -455,11 +457,11 @@ public class ProductosController : ControllerBase
             
             if (sqlMsg.Contains("FK_PRODUCTO_IMPUESTO") || sqlMsg.Contains("CODIGOSIMPUESTOS"))
             {
-                result.Errores.Add("Error al guardar: Uno de los productos tiene una tarifa de impuesto (IVA) no válida en la base de datos.");
+                result.Errores.Add("Error al guardar: Uno de los productos tiene una tarifa de impuesto (IVA) no vÃ¡lida en la base de datos.");
             }
             else if (sqlMsg.Contains("duplicate") || sqlMsg.Contains("duplicado") || sqlMsg.Contains("unique") || sqlMsg.Contains("UK_"))
             {
-                result.Errores.Add("Error al guardar: Se detectó un código principal que ya existe en tu catálogo de base de datos.");
+                result.Errores.Add("Error al guardar: Se detectÃ³ un cÃ³digo principal que ya existe en tu catÃ¡logo de base de datos.");
             }
             else
             {
@@ -478,7 +480,7 @@ public class ProductosController : ControllerBase
         int? ownerId = await GetOwnerIdAsync(userId, backOffice);
         if (ownerId == null) return NotFound();
 
-        // ✅ Corregido: Buscar por ownerId
+        // âœ… Corregido: Buscar por ownerId
         var existente = await _db.Productos
             .FirstOrDefaultAsync(x => x.Codigo == codigo && x.Idusuario == ownerId);
 
@@ -516,7 +518,7 @@ public class ProductosController : ControllerBase
         if (ownerId == null) return NotFound();
 
         var existente = await _db.Productos
-            .FirstOrDefaultAsync(x => x.Codigo == codigo && x.Idusuario == ownerId); // ✅ Corregido
+            .FirstOrDefaultAsync(x => x.Codigo == codigo && x.Idusuario == ownerId); // âœ… Corregido
 
         if (existente is null) return NotFound();
 
@@ -525,32 +527,32 @@ public class ProductosController : ControllerBase
         return NoContent();
     }
 
-    #region Validaciones y Normalización
+    #region Validaciones y NormalizaciÃ³n
     private async Task<string?> ValidarProductoAsync(int ownerId, ProductoUpsertDto? model, int? codigoActual = null, Producto? productoActual = null)
     {
-        if (model is null) return "Datos inválidos.";
+        if (model is null) return "Datos invÃ¡lidos.";
         NormalizarProducto(model);
 
         if (string.IsNullOrWhiteSpace(model.TipoCompravena)) return "Debe seleccionar si el registro es PRODUCTO o SERVICIO.";
-        if (model.TipoCompravena != "PRODUCTO" && model.TipoCompravena != "SERVICIO") return "Debe seleccionar un tipo válido: PRODUCTO o SERVICIO.";
+        if (model.TipoCompravena != "PRODUCTO" && model.TipoCompravena != "SERVICIO") return "Debe seleccionar un tipo vÃ¡lido: PRODUCTO o SERVICIO.";
         if (string.IsNullOrWhiteSpace(model.Nombre)) return "Debe ingresar el nombre del producto.";
         if (model.Nombre.Length > 120) return "El nombre no puede exceder 120 caracteres.";
-        if (!string.IsNullOrWhiteSpace(model.CodigoPrincipal) && model.CodigoPrincipal.Length > 50) return "El código no puede exceder 50 caracteres.";
+        if (!string.IsNullOrWhiteSpace(model.CodigoPrincipal) && model.CodigoPrincipal.Length > 50) return "El cÃ³digo no puede exceder 50 caracteres.";
         if (!model.ValorUnitario.HasValue) return "Debe ingresar el precio base.";
         if (model.ValorUnitario < 0 || model.Precio2 < 0 || model.Precio3 < 0) return "Los precios no pueden ser menores a 0.";
         if (model.ValorUnitario > PrecioMaximoPermitido || model.Precio2 > PrecioMaximoPermitido || model.Precio3 > PrecioMaximoPermitido)
             return $"Los precios no pueden superar {PrecioMaximoPermitido:N2}.";
-        if (!string.IsNullOrWhiteSpace(model.Observacion) && model.Observacion.Length > 250) return "La observación no puede exceder 250 caracteres.";
+        if (!string.IsNullOrWhiteSpace(model.Observacion) && model.Observacion.Length > 250) return "La observaciÃ³n no puede exceder 250 caracteres.";
         if (model.Codigoimpuesto == "2" && string.IsNullOrWhiteSpace(model.Porcentajeimpuesto)) return "Debe seleccionar la tarifa IVA.";
 
-        // Validar duplicado de código principal dentro del mismo grupo
+        // Validar duplicado de cÃ³digo principal dentro del mismo grupo
         if (!string.IsNullOrWhiteSpace(model.CodigoPrincipal))
         {
             var existeDuplicado = await _db.Productos
                 .AnyAsync(p => p.Idusuario == ownerId &&
                                p.Codigo != (codigoActual ?? 0) &&
                                p.CodigoPrincipal == model.CodigoPrincipal);
-            if (existeDuplicado) return "Ya existe un producto con ese código en su catálogo.";
+            if (existeDuplicado) return "Ya existe un producto con ese cÃ³digo en su catÃ¡logo.";
         }
 
         if (model.TipoProducto.HasValue)
@@ -563,14 +565,14 @@ public class ProductosController : ControllerBase
                 t.Idusuario == ownerId &&
                 t.Estado == true);
 
-            if (!catOk) return "La categoría seleccionada no es válida para su usuario.";
+            if (!catOk) return "La categorÃ­a seleccionada no es vÃ¡lida para su usuario.";
         }
 
         if (model.Idsubtipo.HasValue)
         {
             if (!model.TipoProducto.HasValue)
             {
-                return "Debe seleccionar una categoría antes de elegir la subcategoría.";
+                return "Debe seleccionar una categorÃ­a antes de elegir la subcategorÃ­a.";
             }
 
             var subtipoSinCambios = productoActual is not null &&
@@ -583,7 +585,7 @@ public class ProductosController : ControllerBase
                 s.Idtipoproducto == model.TipoProducto &&
                 s.Estado == "A");
 
-            if (!subtipoOk) return "La subcategoría seleccionada no es válida para su usuario.";
+            if (!subtipoOk) return "La subcategorÃ­a seleccionada no es vÃ¡lida para su usuario.";
         }
 
         return null;

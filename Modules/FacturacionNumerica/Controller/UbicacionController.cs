@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Data;
 using Simetric.Services;
@@ -6,6 +7,7 @@ using Simetric.Services;
 namespace Simetric.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/ubicacion")]
 public class UbicacionController : ControllerBase
 {

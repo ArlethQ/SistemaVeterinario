@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Data;
 using Simetric.Models;
@@ -8,6 +9,7 @@ using System.Globalization;
 namespace Simetric.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/cajas")]
 public class CajasController : ControllerBase
 {

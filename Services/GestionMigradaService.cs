@@ -327,10 +327,10 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
             FROM VeterinariaFacturacion.dbo.PRODUCTO p
             INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
             WHERE ISNULL(p.ESTADO, 1) = 1
-              AND p.IDUSUARIO = @IdUsuario
+              AND p.IDUSUARIO >= 1000000
               AND UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) = 'SERVICIOS'
               AND (@Filtro = '' OR p.NOMBRE LIKE '%' + @Filtro + '%' OR CAST(p.CODIGO AS VARCHAR(20)) LIKE '%' + @Filtro + '%' OR ISNULL(p.CODIGO_PRINCIPAL, '') LIKE '%' + @Filtro + '%')
-            ORDER BY p.NOMBRE", new { IdUsuario = UsuarioFacturacion, Filtro = filtro?.Trim() ?? "" })).ToList();
+            ORDER BY p.NOMBRE", new { Filtro = filtro?.Trim() ?? "" })).ToList();
 
     private static bool HoraValida(string desde,string hasta,bool admiteFinDia=false)
     {

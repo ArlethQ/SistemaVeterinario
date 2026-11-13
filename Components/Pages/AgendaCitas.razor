@@ -6,6 +6,7 @@
 @inject SessionStateService SessionState
 @inject IJSRuntime JS
 @inject IWebHostEnvironment Env
+@inject SessionControlService SessionControl
 @inject NavigationManager NavManager
 
 <PageTitle>e-ForVets — Agenda Médica y Calendarización de Citas</PageTitle>
@@ -1070,7 +1071,7 @@
         string directorio = Path.Combine(Env.WebRootPath, "PacientesFotos");
         if (!Directory.Exists(directorio)) return string.Empty;
         string? archivo = Directory.EnumerateFiles(directorio, $"{nhcl}.*").FirstOrDefault();
-        return archivo is null ? string.Empty : $"/pacientes-fotos/{nhcl}?v={File.GetLastWriteTimeUtc(archivo).Ticks}";
+        return archivo is null ? string.Empty : SessionControl.FirmarFotoUrl(nhcl, File.GetLastWriteTimeUtc(archivo).Ticks);
     }
 
         private string _errorFormulario = string.Empty;

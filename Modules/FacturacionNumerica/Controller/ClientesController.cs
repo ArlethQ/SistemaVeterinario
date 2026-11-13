@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Data;
@@ -8,6 +9,7 @@ using System.Net.Mail;
 namespace Simetric.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/clientes")]
 public class ClientesController : ControllerBase
 {
@@ -74,7 +76,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
         public int? Provincia { get; set; }
         public int? Ciudad { get; set; }
 
-        // Blazor envía el IDE_SEC
+        // Blazor envÃ­a el IDE_SEC
         public int? Tipoidentificacion { get; set; }
         public List<string> CorreosAdicionales { get; set; } = new();
         public string? Oblgconta { get; set; }
@@ -100,7 +102,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
     public async Task<IActionResult> GetAll([FromQuery] int userId, [FromQuery] bool incluirInactivos = false)
     {
         if (!IsValidUser(userId))
-            return Unauthorized("Sesión no válida.");
+            return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         await EnsureDiasCreditoColumnAsync();
 
@@ -198,7 +200,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
     public async Task<IActionResult> GetById(int id, [FromQuery] int userId)
     {
         if (!IsValidUser(userId))
-            return Unauthorized("Sesión no válida.");
+            return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         await EnsureDiasCreditoColumnAsync();
 
@@ -298,7 +300,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
     public async Task<IActionResult> Create([FromQuery] int userId, [FromBody] ClienteUpsertDto dto)
     {
         if (!IsValidUser(userId))
-            return Unauthorized("Sesión no válida.");
+            return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         await EnsureDiasCreditoColumnAsync();
 
@@ -326,7 +328,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
                 .FirstOrDefaultAsync();
 
             if (string.IsNullOrWhiteSpace(codigoReal))
-                return BadRequest("El tipo de identificación seleccionado no es válido.");
+                return BadRequest("El tipo de identificaciÃ³n seleccionado no es vÃ¡lido.");
         }
 
         NormalizarDto(dto);
@@ -388,7 +390,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
     public async Task<ActionResult<BulkImportResultDto>> BulkCreate([FromQuery] int userId, [FromBody] List<ClienteUpsertDto> models)
     {
         if (!IsValidUser(userId))
-            return Unauthorized("Sesión no válida.");
+            return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         await EnsureDiasCreditoColumnAsync();
 
@@ -461,38 +463,38 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
                 continue;
             }
 
-            // Validar duplicado de identificación (insensible a mayúsculas/minúsculas)
+            // Validar duplicado de identificaciÃ³n (insensible a mayÃºsculas/minÃºsculas)
             if (!string.IsNullOrWhiteSpace(dto.Numeroidentificacion))
             {
                 var cleanId = dto.Numeroidentificacion.Trim().ToLowerInvariant();
                 if (existingIdSet.Contains(cleanId) || tempIdsLote.Contains(cleanId))
                 {
-                    result.Errores.Add($"Fila {fila}: Identificación duplicada. Ya existe un cliente registrado con la cédula/RUC '{dto.Numeroidentificacion}'.");
+                    result.Errores.Add($"Fila {fila}: IdentificaciÃ³n duplicada. Ya existe un cliente registrado con la cÃ©dula/RUC '{dto.Numeroidentificacion}'.");
                     continue;
                 }
                 tempIdsLote.Add(cleanId);
             }
 
-            // Validar duplicado de correo electrónico (insensible a mayúsculas/minúsculas)
+            // Validar duplicado de correo electrÃ³nico (insensible a mayÃºsculas/minÃºsculas)
             if (!string.IsNullOrWhiteSpace(dto.Correo))
             {
                 var cleanEmail = dto.Correo.Trim().ToLowerInvariant();
                 if (existingEmailSet.Contains(cleanEmail) || tempEmailsLote.Contains(cleanEmail))
                 {
-                    result.Errores.Add($"Fila {fila}: Correo electrónico duplicado. Ya existe un cliente registrado con el correo '{dto.Correo}'.");
+                    result.Errores.Add($"Fila {fila}: Correo electrÃ³nico duplicado. Ya existe un cliente registrado con el correo '{dto.Correo}'.");
                     continue;
                 }
                 tempEmailsLote.Add(cleanEmail);
             }
 
-            // Validar duplicado de nombre/razón social (insensible a tildes/mayúsculas/minúsculas)
+            // Validar duplicado de nombre/razÃ³n social (insensible a tildes/mayÃºsculas/minÃºsculas)
             var modelName = !string.IsNullOrWhiteSpace(dto.Nombrerazonsocial) 
                 ? dto.Nombrerazonsocial 
                 : $"{dto.Apellidos} {dto.Nombres}";
             var normalizedModelName = RemoveAccents(modelName).Trim().ToLowerInvariant();
             if (existingNamesSet.Contains(normalizedModelName) || tempNamesLote.Contains(normalizedModelName))
             {
-                result.Errores.Add($"Fila {fila}: Nombre duplicado. Ya existe un cliente registrado con el nombre o razón social '{modelName}'.");
+                result.Errores.Add($"Fila {fila}: Nombre duplicado. Ya existe un cliente registrado con el nombre o razÃ³n social '{modelName}'.");
                 continue;
             }
             tempNamesLote.Add(normalizedModelName);
@@ -508,7 +510,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
 
                 if (string.IsNullOrWhiteSpace(codigoReal))
                 {
-                    result.Errores.Add($"Fila {fila}: El tipo de identificación seleccionado no es válido.");
+                    result.Errores.Add($"Fila {fila}: El tipo de identificaciÃ³n seleccionado no es vÃ¡lido.");
                     continue;
                 }
             }
@@ -599,7 +601,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
     public async Task<IActionResult> Update(int id, [FromQuery] int userId, [FromBody] ClienteUpsertDto dto)
     {
         if (!IsValidUser(userId))
-            return Unauthorized("Sesión no válida.");
+            return Unauthorized("SesiÃ³n no vÃ¡lida.");
 
         await EnsureDiasCreditoColumnAsync();
 
@@ -634,12 +636,12 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
                 .FirstOrDefaultAsync();
 
             if (string.IsNullOrWhiteSpace(codigoReal))
-                return BadRequest("El tipo de identificación seleccionado no es válido.");
+                return BadRequest("El tipo de identificaciÃ³n seleccionado no es vÃ¡lido.");
         }
 
         NormalizarDto(dto);
 
-        // Actualización de campos
+        // ActualizaciÃ³n de campos
         cliente.Apellidos = dto.Apellidos;
         cliente.Nombres = dto.Nombres;
         cliente.Nombrecomercial = dto.Nombrecomercial;
@@ -663,7 +665,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
 
         cliente.Usuario = ownerId.Value;
 
-        // Manejo de correos adicionales (borrón y cuenta nueva)
+        // Manejo de correos adicionales (borrÃ³n y cuenta nueva)
         var correosExistentes = await _context.ClientesCorreos
             .Where(cc => cc.CodCliente == cliente.Codcliente)
             .ToListAsync();
@@ -831,7 +833,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
             .FirstOrDefaultAsync();
 
         if (idPaisEcuador <= 0)
-            return NotFound("No se encontró el catálogo de Ecuador.");
+            return NotFound("No se encontrÃ³ el catÃ¡logo de Ecuador.");
 
         await _ubicacionEcuadorCatalogService.EnsureCatalogoAsync();
 
@@ -915,9 +917,9 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
     private async Task<string?> ValidarCliente(ClienteUpsertDto dto, int userId, int? clienteIdExistente = null, bool checkDuplicatesInDb = true)
     {
         if (dto is null)
-            return "Datos no válidos.";
+            return "Datos no vÃ¡lidos.";
 
-        // Normalizar RUC/Cédula scientific notation and symbols
+        // Normalizar RUC/CÃ©dula scientific notation and symbols
         if (dto.Tipoidentificacion.HasValue && dto.Tipoidentificacion.Value > 0)
         {
             var ideLookup = await _context.Identificacion.FirstOrDefaultAsync(i => i.IdeSec == dto.Tipoidentificacion.Value);
@@ -927,7 +929,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
                 var normDescReal = ideLookup.IdeDescripcion ?? "";
 
                 bool normEsCedula = string.Equals(normCodigoReal, "05", StringComparison.OrdinalIgnoreCase) ||
-                                    normDescReal.Contains("cédula", StringComparison.OrdinalIgnoreCase) ||
+                                    normDescReal.Contains("cÃ©dula", StringComparison.OrdinalIgnoreCase) ||
                                     normDescReal.Contains("cedula", StringComparison.OrdinalIgnoreCase);
 
                 bool normEsRuc = string.Equals(normCodigoReal, "04", StringComparison.OrdinalIgnoreCase) ||
@@ -971,17 +973,17 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
             return "El Tipo de cliente (Natural o Juridica) es obligatorio.";
 
         if (!dto.Tipoidentificacion.HasValue || dto.Tipoidentificacion <= 0)
-            return "El Tipo de identificación (Cedula o RUC) es obligatorio.";
+            return "El Tipo de identificaciÃ³n (Cedula o RUC) es obligatorio.";
 
         var ide = await _context.Identificacion.FirstOrDefaultAsync(i => i.IdeSec == dto.Tipoidentificacion.Value);
         if (ide == null)
-            return "El tipo de identificación seleccionado es inválido o no existe.";
+            return "El tipo de identificaciÃ³n seleccionado es invÃ¡lido o no existe.";
 
         var codigoReal = ide.IdeCodigo;
         var descReal = ide.IdeDescripcion ?? "";
 
         bool esCedula = string.Equals(codigoReal, "05", StringComparison.OrdinalIgnoreCase) ||
-                         descReal.Contains("cédula", StringComparison.OrdinalIgnoreCase) ||
+                         descReal.Contains("cÃ©dula", StringComparison.OrdinalIgnoreCase) ||
                          descReal.Contains("cedula", StringComparison.OrdinalIgnoreCase);
 
         bool esRuc = string.Equals(codigoReal, "04", StringComparison.OrdinalIgnoreCase) ||
@@ -1008,7 +1010,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
             {
                 var ruc = dto.Numeroidentificacion;
                 var tercerDigito = int.Parse(ruc.Substring(2, 1), System.Globalization.CultureInfo.InvariantCulture);
-                if (tercerDigito == 9) // Private legal entity (RUC de Sociedad Privada/Extranjera sin cédula)
+                if (tercerDigito == 9) // Private legal entity (RUC de Sociedad Privada/Extranjera sin cÃ©dula)
                 {
                     int[] coeficientes = { 4, 3, 2, 7, 6, 5, 4, 3, 2 };
                     var suma = 0;
@@ -1046,54 +1048,54 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
         if (esCedula)
         {
             if (string.IsNullOrWhiteSpace(dto.Numeroidentificacion))
-                return "La identificación (cédula) es obligatoria.";
+                return "La identificaciÃ³n (cÃ©dula) es obligatoria.";
 
             if (!dto.Numeroidentificacion.All(char.IsDigit))
-                return "La cédula debe contener únicamente dígitos numéricos.";
+                return "La cÃ©dula debe contener Ãºnicamente dÃ­gitos numÃ©ricos.";
 
             if (dto.Numeroidentificacion.Length != 10)
-                return $"Cédula inválida. La cédula debe tener exactamente 10 dígitos (se recibieron {dto.Numeroidentificacion.Length} dígitos).";
+                return $"CÃ©dula invÃ¡lida. La cÃ©dula debe tener exactamente 10 dÃ­gitos (se recibieron {dto.Numeroidentificacion.Length} dÃ­gitos).";
 
             if (!ValidarCedulaEcuatoriana(dto.Numeroidentificacion))
-                return "Cédula inválida. No supera el algoritmo de validación del dígito verificador ecuatoriano.";
+                return "CÃ©dula invÃ¡lida. No supera el algoritmo de validaciÃ³n del dÃ­gito verificador ecuatoriano.";
         }
         else if (esRuc)
         {
             if (string.IsNullOrWhiteSpace(dto.Numeroidentificacion))
-                return "La identificación (RUC) es obligatoria.";
+                return "La identificaciÃ³n (RUC) es obligatoria.";
 
             if (!dto.Numeroidentificacion.All(char.IsDigit))
-                return "El RUC debe contener únicamente dígitos numéricos.";
+                return "El RUC debe contener Ãºnicamente dÃ­gitos numÃ©ricos.";
 
             if (dto.Numeroidentificacion.Length != 13)
-                return $"RUC inválido. El RUC debe tener exactamente 13 dígitos (se recibieron {dto.Numeroidentificacion.Length} dígitos).";
+                return $"RUC invÃ¡lido. El RUC debe tener exactamente 13 dÃ­gitos (se recibieron {dto.Numeroidentificacion.Length} dÃ­gitos).";
 
             if (!ValidarRucEcuatoriano(dto.Numeroidentificacion))
-                return "RUC inválido. La estructura del RUC no es válida.";
+                return "RUC invÃ¡lido. La estructura del RUC no es vÃ¡lida.";
         }
         else if (esDocumentoAlfanumerico)
         {
             if (string.IsNullOrWhiteSpace(dto.Numeroidentificacion))
-                return "La identificación es obligatoria.";
+                return "La identificaciÃ³n es obligatoria.";
 
             if (!dto.Numeroidentificacion.All(char.IsLetterOrDigit))
-                return "La identificación debe contener únicamente caracteres alfanuméricos (letras y números).";
+                return "La identificaciÃ³n debe contener Ãºnicamente caracteres alfanumÃ©ricos (letras y nÃºmeros).";
 
             if (dto.Numeroidentificacion.Length < 3 || dto.Numeroidentificacion.Length > 20)
-                return $"La identificación debe tener una longitud de entre 3 y 20 caracteres (se recibieron {dto.Numeroidentificacion.Length} caracteres).";
+                return $"La identificaciÃ³n debe tener una longitud de entre 3 y 20 caracteres (se recibieron {dto.Numeroidentificacion.Length} caracteres).";
         }
         else
         {
             if (string.IsNullOrWhiteSpace(dto.Numeroidentificacion))
-                return "La identificación es obligatoria.";
+                return "La identificaciÃ³n es obligatoria.";
 
             if (dto.Numeroidentificacion.Length < 3 || dto.Numeroidentificacion.Length > 20)
-                return $"La identificación debe tener una longitud de entre 3 y 20 caracteres (se recibieron {dto.Numeroidentificacion.Length} caracteres).";
+                return $"La identificaciÃ³n debe tener una longitud de entre 3 y 20 caracteres (se recibieron {dto.Numeroidentificacion.Length} caracteres).";
         }
 
         if (checkDuplicatesInDb)
         {
-            // Validar duplicado de identificación (insensible a mayúsculas/minúsculas)
+            // Validar duplicado de identificaciÃ³n (insensible a mayÃºsculas/minÃºsculas)
             if (!string.IsNullOrWhiteSpace(dto.Numeroidentificacion))
             {
                 var idBuscado = dto.Numeroidentificacion.Trim().ToLowerInvariant();
@@ -1105,11 +1107,11 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
                                    (!clienteIdExistente.HasValue || c.Codcliente != clienteIdExistente.Value));
                 if (duplicateId)
                 {
-                    return $"Identificación duplicada. Ya existe un cliente activo registrado con la identificación '{dto.Numeroidentificacion}'.";
+                    return $"IdentificaciÃ³n duplicada. Ya existe un cliente activo registrado con la identificaciÃ³n '{dto.Numeroidentificacion}'.";
                 }
             }
 
-            // Validar duplicado de correo electrónico (insensible a mayúsculas/minúsculas)
+            // Validar duplicado de correo electrÃ³nico (insensible a mayÃºsculas/minÃºsculas)
             if (!string.IsNullOrWhiteSpace(dto.Correo))
             {
                 var correoBuscado = dto.Correo.Trim().ToLowerInvariant();
@@ -1121,16 +1123,16 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
                                    (!clienteIdExistente.HasValue || c.Codcliente != clienteIdExistente.Value));
                 if (duplicateEmail)
                 {
-                    return $"Correo electrónico duplicado. Ya existe un cliente activo registrado con el correo electrónico '{dto.Correo}'.";
+                    return $"Correo electrÃ³nico duplicado. Ya existe un cliente activo registrado con el correo electrÃ³nico '{dto.Correo}'.";
                 }
             }
         }
 
         if (string.IsNullOrWhiteSpace(dto.Correo))
-            return "El correo electrónico es obligatorio.";
+            return "El correo electrÃ³nico es obligatorio.";
 
         if (dto.DiasCredito is < 0)
-            return "Los días de crédito no pueden ser negativos.";
+            return "Los dÃ­as de crÃ©dito no pueden ser negativos.";
 
         try
         {
@@ -1138,7 +1140,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
         }
         catch
         {
-            return "El formato del correo electrónico es inválido (debe cumplir el formato usuario@dominio.com).";
+            return "El formato del correo electrÃ³nico es invÃ¡lido (debe cumplir el formato usuario@dominio.com).";
         }
 
         var correoPrincipalNormalizado = NormalizarCorreo(dto.Correo);
@@ -1161,12 +1163,12 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
             }
             catch
             {
-                return "Uno de los correos secundarios adicionales es inválido o tiene un formato incorrecto.";
+                return "Uno de los correos secundarios adicionales es invÃ¡lido o tiene un formato incorrecto.";
             }
         }
 
         if (string.IsNullOrWhiteSpace(dto.Oblgconta))
-            return "Debe indicar si está obligado a llevar contabilidad (SI o NO).";
+            return "Debe indicar si estÃ¡ obligado a llevar contabilidad (SI o NO).";
 
         if (dto.Oblgconta != "SI" && dto.Oblgconta != "NO")
             return "El campo obligado a llevar contabilidad solo permite los valores 'SI' o 'NO'.";
@@ -1179,7 +1181,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
                 return "El nombre comercial es obligatorio para personas juridicas.";
 
             if (string.IsNullOrWhiteSpace(dto.Nombrerazonsocial))
-                return "La razón social es obligatoria para personas jurídicas.";
+                return "La razÃ³n social es obligatoria para personas jurÃ­dicas.";
 
             dto.Apellidos = null;
             dto.Nombres = null;
@@ -1381,9 +1383,9 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
     private string? ValidarClienteOptimizado(ClienteUpsertDto dto, List<Identificacion> identificaciones, List<Tipocliente> tiposCliente)
     {
         if (dto is null)
-            return "Datos no válidos.";
+            return "Datos no vÃ¡lidos.";
 
-        // Normalizar RUC/Cédula scientific notation and symbols
+        // Normalizar RUC/CÃ©dula scientific notation and symbols
         if (dto.Tipoidentificacion.HasValue && dto.Tipoidentificacion.Value > 0)
         {
             var ideLookup = identificaciones.FirstOrDefault(i => i.IdeSec == dto.Tipoidentificacion.Value);
@@ -1393,7 +1395,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
                 var normDescReal = ideLookup.IdeDescripcion ?? "";
 
                 bool normEsCedula = string.Equals(normCodigoReal, "05", StringComparison.OrdinalIgnoreCase) ||
-                                    normDescReal.Contains("cédula", StringComparison.OrdinalIgnoreCase) ||
+                                    normDescReal.Contains("cÃ©dula", StringComparison.OrdinalIgnoreCase) ||
                                     normDescReal.Contains("cedula", StringComparison.OrdinalIgnoreCase);
 
                 bool normEsRuc = string.Equals(normCodigoReal, "04", StringComparison.OrdinalIgnoreCase) ||
@@ -1437,17 +1439,17 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
             return "El Tipo de cliente (Natural o Juridica) es obligatorio.";
 
         if (!dto.Tipoidentificacion.HasValue || dto.Tipoidentificacion <= 0)
-            return "El Tipo de identificación (Cedula o RUC) es obligatorio.";
+            return "El Tipo de identificaciÃ³n (Cedula o RUC) es obligatorio.";
 
         var ide = identificaciones.FirstOrDefault(i => i.IdeSec == dto.Tipoidentificacion.Value);
         if (ide == null)
-            return "El tipo de identificación seleccionado es inválido o no existe.";
+            return "El tipo de identificaciÃ³n seleccionado es invÃ¡lido o no existe.";
 
         var codigoReal = ide.IdeCodigo;
         var descReal = ide.IdeDescripcion ?? "";
 
         bool esCedula = string.Equals(codigoReal, "05", StringComparison.OrdinalIgnoreCase) ||
-                         descReal.Contains("cédula", StringComparison.OrdinalIgnoreCase) ||
+                         descReal.Contains("cÃ©dula", StringComparison.OrdinalIgnoreCase) ||
                          descReal.Contains("cedula", StringComparison.OrdinalIgnoreCase);
 
         bool esRuc = string.Equals(codigoReal, "04", StringComparison.OrdinalIgnoreCase) ||
@@ -1474,7 +1476,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
             {
                 var ruc = dto.Numeroidentificacion;
                 var tercerDigito = int.Parse(ruc.Substring(2, 1), System.Globalization.CultureInfo.InvariantCulture);
-                if (tercerDigito == 9) // Private legal entity (RUC de Sociedad Privada/Extranjera sin cédula)
+                if (tercerDigito == 9) // Private legal entity (RUC de Sociedad Privada/Extranjera sin cÃ©dula)
                 {
                     int[] coeficientes = { 4, 3, 2, 7, 6, 5, 4, 3, 2 };
                     var suma = 0;
@@ -1512,56 +1514,56 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
         if (esCedula)
         {
             if (string.IsNullOrWhiteSpace(dto.Numeroidentificacion))
-                return "La identificación (cédula) es obligatoria.";
+                return "La identificaciÃ³n (cÃ©dula) es obligatoria.";
 
             if (!dto.Numeroidentificacion.All(char.IsDigit))
-                return "La cédula debe contener únicamente dígitos numéricos.";
+                return "La cÃ©dula debe contener Ãºnicamente dÃ­gitos numÃ©ricos.";
 
             if (dto.Numeroidentificacion.Length != 10)
-                return $"Cédula inválida. La cédula debe tener exactamente 10 dígitos (se recibieron {dto.Numeroidentificacion.Length} dígitos).";
+                return $"CÃ©dula invÃ¡lida. La cÃ©dula debe tener exactamente 10 dÃ­gitos (se recibieron {dto.Numeroidentificacion.Length} dÃ­gitos).";
 
             if (!ValidarCedulaEcuatoriana(dto.Numeroidentificacion))
-                return "Cédula inválida. No supera el algoritmo de validación del dígito verificador ecuatoriano.";
+                return "CÃ©dula invÃ¡lida. No supera el algoritmo de validaciÃ³n del dÃ­gito verificador ecuatoriano.";
         }
         else if (esRuc)
         {
             if (string.IsNullOrWhiteSpace(dto.Numeroidentificacion))
-                return "La identificación (RUC) es obligatoria.";
+                return "La identificaciÃ³n (RUC) es obligatoria.";
 
             if (!dto.Numeroidentificacion.All(char.IsDigit))
-                return "El RUC debe contener únicamente dígitos numéricos.";
+                return "El RUC debe contener Ãºnicamente dÃ­gitos numÃ©ricos.";
 
             if (dto.Numeroidentificacion.Length != 13)
-                return $"RUC inválido. El RUC debe tener exactamente 13 dígitos (se recibieron {dto.Numeroidentificacion.Length} dígitos).";
+                return $"RUC invÃ¡lido. El RUC debe tener exactamente 13 dÃ­gitos (se recibieron {dto.Numeroidentificacion.Length} dÃ­gitos).";
 
             if (!ValidarRucEcuatoriano(dto.Numeroidentificacion))
-                return "RUC inválido. La estructura del RUC no es válida.";
+                return "RUC invÃ¡lido. La estructura del RUC no es vÃ¡lida.";
         }
         else if (esDocumentoAlfanumerico)
         {
             if (string.IsNullOrWhiteSpace(dto.Numeroidentificacion))
-                return "La identificación es obligatoria.";
+                return "La identificaciÃ³n es obligatoria.";
 
             if (!dto.Numeroidentificacion.All(char.IsLetterOrDigit))
-                return "La identificación debe contener únicamente caracteres alfanuméricos (letras y números).";
+                return "La identificaciÃ³n debe contener Ãºnicamente caracteres alfanumÃ©ricos (letras y nÃºmeros).";
 
             if (dto.Numeroidentificacion.Length < 3 || dto.Numeroidentificacion.Length > 20)
-                return $"La identificación debe tener una longitud de entre 3 y 20 caracteres (se recibieron {dto.Numeroidentificacion.Length} caracteres).";
+                return $"La identificaciÃ³n debe tener una longitud de entre 3 y 20 caracteres (se recibieron {dto.Numeroidentificacion.Length} caracteres).";
         }
         else
         {
             if (string.IsNullOrWhiteSpace(dto.Numeroidentificacion))
-                return "La identificación es obligatoria.";
+                return "La identificaciÃ³n es obligatoria.";
 
             if (dto.Numeroidentificacion.Length < 3 || dto.Numeroidentificacion.Length > 20)
-                return $"La identificación debe tener una longitud de entre 3 y 20 caracteres (se recibieron {dto.Numeroidentificacion.Length} caracteres).";
+                return $"La identificaciÃ³n debe tener una longitud de entre 3 y 20 caracteres (se recibieron {dto.Numeroidentificacion.Length} caracteres).";
         }
 
         if (string.IsNullOrWhiteSpace(dto.Correo))
-            return "El correo electrónico es obligatorio.";
+            return "El correo electrÃ³nico es obligatorio.";
 
         if (dto.DiasCredito is < 0)
-            return "Los días de crédito no pueden ser negativos.";
+            return "Los dÃ­as de crÃ©dito no pueden ser negativos.";
 
         try
         {
@@ -1569,7 +1571,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
         }
         catch
         {
-            return "El formato del correo electrónico es inválido (debe cumplir el formato usuario@dominio.com).";
+            return "El formato del correo electrÃ³nico es invÃ¡lido (debe cumplir el formato usuario@dominio.com).";
         }
 
         var correoPrincipalNormalizado = NormalizarCorreo(dto.Correo);
@@ -1592,12 +1594,12 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
             }
             catch
             {
-                return "Uno de los correos secundarios adicionales es inválido o tiene un formato incorrecto.";
+                return "Uno de los correos secundarios adicionales es invÃ¡lido o tiene un formato incorrecto.";
             }
         }
 
         if (string.IsNullOrWhiteSpace(dto.Oblgconta))
-            return "Debe indicar si está obligado a llevar contabilidad (SI o NO).";
+            return "Debe indicar si estÃ¡ obligado a llevar contabilidad (SI o NO).";
 
         if (dto.Oblgconta != "SI" && dto.Oblgconta != "NO")
             return "El campo obligado a llevar contabilidad solo permite los valores 'SI' o 'NO'.";
@@ -1609,7 +1611,7 @@ IF COL_LENGTH('dbo.CLIENTES', 'DIAS_CREDITO') IS NULL
         if (esJuridica)
         {
             if (string.IsNullOrWhiteSpace(dto.Nombrerazonsocial))
-                return "La razón social es obligatoria para personas jurídicas.";
+                return "La razÃ³n social es obligatoria para personas jurÃ­dicas.";
 
             dto.Apellidos = null;
             dto.Nombres = null;

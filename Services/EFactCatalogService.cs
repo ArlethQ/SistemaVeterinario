@@ -26,13 +26,13 @@ public sealed class EFactCatalogService(
     SessionStateService session,
     ILogger<EFactCatalogService> logger) : IEFactCatalogService
 {
-    private int UsuarioFacturacion => 1_000_000 + session.Localidad;
+    private int UsuarioFacturacion => 1_000_000 + (session.Localidad > 0 ? session.Localidad : 1);
 
     public async Task<List<CatalogoOperativoDto>> ObtenerCategoriasAsync()
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Productotipos.AsNoTracking()
-            .Where(x => x.Idusuario == UsuarioFacturacion)
+            .Where(x => x.Idusuario >= 1_000_000)
             .OrderBy(x => x.Descripcion)
             .Select(x => new CatalogoOperativoDto
             {
@@ -48,7 +48,7 @@ public sealed class EFactCatalogService(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Productosubtipos.AsNoTracking()
-            .Where(x => x.Idusuario == UsuarioFacturacion)
+            .Where(x => x.Idusuario >= 1_000_000)
             .OrderBy(x => x.Descripcion)
             .Select(x => new CatalogoOperativoDto
             {
@@ -65,7 +65,7 @@ public sealed class EFactCatalogService(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Productos.AsNoTracking()
-            .Where(x => x.Idusuario == UsuarioFacturacion)
+            .Where(x => x.Idusuario >= 1_000_000)
             .OrderBy(x => x.Nombre)
             .Select(x => new CatalogoOperativoDto
             {
