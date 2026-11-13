@@ -389,9 +389,9 @@ public class AuthService : IAuthService
                 (202, 'Recepción de órdenes', 2, 'admision/ordenes'),
                 (203, 'Agenda de citas', 2, 'admision/citas'),
                 (204, 'Triaje de ingreso', 13, 'admision/triaje'),
-                (301, 'Bandeja de órdenes', 3, 'kardex/ordenes'),
-                (302, 'Kardex enfermería', 3, 'kardex/enfermeria'),
-                (303, 'Signos y balance hídrico', 3, 'kardex/signos'),
+                (301, 'Bandeja de órdenes', 4, 'kardex/ordenes'),
+                (302, 'Kardex enfermería', 4, 'kardex/enfermeria'),
+                (303, 'Signos y balance hídrico', 4, 'kardex/signos'),
                 (401, 'Ficha de hospitalización', 4, 'hospitalizacion/ficha'),
                 (402, 'Monitoreo 24 horas', 4, 'hospitalizacion/monitoreo'),
                 (403, 'Turnos, exámenes y transfusión', 4, 'hospitalizacion/fichas-complementarias'),
@@ -405,7 +405,7 @@ public class AuthService : IAuthService
                 (601, 'Historia clínica SOAP', 6, 'consulta/fichamedica'),
                 (602, 'Apuntes a historias', 6, 'consulta/historial/apuntes'),
                 (603, 'Vacunación', 6, 'consulta/vacunas'),
-                (604, 'Evolución médica', 6, 'consulta/evoluciones'),
+                (604, 'Evolución médica', 4, 'consulta/evoluciones'),
                 (605, 'Recetario médico', 6, 'consulta/recetario'),
                 (606, 'Recetas sin orden', 6, 'consulta/recetario/sin-orden'),
                 (607, 'Consentimientos y alta', 6, 'consulta/autorizaciones'),
@@ -638,6 +638,7 @@ public class AuthService : IAuthService
     {
         if (string.IsNullOrWhiteSpace(menu.Url) || !int.TryParse(menu.SecNuevoMenu, out var seccion)) return "0";
         if (menu.Url.Equals("admision/triaje", StringComparison.OrdinalIgnoreCase)) return "13";
+        if (menu.Url.Trim().TrimStart('~', '/').ToLowerInvariant() is "kardex/ordenes" or "kardex/enfermeria" or "kardex/signos" or "consulta/evoluciones") return "4";
         if (seccion is >= 700 and < 800) return "0";
         var padre = seccion / 100;
         return padre is >= 1 and <= 12 ? padre.ToString() : "0";

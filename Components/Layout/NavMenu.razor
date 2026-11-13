@@ -85,10 +85,10 @@
             {
                 <span class="menu-section-label">Atención clínica</span>
 
-                @if (TieneAlguno(RutasKardex))
+                @if (TieneAlguno(RutasHospitalizacion))
                 {
                     <details>
-                        <summary><MenuIcon Name="kardex" /><span>Kardex clínico</span><i>⌄</i></summary>
+                        <summary><MenuIcon Name="hospital" /><span>Hospitalización 24h</span><i>⌄</i></summary>
                         <div class="submenu">
                             @if (TienePermiso("kardex/ordenes"))
                             {
@@ -102,15 +102,10 @@
                             {
                                 <NavLink href="kardex/signos">Signos y balance hídrico</NavLink>
                             }
-                        </div>
-                    </details>
-                }
-
-                @if (TieneAlguno(RutasHospitalizacion))
-                {
-                    <details>
-                        <summary><MenuIcon Name="hospital" /><span>Hospitalización 24h</span><i>⌄</i></summary>
-                        <div class="submenu">
+                            @if (TienePermiso("consulta/evoluciones"))
+                            {
+                                <NavLink href="consulta/evoluciones">Evolución médica</NavLink>
+                            }
                             @if (TienePermiso("hospitalizacion/ficha"))
                             {
                                 <NavLink href="hospitalizacion/ficha">Ficha de hospitalización</NavLink>
@@ -180,10 +175,6 @@
                             @if (TienePermiso("consulta/vacunas"))
                             {
                                 <NavLink href="consulta/vacunas">Vacunación</NavLink>
-                            }
-                            @if (TienePermiso("consulta/evoluciones"))
-                            {
-                                <NavLink href="consulta/evoluciones">Evolución médica</NavLink>
                             }
                             @if (TienePermiso("consulta/recetario"))
                             {
@@ -481,15 +472,12 @@
         "admision/citas"
     ];
 
-    private static readonly string[] RutasKardex =
+    private static readonly string[] RutasHospitalizacion =
     [
         "kardex/ordenes",
         "kardex/enfermeria",
-        "kardex/signos"
-    ];
-
-    private static readonly string[] RutasHospitalizacion =
-    [
+        "kardex/signos",
+        "consulta/evoluciones",
         "hospitalizacion/ficha",
         "hospitalizacion/monitoreo",
         "hospitalizacion/fichas-complementarias",
@@ -511,7 +499,6 @@
         "consulta/fichamedica",
         "consulta/historial/apuntes",
         "consulta/vacunas",
-        "consulta/evoluciones",
         "consulta/recetario",
         "consulta/recetario/sin-orden",
         "consulta/autorizaciones",
@@ -528,7 +515,6 @@
 
     private static readonly string[] RutasAtencionClinica =
     [
-        ..RutasKardex,
         ..RutasHospitalizacion,
         ..RutasQuirofano,
         ..RutasConsulta,

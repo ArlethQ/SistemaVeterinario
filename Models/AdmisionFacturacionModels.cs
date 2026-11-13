@@ -191,6 +191,7 @@ public class OrdenAtencionResumenDto
     public string Especialidad { get; set; } = string.Empty;
     public int IdMedico { get; set; }
     public string Medico { get; set; } = string.Empty;
+    public bool PuedeAbrirCola { get; set; }
     public bool TriajeMedico { get; set; }
     public bool EsProcedimiento { get; set; }
     public int? IdEnfermero { get; set; }

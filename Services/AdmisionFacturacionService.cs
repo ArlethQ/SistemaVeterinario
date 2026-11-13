@@ -1538,6 +1538,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    ISNULL(u.user_nombre, '') AS Medico,
                    ISNULL(enf.user_nombre, '') AS Enfermero,
                    CAST(ISNULL(o.ordenAten_triajeMedico, 0) AS bit) AS TriajeMedico,
+                   CAST(CASE WHEN @Triaje = 0 OR EXISTS (
+                       SELECT 1 FROM vt_usuarios u
+                       JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
+                       WHERE u.user_numero = @Usuario AND u.user_estado = 'A' AND {ResponsableTriaje}
+                   ) THEN 1 ELSE 0 END AS bit) AS PuedeAbrirCola,
                    ISNULL(o.ordenAten_estado, 'A') AS Estado,
                    CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento,
                    COALESCE(asignacion.Fecha, historica.Fecha,
@@ -1563,7 +1568,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             ) historica
             WHERE ((@IdOrden IS NOT NULL AND o.ordenAten_id = @IdOrden)
                 OR (@IdOrden IS NULL AND o.ordenAten_fecha >= @Hoy AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
-                    AND (@LocalidadSesion <= 0 OR o.ordenAten_idlocalidad = @LocalidadSesion)
+                    AND ((@LocalidadSesion <= 0 AND NOT (@Rol = 1 AND @Triaje = 1))
+                         OR o.ordenAten_idlocalidad = @LocalidadSesion)
                     AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')))
               AND {AlcanceOrden}
               AND (
@@ -1572,9 +1578,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         AND EXISTS (SELECT 1 FROM vt_vitacora v
                             WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id)))
                    OR (@Triaje = 1 AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
-                        AND EXISTS (SELECT 1 FROM vt_usuarios u
-                            JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
-                            WHERE u.user_numero = @Usuario AND u.user_estado = 'A' AND {ResponsableTriaje})
+                        AND ((@Rol = 1 AND @IdOrden IS NULL AND o.ordenAten_idlocalidad = @LocalidadSesion)
+                            OR EXISTS (SELECT 1 FROM vt_usuarios u
+                                JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
+                                WHERE u.user_numero = @Usuario AND u.user_estado = 'A' AND {ResponsableTriaje}))
                         AND NOT EXISTS (SELECT 1 FROM vt_vitacora v
                             WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id)))
               )

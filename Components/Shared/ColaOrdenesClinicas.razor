@@ -37,7 +37,14 @@
                             @if (UnificarConTriaje) { <td>@(EsTriaje(orden) ? "Triaje" : "Consulta")</td> }
                             <td>@(orden.Estado.Trim() == "E" ? "En atención" : "En espera")</td>
                             <td>
-                                <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(EsTriaje(orden) && orden.Estado.Trim() == "A" ? "Iniciar triaje" : "Abrir") <span class="visually-hidden">orden #@orden.IdOrden</span></a>
+                                @if (orden.PuedeAbrirCola)
+                                {
+                                    <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(EsTriaje(orden) && orden.Estado.Trim() == "A" ? "Iniciar triaje" : "Abrir") <span class="visually-hidden">orden #@orden.IdOrden</span></a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Atiende el responsable asignado</span>
+                                }
                             </td>
                         </tr>
                     }
