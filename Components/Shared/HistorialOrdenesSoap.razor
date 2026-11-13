@@ -17,13 +17,13 @@
         @if (_mascota != null && NhclActual > 0)
         {
             <button type="button" class="btn btn-sm btn-outline-primary align-self-start mb-2" disabled="@_ocupado"
-                    @onclick="() => _mascota = null">Ver mascota de la ficha SOAP</button>
+                    @onclick="VolverAMascotaActual">Ver mascota de la ficha SOAP</button>
         }
         <div class="btn-group align-self-start mb-2" role="group" aria-label="Período de las órdenes">
             <button type="button" class="btn btn-sm btn-outline-primary @(!_antiguas ? "active" : null)"
-                    aria-pressed="@(!_antiguas)" @onclick="() => _antiguas = false">Nuevas (desde hoy)</button>
+                    aria-pressed="@(!_antiguas)" @onclick="() => CambiarPeriodo(false)">Nuevas (desde hoy)</button>
             <button type="button" class="btn btn-sm btn-outline-primary @(_antiguas ? "active" : null)"
-                    aria-pressed="@_antiguas" @onclick="() => _antiguas = true">Antiguas</button>
+                    aria-pressed="@_antiguas" @onclick="() => CambiarPeriodo(true)">Antiguas</button>
         </div>
 
         @if (ErrorHistorial)
@@ -40,9 +40,9 @@
                 <table class="table table-sm align-middle mb-0">
                     <thead><tr><th>Orden</th><th>Fecha</th><th>Especialidad</th><th>Médico</th><th>Estado</th><th>Ficha SOAP</th></tr></thead>
                     <tbody>
-                        @foreach (var orden in OrdenesVisibles)
+                        @foreach (var orden in OrdenesVisibles.Skip((PaginaActual - 1) * TamanoPagina).Take(TamanoPagina))
                         {
-                            var estadoOrd = OrdenActualCerrada && orden.IdOrden == OrdenActual ? "T" : orden.Estado.Trim();
+                            var estadoOrd = OrdenActualCerrada && orden.IdOrden == OrdenActual ? "T" : orden.Estado.Trim().ToUpperInvariant();
                             <tr @key="orden.IdOrden" class="@(orden.IdOrden == OrdenActual ? "table-active" : null)">
                                 <td>#@orden.IdOrden</td>
                                 <td>@orden.Fecha.ToString("dd/MM/yyyy") @orden.Hora</td>
@@ -71,13 +71,15 @@
                                     {
                                         <span class="text-muted">Anulada</span>
                                     }
-                                    else if (orden.IdOrden == OrdenActual)
-                                    {
-                                        <span class="text-muted">@(OrdenActualCerrada ? "Guardada" : "Abierta")</span>
-                                    }
                                     else
                                     {
-                                        <a class="btn btn-sm btn-outline-primary" href="/consulta/fichamedica/@orden.IdOrden/@NhclHistorial" target="_blank" rel="noopener">Abrir en otra pestaña</a>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AbrirOrden.InvokeAsync((orden.IdOrden, NhclHistorial, false))">Ver</button>
+                                            @if (PuedeEditar(orden, estadoOrd))
+                                            {
+                                                <button type="button" class="btn btn-sm btn-primary" @onclick="() => AbrirOrden.InvokeAsync((orden.IdOrden, NhclHistorial, true))">Editar</button>
+                                            }
+                                        </div>
                                     }
                                 </td>
                             </tr>
@@ -85,6 +87,16 @@
                     </tbody>
                 </table>
             </div>
+            @if (TotalPaginas > 1)
+            {
+                <nav class="d-flex align-items-center justify-content-end gap-2 mt-2" aria-label="Paginación del historial">
+                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@(PaginaActual <= 1)"
+                            @onclick="() => _pagina = PaginaActual - 1">Anterior</button>
+                    <span class="small" role="status">Página @PaginaActual de @TotalPaginas</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@(PaginaActual >= TotalPaginas)"
+                            @onclick="() => _pagina = PaginaActual + 1">Siguiente</button>
+                </nav>
+            }
         }
     }
 </section>
@@ -96,6 +108,32 @@
     [Parameter] public bool OrdenActualCerrada { get; set; }
     [Parameter] public IReadOnlyList<OrdenPacienteResumenDto> OrdenesActuales { get; set; } = [];
     [Parameter] public bool ErrorActual { get; set; }
+
+    [Parameter] public EventCallback<(int IdOrden, int Nhcl, bool Editar)> AbrirOrden { get; set; }
+
+    [Parameter] public int RolUsuario { get; set; }
+    [Parameter] public int IdUsuario { get; set; }
+
+    private bool PuedeEditar(OrdenPacienteResumenDto orden, string estado) =>
+        estado is ("A" or "E" or "T") &&
+        (RolUsuario == 1 || (RolUsuario == 2 && orden.IdMedico == IdUsuario && orden.EnVentanaEdicion24h));
+
+    private const int TamanoPagina = 10;
+    private int _pagina = 1;
+    private int TotalPaginas => Math.Max(1, (OrdenesVisibles.Count() + TamanoPagina - 1) / TamanoPagina);
+    private int PaginaActual => Math.Min(_pagina, TotalPaginas);
+
+    private void CambiarPeriodo(bool antiguas)
+    {
+        _antiguas = antiguas;
+        _pagina = 1;
+    }
+
+    private void VolverAMascotaActual()
+    {
+        _mascota = null;
+        _pagina = 1;
+    }
 
     private SelectorClinicoDto? _mascota;
     private List<OrdenPacienteResumenDto> _ordenes = [];
@@ -143,6 +181,7 @@
             if (version == _versionCarga)
             {
                 _mascota = mascota;
+                _pagina = 1;
                 _antiguas = _ordenes.Count > 0 && _ordenes.All(orden => orden.Fecha.Date < DateTime.Today);
                 _ocupado = false;
                 StateHasChanged();

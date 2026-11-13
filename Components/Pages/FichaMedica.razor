@@ -83,7 +83,7 @@
 
     <div hidden="@(!_verHistorial)">
         <HistorialOrdenesSoap @key="Nhcl" @ref="_historialSoap" NhclActual="@(Paciente?.Nhcl ?? 0)" NombreActual="@Paciente?.PacienteNombre"
-                             OrdenActual="@IdOrden" OrdenActualCerrada="@_ordenActualCerrada" OrdenesActuales="@_historialOrdenes" ErrorActual="@_errorHistorialOrdenes" />
+                             OrdenActual="@IdOrden" OrdenActualCerrada="@_ordenActualCerrada" OrdenesActuales="@_historialOrdenes" ErrorActual="@_errorHistorialOrdenes" RolUsuario="@Session.TipoUser" IdUsuario="@Session.IdUser" AbrirOrden="AbrirOrdenHistorialAsync" />
     </div>
 
     <div hidden="@_verHistorial">
@@ -182,7 +182,8 @@
     @if (!FichaEditable && (_ordenActualCerrada || _estadoOrden is ("A" or "E")))
     {
         <p class="small text-muted mb-2">
-            @(Session.TipoUser != 1 && _ordenActualAsignadaA != Session.IdUser
+            @(SoloVer ? "Ficha SOAP en modo de solo lectura."
+                : Session.TipoUser != 1 && _ordenActualAsignadaA != Session.IdUser
                 ? "Solo lectura: esta ficha SOAP está asignada a otro médico."
                 : _ordenActualCerrada
                     ? "Ficha SOAP bloqueada (solo editable por el médico asignado dentro de las primeras 24 horas o por un administrador)."
@@ -1068,6 +1069,8 @@
 @code {
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
+    [SupplyParameterFromQuery(Name = "ver")] public bool? Ver { get; set; }
+    private bool SoloVer => Ver == true;
 
     private List<OrdenActivaResumenDto> _ordenesActivas = new();
     private HistorialOrdenesSoap? _historialSoap;
@@ -1124,7 +1127,7 @@
     private OrdenPacienteResumenDto? OrdenActualResumen => _historialOrdenes.FirstOrDefault(o => o.IdOrden == IdOrden);
     private int _ordenActualAsignadaA => OrdenActualResumen?.IdMedico ?? 0;
     private bool FichaCargada => Paciente != null && IdOrden > 0 && !CargandoInicial;
-    private bool FichaEditable => FichaCargada &&
+    private bool FichaEditable => !SoloVer && FichaCargada &&
         (Session.TipoUser == 1
             ? ((_estadoOrden is ("A" or "E") && (_inicioConsultaUtc.HasValue || _triajeMedicoPendiente)) || _estadoOrden == "T")
             : (OrdenActualResumen is { } ord
@@ -1295,6 +1298,14 @@
         }
     }
 
+    private async Task AbrirOrdenHistorialAsync((int IdOrden, int Nhcl, bool Editar) orden)
+    {
+        if (!await GuardarCambiosSoapAsync()) return;
+
+        _verHistorial = false;
+        Nav.NavigateTo($"/consulta/fichamedica/{orden.IdOrden}/{orden.Nhcl}" + (orden.Editar ? "" : "?ver=true"));
+    }
+
     private async Task VerHistorialAsync()
     {
         if (await GuardarCambiosSoapAsync())
@@ -1356,15 +1367,15 @@
             }
         }
 
-        _estadoOrden = _historialOrdenes.FirstOrDefault(orden => orden.IdOrden == IdOrden)?.Estado.Trim();
+        _estadoOrden = _historialOrdenes.FirstOrDefault(orden => orden.IdOrden == IdOrden)?.Estado.Trim().ToUpperInvariant();
         _ordenActualCerrada = _estadoOrden == "T";
-        if (!_ordenActualCerrada)
+        if (!SoloVer && !_ordenActualCerrada)
             Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
 
         if (Paciente == null || IdOrden <= 0)
             return;
 
-        if (_estadoOrden is "A" or "E")
+        if (!SoloVer && _estadoOrden is ("A" or "E"))
         {
             _inicioConsultaUtc = await AdmisionService.IniciarAtencionClinicaAsync(IdOrden, Nhcl, triaje: false);
             if (!_inicioConsultaUtc.HasValue)

@@ -39,7 +39,7 @@
                             <td>
                                 @if (orden.PuedeAbrirCola)
                                 {
-                                    <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(EsTriaje(orden) && orden.Estado.Trim() == "A" ? "Iniciar triaje" : "Abrir") <span class="visually-hidden">orden #@orden.IdOrden</span></a>
+                                    <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(TextoAccion(orden)) <span class="visually-hidden">orden #@orden.IdOrden</span></a>
                                 }
                                 else
                                 {
@@ -69,6 +69,13 @@
     private bool _cargada;
     private bool _sonidoActivo;
     private string? _error;
+
+    private string TextoAccion(OrdenAtencionResumenDto orden)
+    {
+        if (orden.Estado.Trim() != "A") return "Abrir";
+        if (EsTriaje(orden)) return "Iniciar triaje";
+        return UnificarConTriaje ? "Iniciar consulta" : "Abrir";
+    }
 
     private string RutaOrden(OrdenAtencionResumenDto orden) =>
         $"{(Triaje && !AbrirEnSoap ? "/admision/triaje" : "/consulta/fichamedica")}/{orden.IdOrden}/{orden.Nhcl}";
