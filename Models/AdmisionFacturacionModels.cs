@@ -365,9 +365,11 @@ public sealed class OrdenPacienteResumenDto
 {
     public bool EsProcedimiento { get; set; }
     public int IdOrden { get; set; }
+    public int IdMedico { get; set; }
     public DateTime Fecha { get; set; }
     public string Hora { get; set; } = string.Empty;
     public string Especialidad { get; set; } = string.Empty;
     public string Medico { get; set; } = string.Empty;
     public string Estado { get; set; } = string.Empty;
+    public bool EnVentanaEdicion24h { get; set; }
 }

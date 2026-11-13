@@ -1242,12 +1242,20 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         if (!_session.IsAuthenticated || nhcl <= 0) return [];
         var ordenes = await _db.QueryAsync<OrdenPacienteResumenDto>($@"
             SELECT o.ordenAten_id AS IdOrden,
+                   ISNULL(o.ordenAten_idMedico, 0) AS IdMedico,
                    ISNULL(o.ordenAten_fecha, GETDATE()) AS Fecha,
                    ISNULL(o.ordenAten_hora, '') AS Hora,
                    ISNULL(esp.es_descripcion, 'Consulta General') AS Especialidad,
                    ISNULL(u.user_nombre, 'Médico') AS Medico,
                    ISNULL(o.ordenAten_estado, 'A') AS Estado,
-                   CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento
+                   CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento,
+                   CAST(CASE WHEN DATEADD(hour, 24,
+                       CASE
+                           WHEN ISNULL(o.ordenAten_estado, 'A') = 'T'
+                               THEN COALESCE(o.ordenAten_fechaProcesado, TRY_CAST(CONCAT(CONVERT(varchar(10), o.ordenAten_fecha, 23), ' ', NULLIF(RTRIM(o.ordenAten_hora), '')) AS datetime), CAST(o.ordenAten_fecha AS datetime))
+                           ELSE COALESCE(o.ordenAten_fechaenAtencion, TRY_CAST(CONCAT(CONVERT(varchar(10), o.ordenAten_fecha, 23), ' ', NULLIF(RTRIM(o.ordenAten_hora), '')) AS datetime), CAST(o.ordenAten_fecha AS datetime))
+                       END
+                   ) >= GETDATE() THEN 1 ELSE 0 END AS bit) AS EnVentanaEdicion24h
             FROM vt_ordenAtencion o
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             LEFT JOIN vt_especialidades esp ON o.ordenAten_esp_numero = esp.es_id

@@ -189,9 +189,15 @@
             </li>
         </ul>
 
-    @if (_ordenActualCerrada && !FichaEditable)
+    @if (!FichaEditable && (_ordenActualCerrada || _estadoOrden is ("A" or "E")))
     {
-        <p class="small text-muted mb-2">Ficha SOAP finalizada. Solo lectura.</p>
+        <p class="small text-muted mb-2">
+            @(Session.TipoUser != 1 && _ordenActualAsignadaA != Session.IdUser
+                ? "Solo lectura: esta ficha SOAP está asignada a otro médico."
+                : _ordenActualCerrada
+                    ? "Ficha SOAP bloqueada (solo editable por el médico asignado dentro de las primeras 24 horas o por un administrador)."
+                    : "Ficha SOAP de solo lectura (fuera de las 24 horas permitidas o pendiente de triaje/inicio de atención).")
+        </p>
     }
     <fieldset disabled="@(!FichaEditable || Guardando)">
     <!-- TAB 1: EXAMEN FÍSICO, CONSTANTES FISIOLÓGICAS Y TRIAJE -->
@@ -1115,9 +1121,16 @@
             await _historialSoap.VerOrdenesAsync(mascota);
     }
 
+    private OrdenPacienteResumenDto? OrdenActualResumen => _historialOrdenes.FirstOrDefault(o => o.IdOrden == IdOrden);
+    private int _ordenActualAsignadaA => OrdenActualResumen?.IdMedico ?? 0;
     private bool FichaCargada => Paciente != null && IdOrden > 0 && !CargandoInicial;
     private bool FichaEditable => FichaCargada &&
-        ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || (_estadoOrden == "T" && Session.TipoUser == 1));
+        (Session.TipoUser == 1
+            ? ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || _estadoOrden == "T")
+            : (OrdenActualResumen is { } ord
+                && ord.IdMedico == Session.IdUser
+                && ord.EnVentanaEdicion24h
+                && ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || _estadoOrden == "T")));
     private DateTime? _inicioConsultaUtc;
     private bool _triajeMedicoPendiente;
     private DateTime? _finConsultaUtc;
