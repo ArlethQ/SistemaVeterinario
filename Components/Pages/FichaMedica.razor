@@ -57,6 +57,10 @@
                     </div>
                 }
             </div>
+            @if (_inicioConsultaUtc is { } inicio)
+            {
+                <ContadorAtencion @key="(IdOrden, inicio)" Etiqueta="Consulta" InicioUtc="inicio" FinUtc="_finConsultaUtc" />
+            }
             <button class="btn btn-sm btn-success" @onclick="GuardarFichaCompletaAsync" disabled="@(Guardando || !FichaEditable)">
                 <i class="bi bi-floppy-fill me-1"></i>@(Guardando ? "Guardando..." : "Guardar Ficha SOAP")
             </button>
@@ -84,6 +88,10 @@
 
     <div hidden="@_verHistorial">
     <ColaOrdenesClinicas @ref="_colaOrdenes" OrdenSeleccionada="@IdOrden" />
+    @if (Session.TipoUser == 2)
+    {
+        <ColaOrdenesClinicas Triaje="true" AbrirEnSoap="true" OrdenSeleccionada="@IdOrden" />
+    }
 
     @if (!string.IsNullOrEmpty(MensajeAlerta))
     {
@@ -99,6 +107,12 @@
             <div class="spinner-border spinner-border-sm" role="status"></div>
             <span class="fw-semibold small">Cargando historia clínica SOAP y antecedentes...</span>
         </div>
+    }
+
+    @if (FichaCargada && _triajeMedicoPendiente)
+    {
+        <TriajeIngreso @key="(IdOrden, Nhcl)" IdOrden="@IdOrden" Nhcl="@Nhcl"
+                       ModoModal="true" OnGuardado="ContinuarConsultaTrasTriajeAsync" />
     }
 
     <!-- Cinta de Identificación del Paciente y Semáforo de Temperamento + 4 Pestañas Clínicas -->
@@ -1102,8 +1116,11 @@
     }
 
     private bool FichaCargada => Paciente != null && IdOrden > 0 && !CargandoInicial;
-    private bool FichaEditable => FichaCargada && _estadoOrden is ("A" or "E" or "T")
-        && (_estadoOrden != "T" || Session.TipoUser == 1);
+    private bool FichaEditable => FichaCargada &&
+        ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || (_estadoOrden == "T" && Session.TipoUser == 1));
+    private DateTime? _inicioConsultaUtc;
+    private bool _triajeMedicoPendiente;
+    private DateTime? _finConsultaUtc;
     private string? _estadoOrden;
     private bool _verHistorial;
     private int TabActiva { get; set; } = 1;
@@ -1261,8 +1278,14 @@
             await CargarCatalogosPrescripcionAsync();
     }
 
+    private Task ContinuarConsultaTrasTriajeAsync(FichaMedicaCompletaDto ficha) =>
+        ficha.MedOrden == IdOrden && ficha.MedNhcl == Nhcl ? CargarDatosCompletosAsync() : Task.CompletedTask;
+
     private async Task CargarDatosCompletosAsync()
     {
+        _triajeMedicoPendiente = false;
+        _inicioConsultaUtc = null;
+        _finConsultaUtc = null;
         MensajeAlerta = null;
         EsError = false;
         _historialOrdenes = [];
@@ -1306,6 +1329,18 @@
 
         if (Paciente == null || IdOrden <= 0)
             return;
+
+        if (_estadoOrden is "A" or "E")
+        {
+            _inicioConsultaUtc = await AdmisionService.IniciarAtencionClinicaAsync(IdOrden, Nhcl, triaje: false);
+            if (!_inicioConsultaUtc.HasValue)
+            {
+                _triajeMedicoPendiente = Session.TipoUser == 2 &&
+                    (await AdmisionService.ObtenerColaClinicaAsync(triaje: true, idOrden: IdOrden)).Any();
+                if (!_triajeMedicoPendiente)
+                    MensajeAlerta = "La consulta estará disponible cuando se complete el triaje requerido.";
+            }
+        }
 
         var tFicha = ConsultaService.ObtenerFichaMedicaAsync(IdOrden, Nhcl);
         var tDiag = ConsultaService.ObtenerDiagnosticosOrdenAsync(IdOrden);
@@ -1569,6 +1604,7 @@
             }
 
             _estadoOrden = "T";
+            _finConsultaUtc = DateTime.UtcNow;
             _ordenActualCerrada = true;
             var ordenGuardada = _historialOrdenes.FirstOrDefault(orden => orden.IdOrden == ordenCerrada);
             if (ordenGuardada != null)

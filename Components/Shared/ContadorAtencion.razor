@@ -1,0 +1,30 @@
+@implements IDisposable
+
+<span class="badge bg-light text-dark border">
+    @Etiqueta @($"{(int)Duracion.TotalHours:00}:{Duracion.Minutes:00}:{Duracion.Seconds:00}")
+</span>
+
+@code {
+    [Parameter, EditorRequired] public DateTime InicioUtc { get; set; }
+    [Parameter] public DateTime? FinUtc { get; set; }
+    [Parameter, EditorRequired] public string Etiqueta { get; set; } = "";
+
+    private readonly PeriodicTimer _timer = new(TimeSpan.FromSeconds(1));
+    private TimeSpan Duracion => TimeSpan.FromSeconds(Math.Max(0, ((FinUtc ?? DateTime.UtcNow) - InicioUtc).TotalSeconds));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        while (await _timer.WaitForNextTickAsync())
+        {
+            if (FinUtc.HasValue)
+                return;
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose() => _timer.Dispose();
+}

@@ -503,26 +503,27 @@ public class ConsultaExternaService : IConsultaExternaService
             }
             else if (triaje)
             {
-                comandos.Add((@"
+                comandos.Add(($@"
                     IF NOT EXISTS (
                         SELECT 1 FROM vt_ordenAtencion o WITH (UPDLOCK, HOLDLOCK)
                         WHERE o.ordenAten_id = @MedOrden AND o.ordenAten_nhcl = @MedNhcl
-                          AND (ISNULL(o.ordenAten_triajeMedico, CASE WHEN o.ordenAten_esp_numero > 0 THEN 1 ELSE 0 END) = 1
-                              OR (ISNULL(o.ordenAten_esProcedimiento, 0) = 1 AND (o.ordenAten_idEnfermero = @MedIdUser OR EXISTS (
-                                  SELECT 1 FROM vt_usuarios WHERE user_numero = @MedIdUser AND user_tipouser_numero = 1))))
                           AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
-                    ) OR NOT EXISTS (
-                        SELECT 1 FROM vt_usuarios u
-                        JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
-                        WHERE u.user_numero = @MedIdUser AND u.user_estado = 'A'
-                          AND (t.tipuser_numero = 1 OR UPPER(t.tipuser_descripcion) LIKE '%ENFERMER%')
+                          AND EXISTS (
+                              SELECT 1 FROM vt_usuarios u
+                              JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
+                              WHERE u.user_numero = @MedIdUser AND u.user_estado = 'A'
+                                AND {AdmisionFacturacionService.ResponsableTriaje})
                     ) OR EXISTS (
                         SELECT 1 FROM vt_vitacora
                         WHERE vit_detalle = CONCAT('Triaje de ingreso completado Orden #', @MedOrden)
                     )
                         THROW 50001, 'La orden ya no está disponible para triaje.', 1;
 
-                    UPDATE vt_ordenAtencion SET ordenAten_idEnfermero = @MedIdUser
+                    UPDATE vt_ordenAtencion
+                    SET ordenAten_idEnfermero = CASE WHEN ISNULL(ordenAten_esProcedimiento, 0) = 0 AND ISNULL(ordenAten_triajeMedico, 0) = 1 THEN ordenAten_idEnfermero ELSE @MedIdUser END,
+                        ordenAten_estado = CASE WHEN ordenAten_esProcedimiento = 1 THEN 'T' ELSE 'E' END,
+                        ordenAten_etapa = CASE WHEN ordenAten_esProcedimiento = 1 THEN 'Procesado' ELSE ordenAten_etapa END,
+                        ordenAten_fechaProcesado = CASE WHEN ordenAten_esProcedimiento = 1 THEN GETDATE() ELSE ordenAten_fechaProcesado END
                     WHERE ordenAten_id = @MedOrden;
 
                     INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)

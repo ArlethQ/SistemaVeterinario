@@ -198,6 +198,10 @@ public class OrdenAtencionResumenDto
     public DateTime Fecha { get; set; }
     public string Hora { get; set; } = string.Empty;
     public DateTime FechaAsignacion { get; set; }
+    public DateTime? InicioTriaje { get; set; }
+    public DateTime? FinTriaje { get; set; }
+    public DateTime? InicioConsulta { get; set; }
+    public DateTime? FinConsulta { get; set; }
     public string Estado { get; set; } = "A"; // A=Activa/Espera, T=Terminada, P=Pre-alta, I=Anulada
     public string Etapa { get; set; } = "Consulta";
     public string TipoOrigen { get; set; } = "M";

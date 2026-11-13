@@ -33,6 +33,7 @@ public interface IAdmisionFacturacionService
     Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "");
     Task<List<OrdenPacienteResumenDto>> ObtenerOrdenesPacienteAsync(int nhcl);
     Task<bool> PuedeConsultarOrdenAsync(int idOrden, int nhcl);
+    Task<DateTime?> IniciarAtencionClinicaAsync(int idOrden, int nhcl, bool triaje);
     Task<List<ProcedimientoTriajeDto>> ObtenerProcedimientosTriajeAsync(int idOrden, int nhcl);
     Task<List<CatalogoOperativoDto>> ObtenerCatalogoProcedimientosTriajeAsync(int idOrden, int nhcl, int? idProducto = null);
     Task<bool> AgregarProcedimientoTriajeAsync(int idOrden, int nhcl, int idProducto, int cantidad, string observaciones, bool desdeHistorial, bool desdeSoap);
@@ -80,6 +81,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         o.ordenAten_idlocalidad = @LocalidadSesion
         AND o.ordenAten_idlocalidad IN (" + SucursalesAsignadas + @")
         AND (@Rol <> 2 OR o.ordenAten_idMedico = @UsuarioSesion)))";
+    internal const string ResponsableTriaje = """
+        (ISNULL(o.ordenAten_esProcedimiento, 0) = 0
+            AND ISNULL(o.ordenAten_triajeMedico, 0) = 1
+            AND u.user_tipouser_numero = 2 AND o.ordenAten_idMedico = u.user_numero
+         OR (ISNULL(o.ordenAten_esProcedimiento, 0) = 1 OR ISNULL(o.ordenAten_triajeMedico, 0) = 0)
+            AND (u.user_tipouser_numero = 1 OR UPPER(t.tipuser_descripcion) LIKE '%ENFERMER%')
+            AND (ISNULL(o.ordenAten_idEnfermero, 0) = 0 OR o.ordenAten_idEnfermero = u.user_numero))
+        """;
+
     private const string PermisoEditarCita = @" AND EXISTS (
         SELECT 1 FROM vt_usuarios actor
         WHERE actor.user_numero = @UsuarioSesion AND actor.user_estado = 'A'
@@ -1006,9 +1016,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         if (orden.TipoDespacho is < 0 or > 4) throw new InvalidOperationException("El tipo de despacho seleccionado no es válido.");
         if (orden.EsProcedimiento)
         {
-            if (!orden.IdEnfermero.HasValue || orden.IdEnfermero.Value <= 0)
-                throw new InvalidOperationException("El procedimiento requiere un enfermero responsable.");
-            if (!await EnfermeroAtiendeEnLocalidadAsync(orden.IdEnfermero.Value, orden.IdLocalidad))
+            if (orden.IdEnfermero is > 0 && !await EnfermeroAtiendeEnLocalidadAsync(orden.IdEnfermero.Value, orden.IdLocalidad))
                 throw new InvalidOperationException("El enfermero seleccionado no pertenece a la sucursal conectada.");
 
             orden.IdMedico = 0;
@@ -1168,6 +1176,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 o.ordenAten_fecha AS Fecha,
                 ISNULL(o.ordenAten_hora, '') AS Hora,
                 ISNULL(o.ordenAten_estado, 'A') AS Estado,
+                triaje.InicioTriaje,
+                triajeFinalizado.FinTriaje,
+                consulta.InicioConsulta,
+                CASE WHEN o.ordenAten_estado = 'T' THEN o.ordenAten_fechaProcesado END AS FinConsulta,
                 ISNULL(o.ordenAten_etapa, 'Consulta') AS Etapa,
                 ISNULL(o.ordenAten_Tipo, 'M') AS TipoOrigen,
                 ISNULL(o.ordenAten_Despacho, 0) AS TipoDespacho,
@@ -1181,6 +1193,21 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LEFT JOIN vt_especialidades es ON o.ordenAten_esp_numero = es.es_id
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             LEFT JOIN vt_usuarios enf ON o.ordenAten_idEnfermero = enf.user_numero
+            OUTER APPLY (
+                SELECT MIN(v.vit_idFechaMod) AS InicioTriaje
+                FROM vt_vitacora v
+                WHERE v.vit_detalle = CONCAT('Inicio de triaje Orden #', o.ordenAten_id)
+            ) triaje
+            OUTER APPLY (
+                SELECT MIN(v.vit_idFechaMod) AS FinTriaje
+                FROM vt_vitacora v
+                WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id)
+            ) triajeFinalizado
+            OUTER APPLY (
+                SELECT MIN(v.vit_idFechaMod) AS InicioConsulta
+                FROM vt_vitacora v
+                WHERE v.vit_detalle = CONCAT('Inicio de consulta Orden #', o.ordenAten_id)
+            ) consulta
             WHERE o.ordenAten_fecha = @Fecha
               AND {AlcanceOrden}
               AND (@LocalidadSesion <= 0 OR o.ordenAten_idlocalidad = @LocalidadSesion)
@@ -1281,24 +1308,121 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             }) > 0;
     }
 
+    public async Task<DateTime?> IniciarAtencionClinicaAsync(int idOrden, int nhcl, bool triaje)
+    {
+        if (!_session.IsAuthenticated || idOrden <= 0 || nhcl <= 0)
+            return null;
+
+        return await _db.ExecuteScalarAsync<DateTime?>($"""
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+            DECLARE @Inicio datetime, @Ahora datetime = GETDATE();
+            UPDATE o SET ordenAten_estado = 'E',
+                ordenAten_idEnfermero = CASE WHEN @Triaje = 1 AND (ISNULL(o.ordenAten_esProcedimiento, 0) = 1 OR ISNULL(o.ordenAten_triajeMedico, 0) = 0) THEN @UsuarioSesion ELSE o.ordenAten_idEnfermero END,
+                ordenAten_fechaenAtencion = CASE WHEN ISNULL(o.ordenAten_estado, 'A') = 'A' THEN @Ahora ELSE o.ordenAten_fechaenAtencion END
+            FROM vt_ordenAtencion o
+            WHERE o.ordenAten_id = @IdOrden AND o.ordenAten_nhcl = @Nhcl
+              AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E') AND {AlcanceOrden}
+              AND EXISTS (
+                  SELECT 1 FROM vt_usuarios u
+                  JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
+                  WHERE u.user_numero = @UsuarioSesion AND u.user_estado = 'A'
+                    AND (@Triaje = 0 OR {ResponsableTriaje}))
+              AND ((@Triaje = 1 AND NOT EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @FinTriaje))
+                OR (@Triaje = 0 AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
+                    AND EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @FinTriaje)));
+            IF @@ROWCOUNT = 1
+            BEGIN
+                SELECT @Inicio = MIN(vit_idFechaMod) FROM vt_vitacora WITH (UPDLOCK, HOLDLOCK) WHERE vit_detalle = @Marca;
+                IF @Inicio IS NULL
+                BEGIN
+                    SET @Inicio = @Ahora;
+                    INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
+                    VALUES (@Marca, @UsuarioSesion, @Inicio, '127.0.0.1', 'BlazorClient');
+                END
+            END;
+            COMMIT TRANSACTION;
+            SELECT DATEADD(second, -DATEDIFF(second, @Inicio, @Ahora), GETUTCDATE());
+            """, new
+        {
+            IdOrden = idOrden,
+            Nhcl = nhcl,
+            Triaje = triaje,
+            Marca = triaje ? $"Inicio de triaje Orden #{idOrden}" : $"Inicio de consulta Orden #{idOrden}",
+            FinTriaje = $"Triaje de ingreso completado Orden #{idOrden}",
+            Rol = _session.TipoUser,
+            VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
+            LocalidadSesion = _session.Localidad,
+            UsuarioSesion = _session.IdUser
+        });
+    }
+
     public async Task<List<CatalogoOperativoDto>> ObtenerCatalogoProcedimientosTriajeAsync(int idOrden, int nhcl, int? idProducto = null)
     {
         if (nhcl <= 0 || !await PuedeConsultarOrdenAsync(idOrden, nhcl))
             return [];
 
         return (await _db.QueryAsync<CatalogoOperativoDto>("""
+            DECLARE @IdLocalidad int, @IdUsuario int, @IdEmpresa int;
+            SELECT @IdLocalidad = ordenAten_idlocalidad
+            FROM vt_ordenAtencion
+            WHERE ordenAten_id = @IdOrden AND ordenAten_nhcl = @Nhcl;
+
+            SET @IdUsuario = 1000000 + @IdLocalidad;
+            IF COL_LENGTH('dbo.vt_localidades', 'idEmpresa') IS NOT NULL
+                EXEC sys.sp_executesql
+                    N'SELECT @Empresa = idEmpresa FROM dbo.vt_localidades WHERE loc_id = @Localidad',
+                    N'@Localidad int, @Empresa int OUTPUT',
+                    @Localidad = @IdLocalidad, @Empresa = @IdEmpresa OUTPUT;
+
+            IF OBJECT_ID('dbo.VeterinariaFacturacionTenant', 'U') IS NOT NULL
+                EXEC sys.sp_executesql
+                    N'SELECT @Usuario = COALESCE(MAX(IdUsuarioFacturacion), @Usuario)
+                      FROM dbo.VeterinariaFacturacionTenant
+                      WHERE IdLocalidad = @Localidad AND Estado = 1',
+                    N'@Localidad int, @Usuario int OUTPUT',
+                    @Localidad = @IdLocalidad, @Usuario = @IdUsuario OUTPUT;
+
+            DECLARE @Titulares TABLE (IdUsuario int);
+            IF @IdEmpresa IS NOT NULL
+                INSERT INTO @Titulares (IdUsuario)
+                EXEC sys.sp_executesql
+                    N'SELECT 1000000 + loc_id FROM dbo.vt_localidades WHERE idEmpresa = @Empresa',
+                    N'@Empresa int', @Empresa = @IdEmpresa;
+
+            IF @IdEmpresa IS NOT NULL AND OBJECT_ID('dbo.VeterinariaFacturacionTenant', 'U') IS NOT NULL
+                INSERT INTO @Titulares (IdUsuario)
+                EXEC sys.sp_executesql
+                    N'SELECT t.IdUsuarioFacturacion FROM dbo.VeterinariaFacturacionTenant t
+                      JOIN dbo.vt_localidades l ON l.loc_id = t.IdLocalidad
+                      WHERE l.idEmpresa = @Empresa AND t.Estado = 1',
+                    N'@Empresa int', @Empresa = @IdEmpresa;
+
+            IF @IdEmpresa IS NOT NULL AND COL_LENGTH('dbo.vt_usuarios', 'idUsuarioFacturacion') IS NOT NULL
+                AND COL_LENGTH('dbo.vt_usuarios', 'idEmpresa') IS NOT NULL
+                INSERT INTO @Titulares (IdUsuario)
+                EXEC sys.sp_executesql
+                    N'SELECT DISTINCT idUsuarioFacturacion FROM dbo.vt_usuarios
+                      WHERE idEmpresa = @Empresa AND idUsuarioFacturacion IS NOT NULL',
+                    N'@Empresa int', @Empresa = @IdEmpresa;
+
             SELECT p.CODIGO AS Id, COALESCE(NULLIF(RTRIM(p.CODIGO_PRINCIPAL), ''), CAST(p.CODIGO AS varchar(30))) AS Codigo,
                 RTRIM(ISNULL(p.NOMBRE, '')) AS Descripcion, p.IDSUBTIPO AS IdSubgrupo,
                 RTRIM(ISNULL(s.DESCRIPCION, '')) AS Subgrupo, p.VALOR_UNITARIO AS Precio
             FROM VeterinariaFacturacion.dbo.PRODUCTO p
             JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
             LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
-            WHERE p.IDUSUARIO = @IdUsuario AND ISNULL(p.ESTADO, 1) = 1
+            WHERE ((@IdEmpresa IS NULL AND p.IDUSUARIO = @IdUsuario) OR p.IDEMPRESA = @IdEmpresa
+                OR (p.IDEMPRESA IS NULL AND p.IDUSUARIO IN (SELECT IdUsuario FROM @Titulares))
+                OR (@IdEmpresa IS NULL AND @IdLocalidad > 0 AND p.IDEMPRESA IS NULL AND p.IDUSUARIO = 1000001
+                    AND UPPER(LTRIM(RTRIM(t.DESCRIPCION))) IN ('PROCEDIMIENTO', 'PROCEDIMIENTOS')))
+                AND (p.IDEMPRESA IS NULL OR @IdEmpresa IS NULL OR p.IDEMPRESA = @IdEmpresa)
+                AND ISNULL(p.ESTADO, 1) = 1
                 AND UPPER(LTRIM(RTRIM(t.DESCRIPCION))) IN ('PROCEDIMIENTO', 'PROCEDIMIENTOS', 'SERVICIOS')
                 AND UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) NOT IN ('CONSULTA', 'CONSULTAS')
                 AND (@IdProducto IS NULL OR p.CODIGO = @IdProducto)
-            ORDER BY p.NOMBRE
-            """, new { IdProducto = idProducto, IdUsuario = 1_000_000 + Math.Max(1, _session.Localidad) })).ToList();
+            ORDER BY Descripcion
+            """, new { IdOrden = idOrden, Nhcl = nhcl, IdProducto = idProducto })).ToList();
     }
 
     public async Task<List<ProcedimientoTriajeDto>> ObtenerProcedimientosTriajeAsync(int idOrden, int nhcl)
@@ -1405,6 +1529,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    ISNULL(es.especie_descripcion, '') AS Especie,
                    ISNULL(u.user_nombre, '') AS Medico,
                    ISNULL(enf.user_nombre, '') AS Enfermero,
+                   CAST(ISNULL(o.ordenAten_triajeMedico, 0) AS bit) AS TriajeMedico,
                    ISNULL(o.ordenAten_estado, 'A') AS Estado,
                    CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento,
                    COALESCE(asignacion.Fecha, historica.Fecha,
@@ -1434,18 +1559,16 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')))
               AND {AlcanceOrden}
               AND (
-                   (@Triaje = 0 AND (@Rol <> 2 OR o.ordenAten_idMedico = @Usuario))
-                   OR (@Triaje = 1 AND (
-                        (@Rol = 1 OR EXISTS (SELECT 1 FROM vt_usuarios enfermero
-                            JOIN vt_tipos_usuarios tipo ON tipo.tipuser_numero = enfermero.user_tipouser_numero
-                            WHERE enfermero.user_numero = @Usuario AND enfermero.user_estado = 'A'
-                                AND UPPER(tipo.tipuser_descripcion) LIKE '%ENFERMER%'))
-                        AND (ISNULL(o.ordenAten_triajeMedico, CASE WHEN o.ordenAten_esp_numero > 0 THEN 1 ELSE 0 END) = 1
-                            OR (ISNULL(o.ordenAten_esProcedimiento, 0) = 1 AND (@Rol = 1 OR o.ordenAten_idEnfermero = @Usuario)))
-                        AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                   (@Triaje = 0 AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
+                        AND (@Rol <> 2 OR o.ordenAten_idMedico = @Usuario)
+                        AND EXISTS (SELECT 1 FROM vt_vitacora v
+                            WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id)))
+                   OR (@Triaje = 1 AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                        AND EXISTS (SELECT 1 FROM vt_usuarios u
+                            JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
+                            WHERE u.user_numero = @Usuario AND u.user_estado = 'A' AND {ResponsableTriaje})
                         AND NOT EXISTS (SELECT 1 FROM vt_vitacora v
-                            WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id))
-                   ))
+                            WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id)))
               )
             ORDER BY FechaAsignacion, o.ordenAten_id;";
 
@@ -1475,7 +1598,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     ordenAten_etapa = @Etapa,
                     ordenAten_fechaenAtencion = CASE WHEN @Estado = 'E' THEN GETDATE() ELSE ordenAten_fechaenAtencion END,
                     ordenAten_fechaProcesado = CASE WHEN @Estado = 'T' THEN GETDATE() ELSE ordenAten_fechaProcesado END
-                WHERE ordenAten_id = @IdOrden";
+                WHERE ordenAten_id = @IdOrden
+                  AND (@Estado <> 'T' OR (
+                      ISNULL(ordenAten_estado, 'A') IN ('A', 'E')
+                      AND (NOT EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = CONCAT('Inicio de triaje Orden #', @IdOrden))
+                           OR EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = CONCAT('Triaje de ingreso completado Orden #', @IdOrden)))))";
             int rows = await _db.ExecuteAsync(sql, new { IdOrden = idOrden, Estado = nuevoEstado, Etapa = nuevaEtapa });
             if (rows > 0) return true;
         }

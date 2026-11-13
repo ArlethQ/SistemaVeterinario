@@ -269,8 +269,12 @@ else
                 }
                 @if (!SoloLectura)
                 {
-                    <button type="button" class="btn btn-success fw-bold px-4" @onclick="GuardarTriajeAsync" disabled="@_guardando">
-                        <i class="bi bi-floppy-fill me-1"></i>@(_guardando ? "Guardando..." : "Guardar Constantes")
+                    @if (_inicioTriajeUtc is { } inicio)
+                    {
+                        <ContadorAtencion @key="inicio" Etiqueta="Triaje" InicioUtc="inicio" FinUtc="_finTriajeUtc" />
+                    }
+                    <button type="button" class="btn btn-success fw-bold px-4" @onclick="GuardarTriajeAsync" disabled="@(_guardando || (!DesdeHistorial && (!_inicioTriajeUtc.HasValue || _finTriajeUtc.HasValue)))">
+                        <i class="bi bi-floppy-fill me-1"></i>@(_guardando ? "Guardando..." : DesdeHistorial ? "Guardar Constantes" : "Finalizar triaje")
                     </button>
                 }
             </div>
@@ -299,6 +303,8 @@ else
     private int _especialidad;
     private bool _esOrdenProcedimiento;
     private FichaMedicaCompletaDto _ficha = new();
+    private DateTime? _inicioTriajeUtc;
+    private DateTime? _finTriajeUtc;
     private List<string> _tiposConsultaCatalogo = [];
     private IEnumerable<string> TiposConsultaDisponibles =>
         !string.IsNullOrWhiteSpace(_ficha.MedTipoConsulta) &&
@@ -314,6 +320,8 @@ else
         if (_parametrosCargados == parametros) return;
         _parametrosCargados = parametros;
         _verHistorial = false;
+        _inicioTriajeUtc = null;
+        _finTriajeUtc = null;
 
         _cargando = true;
         _paciente = null;
@@ -335,7 +343,7 @@ else
         if (!Permisos.Permite("admision/triaje"))
         {
             _esError = true;
-            _mensajeAlerta = "El triaje requiere una sesión de Enfermería o Administración.";
+            _mensajeAlerta = "Tu usuario no tiene acceso a Triaje.";
             return;
         }
 
@@ -361,6 +369,15 @@ else
 
         if (ord > 0 && !DesdeHistorial)
         {
+            if (_paciente is not null)
+            {
+                _inicioTriajeUtc = await AdmisionService.IniciarAtencionClinicaAsync(ord, _paciente.Nhcl, triaje: true);
+                if (!_inicioTriajeUtc.HasValue)
+                {
+                    _esError = true;
+                    _mensajeAlerta = "Esta orden ya no está disponible para triaje.";
+                }
+            }
             Session.SeleccionarOrden(ord, Nhcl ?? (_paciente?.Nhcl ?? 0), _paciente?.PacienteNombre);
         }
 
@@ -407,7 +424,7 @@ else
             if (idUsuario <= 0 || !Permisos.Permite("admision/triaje"))
             {
                 _esError = true;
-                _mensajeAlerta = "El triaje requiere una sesión de Enfermería o Administración.";
+                _mensajeAlerta = "Tu usuario no tiene acceso a Triaje.";
                 return;
             }
 
@@ -421,9 +438,23 @@ else
 
             if (exito)
             {
+                _finTriajeUtc = DateTime.UtcNow;
                 if (!DesdeHistorial)
-                    Session.SeleccionarOrden(_ficha.MedOrden, _ficha.MedNhcl, _paciente?.PacienteNombre);
-                if (!ModoModal)
+                {
+                    if (_esOrdenProcedimiento)
+                    {
+                        KardexService.InvalidarCacheOrdenesActivas();
+                        if (Session.OrdenActiva == _ficha.MedOrden)
+                            Session.LimpiarOrdenActiva();
+                    }
+                    else
+                    {
+                        Session.SeleccionarOrden(_ficha.MedOrden, _ficha.MedNhcl, _paciente?.PacienteNombre);
+                    }
+                }
+                if (!ModoModal && !DesdeHistorial && !_esOrdenProcedimiento && Session.TipoUser == 2)
+                    Nav.NavigateTo($"/consulta/fichamedica/{_ficha.MedOrden}/{_ficha.MedNhcl}");
+                else if (!ModoModal)
                     Nav.NavigateTo("/admision/triaje");
                 if (OnGuardado.HasDelegate)
                 {

@@ -197,9 +197,9 @@
                             @if (_nuevaOrden.EsProcedimiento)
                             {
                                 <div class="col-md-12">
-                                    <label class="form-label small fw-bold">2. Enfermero responsable *</label>
+                                    <label class="form-label small fw-bold">2. Enfermero responsable</label>
                                     <select class="form-select form-select-sm" @bind="_nuevaOrden.IdEnfermero" disabled="@EsDesdeCita">
-                                        <option value="">Seleccione un enfermero</option>
+                                        <option value="">Cualquier enfermero disponible</option>
                                         @foreach (var enfermero in _enfermeros)
                                         {
                                             <option value="@enfermero.Id">@enfermero.Descripcion</option>
@@ -220,7 +220,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-3 d-flex align-items-end">
-                                    <label class="form-check mb-2"><input type="checkbox" class="form-check-input" @bind="_nuevaOrden.TriajeMedico" disabled="@EsDesdeCita" /><span class="form-check-label ms-2 fw-bold">Triaje</span></label>
+                                    <label class="form-check mb-2"><input type="checkbox" class="form-check-input" @bind="_nuevaOrden.TriajeMedico" disabled="@EsDesdeCita" /><span class="form-check-label ms-2 fw-bold">Triaje por el médico</span></label>
                                 </div>
                             }
 
@@ -358,35 +358,31 @@
                                         </td>
                                         <td>
                                             <div class="d-flex flex-column align-items-start gap-1">
-                                                <span class="badge @ObtenerBadgeEtapa(o.Etapa)">@o.Etapa</span>
-                                                @if (!o.EsProcedimiento && o.TriajeMedico)
-                                                {
-                                                    <span class="badge bg-info text-dark" style="font-size:0.65rem;">
-                                                        @(string.IsNullOrWhiteSpace(o.Enfermero) ? "Triaje pendiente" : $"Triaje: {o.Enfermero}")
-                                                    </span>
+                                                @{
+                                                    var estado = EstadosClinicos.First(e => e.Clave == ObtenerEstadoClinico(o));
                                                 }
-                                                @if (o.Estado == "A")
+                                                <div class="d-flex flex-wrap align-items-center gap-1">
+                                                    <span class="badge @estado.Badge">@estado.Titulo</span>
+                                                    @if (o.Estado == "E" && estado.Clave != "TRIAJE")
+                                                    {
+                                                        <button type="button" class="badge bg-secondary border-0" @onclick="() => FinalizarTurnoAsync(o)">Finalizar</button>
+                                                    }
+                                                </div>
+                                                @if (o.EsProcedimiento || !string.Equals(o.Etapa, "Consulta", StringComparison.OrdinalIgnoreCase))
                                                 {
-                                                    <div class="d-flex align-items-center gap-1">
-                                                        <span class="badge bg-warning text-dark" style="font-size:0.65rem;">⏳ En espera</span>
-                                                    </div>
+                                                    <small class="text-muted">@(o.EsProcedimiento ? "Procedimiento" : o.Etapa)</small>
                                                 }
-                                                else if (o.Estado == "E")
+                                                @if (!o.EsProcedimiento && o.TriajeMedico && !string.IsNullOrWhiteSpace(o.Enfermero))
                                                 {
-                                                    <div class="d-flex align-items-center gap-1">
-                                                        <span class="badge bg-primary" style="font-size:0.65rem;">🟢 En atención</span>
-                                                        <span role="button"
-                                                              class="badge bg-secondary text-white shadow-sm"
-                                                              style="font-size:0.65rem; padding: 4px 8px; cursor:pointer; user-select:none;"
-                                                              title="Marcar atención como finalizada"
-                                                              @onclick="() => FinalizarTurnoAsync(o)">
-                                                            ✓ Finalizar
-                                                        </span>
-                                                    </div>
+                                                    <small class="text-muted">Triaje: @o.Enfermero</small>
                                                 }
-                                                else if (o.Estado == "T")
+                                                @if (o.InicioTriaje is { } inicioTriaje && o.FinTriaje is { } finTriaje)
                                                 {
-                                                    <span class="badge bg-secondary" style="font-size:0.65rem;">◉ Finalizado</span>
+                                                    <ContadorAtencion Etiqueta="Triaje" InicioUtc="inicioTriaje" FinUtc="finTriaje" />
+                                                }
+                                                @if (o.InicioConsulta is { } inicioConsulta && o.FinConsulta is { } finConsulta)
+                                                {
+                                                    <ContadorAtencion Etiqueta="Consulta" InicioUtc="inicioConsulta" FinUtc="finConsulta" />
                                                 }
                                             </div>
                                         </td>
@@ -407,7 +403,7 @@
                                                     @onchange="(e) => EjecutarAccionDropboxAsync(o, e)">
                                                 <option value="">⚡ Módulos / Acciones...</option>
                                                 <optgroup label="Módulos Clínicos">
-                                                    @if ((o.TriajeMedico || o.EsProcedimiento) && Permisos.Permite("admision/triaje"))
+                                                    @if (Permisos.Permite("admision/triaje") && !o.FinTriaje.HasValue)
                                                     {
                                                         <option value="triaje">📋 Triaje de Ingreso</option>
                                                     }
@@ -443,16 +439,17 @@
     </div>
 
     <section class="stage-board mt-3">
-        <header><span>▤</span><strong>Pacientes por Etapa</strong></header>
+        <header><span>▤</span><strong>Pacientes por estado</strong></header>
         <div class="stage-columns">
-            @foreach (var etapa in EtapasResumen)
+            @foreach (var etapa in EstadosClinicos)
             {
                 var pacientesEtapa = FiltrarPorEtapa(etapa.Clave);
+                if (etapa.Clave == "OTRO" && pacientesEtapa.Count == 0) { continue; }
                 <div class="stage-column @etapa.Clase">
                     <div class="stage-title"><span>@etapa.Icono</span><strong>@etapa.Titulo (@pacientesEtapa.Count)</strong></div>
                     @if (pacientesEtapa.Count == 0)
                     {
-                        <div class="stage-empty">Sin pacientes en esta etapa</div>
+                        <div class="stage-empty">Sin pacientes en este estado</div>
                     }
                     @foreach (var orden in pacientesEtapa.Take(10))
                     {
@@ -553,6 +550,8 @@
     private List<OrdenAtencionResumenDto> OrdenesMostradas =>
         _ordenes
             .Where(o => o.Estado != "T" && o.Estado != "I")
+            .OrderBy(o => Array.FindIndex(EstadosClinicos, estado => estado.Clave == ObtenerEstadoClinico(o)))
+            .ThenBy(o => o.IdOrden)
             .ToList();
 
     private string ObtenerSiguienteTurnoPreview()
@@ -590,22 +589,28 @@
     private int OrdenesEnAtencion => _ordenes.Count(o => o.Estado == "E");
     private int OrdenesPendientes => _ordenes.Count(o => o.Facturado != "S" && o.Estado != "T" && o.Estado != "I");
     private int OrdenesEnEspera => _ordenes.Count(o => o.Estado == "A");
-    private static readonly (string Clave, string Titulo, string Clase, string Icono)[] EtapasResumen =
+    private static readonly (string Clave, string Titulo, string Clase, string Icono, string Badge)[] EstadosClinicos =
     [
-        ("ESPERA", "En espera", "waiting", "⌛"),
-        ("ATENCION", "En atención", "attention", "▣"),
-        ("PENDIENTE", "Pendientes", "pending", "✓"),
-        ("FINALIZADO", "Finalizados", "finished", "◉")
+        ("ESPERA", "En espera", "waiting", "⌛", "bg-warning text-dark"),
+        ("TRIAJE", "En triaje", "attention", "▣", "bg-info text-dark"),
+        ("ESPERA_CONSULTA", "En espera de consulta", "waiting", "⌛", "bg-warning text-dark"),
+        ("CONSULTA", "En consulta", "pending", "✚", "bg-primary"),
+        ("FINALIZADO", "Finalizado", "finished", "◉", "bg-secondary"),
+        ("OTRO", "Otros estados", "finished", "•", "bg-secondary")
     ];
 
-    private List<OrdenAtencionResumenDto> FiltrarPorEtapa(string etapa) => etapa switch
+    private static string ObtenerEstadoClinico(OrdenAtencionResumenDto orden) => orden.Estado switch
     {
-        "ESPERA" => _ordenes.Where(o => o.Estado == "A").OrderBy(o => o.IdOrden).ToList(),
-        "ATENCION" => _ordenes.Where(o => o.Estado == "E").ToList(),
-        "PENDIENTE" => _ordenes.Where(o => o.Facturado != "S" && o.Estado != "T").ToList(),
-        "FINALIZADO" => _ordenes.Where(o => o.Estado == "T").ToList(),
-        _ => _ordenes.Where(o => o.Etapa.Contains(etapa, StringComparison.OrdinalIgnoreCase)).ToList()
+        "A" => "ESPERA",
+        "E" when orden.InicioTriaje.HasValue && !orden.FinTriaje.HasValue => "TRIAJE",
+        "E" when orden.FinTriaje.HasValue && !orden.InicioConsulta.HasValue && !orden.EsProcedimiento => "ESPERA_CONSULTA",
+        "E" => "CONSULTA",
+        "T" => "FINALIZADO",
+        _ => "OTRO"
     };
+
+    private List<OrdenAtencionResumenDto> FiltrarPorEtapa(string etapa) =>
+        _ordenes.Where(o => ObtenerEstadoClinico(o) == etapa).OrderBy(o => o.IdOrden).ToList();
 
     private OrdenAtencionResumenDto? ObtenerSiguienteEnEsperaMedico(int idMedico) =>
         _ordenes
@@ -1202,13 +1207,6 @@
 
         if (_nuevaOrden.EsProcedimiento)
         {
-            if (!_nuevaOrden.IdEnfermero.HasValue || _nuevaOrden.IdEnfermero.Value <= 0)
-            {
-                _esError = true;
-                _mensajeAlerta = "Seleccione el enfermero responsable del procedimiento.";
-                return;
-            }
-
             _nuevaOrden.IdMedico = 0;
             _nuevaOrden.IdEspecialidad = 0;
             _nuevaOrden.TipoConsulta = 0;

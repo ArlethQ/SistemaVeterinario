@@ -11,7 +11,7 @@ public sealed class PermisosNavegacion(int rol, IEnumerable<MenuItemModel> menus
     {
         if (rol <= 0) return false;
         var clave = Normalizar(ruta);
-        if (clave == "admision/triaje") return rol == 1 || esEnfermeria;
+        if (clave == "admision/triaje") return rol is 1 or 2 || esEnfermeria;
         if (rol == 1 || (rol == 2 && clave == "admision/citas")) return true;
         if (clave == "administracion/menus") return false;
         if (clave is "administracion/empresas" or "administracion/usuarios" or "administracion/roles"

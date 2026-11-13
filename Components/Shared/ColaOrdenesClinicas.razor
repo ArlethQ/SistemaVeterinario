@@ -5,7 +5,7 @@
 
 <section class="card shadow-sm border-0 mb-3" aria-label="Cola de órdenes del día">
     <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
-        <h5 class="mb-0">Cola de órdenes del día <span class="badge text-bg-secondary">@_ordenes.Count</span></h5>
+        <h5 class="mb-0">@(Triaje ? "Cola de triaje" : "Cola de consulta") <span class="badge text-bg-secondary">@_ordenes.Count</span></h5>
         <button type="button" class="btn btn-sm btn-outline-primary" @onclick="CambiarSonidoAsync" aria-pressed="@(_sonidoActivo ? "true" : "false")">
             @(_sonidoActivo ? "Silenciar avisos" : "Activar avisos sonoros")
         </button>
@@ -33,10 +33,10 @@
                             <td>#@orden.IdOrden @orden.Turno</td>
                             <td>@orden.Mascota <small class="text-muted">NHCL #@orden.Nhcl</small></td>
                             @if (Triaje) { <td>@orden.Especie</td><td>@orden.Especialidad</td> }
-                            <td>@(Triaje ? (string.IsNullOrWhiteSpace(orden.Enfermero) ? "Disponible" : orden.Enfermero) : orden.Medico)</td>
+                            <td>@(Triaje && !orden.TriajeMedico ? (string.IsNullOrWhiteSpace(orden.Enfermero) ? "Disponible" : orden.Enfermero) : orden.Medico)</td>
                             <td>@(orden.Estado.Trim() == "E" ? "En atención" : "En espera")</td>
                             <td>
-                                <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">Abrir <span class="visually-hidden">orden #@orden.IdOrden</span></a>
+                                <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(Triaje && orden.Estado.Trim() == "A" ? "Iniciar triaje" : "Abrir") <span class="visually-hidden">orden #@orden.IdOrden</span></a>
                             </td>
                         </tr>
                     }
@@ -48,6 +48,7 @@
 
 @code {
     [Parameter] public bool Triaje { get; set; }
+    [Parameter] public bool AbrirEnSoap { get; set; }
     [Parameter] public int OrdenSeleccionada { get; set; }
 
     private readonly CancellationTokenSource _cancelacion = new();
@@ -59,7 +60,7 @@
     private string? _error;
 
     private string RutaOrden(OrdenAtencionResumenDto orden) =>
-        $"{(Triaje ? "/admision/triaje" : "/consulta/fichamedica")}/{orden.IdOrden}/{orden.Nhcl}";
+        $"{(Triaje && !AbrirEnSoap ? "/admision/triaje" : "/consulta/fichamedica")}/{orden.IdOrden}/{orden.Nhcl}";
 
     public Task RefrescarAsync() =>
         _cancelacion.IsCancellationRequested ? Task.CompletedTask : ActualizarAsync(_cancelacion.Token);
