@@ -75,6 +75,7 @@ public class SessionStateService
         LocalidadDescripcion = localidadDesc;
         Apostrofe = localidad == 2 ? "EQ" : "HV";
         _lastActivityUtc = DateTimeOffset.UtcNow;
+        _permisosCache = null;
         await SaveAsync();
         NotifyStateChanged();
     }
@@ -113,6 +114,17 @@ public class SessionStateService
         }
     }
 
+    private DateTimeOffset? _lastPersistedUtc;
+    private (int UserId, PermisosNavegacion Permisos, DateTimeOffset ExpiraUtc)? _permisosCache;
+
+    internal PermisosNavegacion? ObtenerPermisosCache(int userId) =>
+        _permisosCache is { } c && c.UserId == userId && DateTimeOffset.UtcNow < c.ExpiraUtc
+            ? c.Permisos
+            : null;
+
+    internal void GuardarPermisosCache(int userId, PermisosNavegacion permisos) =>
+        _permisosCache = (userId, permisos, DateTimeOffset.UtcNow.AddSeconds(20));
+
     public async Task<bool> ValidateAndTouchAsync()
     {
         if (!IsAuthenticated)
@@ -121,8 +133,12 @@ public class SessionStateService
             return false;
         }
 
-        _lastActivityUtc = DateTimeOffset.UtcNow;
-        await SaveAsync();
+        var ahora = DateTimeOffset.UtcNow;
+        _lastActivityUtc = ahora;
+        if (!_lastPersistedUtc.HasValue || (ahora - _lastPersistedUtc.Value) >= TimeSpan.FromSeconds(60))
+        {
+            await SaveAsync();
+        }
         return true;
     }
 
@@ -133,9 +149,13 @@ public class SessionStateService
         NotifyStateChanged();
     }
 
-    private async Task SaveAsync() => await _storage.SetAsync(StorageKey, new PersistedSession(
-        IdUser, TipoUser, EspUser, Localidad, LocalidadDescripcion, Apostrofe,
-        LoginUser, NombreUsuario, Iniciales, DateTimeOffset.UtcNow.Add(SessionTimeout)));
+    private async Task SaveAsync()
+    {
+        _lastPersistedUtc = DateTimeOffset.UtcNow;
+        await _storage.SetAsync(StorageKey, new PersistedSession(
+            IdUser, TipoUser, EspUser, Localidad, LocalidadDescripcion, Apostrofe,
+            LoginUser, NombreUsuario, Iniciales, DateTimeOffset.UtcNow.Add(SessionTimeout)));
+    }
 
     private void ClearSession()
     {
@@ -151,6 +171,8 @@ public class SessionStateService
         NhclActivo = null;
         PacienteActivo = null;
         _lastActivityUtc = null;
+        _lastPersistedUtc = null;
+        _permisosCache = null;
     }
 
     private void NotifyStateChanged() => OnChange?.Invoke();
@@ -804,12 +826,21 @@ public class AuthService : IAuthService
         if (!_session.IsAuthenticated) return new(0, []);
 
         int usuario = _session.IdUser;
+        var cached = _session.ObtenerPermisosCache(usuario);
+        if (cached is not null)
+        {
+            if (!cached.Permite(ruta))
+                await _sql.RegistrarBitacoraAsync($"Acceso denegado a ruta: {ruta}", usuario);
+            return cached;
+        }
+
         int rol = await ObtenerRolActivoAsync(usuario);
         var menus = rol > 1 ? await ObtenerMenuUsuarioAsync(usuario, rol) : [];
         bool esEnfermeria = rol > 0 && await _sql.ExecuteScalarAsync<int>(@"
             SELECT COUNT(*) FROM vt_tipos_usuarios
             WHERE tipuser_numero = @Rol AND UPPER(tipuser_descripcion) LIKE '%ENFERMER%'", new { Rol = rol }) > 0;
         var permisos = new PermisosNavegacion(rol, menus, esEnfermeria);
+        _session.GuardarPermisosCache(usuario, permisos);
         if (!permisos.Permite(ruta))
             await _sql.RegistrarBitacoraAsync($"Acceso denegado a ruta: {ruta}", usuario);
         return permisos;

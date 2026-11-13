@@ -1,0 +1,37 @@
+@implements IDisposable
+
+<div class="text-end me-2" title="Hora local del sistema">
+    <strong class="d-block font-monospace">@_ahora.ToString("HH:mm:ss")</strong>
+    <small class="text-muted">@_ahora.ToString("dd/MM/yyyy")</small>
+</div>
+
+@code {
+    private DateTime _ahora = DateTime.Now;
+    private readonly PeriodicTimer _reloj = new(TimeSpan.FromSeconds(1));
+    private bool _disposed;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+            _ = ActualizarRelojAsync();
+    }
+
+    private async Task ActualizarRelojAsync()
+    {
+        try
+        {
+            while (await _reloj.WaitForNextTickAsync() && !_disposed)
+            {
+                _ahora = DateTime.Now;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _reloj.Dispose();
+    }
+}

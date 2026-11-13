@@ -1170,6 +1170,28 @@
             CiTipoConsulta = tipoConsulta
         };
         _mostrarFormularioCita = true;
+        if (_pacientes.Count == 0)
+            _ = CargarPacientesEnSegundoPlanoAsync();
+    }
+
+    private Task? _tareaPacientes;
+    private async Task CargarPacientesEnSegundoPlanoAsync()
+    {
+        if (_pacientes.Count > 0) return;
+        _tareaPacientes ??= AdmisionService.BuscarMascotasAsync(string.Empty);
+        try
+        {
+            var lista = await (Task<List<PacienteMascotaDto>>)_tareaPacientes;
+            if (_pacientes.Count == 0)
+            {
+                _pacientes = lista;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch
+        {
+            _tareaPacientes = null;
+        }
     }
 
     private int ResolverTipoConsultaPorEspecialidad(int idEspecialidad)
@@ -1384,10 +1406,9 @@
     {
         var tEsp = AdmisionService.ObtenerEspecialidadesAsync();
         var tMed = AdmisionService.ObtenerMedicosAgendaAsync();
-        var tPac = AdmisionService.BuscarMascotasAsync(string.Empty);
         var tPermiso = AdmisionService.PuedeVerAgendaCompletaAsync();
         var tSucursales = AdmisionService.ObtenerSucursalesAgendaAsync();
-        await Task.WhenAll(tEsp, tMed, tPac, tPermiso, tSucursales);
+        await Task.WhenAll(tEsp, tMed, tPermiso, tSucursales);
         _puedeVerAgendaCompleta = await tPermiso;
         _sucursales = await tSucursales;
         _especialidades = await tEsp;
@@ -1395,13 +1416,16 @@
         if (!_puedeVerAgendaCompleta && _medicos.Count == 0 && SessionState.IsAuthenticated)
             _medicos.Add(new() { Id = SessionState.IdUser, Descripcion = SessionState.NombreUsuario });
 
-        _pacientes = await tPac;
         _medicosHistorial = _medicos;
 
-        foreach (var suc in _sucursales)
+        var tareasSucursales = _sucursales.Select(async suc =>
         {
             var meds = await AdmisionService.ObtenerMedicosAgendaAsync(suc.Id);
-            _medicosPorSucursal[suc.Id] = meds.Where(m => _puedeVerAgendaCompleta || m.Id == SessionState.IdUser).ToList();
+            return (suc.Id, Medicos: meds.Where(m => _puedeVerAgendaCompleta || m.Id == SessionState.IdUser).ToList());
+        });
+        foreach (var (idSuc, meds) in await Task.WhenAll(tareasSucursales))
+        {
+            _medicosPorSucursal[idSuc] = meds;
         }
 
         if (!_puedeVerAgendaCompleta && SessionState.IsAuthenticated)
@@ -1419,6 +1443,7 @@
         ActualizarMedicosAgenda();
         _filtrosCargados = true;
         await CargarAgendaAsync();
+        _ = CargarPacientesEnSegundoPlanoAsync();
     }
 
     private async Task CambiarEspecialidadAsync(int idEsp)

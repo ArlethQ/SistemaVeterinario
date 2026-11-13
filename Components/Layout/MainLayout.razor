@@ -1,5 +1,4 @@
 @inherits LayoutComponentBase
-@implements IDisposable
 @inject SessionStateService Session
 @inject NavigationManager Nav
 
@@ -16,7 +15,7 @@
     <main class="workspace">
         <header class="workspace-header">
             <div class="workspace-brand"><span class="mobile-mark">H</span><div><small>Hospital Veterinario</small><strong>@(Session.LocalidadDescripcion?.Replace(" USFQ", "", StringComparison.OrdinalIgnoreCase).Replace("USFQ", "", StringComparison.OrdinalIgnoreCase).Trim())</strong></div></div>
-            <div class="session-actions"><div class="text-end me-2" title="Hora local del sistema"><strong class="d-block font-monospace">@_ahora.ToString("HH:mm:ss")</strong><small class="text-muted">@_ahora.ToString("dd/MM/yyyy")</small></div><div class="user-avatar">@Session.Iniciales</div><div class="user-copy"><strong>@Session.NombreUsuario</strong><small>@Session.LoginUser</small></div><button type="button" class="logout-button" @onclick="CerrarSesion">Salir</button></div>
+            <div class="session-actions"><RelojSistema /><div class="user-avatar">@Session.Iniciales</div><div class="user-copy"><strong>@Session.NombreUsuario</strong><small>@Session.LoginUser</small></div><button type="button" class="logout-button" @onclick="CerrarSesion">Salir</button></div>
         </header>
         <article class="workspace-content">@Body</article>
     </main>
@@ -25,27 +24,6 @@
 <div id="blazor-error-ui" data-nosnippet>Ha ocurrido un error inesperado. <a href="." class="reload">Recargar</a><span class="dismiss">🗙</span></div>
 
 @code {
-    private DateTime _ahora = DateTime.Now;
-    private readonly PeriodicTimer _reloj = new(TimeSpan.FromSeconds(1));
-    private bool _disposed;
-
-    protected override void OnInitialized() => _ = ActualizarRelojAsync();
-
-    private async Task ActualizarRelojAsync()
-    {
-        while (await _reloj.WaitForNextTickAsync() && !_disposed)
-        {
-            _ahora = DateTime.Now;
-            StateHasChanged();
-        }
-    }
-
-    public void Dispose()
-    {
-        _disposed = true;
-        _reloj.Dispose();
-    }
-
     private async Task CerrarSesion()
     {
         await Session.LogoutAsync();

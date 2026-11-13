@@ -65,10 +65,30 @@
     public Task RefrescarAsync() =>
         _cancelacion.IsCancellationRequested ? Task.CompletedTask : ActualizarAsync(_cancelacion.Token);
 
-    protected override Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnInitializedAsync()
     {
-        if (firstRender) _ = ActualizarPeriodicamenteAsync(_cancelacion.Token);
-        return Task.CompletedTask;
+        await ActualizarAsync(_cancelacion.Token, permitirSonido: false);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _sonidoActivo = await JS.InvokeAsync<bool>("hosvetColaClinica.obtenerPreferencia");
+                if (_sonidoActivo)
+                {
+                    await JS.InvokeVoidAsync("hosvetColaClinica.prepararAutoActivacion");
+                    StateHasChanged();
+                }
+            }
+            catch (JSException ex)
+            {
+                Logger.LogDebug(ex, "No se pudo restaurar la preferencia de sonido de la cola clínica.");
+            }
+            _ = ActualizarPeriodicamenteAsync(_cancelacion.Token);
+        }
     }
 
     private async Task ActualizarPeriodicamenteAsync(CancellationToken token)
@@ -76,17 +96,16 @@
         using var reloj = new PeriodicTimer(TimeSpan.FromSeconds(10));
         try
         {
-            do
+            while (await reloj.WaitForNextTickAsync(token))
             {
-                await ActualizarAsync(token);
+                await ActualizarAsync(token, permitirSonido: true);
             }
-            while (await reloj.WaitForNextTickAsync(token));
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (JSDisconnectedException) { }
     }
 
-    private async Task ActualizarAsync(CancellationToken token)
+    private async Task ActualizarAsync(CancellationToken token, bool permitirSonido = true)
     {
         bool hayNuevas = false;
         try
@@ -115,8 +134,16 @@
         }
 
         token.ThrowIfCancellationRequested();
-        StateHasChanged();
-        if (hayNuevas && _sonidoActivo)
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        if (permitirSonido && hayNuevas && _sonidoActivo)
         {
             try
             {
@@ -125,8 +152,6 @@
             catch (JSException ex)
             {
                 Logger.LogDebug(ex, "No se pudo reproducir el aviso de la cola clínica.");
-                _sonidoActivo = false;
-                StateHasChanged();
             }
         }
     }
@@ -136,12 +161,25 @@
         if (_sonidoActivo)
         {
             _sonidoActivo = false;
+            try
+            {
+                await JS.InvokeVoidAsync("hosvetColaClinica.guardarPreferencia", false);
+            }
+            catch (JSException ex)
+            {
+                Logger.LogDebug(ex, "No se pudo guardar la preferencia de sonido.");
+            }
             return;
         }
 
         try
         {
             _sonidoActivo = await JS.InvokeAsync<bool>("hosvetColaClinica.activar");
+            await JS.InvokeVoidAsync("hosvetColaClinica.guardarPreferencia", _sonidoActivo);
+            if (_sonidoActivo)
+            {
+                await JS.InvokeVoidAsync("hosvetColaClinica.sonar");
+            }
         }
         catch (JSException ex)
         {

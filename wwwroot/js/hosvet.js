@@ -723,20 +723,71 @@ window.hosvetEditor = {
 };
 
 window.hosvetColaClinica = (() => {
+    const STORAGE_KEY = 'hosvet_cola_sonido_activo';
     let audio;
+    let listenerRegistrado = false;
+
+    async function asegurarAudio() {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return false;
+
+        audio ??= new AudioContext();
+        if (audio.state !== 'running') {
+            try {
+                await audio.resume();
+            } catch {
+                return false;
+            }
+        }
+        return audio.state === 'running';
+    }
+
+    function registrarDesbloqueo() {
+        if (listenerRegistrado) return;
+        listenerRegistrado = true;
+        const desbloquear = async () => {
+            if (localStorage.getItem(STORAGE_KEY) !== '1') return;
+            const ok = await asegurarAudio();
+            if (ok) {
+                document.removeEventListener('pointerdown', desbloquear, true);
+                document.removeEventListener('keydown', desbloquear, true);
+                listenerRegistrado = false;
+            }
+        };
+        document.addEventListener('pointerdown', desbloquear, true);
+        document.addEventListener('keydown', desbloquear, true);
+    }
 
     return {
-        async activar() {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (!AudioContext) return false;
-
-            audio ??= new AudioContext();
-            if (audio.state !== 'running') await audio.resume();
-            return audio.state === 'running';
+        obtenerPreferencia() {
+            try {
+                return localStorage.getItem(STORAGE_KEY) === '1';
+            } catch {
+                return false;
+            }
         },
 
-        sonar() {
-            if (audio?.state !== 'running') return;
+        guardarPreferencia(activo) {
+            try {
+                localStorage.setItem(STORAGE_KEY, activo ? '1' : '0');
+            } catch { }
+        },
+
+        async prepararAutoActivacion() {
+            const ok = await asegurarAudio();
+            if (!ok) registrarDesbloqueo();
+            return ok;
+        },
+
+        async activar() {
+            return await asegurarAudio();
+        },
+
+        async sonar() {
+            if (!(await asegurarAudio())) {
+                registrarDesbloqueo();
+                return;
+            }
 
             const tono = audio.createOscillator();
             const volumen = audio.createGain();
