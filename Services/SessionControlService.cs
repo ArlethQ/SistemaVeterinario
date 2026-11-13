@@ -6,6 +6,7 @@ namespace HosvetKardex.Web.Services;
 
 public sealed class SessionControlService
 {
+    public string ServerInstanceId { get; } = Guid.NewGuid().ToString("N");
     private long _permisosVersion = 1;
     private readonly ConcurrentDictionary<int, DateTimeOffset> _revokedAfterUtc = new();
     private readonly byte[] _fotoKey = RandomNumberGenerator.GetBytes(32);

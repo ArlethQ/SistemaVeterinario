@@ -807,19 +807,39 @@ window.hosvetColaClinica = (() => {
 
 window.hosvetSessionWatcher = (() => {
     const STORAGE_KEY = 'hosvet.session';
+    const TAB_KEY = 'hosvet.tab_alive';
+    const CHANNEL_NAME = 'hosvet_tabs';
     let ref = null;
     let handlersAttached = false;
+    let channel = null;
+
+    function asegurarCanal() {
+        if (channel || typeof BroadcastChannel === 'undefined') return;
+        channel = new BroadcastChannel(CHANNEL_NAME);
+        channel.onmessage = (ev) => {
+            if (ev.data === 'ping' && ref && localStorage.getItem(STORAGE_KEY) !== null) {
+                channel.postMessage('pong');
+            }
+        };
+    }
 
     function verificar() {
         if (!ref) return;
         if (localStorage.getItem(STORAGE_KEY) === null) {
+            try { sessionStorage.removeItem(TAB_KEY); } catch { }
             ref.invokeMethodAsync('OnBrowserSessionCleared').catch(() => {});
         }
     }
 
     return {
+        marcarActiva() {
+            try { sessionStorage.setItem(TAB_KEY, '1'); } catch { }
+            asegurarCanal();
+        },
         iniciar(dotNetRef) {
             ref = dotNetRef;
+            try { sessionStorage.setItem(TAB_KEY, '1'); } catch { }
+            asegurarCanal();
             if (handlersAttached) return;
             handlersAttached = true;
             window.addEventListener('storage', (e) => {
@@ -831,10 +851,46 @@ window.hosvetSessionWatcher = (() => {
             });
         },
         existe() {
-            return localStorage.getItem(STORAGE_KEY) !== null;
+            if (localStorage.getItem(STORAGE_KEY) === null) {
+                try { sessionStorage.removeItem(TAB_KEY); } catch { }
+                return Promise.resolve(false);
+            }
+            try {
+                if (sessionStorage.getItem(TAB_KEY) === '1') {
+                    return Promise.resolve(true);
+                }
+            } catch { }
+
+            if (typeof BroadcastChannel === 'undefined') {
+                return Promise.resolve(true);
+            }
+
+            return new Promise((resolve) => {
+                let resuelto = false;
+                const probe = new BroadcastChannel(CHANNEL_NAME);
+                const timer = setTimeout(() => {
+                    if (resuelto) return;
+                    resuelto = true;
+                    try { probe.close(); } catch { }
+                    try { localStorage.removeItem(STORAGE_KEY); } catch { }
+                    resolve(false);
+                }, 90);
+
+                probe.onmessage = (ev) => {
+                    if (resuelto || ev.data !== 'pong') return;
+                    resuelto = true;
+                    clearTimeout(timer);
+                    try { sessionStorage.setItem(TAB_KEY, '1'); } catch { }
+                    try { probe.close(); } catch { }
+                    resolve(true);
+                };
+
+                probe.postMessage('ping');
+            });
         },
         detener() {
             ref = null;
+            try { sessionStorage.removeItem(TAB_KEY); } catch { }
         }
     };
 })();

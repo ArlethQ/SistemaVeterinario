@@ -49,7 +49,7 @@
                 }
             }
 
-            @if (TieneAlguno(RutasAdmision) || TienePermiso("admision/triaje"))
+            @if (TieneAlguno(RutasAdmision) || (Session.TipoUser != 2 && TienePermiso("admision/triaje")))
             {
                 <span class="menu-section-label">Gestión</span>
                 @if (TieneAlguno(RutasAdmision))
@@ -72,7 +72,7 @@
                         </div>
                     </details>
                 }
-                @if (TienePermiso("admision/triaje"))
+                @if (Session.TipoUser != 2 && TienePermiso("admision/triaje"))
                 {
                     <details>
                         <summary><MenuIcon Name="kardex" /><span>Enfermería</span><i>⌄</i></summary>

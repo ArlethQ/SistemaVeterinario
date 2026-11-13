@@ -102,6 +102,11 @@ public class SessionStateService
             }
 
             var saved = result.Value;
+            if (!string.Equals(saved.ServerInstanceId, _control.ServerInstanceId, StringComparison.Ordinal))
+            {
+                await _storage.DeleteAsync(StorageKey);
+                return false;
+            }
             IdUser = saved.IdUser;
             TipoUser = saved.TipoUser;
             EspUser = saved.EspUser;
@@ -182,7 +187,7 @@ public class SessionStateService
         _lastPersistedUtc = DateTimeOffset.UtcNow;
         await _storage.SetAsync(StorageKey, new PersistedSession(
             IdUser, TipoUser, EspUser, Localidad, LocalidadDescripcion, Apostrofe,
-            LoginUser, NombreUsuario, Iniciales, DateTimeOffset.UtcNow.Add(SessionTimeout), _sessionIssuedUtc));
+            LoginUser, NombreUsuario, Iniciales, DateTimeOffset.UtcNow.Add(SessionTimeout), _sessionIssuedUtc, _control.ServerInstanceId));
     }
 
     private void ClearSession()
@@ -209,7 +214,7 @@ public class SessionStateService
     public sealed record PersistedSession(
         int IdUser, int TipoUser, int EspUser, int Localidad, string LocalidadDescripcion,
         string Apostrofe, string LoginUser, string NombreUsuario, string Iniciales,
-        DateTimeOffset ExpiresUtc, DateTimeOffset? IssuedUtc = null);
+        DateTimeOffset ExpiresUtc, DateTimeOffset? IssuedUtc = null, string? ServerInstanceId = null);
 }
 
 public interface IAuthService

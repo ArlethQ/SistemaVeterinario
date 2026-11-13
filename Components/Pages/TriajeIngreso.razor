@@ -156,20 +156,11 @@ else
         <div class="card-body p-3 triaje-form-layout">
             <fieldset class="triaje-form-main" disabled="@SoloLectura">
             <div class="triaje-section-title"><i class="bi bi-clipboard2-pulse"></i> Información del triaje</div>
-            <!-- Fila 1: Tipo de Consulta, Esterilizado, Sede / Tipo -->
+            <!-- Fila 1: Esterilizado y Tipo -->
             <div class="row g-2 mb-3">
-                <div class="col-md-5">
-                    <label class="form-label small fw-semibold">Tipo de Consulta</label>
-                    <select class="form-select form-select-sm" @bind="_ficha.MedTipoConsulta">
-                        @foreach (var tipo in TiposConsultaDisponibles)
-                        {
-                            <option value="@tipo">@tipo</option>
-                        }
-                    </select>
-                </div>
                 @if (!DesdeHistorial)
                 {
-                    <div class="col-md-3">
+                    <div class="col-md-6">
                         <label class="form-label small fw-semibold">Esterilizado</label>
                         <select class="form-select form-select-sm" @bind="_ficha.Esterilizado">
                             <option value="S">SÍ</option>
@@ -177,9 +168,12 @@ else
                         </select>
                     </div>
                 }
-                <div class="col-md-4">
+                <div class="@(DesdeHistorial ? "col-12" : "col-md-6")">
                     <label class="form-label small fw-semibold">Tipo</label>
-                    <input type="text" class="form-control form-control-sm bg-light" value="@TipoPacienteTexto" readonly disabled />
+                    <select class="form-select form-select-sm" @bind="_ficha.MedTipo">
+                        <option value="HDEV">Doméstico (Mascotas)</option>
+                        <option value="TUERI">Silvestre (Fauna)</option>
+                    </select>
                 </div>
             </div>
 

@@ -2,6 +2,7 @@
 @layout Layout.PublicLayout
 @inject IAuthService AuthService
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>e-ForVets - Iniciar sesión</PageTitle>
@@ -121,6 +122,16 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            await JS.InvokeAsync<bool>("hosvetSessionWatcher.existe");
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException) { }
+    }
+
     private async Task IngresarAsync() {
         if (_localidad <= 0 || _localidades.Count == 0)
         {
@@ -133,6 +144,8 @@
         {
             var resultado = await AuthService.LoginAsync(_username, _password, _localidad);
             if (!resultado.Exito) { _mensajeError = resultado.Mensaje; return; }
+            try { await JS.InvokeVoidAsync("hosvetSessionWatcher.marcarActiva"); }
+            catch (Exception ex) when (ex is JSException or JSDisconnectedException) { }
             Nav.NavigateTo(EsRutaLocalSegura(ReturnUrl) ? ReturnUrl! : "/dashboard");
         }
         catch { _mensajeError = "No fue posible iniciar sesión. Inténtalo nuevamente más tarde."; }

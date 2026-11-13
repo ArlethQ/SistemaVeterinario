@@ -109,12 +109,6 @@
         </div>
     }
 
-    @if (FichaCargada && _triajeMedicoPendiente)
-    {
-        <TriajeIngreso @key="(IdOrden, Nhcl)" IdOrden="@IdOrden" Nhcl="@Nhcl"
-                       ModoModal="true" OnGuardado="ContinuarConsultaTrasTriajeAsync" />
-    }
-
     <!-- Cinta de Identificación del Paciente y Semáforo de Temperamento + 4 Pestañas Clínicas -->
     @if (Paciente == null && !CargandoInicial)
     {
@@ -229,7 +223,7 @@
                                 </select>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label small fw-semibold">Sede / Tipo</label>
+                                <label class="form-label small fw-semibold">Tipo</label>
                                 <select class="form-select form-select-sm" @bind="Ficha.MedTipo" @bind:after="RegistrarCambioSoapAsync">
                                     <option value="HDEV">Doméstico (Mascotas)</option>
                                     <option value="TUERI">Silvestre (Fauna)</option>
@@ -1126,11 +1120,11 @@
     private bool FichaCargada => Paciente != null && IdOrden > 0 && !CargandoInicial;
     private bool FichaEditable => FichaCargada &&
         (Session.TipoUser == 1
-            ? ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || _estadoOrden == "T")
+            ? ((_estadoOrden is ("A" or "E") && (_inicioConsultaUtc.HasValue || _triajeMedicoPendiente)) || _estadoOrden == "T")
             : (OrdenActualResumen is { } ord
                 && ord.IdMedico == Session.IdUser
                 && ord.EnVentanaEdicion24h
-                && ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || _estadoOrden == "T")));
+                && ((_estadoOrden is ("A" or "E") && (_inicioConsultaUtc.HasValue || _triajeMedicoPendiente)) || _estadoOrden == "T")));
     private DateTime? _inicioConsultaUtc;
     private bool _triajeMedicoPendiente;
     private DateTime? _finConsultaUtc;
