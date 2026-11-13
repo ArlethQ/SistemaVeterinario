@@ -115,7 +115,7 @@
                     <div class="col-md-4"><label class="form-label">Pendientes</label><InputTextArea class="form-control" rows="2" @bind-Value="_turno.Pendientes" /></div>
                     <div class="col-md-4"><label class="form-label text-danger fw-bold">Alertas y criterios para llamar</label><InputTextArea class="form-control" rows="2" @bind-Value="_turno.Alertas" /></div>
                 </div>
-                <div class="mt-3 d-flex gap-2"><button class="btn btn-primary" @onclick="GuardarTurnoAsync">Guardar entrega clínica</button><button class="btn btn-outline-secondary" @onclick="NuevoTurno">Limpiar</button></div>
+                <div class="mt-3 d-flex gap-2"><SaveButton class="btn btn-primary" OnClick="GuardarTurnoAsync">Guardar entrega clínica</SaveButton><button class="btn btn-outline-secondary" @onclick="NuevoTurno">Limpiar</button></div>
             </div>
         </div>
         <div class="table-responsive mt-3 history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Fecha</th><th>Turno</th><th>Entrega → recibe</th><th>Pendientes/alertas</th><th></th></tr></thead><tbody>
@@ -136,7 +136,7 @@
                 <div class="col-md-4"><label class="form-label">Médico solicitante</label><InputText class="form-control" @bind-Value="_inter.MedicoSolicitante" /></div>
                 <div class="col-md-9"><label class="form-label">Resumen del resultado</label><InputTextArea class="form-control" rows="2" @bind-Value="_inter.ResultadoResumen" /></div>
                 <div class="col-md-3 d-flex align-items-end"><div class="form-check mb-2"><InputCheckbox class="form-check-input" @bind-Value="_inter.RegistradoHistoria" /><label class="form-check-label">Registrado en historia</label></div></div>
-            </div><div class="mt-3 d-flex gap-2"><button class="btn btn-primary" @onclick="GuardarInterAsync">Guardar</button><button class="btn btn-outline-secondary" @onclick="NuevaInter">Limpiar</button></div></div>
+            </div><div class="mt-3 d-flex gap-2"><SaveButton class="btn btn-primary" OnClick="GuardarInterAsync">Guardar</SaveButton><button class="btn btn-outline-secondary" @onclick="NuevaInter">Limpiar</button></div></div>
         </div>
         <div class="table-responsive mt-3 history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Solicitud</th><th>Tipo/detalle</th><th>Agenda</th><th>Estado</th><th>Resultado</th><th></th></tr></thead><tbody>
         @foreach (var x in _interconsultas) { <tr><td>@x.FechaSolicitud.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Tipo: @x.Detalle</td><td>@x.FechaAgendada?.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Estado</td><td>@x.ResultadoResumen</td><td class="text-end"><button class="btn btn-xs btn-outline-primary" @onclick="() => EditarInter(x)">Editar</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarInterAsync(x.Id)">Eliminar</button></td></tr> }
@@ -162,7 +162,7 @@
             <div class="col-md-3"><label class="form-label">Doble verificación (dos responsables)</label><InputText class="form-control" @bind-Value="_trans.DobleVerificacion" /></div>
             <div class="col-md-12 d-flex flex-wrap gap-4"><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.ConsentimientoConfirmado" />Consentimiento confirmado *</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.TipificacionVerificada" />Tipificación verificada *</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.CrossmatchMayor" />Crossmatch mayor</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.CrossmatchMenor" />Crossmatch menor</label></div>
             <div class="col-12"><label class="form-label">Observaciones</label><InputTextArea class="form-control" rows="2" @bind-Value="_trans.Observaciones" /></div>
-        </div><div class="mt-3 d-flex gap-2"><button class="btn btn-danger" @onclick="GuardarTransAsync">Guardar transfusión</button><button class="btn btn-outline-secondary" @onclick="NuevaTrans">Nueva</button></div></div></div>
+        </div><div class="mt-3 d-flex gap-2"><SaveButton class="btn btn-danger" OnClick="GuardarTransAsync">Guardar transfusión</SaveButton><button class="btn btn-outline-secondary" @onclick="NuevaTrans">Nueva</button></div></div></div>
 
         @if (_trans.Id > 0)
         {
@@ -179,7 +179,7 @@
                 <div class="col-md-3"><label class="form-label text-danger">Reacciones adversas</label><InputText class="form-control" @bind-Value="_mon.ReaccionesAdversas" /></div>
                 <div class="col-md-3"><label class="form-label">Acción tomada</label><InputText class="form-control" @bind-Value="_mon.AccionTomada" /></div>
                 <div class="col-md-3"><label class="form-label">Responsable</label><InputText class="form-control" @bind-Value="_mon.Responsable" /></div>
-            </div><button class="btn btn-primary mt-3" @onclick="AgregarMonAsync">Agregar control</button></div></div>
+            </div><SaveButton class="btn btn-primary mt-3" OnClick="AgregarMonAsync">Agregar control</SaveButton></div></div>
         }
         <div class="table-responsive mt-3 history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Fecha</th><th>Producto/unidad</th><th>Compatibilidad</th><th>Volumen</th><th>Estado</th><th>Controles</th><th></th></tr></thead><tbody>
         @foreach (var x in _transfusiones) { <tr><td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Producto / @x.IdentificadorUnidad</td><td>@x.GrupoReceptor → @x.GrupoDonante</td><td>@x.VolumenAdministradoMl / @x.VolumenPrescritoMl ml</td><td>@x.Estado</td><td>@x.Monitoreos.Count</td><td class="text-end"><button class="btn btn-xs btn-outline-primary" @onclick="() => EditarTrans(x)">Abrir</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarTransAsync(x.Id)">Eliminar</button></td></tr> }

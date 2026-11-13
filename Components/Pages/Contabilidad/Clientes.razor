@@ -503,7 +503,7 @@
             </div>
 
             <div class="editor-body entity-form-legacy">
-                <EditForm Model="@model" OnValidSubmit="Guardar">
+                <SaveForm Model="@model" OnValidSubmit="Guardar">
                     <DataAnnotationsValidator />
 
                     <div @key="formKey">
@@ -884,13 +884,13 @@
                             </details>
 
                         <div class="form-actions entity-form-actions">
-                            <button class="primary-btn @(guardandoCliente ? "n-auto-loading" : null)" type="submit" disabled="@(!PuedeGuardarCliente || guardandoCliente)">
+                            <SaveButton class="@("primary-btn " + (guardandoCliente ? "n-auto-loading" : null))" Type="submit" Disabled="@(!PuedeGuardarCliente || guardandoCliente)">
                                 @if (!guardandoCliente)
                                 {
                                     <i class="bi bi-save me-1"></i>
                                 }
                                 @(isDemoMode ? "Guardar bloqueado" : (guardandoCliente ? "Guardando..." : (editando ? "Guardar cambios" : (EsModoProveedores ? "Crear proveedor" : "Crear cliente"))))
-                            </button>
+                            </SaveButton>
                             <button type="button" class="secondary-btn clear-action-btn" @onclick="Nuevo">
                                 <i class="bi bi-eraser"></i>
                                 Limpiar formulario
@@ -898,7 +898,7 @@
                         </div>
 
                         </div>
-                </EditForm>
+                </SaveForm>
             </div>
         </section>
         }
@@ -919,7 +919,7 @@
                     <div class="detail-modal-body detail-modal-form-body">
                         <section class="editor-card entity-editor-card" data-tour="clientes.editor">
                             <div class="editor-body entity-form-legacy">
-                                <EditForm Model="@model" OnValidSubmit="Guardar" OnInvalidSubmit="OnFormularioClienteInvalido">
+                                <SaveForm Model="@model" OnValidSubmit="Guardar" OnInvalidSubmit="OnFormularioClienteInvalido">
                                     <DataAnnotationsValidator />
 
                                     <div @key="formKey">
@@ -1320,13 +1320,13 @@
                                         </div>
 
                                         <div class="form-actions entity-form-actions">
-                                            <button class="primary-btn @(guardandoCliente ? "n-auto-loading" : null)" type="submit" disabled="@(!PuedeGuardarCliente || guardandoCliente)">
+                                            <SaveButton class="@("primary-btn " + (guardandoCliente ? "n-auto-loading" : null))" Type="submit" Disabled="@(!PuedeGuardarCliente || guardandoCliente)">
                                                 @if (!guardandoCliente)
                                                 {
                                                     <i class="bi bi-save me-1"></i>
                                                 }
                                                 @(isDemoMode ? "Guardar bloqueado" : (guardandoCliente ? "Guardando..." : (editando ? "Guardar cambios" : (EsModoProveedores ? "Crear proveedor" : "Crear cliente"))))
-                                            </button>
+                                            </SaveButton>
                                             <button type="button" class="secondary-btn clear-action-btn" @onclick="Nuevo">
                                                 <i class="bi bi-eraser"></i>
                                                 Limpiar formulario
@@ -1334,7 +1334,7 @@
                                         </div>
 
                                         </div>
-                                </EditForm>
+                                </SaveForm>
                             </div>
                         </section>
                     </div>

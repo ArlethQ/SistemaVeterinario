@@ -61,9 +61,9 @@
             {
                 <ContadorAtencion @key="(IdOrden, inicio)" Etiqueta="Consulta" InicioUtc="inicio" FinUtc="_finConsultaUtc" />
             }
-            <button class="btn btn-sm btn-success" @onclick="GuardarFichaCompletaAsync" disabled="@(Guardando || !FichaEditable)">
+            <SaveButton class="btn btn-sm btn-success" OnClick="GuardarFichaCompletaAsync" Disabled="@(Guardando || !FichaEditable)">
                 <i class="bi bi-floppy-fill me-1"></i>@(Guardando ? "Guardando..." : "Guardar Ficha SOAP")
-            </button>
+            </SaveButton>
             <button class="btn btn-sm btn-outline-danger" disabled="@(!FichaCargada)" @onclick="ExportarPdfAsync">
                 <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF Historia
             </button>
@@ -489,9 +489,9 @@
                                 <input type="text" class="form-control form-control-sm" @bind="NuevoDiagnostico.DescripcionObservacion" />
                             </div>
                             <div class="col-md-2">
-                                <button class="btn btn-sm btn-primary w-100" @onclick="AgregarDiagnosticoAsync">
+                                <SaveButton class="btn btn-sm btn-primary w-100" OnClick="AgregarDiagnosticoAsync">
                                     <i class="bi bi-plus-lg"></i>
-                                </button>
+                                </SaveButton>
                             </div>
                         </div>
 
@@ -605,18 +605,18 @@
                                        placeholder="Ej: Administrar 1 tableta vía oral cada 12 horas por 7 días." />
                             </div>
                             <div class="col-md-3 d-flex align-items-end">
-                                <button type="button" class="btn btn-sm btn-success w-100" @onclick="AgregarMedicamentoAsync">
+                                <SaveButton Type="button" class="btn btn-sm btn-success w-100" OnClick="AgregarMedicamentoAsync">
                                     <i class="bi bi-plus-circle me-1"></i>Agregar
-                                </button>
+                                </SaveButton>
                             </div>
                         </div>
 
                         <div class="mb-2">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <label class="form-label small fw-semibold mb-0">Indicaciones Generales de Receta</label>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" @onclick="GuardarIndicacionesGeneralesTab3Async">
+                                <SaveButton Type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" OnClick="GuardarIndicacionesGeneralesTab3Async">
                                     <i class="bi bi-save me-1"></i>Guardar indicaciones
-                                </button>
+                                </SaveButton>
                             </div>
                             <textarea class="form-control form-control-sm" rows="2" @bind="Ficha.IndicacionesGeneralesReceta" @bind:event="oninput" @bind:after="RegistrarCambioSoapAsync" placeholder="Cuidados generales para imprimir en la receta..."></textarea>
                         </div>
@@ -738,9 +738,9 @@
                                 <input type="text" class="form-control form-control-sm" @bind="_observacionServicio" placeholder="Indicaciones o detalle opcional..." />
                             </div>
                             <div class="col-md-1">
-                                <button type="button" class="btn btn-sm btn-primary w-100" @onclick="AgregarServicioOrdenAsync" disabled="@_agregandoServicio">
+                                <SaveButton Type="button" class="btn btn-sm btn-primary w-100" OnClick="AgregarServicioOrdenAsync" Disabled="@_agregandoServicio">
                                     <i class="bi bi-plus-lg"></i>
-                                </button>
+                                </SaveButton>
                             </div>
                         </div>
                         @if (_mensajeServicio is not null)
@@ -947,9 +947,9 @@
                                 <input type="text" class="form-control form-control-sm" @bind="NuevoAntecedente.Descripcion" placeholder="Alergias, cirugías o patologías crónicas..." />
                             </div>
                             <div class="col-md-3 d-flex align-items-end">
-                                <button class="btn btn-sm btn-primary w-100" @onclick="AgregarAntecedenteAsync">
+                                <SaveButton class="btn btn-sm btn-primary w-100" OnClick="AgregarAntecedenteAsync">
                                     <i class="bi bi-plus-circle me-1"></i>Agregar
-                                </button>
+                                </SaveButton>
                             </div>
                         </div>
 
@@ -1013,9 +1013,9 @@
                                        @onchange="OnFechaRevacunacionChanged" />
                             </div>
                             <div class="col-md-2 d-flex align-items-end">
-                                <button class="btn btn-sm btn-success w-100" @onclick="AgregarVacunaAsync">
+                                <SaveButton class="btn btn-sm btn-success w-100" OnClick="AgregarVacunaAsync">
                                     <i class="bi bi-plus-lg"></i>
-                                </button>
+                                </SaveButton>
                             </div>
                         </div>
                         <input type="text" class="form-control form-control-sm mb-3" maxlength="500" @bind="NuevaVacuna.ObservacionVacuna" placeholder="Observaciones, lote o reacción (opcional)" />

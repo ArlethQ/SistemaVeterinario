@@ -49,9 +49,9 @@
                     @if (_paciente is not null)
                     {
                         <div class="btn-group btn-group-sm">
-                            <button class="btn btn-primary fw-semibold" @onclick="GuardarMonitoreoAsync" disabled="@(_guardando || _sheet.Cerrada)">
+                            <SaveButton class="btn btn-primary fw-semibold" OnClick="GuardarMonitoreoAsync" Disabled="@(_guardando || _sheet.Cerrada)">
                                 💾 @(_guardando ? "Guardando..." : "Guardar Monitoreo")
-                            </button>
+                            </SaveButton>
                             <button class="btn btn-outline-primary" @onclick="NuevaHojaAsync" disabled="@_sheet.Cerrada">
                                 ➕ Nueva Hoja
                             </button>
@@ -297,9 +297,9 @@
                             </select>
                         </div>
                         <div class="col-md-1">
-                            <button class="btn btn-sm btn-success w-100 fw-semibold" @onclick="AgregarMedicamentoMonitoreoAsync" disabled="@(_sheet.Cerrada || _guardandoMedicamento)">
+                            <SaveButton class="btn btn-sm btn-success w-100 fw-semibold" OnClick="AgregarMedicamentoMonitoreoAsync" Disabled="@(_sheet.Cerrada || _guardandoMedicamento)">
                                 ➕ Añadir
-                            </button>
+                            </SaveButton>
                         </div>
                     </div>
 
@@ -370,7 +370,7 @@
                                                         </label>
                                                         <label class="col-sm-7">Indicaciones<input class="form-control form-control-sm" @bind="edicion.Indicaciones" /></label>
                                                         <div class="col-12 d-flex gap-2">
-                                                            <button type="button" class="btn btn-sm btn-primary" @onclick="GuardarMedicamentoEditadoAsync">Guardar cambios</button>
+                                                            <SaveButton Type="button" class="btn btn-sm btn-primary" OnClick="GuardarMedicamentoEditadoAsync">Guardar cambios</SaveButton>
                                                             <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => _medicamentoEditado = null">Cancelar</button>
                                                         </div>
                                                     </fieldset>
@@ -396,9 +396,9 @@
                             <div class="input-group input-group-sm mb-2 no-print">
                                 <input type="text" class="form-control" placeholder="Ingrese comentario de chequeo quirúrgico..."
                                        @bind="_nuevaNotaChequeo" disabled="@_sheet.Cerrada" />
-                                <button class="btn btn-warning fw-semibold" @onclick="AgregarNotaChequeoAsync" disabled="@_sheet.Cerrada">
+                                <SaveButton class="btn btn-warning fw-semibold" OnClick="AgregarNotaChequeoAsync" Disabled="@_sheet.Cerrada">
                                     Agregar
-                                </button>
+                                </SaveButton>
                             </div>
                             <table class="table table-sm table-striped small mb-0">
                                 <thead>
@@ -440,9 +440,9 @@
                                            @bind="_textoObsHora" disabled="@_sheet.Cerrada" />
                                 </div>
                                 <div class="col-2">
-                                    <button class="btn btn-sm btn-info w-100 fw-semibold" @onclick="AgregarObsHoraAsync" disabled="@_sheet.Cerrada">
+                                    <SaveButton class="btn btn-sm btn-info w-100 fw-semibold" OnClick="AgregarObsHoraAsync" Disabled="@_sheet.Cerrada">
                                         Agregar
-                                    </button>
+                                    </SaveButton>
                                 </div>
                             </div>
                             <table class="table table-sm table-striped small mb-0">

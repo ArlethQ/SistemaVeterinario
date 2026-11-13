@@ -269,7 +269,7 @@
                         <h3>@rolSeleccionado.DescripcionRol</h3>
                         <p>Seleccione modulos completos o items individuales para este perfil.</p>
                     </div>
-                    <button type="button" class="primary-btn" data-tour="security.save-access" @onclick="GuardarAccesos" disabled="@guardandoAccesos">
+                    <SaveButton Type="button" class="primary-btn" data-tour="security.save-access" OnClick="GuardarAccesos" Disabled="@guardandoAccesos">
                         @if (guardandoAccesos)
                         {
                             <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
@@ -280,7 +280,7 @@
                             <i class="ri-save-3-line"></i>
                             <span>Guardar cambios</span>
                         }
-                    </button>
+                    </SaveButton>
                 </div>
 
                 @if (!string.IsNullOrWhiteSpace(mensajeEstado))
@@ -481,13 +481,13 @@
                 <button type="button" class="secondary-btn secondary-btn-quiet" @onclick="CerrarModalRol">
                     Cancelar
                 </button>
-                <button type="button"
+                <SaveButton Type="button"
                         class="primary-btn"
-                        @onclick="ProcesarNuevoRol"
-                        disabled="@(string.IsNullOrWhiteSpace(nuevoNombrePerfil))">
+                        OnClick="ProcesarNuevoRol"
+                        Disabled="@(string.IsNullOrWhiteSpace(nuevoNombrePerfil))">
                     <i class="ri-add-circle-line"></i>
                     <span>Crear perfil</span>
-                </button>
+                </SaveButton>
             </div>
         </div>
     </div>
@@ -498,7 +498,7 @@
     <div class="security-modal-backdrop"></div>
     <div class="security-modal" role="dialog" aria-modal="true">
         <div class="security-modal-content security-modal-lg">
-            <EditForm EditContext="menuEditContext" OnValidSubmit="GuardarMenuMaestro">
+            <SaveForm EditContext="menuEditContext" OnValidSubmit="GuardarMenuMaestro">
                 <DataAnnotationsValidator />
                 <div class="security-modal-header security-modal-header-primary">
                     <div>
@@ -569,12 +569,12 @@
                     <button type="button" class="secondary-btn secondary-btn-quiet" @onclick="CerrarModalMenu">
                         Cerrar
                     </button>
-                    <button type="submit" class="primary-btn">
+                    <SaveButton Type="submit" class="primary-btn">
                         <i class="@(menuModel.IdMenu == 0 ? "ri-add-line" : "ri-save-3-line")"></i>
                         <span>@(menuModel.IdMenu == 0 ? "Crear item" : "Actualizar")</span>
-                    </button>
+                    </SaveButton>
                 </div>
-            </EditForm>
+            </SaveForm>
         </div>
     </div>
 }
@@ -764,7 +764,7 @@
 
             <div class="security-modal-footer">
                 <button type="button" class="secondary-btn secondary-btn-quiet" @onclick="CerrarModalOrder" disabled="@isSavingOrder">Cancelar</button>
-                <button type="button" class="primary-btn" @onclick="GuardarOrdenMenus" disabled="@isSavingOrder">
+                <SaveButton Type="button" class="primary-btn" OnClick="GuardarOrdenMenus" Disabled="@isSavingOrder">
                     @if (isSavingOrder)
                     {
                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
@@ -775,7 +775,7 @@
                         <i class="ri-save-3-line"></i>
                         <span>Guardar orden</span>
                     }
-                </button>
+                </SaveButton>
             </div>
         </div>
     </div>

@@ -208,10 +208,10 @@
                         </label>
                         <div class="mass-payment-actions">
                             <span class="mass-selection-count"><strong>@clientesPagoMasivo.Count</strong> clientes seleccionados</span>
-                            <button type="button" class="confirm-btn confirm-btn-sm" disabled="@(clientesPagoMasivo.Count == 0 || montoPagoMasivo <= 0 || procesandoPagoMasivo)" @onclick="RegistrarPagosMasivosAsync">
+                            <SaveButton Type="button" class="confirm-btn confirm-btn-sm" Disabled="@(clientesPagoMasivo.Count == 0 || montoPagoMasivo <= 0 || procesandoPagoMasivo)" OnClick="RegistrarPagosMasivosAsync">
                                 <i class="ri-check-double-line"></i>
                                 <span>@(procesandoPagoMasivo ? "Registrando..." : "Registrar pagos")</span>
-                            </button>
+                            </SaveButton>
                             <button type="button" class="ghost-btn ghost-btn-sm" @onclick="LimpiarPagoMasivoAsync">Limpiar</button>
                         </div>
                     </div>
@@ -263,15 +263,15 @@
                                     <td class="text-end cartera-balance">$@facturaPendiente.SaldoPendiente.ToString("N2")</td>
                                     <td><span class="@GetEstadoCarteraClase(facturaPendiente)">@GetEstadoCartera(facturaPendiente)</span></td>
                                     <td class="text-end">
-                                        <button type="button"
+                                        <SaveButton Type="button"
                                                 class="cartera-row-action"
                                                 data-tour="abonos.row-action"
                                                 title="Registrar abono"
-                                                @onclick:stopPropagation="true"
-                                                @onclick="() => RegistrarAbonoDesdeFila(facturaPendiente)">
+                                                StopPropagation="true"
+                                                OnClick="() => RegistrarAbonoDesdeFila(facturaPendiente)">
                                             <i class="ri-hand-coin-line"></i>
                                             <span>Registrar</span>
-                                        </button>
+                                        </SaveButton>
                                     </td>
                                 </tr>
                             }
@@ -1168,7 +1168,7 @@
 
         <div class="confirm-modal-actions">
             <button type="button" class="ghost-btn" @onclick="CerrarConfirmacionFinal" disabled="@cargando">Cancelar</button>
-            <button type="button" class="confirm-btn" @onclick="ProcesarPagoConfirmado" disabled="@(!confirmacionFinalAceptada || cargando)">
+            <SaveButton Type="button" class="confirm-btn" OnClick="ProcesarPagoConfirmado" Disabled="@(!confirmacionFinalAceptada || cargando)">
                 @if (cargando)
                 {
                     <i class="ri-loader-4-line spin"></i>
@@ -1179,7 +1179,7 @@
                     <i class="ri-check-line"></i>
                     <span>Si, registrar abono</span>
                 }
-            </button>
+            </SaveButton>
         </div>
     </section>
 }

@@ -42,7 +42,7 @@
                                 <option value="@menu.Id">@menu.Descripcion</option>
                             }
                         </select>
-                        <button type="button" class="btn btn-primary" disabled="@_guardando" @onclick="CrearPadreAsync">Crear menú y asignar submenú</button>
+                        <SaveButton Type="button" class="btn btn-primary" Disabled="@_guardando" OnClick="CrearPadreAsync">Crear menú y asignar submenú</SaveButton>
                     </div></div>
                 }
                 else if (_edit is not null)
@@ -61,7 +61,7 @@
                         </select>
                         <label class="form-label" for="menu-orden">Orden</label>
                         <input id="menu-orden" class="form-control mb-3" type="number" @bind="_edit.SecNuevoMenu" disabled="@(_edit.Id > 0 && _menus.Any(m => m.PadreNuevoMenu == _edit.SecNuevoMenu))" />
-                        <button type="button" class="btn btn-primary" disabled="@_guardando" @onclick="GuardarAsync">Guardar organización</button>
+                        <SaveButton Type="button" class="btn btn-primary" Disabled="@_guardando" OnClick="GuardarAsync">Guardar organización</SaveButton>
                         @if (_edit.Id > 0 && string.IsNullOrWhiteSpace(_edit.Url))
                         {
                             <button type="button" class="btn btn-outline-danger ms-2" disabled="@_guardando" @onclick="EliminarAsync">Eliminar menú padre</button>
@@ -92,7 +92,7 @@
                     </section></div>
                 </div>
             </div>
-            <footer><button type="button" class="btn btn-light" @onclick="CerrarOrden">Cerrar</button><button type="button" class="btn btn-primary" @onclick="GuardarOrdenAsync" disabled="@_guardando">Guardar orden</button></footer>
+            <footer><button type="button" class="btn btn-light" @onclick="CerrarOrden">Cerrar</button><SaveButton Type="button" class="btn btn-primary" OnClick="GuardarOrdenAsync" Disabled="@_guardando">Guardar orden</SaveButton></footer>
         </div>
     </div>
 }

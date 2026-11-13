@@ -1,0 +1,36 @@
+@namespace Simetric.Components.Shared
+@using Microsoft.AspNetCore.Components.Web
+
+<button @attributes="Attributes" type="@Type" disabled="@(Disabled || IsBusy)"
+        aria-busy="@(IsBusy ? "true" : null)" @onclick="HandleClickAsync" @onclick:stopPropagation="StopPropagation">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public string Type { get; set; } = "button";
+    [Parameter] public bool StopPropagation { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? Attributes { get; set; }
+    [CascadingParameter(Name = "SaveFormBusy")] public bool FormBusy { get; set; }
+
+    private bool _saving;
+    private bool IsBusy => _saving || (Type == "submit" && FormBusy);
+
+    private async Task HandleClickAsync(MouseEventArgs args)
+    {
+        if (Disabled || IsBusy || !OnClick.HasDelegate)
+            return;
+
+        _saving = true;
+        try
+        {
+            await OnClick.InvokeAsync(args);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

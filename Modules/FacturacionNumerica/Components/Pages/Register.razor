@@ -1922,7 +1922,7 @@
 
             @if (pasoActual == RegisterStep.Formulario)
             {
-                <EditForm Model="@model" OnValidSubmit="CrearCuentaYRedirigirLoginAsync" OnInvalidSubmit="MostrarAlertaErroresAsync" FormName="register-form">
+                <SaveForm Model="@model" OnValidSubmit="CrearCuentaYRedirigirLoginAsync" OnInvalidSubmit="MostrarAlertaErroresAsync" FormName="register-form">
                     <DataAnnotationsValidator />
 
                     <div class="free-services-note" role="note">
@@ -2107,16 +2107,16 @@
                         </div>
                     </div>
 
-                    <button type="submit" class="btn-n-login d-flex align-items-center justify-content-center gap-2" disabled="@procesando">
+                    <SaveButton Type="submit" class="btn-n-login d-flex align-items-center justify-content-center gap-2" Disabled="@procesando">
                         <span>@(procesando ? "CREANDO CUENTA..." : "CREAR CUENTA")</span>
                         <i class="bi bi-arrow-right-short" style="font-size: 1.25rem;"></i>
-                    </button>
+                    </SaveButton>
 
                     <div class="text-center auth-footer">
                         <span class="text-muted small">Ya tienes cuenta?</span>
                         <a href="/" class="text-primary fw-bold text-decoration-none ms-1 small">Inicia sesion</a>
                     </div>
-                </EditForm>
+                </SaveForm>
             }
             else if (false && pasoActual == RegisterStep.Servicio)
             {

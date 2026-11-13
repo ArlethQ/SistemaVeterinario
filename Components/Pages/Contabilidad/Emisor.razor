@@ -251,7 +251,7 @@
 
             <div class="editor-body entity-form-legacy">
 
-                <EditForm Model="@model" OnValidSubmit="Guardar" @key="formKey">
+                <SaveForm Model="@model" OnValidSubmit="Guardar" @key="formKey">
                     <DataAnnotationsValidator />
                     <ValidationSummary class="text-danger small" />
 
@@ -406,13 +406,13 @@
                     </fieldset>
 
                     <div class="form-actions entity-form-actions">
-                        <button class="primary-btn @(guardandoEmisor ? "n-auto-loading" : null)" type="submit" disabled="@(BloquearFormularioCreacion || isDemoMode || guardandoEmisor)">
+                        <SaveButton class="@("primary-btn " + (guardandoEmisor ? "n-auto-loading" : null))" Type="submit" Disabled="@(BloquearFormularioCreacion || isDemoMode || guardandoEmisor)">
                             @if (!guardandoEmisor)
                             {
                                 <i class="bi bi-save me-1"></i>
                             }
                             @(isDemoMode ? "Guardar bloqueado" : (guardandoEmisor ? "Guardando..." : (editando ? "Guardar cambios" : "Crear emisor")))
-                        </button>
+                        </SaveButton>
                         <button type="button"
                                 class="secondary-btn clear-action-btn"
                                 @onclick="Nuevo"
@@ -421,7 +421,7 @@
                             Limpiar formulario
                         </button>
                     </div>
-                </EditForm>
+                </SaveForm>
             </div>
         </section>
         </div>
@@ -479,7 +479,7 @@
                 <div class="modal-body p-4" style="max-height: calc(100vh - 180px); overflow-y:auto;">
                     <section class="editor-card entity-editor-card">
                         <div class="editor-body entity-form-legacy">
-                            <EditForm Model="@model" OnValidSubmit="Guardar" @key="formKey">
+                            <SaveForm Model="@model" OnValidSubmit="Guardar" @key="formKey">
                                 <DataAnnotationsValidator />
                                 <ValidationSummary class="text-danger small" />
 
@@ -623,19 +623,19 @@
                                 </fieldset>
 
                                 <div class="form-actions entity-form-actions">
-                                    <button class="primary-btn @(guardandoEmisor ? "n-auto-loading" : null)" type="submit" disabled="@(BloquearFormularioCreacion || isDemoMode || guardandoEmisor)">
+                                    <SaveButton class="@("primary-btn " + (guardandoEmisor ? "n-auto-loading" : null))" Type="submit" Disabled="@(BloquearFormularioCreacion || isDemoMode || guardandoEmisor)">
                                         @if (!guardandoEmisor)
                                         {
                                             <i class="bi bi-save me-1"></i>
                                         }
                                         @(isDemoMode ? "Guardar bloqueado" : (guardandoEmisor ? "Guardando..." : (editando ? "Guardar cambios" : "Crear emisor")))
-                                    </button>
+                                    </SaveButton>
                                     <button type="button" class="secondary-btn clear-action-btn" @onclick="Nuevo" disabled="@BloquearFormularioCreacion">
                                         <i class="bi bi-eraser"></i>
                                         Limpiar formulario
                                     </button>
                                 </div>
-                            </EditForm>
+                            </SaveForm>
                         </div>
                     </section>
                 </div>

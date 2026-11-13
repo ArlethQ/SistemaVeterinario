@@ -88,13 +88,13 @@
                 @if (resumen.Contexto.EsJefeEmpresa)
                 {
                     <label>Nueva sucursal</label><input class="form-control mb-2" @bind="nombreSucursal" maxlength="200" />
-                    <button class="secondary-btn mb-3" disabled="@ocupado" @onclick="CrearSucursalAsync">Crear sucursal</button>
+                    <SaveButton class="secondary-btn mb-3" Disabled="@ocupado" OnClick="CrearSucursalAsync">Crear sucursal</SaveButton>
                 }
                 @if (sucursalId > 0)
                 {
                     @MenuChecks()
                     @if (resumen.Contexto.EsJefeEmpresa)
-                    { <button class="primary-btn" disabled="@ocupado" @onclick="GuardarSucursalAsync">Guardar menús de sucursal</button> }
+                    { <SaveButton class="primary-btn" Disabled="@ocupado" OnClick="GuardarSucursalAsync">Guardar menús de sucursal</SaveButton> }
                 }
             }
             else if (tab == "Roles")
@@ -119,7 +119,7 @@
                     @if (UsuariosAfectados > 0)
                     { <label class="d-block mb-3"><input type="checkbox" @bind="confirmarImpacto" disabled="@ocupado" /> Confirmo actualizar los permisos de estos usuarios</label> }
                 }
-                <button class="primary-btn" disabled="@(ocupado || RolCompartido || (perfilId > 0 && UsuariosAfectados > 0 && !confirmarImpacto))" @onclick="GuardarPerfilAsync">Guardar rol</button>
+                <SaveButton class="primary-btn" Disabled="@(ocupado || RolCompartido || (perfilId > 0 && UsuariosAfectados > 0 && !confirmarImpacto))" OnClick="GuardarPerfilAsync">Guardar rol</SaveButton>
                 @if (perfilId > 0 && !RolCompartido)
                 { <button class="btn btn-outline-danger ms-2" disabled="@ocupado" @onclick="DesactivarRolAsync">Desactivar rol</button> }
             }
@@ -210,7 +210,7 @@
                     @if (resumen.Usuarios.First(x => x.IdUsuario == usuarioEditando).MenusJson is not null)
                     { <button class="secondary-btn mb-3" disabled="@(ocupado || !UsuarioEditable)" @onclick="RestablecerRolAsync">Restablecer permisos del rol</button> }
                 }
-                <button class="primary-btn" disabled="@(ocupado || !UsuarioEditable)" @onclick="GuardarUsuarioAsync">@(usuarioEditando == 0 ? "Crear cuenta" : "Guardar asignación")</button>
+                <SaveButton class="primary-btn" Disabled="@(ocupado || !UsuarioEditable)" OnClick="GuardarUsuarioAsync">@(usuarioEditando == 0 ? "Crear cuenta" : "Guardar asignación")</SaveButton>
                 @if (usuarioEditando > 0)
                 {
                     var miembro = resumen.Usuarios.First(x => x.IdUsuario == usuarioEditando);

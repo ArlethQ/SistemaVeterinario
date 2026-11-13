@@ -71,7 +71,7 @@ else if (_pasoActual == PasoModal.FormularioCliente)
                 </div>
             </div>
 
-            <EditForm Model="_clienteEditando" OnValidSubmit="GuardarClienteAsync">
+            <SaveForm Model="_clienteEditando" OnValidSubmit="GuardarClienteAsync">
                 <DataAnnotationsValidator />
                 @if (!string.IsNullOrEmpty(_mensajeAlerta) && _esError)
                 {
@@ -251,7 +251,7 @@ else if (_pasoActual == PasoModal.FormularioCliente)
                     </button>
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="Cerrar">Cancelar</button>
-                        <button type="submit" class="btn btn-primary btn-sm" disabled="@_guardandoCliente">
+                        <SaveButton Type="submit" class="btn btn-primary btn-sm" Disabled="@_guardandoCliente">
                             @if (_guardandoCliente)
                             {
                                 <span>Guardando...</span>
@@ -261,10 +261,10 @@ else if (_pasoActual == PasoModal.FormularioCliente)
                                 <span>Siguiente: Registrar Paciente</span>
                                 <i class="bi bi-arrow-right-circle-fill ms-1"></i>
                             }
-                        </button>
+                        </SaveButton>
                     </div>
                 </div>
-            </EditForm>
+            </SaveForm>
         </div>
     </section>
 }
@@ -311,7 +311,7 @@ else if (_pasoActual == PasoModal.FormularioMascota)
                 </div>
             }
 
-            <EditForm Model="_mascotaEditando" OnValidSubmit="GuardarMascotaAsync">
+            <SaveForm Model="_mascotaEditando" OnValidSubmit="GuardarMascotaAsync">
                 <DataAnnotationsValidator />
                 @if (!string.IsNullOrEmpty(_mensajeAlerta) && _esError)
                 {
@@ -516,12 +516,12 @@ else if (_pasoActual == PasoModal.FormularioMascota)
                     <span class="small text-muted">Edad estimada: <strong>@_mascotaEditando.EdadCalculada</strong></span>
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="Cancelar">Cancelar</button>
-                        <button type="submit" class="btn btn-primary btn-sm" disabled="@_guardandoMascota">
+                        <SaveButton Type="submit" class="btn btn-primary btn-sm" Disabled="@_guardandoMascota">
                             <i class="bi bi-save me-1"></i>@(_guardandoMascota ? "Guardando paciente..." : "Guardar Paciente")
-                        </button>
+                        </SaveButton>
                     </div>
                 </div>
-            </EditForm>
+            </SaveForm>
         </div>
     </section>
 }

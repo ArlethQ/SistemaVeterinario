@@ -528,7 +528,7 @@
                         </div>
                     }
 
-                    <EditForm EditContext="productEditContext"
+                    <SaveForm EditContext="productEditContext"
                               OnValidSubmit="Guardar"
                               OnInvalidSubmit="ManejarFormularioInvalido"
                               @key="formKey"
@@ -825,15 +825,15 @@
                         </div>
 
                         <div class="product-form-actions pt-3 border-top mt-4">
-                            <button class="primary-btn" type="submit" disabled="@(isDemoMode || isSaving)">
+                            <SaveButton class="primary-btn" Type="submit" Disabled="@(isDemoMode || isSaving)">
                                 <i class="bi bi-save me-1"></i> @(isDemoMode ? "Guardar bloqueado" : isSaving ? "Guardando..." : (editando ? "Guardar Cambios" : "Crear Registro"))
-                            </button>
+                            </SaveButton>
                             <button class="secondary-btn clear-action-btn" type="button" @onclick="Nuevo" disabled="@isSaving">
                                 <i class="bi bi-eraser"></i>
                                 Limpiar formulario
                             </button>
                         </div>
-                    </EditForm>
+                    </SaveForm>
                 </div>
             </div>
         </section>
@@ -930,7 +930,7 @@
             <div class="products-modal-footer cotizacion-footer">
                 <div><span>@lineasCotizacion.Count producto@(lineasCotizacion.Count == 1 ? string.Empty : "s") seleccionado@(lineasCotizacion.Count == 1 ? string.Empty : "s")</span><strong>Total estimado: @FormatCurrency(TotalCotizacion)</strong></div>
                 <button type="button" class="secondary-btn" @onclick="CerrarCotizacion">Cerrar</button>
-                <button type="button" class="primary-btn" @onclick="GenerarCotizacionAsync" disabled="@(generandoCotizacion || !lineasCotizacion.Any())">@(generandoCotizacion ? "Generando..." : "Generar")</button>
+                <SaveButton Type="button" class="primary-btn" OnClick="GenerarCotizacionAsync" Disabled="@(generandoCotizacion || !lineasCotizacion.Any())">@(generandoCotizacion ? "Generando..." : "Generar")</SaveButton>
             </div>
         </div>
     </div>
@@ -1056,7 +1056,7 @@
             </div>
             <div class="products-modal-footer d-flex justify-content-end gap-2 p-3" style="background-color: #f8fafc; border-top: 1px solid #edf2f7;">
                 <button type="button" class="secondary-btn" @onclick="CancelarCrearCategoriasFaltantes">Cancelar importación</button>
-                <button type="button" class="primary-btn" @onclick="ConfirmarCrearCategoriasFaltantesAsync" style="background: #e67e22; border-color: #e67e22; color: white;">Crear y continuar</button>
+                <SaveButton Type="button" class="primary-btn" OnClick="ConfirmarCrearCategoriasFaltantesAsync" style="background: #e67e22; border-color: #e67e22; color: white;">Crear y continuar</SaveButton>
             </div>
         </div>
     </div>
@@ -1113,10 +1113,10 @@
 
             <div class="products-modal-footer">
                 <button type="button" class="secondary-btn" @onclick="CerrarModalCategoriaProducto" disabled="@guardandoCategoriaProducto">Cancelar</button>
-                <button type="button" class="primary-btn" @onclick="GuardarCategoriaDesdeProductoAsync" disabled="@guardandoCategoriaProducto">
+                <SaveButton Type="button" class="primary-btn" OnClick="GuardarCategoriaDesdeProductoAsync" Disabled="@guardandoCategoriaProducto">
                     <i class="bi bi-save"></i>
                     <span>@(guardandoCategoriaProducto ? "Guardando..." : "Guardar")</span>
-                </button>
+                </SaveButton>
             </div>
         </div>
     </div>

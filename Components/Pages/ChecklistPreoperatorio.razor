@@ -23,9 +23,9 @@
         </select>
         <BuscadorOrdenClinica @bind-Orden="ordenInput" @bind-Nhcl="nhclInput" OnBuscar="CargarPorInputAsync" />
         <button class="btn btn-sm btn-outline-secondary" disabled="@(paciente is null)" @onclick="ImprimirAsync">Imprimir</button>
-        <button class="btn btn-sm btn-success fw-semibold" disabled="@(paciente is null || guardando || ordenCerrada)" @onclick="GuardarAsync">
+        <SaveButton class="btn btn-sm btn-success fw-semibold" Disabled="@(paciente is null || guardando || ordenCerrada)" OnClick="GuardarAsync">
             @(guardando ? "Guardando..." : "Guardar checklist")
-        </button>
+        </SaveButton>
     </div>
 </div>
 
@@ -108,7 +108,7 @@ else if (paciente is not null)
                             <div class="col-md-6"><label class="form-label fw-semibold">Observaciones *</label><textarea rows="3" class="form-control" @bind="checklist.Observaciones"></textarea></div>
                             <div class="col-12 d-flex justify-content-end gap-2">
                                 <a class="btn btn-outline-primary" href="@($"/quirofano/pausa-seguridad/{IdOrden}/{Nhcl}")">Continuar a pausa de seguridad</a>
-                                <button class="btn btn-success fw-semibold" disabled="@guardando" @onclick="GuardarAsync">@(guardando ? "Guardando..." : "Guardar checklist preoperatorio")</button>
+                                <SaveButton class="btn btn-success fw-semibold" Disabled="@guardando" OnClick="GuardarAsync">@(guardando ? "Guardando..." : "Guardar checklist preoperatorio")</SaveButton>
                             </div>
                         </div>
                     </div>

@@ -168,7 +168,7 @@
                         </div>
                     }
 
-                    <EditForm Model="_nuevaOrden" OnValidSubmit="CrearOrdenAtencionAsync">
+                    <SaveForm Model="_nuevaOrden" OnValidSubmit="CrearOrdenAtencionAsync">
                         <DataAnnotationsValidator />
 
                         <div class="selected-patient mb-2 small">
@@ -247,10 +247,10 @@
 
                         </div>
 
-                        <button type="submit" class="btn btn-success w-100 mt-3 fw-bold" disabled="@(_nuevaOrden.Nhcl == 0)">
+                        <SaveButton Type="submit" class="btn btn-success w-100 mt-3 fw-bold" Disabled="@(_nuevaOrden.Nhcl == 0)">
                             <i class="bi bi-check2-circle me-1"></i>Registrar Orden y Enviar a Sala de Espera
-                        </button>
-                    </EditForm>
+                        </SaveButton>
+                    </SaveForm>
                 </div>
             </div>
         </div>
@@ -476,7 +476,7 @@
 
     @if (_ordenCambio is not null)
     {
-        <div class="order-drawer-backdrop"></div><div class="order-drawer"><div class="card"><div class="card-header"><strong>Cambiar asignación de orden #@_ordenCambio.IdOrden</strong></div><div class="card-body"><label>Especialidad</label><select class="form-select" value="@_cambioEspecialidad" @onchange="CambiarEspecialidadCambioAsync">@foreach(var e in _especialidades){<option value="@e.Id">[@(string.IsNullOrWhiteSpace(e.Codigo) ? "GEN" : e.Codigo)] @e.Descripcion</option>}</select><label class="mt-2">Médico</label><select class="form-select" @bind="_cambioMedico">@foreach(var m in _medicosCambio){<option value="@m.Id">@m.Descripcion</option>}</select><div class="mt-3 d-flex gap-2"><button class="btn btn-secondary" @onclick="()=>_ordenCambio=null">Cancelar</button><button class="btn btn-primary" @onclick="GuardarCambioAsignacionAsync">Guardar cambio auditable</button></div></div></div></div>
+        <div class="order-drawer-backdrop"></div><div class="order-drawer"><div class="card"><div class="card-header"><strong>Cambiar asignación de orden #@_ordenCambio.IdOrden</strong></div><div class="card-body"><label>Especialidad</label><select class="form-select" value="@_cambioEspecialidad" @onchange="CambiarEspecialidadCambioAsync">@foreach(var e in _especialidades){<option value="@e.Id">[@(string.IsNullOrWhiteSpace(e.Codigo) ? "GEN" : e.Codigo)] @e.Descripcion</option>}</select><label class="mt-2">Médico</label><select class="form-select" @bind="_cambioMedico">@foreach(var m in _medicosCambio){<option value="@m.Id">@m.Descripcion</option>}</select><div class="mt-3 d-flex gap-2"><button class="btn btn-secondary" @onclick="()=>_ordenCambio=null">Cancelar</button><SaveButton class="btn btn-primary" OnClick="GuardarCambioAsignacionAsync">Guardar cambio auditable</SaveButton></div></div></div></div>
     }
 
     @if (_ordenTicket is not null)

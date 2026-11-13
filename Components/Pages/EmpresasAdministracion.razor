@@ -33,7 +33,7 @@
         <div class="modal fade show d-block" style="background:rgba(0,0,0,.5)" tabindex="-1" @onclick="Cerrar">
             <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation><div class="modal-content"><div class="modal-header"><div><small class="text-primary fw-bold">NUEVO TENANT</small><h2 class="h5 mb-0">Crear empresa</h2></div><button class="btn-close" @onclick="Cerrar"></button></div>
                 <div class="modal-body"><div class="mb-3"><label class="form-label">Nombre de la empresa *</label><input class="form-control" @bind="_modelo.Nombre" /></div><div class="mb-3"><label class="form-label">RUC</label><input class="form-control" maxlength="13" @bind="_modelo.Ruc" /></div><div class="mb-3"><label class="form-label">Usuario titular *</label><select class="form-select" @bind="_modelo.IdTitular"><option value="0">Seleccione</option>@foreach (var usuario in _titularesDisponibles) { <option value="@usuario.Id">@usuario.Nombre (@usuario.Email)</option> }</select><div class="form-text">Se creará automáticamente la sucursal Matriz y el titular recibirá control total de la empresa.</div></div></div>
-                <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="Cerrar">Cancelar</button><button class="btn btn-primary" disabled="@_guardando" @onclick="Guardar">@(_guardando ? "Creando..." : "Crear empresa")</button></div>
+                <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="Cerrar">Cancelar</button><SaveButton class="btn btn-primary" Disabled="@_guardando" OnClick="Guardar">@(_guardando ? "Creando..." : "Crear empresa")</SaveButton></div>
             </div></div>
         </div>
     }

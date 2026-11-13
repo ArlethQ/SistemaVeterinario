@@ -2154,7 +2154,7 @@
 
     // Formularios desplegables (inline). Mantienen exactamente las validaciones y bindings existentes.
     private RenderFragment FormularioCliente => @<text>
-<EditForm Model="_clienteEditando" OnValidSubmit="GuardarClienteAsync">
+<SaveForm Model="_clienteEditando" OnValidSubmit="GuardarClienteAsync">
                             <DataAnnotationsValidator />
                             @if (!string.IsNullOrEmpty(_mensajeAlerta) && _esError)
                             {
@@ -2317,7 +2317,7 @@
 
                             <div class="d-flex justify-content-end gap-2 mt-3">
                                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelarEdicionCliente">Cancelar</button>
-                                <button type="submit" class="btn btn-primary btn-sm">
+                                <SaveButton Type="submit" class="btn btn-primary btn-sm">
                                     @if (_flujoRegistroCompleto)
                                     {
                                         <span>Siguiente: Registrar Paciente</span><i class="bi bi-arrow-right-circle-fill ms-1"></i>
@@ -2326,13 +2326,13 @@
                                     {
                                         <i class="bi bi-save me-1"></i><span>Guardar Propietario</span>
                                     }
-                                </button>
+                                </SaveButton>
                             </div>
-                        </EditForm>
+                        </SaveForm>
     </text>;
 
     private RenderFragment FormularioMascota => @<text>
-<EditForm Model="_mascotaEditando" OnValidSubmit="GuardarMascotaAsync">
+<SaveForm Model="_mascotaEditando" OnValidSubmit="GuardarMascotaAsync">
                             <DataAnnotationsValidator />
                             @if (!string.IsNullOrEmpty(_mensajeAlerta) && _esError)
                             {
@@ -2476,12 +2476,12 @@
                                 <span class="small text-muted">Edad estimada: <strong>@_mascotaEditando.EdadCalculada</strong></span>
                                 <div class="d-flex gap-2">
                                     <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelarEdicionMascota">Cancelar</button>
-                                    <button type="submit" class="btn btn-primary btn-sm" disabled="@_guardandoMascota">
+                                    <SaveButton Type="submit" class="btn btn-primary btn-sm" Disabled="@_guardandoMascota">
                                         <i class="bi bi-save me-1"></i>@(_guardandoMascota ? "Guardando..." : "Guardar Paciente")
-                                    </button>
+                                    </SaveButton>
                                 </div>
                             </div>
-                        </EditForm>
+                        </SaveForm>
     </text>;
 
     private static string ObtenerColorHexTriaje(string color) => color switch

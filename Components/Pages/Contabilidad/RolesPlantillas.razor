@@ -146,10 +146,10 @@
                         }
                         @if (rolSeleccionado is not null)
                         {
-                            <button type="button" class="primary-btn" @onclick="GuardarAsync" disabled="@guardando">
+                            <SaveButton Type="button" class="primary-btn" OnClick="GuardarAsync" Disabled="@guardando">
                                 <i class="bi bi-floppy"></i>
                                 <span>@(guardando ? "Guardando..." : "Guardar cambios")</span>
-                            </button>
+                            </SaveButton>
                         }
                     </div>
                 </div>
@@ -299,7 +299,7 @@
             </div>
             <footer class="role-modal-footer">
                 <button type="button" class="secondary-btn" @onclick="CerrarModalMenu">Cerrar</button>
-                @if (!menuSoloLectura) { <button type="button" class="primary-btn" @onclick="GuardarMenuAsync" disabled="@guardandoMenu"><i class="bi @(menuEdicion.IdMenu == 0 ? "bi-plus-lg" : "bi-floppy")"></i> @(guardandoMenu ? "Guardando..." : menuEdicion.IdMenu == 0 ? "Crear ítem" : "Actualizar")</button> }
+                @if (!menuSoloLectura) { <SaveButton Type="button" class="primary-btn" OnClick="GuardarMenuAsync" Disabled="@guardandoMenu"><i class="bi @(menuEdicion.IdMenu == 0 ? "bi-plus-lg" : "bi-floppy")"></i> @(guardandoMenu ? "Guardando..." : menuEdicion.IdMenu == 0 ? "Crear ítem" : "Actualizar")</SaveButton> }
             </footer>
         </div>
     </div>
@@ -318,7 +318,7 @@
                     <section class="order-panel"><header><strong>Submenús de:</strong><span class="selected-parent">@NombrePadreOrden</span></header><div class="order-list">@if (!SubmenusOrdenables.Any()){<div class="order-empty"><i class="bi bi-info-circle"></i><span>Este módulo no tiene submenús.</span></div>}else{@foreach (var item in SubmenusOrdenables){<div class="order-row"><i class="bi bi-arrows-move drag-icon"></i><span class="order-icon"><i class="@ResolveIcono(item.IconoMenu)"></i></span><strong>@item.NombreMenu</strong><div class="order-actions"><button type="button" @onclick="() => MoverMenu(item.IdMenu, -1)"><i class="bi bi-arrow-up"></i></button><button type="button" @onclick="() => MoverMenu(item.IdMenu, 1)"><i class="bi bi-arrow-down"></i></button></div></div>}}</div></section>
                 </div>
             </div>
-            <footer class="role-modal-footer"><button type="button" class="secondary-btn" @onclick="CerrarOrdenMenus">Cancelar</button><button type="button" class="primary-btn" @onclick="GuardarOrdenMenusAsync" disabled="@guardandoMenu"><i class="bi bi-floppy"></i> Guardar orden</button></footer>
+            <footer class="role-modal-footer"><button type="button" class="secondary-btn" @onclick="CerrarOrdenMenus">Cancelar</button><SaveButton Type="button" class="primary-btn" OnClick="GuardarOrdenMenusAsync" Disabled="@guardandoMenu"><i class="bi bi-floppy"></i> Guardar orden</SaveButton></footer>
         </div>
     </div>
 }
@@ -330,7 +330,7 @@
         <div class="role-modal-card profile-modal-card">
             <header class="role-modal-head"><div><span class="modal-kicker">Nuevo perfil</span><h3>Crear rol de usuario</h3></div><button type="button" class="modal-close" @onclick="CerrarModalRol"><i class="bi bi-x-lg"></i></button></header>
             <div class="role-modal-body"><div class="form-field"><label>Nombre del perfil</label><input class="form-control profile-input" @bind="nuevoNombreRol" @bind:event="oninput" maxlength="200" placeholder="Ej: Administrador, Auditor, Supervisor..." /></div></div>
-            <footer class="role-modal-footer"><button type="button" class="secondary-btn" @onclick="CerrarModalRol">Cancelar</button><button type="button" class="primary-btn" @onclick="CrearRolAsync" disabled="@(guardando || string.IsNullOrWhiteSpace(nuevoNombreRol))"><i class="bi bi-plus-circle"></i> Crear perfil</button></footer>
+            <footer class="role-modal-footer"><button type="button" class="secondary-btn" @onclick="CerrarModalRol">Cancelar</button><SaveButton Type="button" class="primary-btn" OnClick="CrearRolAsync" Disabled="@(guardando || string.IsNullOrWhiteSpace(nuevoNombreRol))"><i class="bi bi-plus-circle"></i> Crear perfil</SaveButton></footer>
         </div>
     </div>
 }

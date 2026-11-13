@@ -108,7 +108,7 @@
                     <div class="col-md-9"><label class="form-label fw-semibold">Motivo de la receta *</label><input class="form-control" maxlength="500" @bind="cabecera.Motivo" /></div>
                     <div class="col-12"><label class="form-label fw-semibold">Indicaciones generales</label><textarea class="form-control" rows="3" maxlength="4000" @bind="cabecera.IndicacionesGenerales"></textarea></div>
                 </div>
-                <div class="card-footer bg-white text-end"><button class="btn btn-success fw-semibold" disabled="@guardando" @onclick="GuardarCabeceraAsync">@(guardando ? "Guardando..." : cabecera.IdFicha > 0 ? "Actualizar encabezado" : "Crear receta")</button></div>
+                <div class="card-footer bg-white text-end"><SaveButton class="btn btn-success fw-semibold" Disabled="@guardando" OnClick="GuardarCabeceraAsync">@(guardando ? "Guardando..." : cabecera.IdFicha > 0 ? "Actualizar encabezado" : "Crear receta")</SaveButton></div>
             </div>
 
             @if (cabecera.IdFicha > 0)
@@ -133,7 +133,7 @@
                                 <div class="row g-2">
                                     <div class="col-md-8"><label class="form-label small fw-semibold">Diagnóstico seleccionado u otro diagnóstico</label><textarea class="form-control form-control-sm" rows="2" @bind="nuevoDiagnostico.DescripcionObservacion"></textarea></div>
                                     <div class="col-md-4"><label class="form-label small fw-semibold">Tipo</label><select class="form-select form-select-sm" @bind="nuevoDiagnostico.TipoDiag"><option>Presuntivo</option><option>Definitivo</option></select></div>
-                                    <div class="col-12"><button class="btn btn-sm btn-outline-success w-100" @onclick="AgregarDiagnosticoAsync">Agregar diagnóstico</button></div>
+                                    <div class="col-12"><SaveButton class="btn btn-sm btn-outline-success w-100" OnClick="AgregarDiagnosticoAsync">Agregar diagnóstico</SaveButton></div>
                                 </div>
                                 <hr />
                                 @if (diagnosticos.Count == 0)
@@ -160,7 +160,7 @@
                                     <div class="col-md-2"><label class="form-label small fw-semibold">Cantidad</label><input type="number" min="0.01" step="0.01" class="form-control form-control-sm" @bind="nuevoMedicamento.Cantidad" /></div>
                                     <div class="col-md-3"><label class="form-label small fw-semibold">Fecha</label><input type="date" class="form-control form-control-sm" @bind="nuevoMedicamento.Fecha" /></div>
                                     <div class="col-md-9"><label class="form-label small fw-semibold">Dosis, frecuencia y duración</label><textarea class="form-control form-control-sm" rows="2" maxlength="250" @bind="nuevoMedicamento.Indicaciones"></textarea></div>
-                                    <div class="col-md-3 d-flex align-items-end"><button class="btn btn-sm btn-success w-100" @onclick="AgregarMedicamentoAsync">Agregar</button></div>
+                                    <div class="col-md-3 d-flex align-items-end"><SaveButton class="btn btn-sm btn-success w-100" OnClick="AgregarMedicamentoAsync">Agregar</SaveButton></div>
                                 </div>
                                 <div class="table-responsive">
                                     <table class="table table-sm align-middle small mb-0">

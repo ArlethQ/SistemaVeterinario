@@ -105,7 +105,7 @@
             <label class="wide">Observaciones<textarea rows="2" @bind="_edit.Observaciones"></textarea></label>
             <fieldset class="wide locations-field"><legend>Localidades donde trabaja</legend>@foreach(var l in _localidades){<label class="location-option"><input type="checkbox" checked="@_edit.LocalidadesIds.Contains(l.Id)" @onchange="e => CambiarLocalidad(l.Id, e)" /> @l.Descripcion</label>}</fieldset>
         </div>
-    </div><footer><button @onclick="CerrarEditor">Cancelar</button><button class="primary" disabled="@_guardando" @onclick="Guardar">@(_guardando ? "Guardando..." : "Guardar usuario")</button></footer></section></div>
+    </div><footer><button @onclick="CerrarEditor">Cancelar</button><SaveButton class="primary" Disabled="@_guardando" OnClick="Guardar">@(_guardando ? "Guardando..." : "Guardar usuario")</SaveButton></footer></section></div>
 }
 
 @if (_usuarioClave is not null)
@@ -115,7 +115,7 @@
         {
             <div class="message @(_error ? "error" : "success")" style="margin: 0 0 1rem;" role="alert">@_mensaje</div>
         }
-        <p>Define una contraseña temporal para <strong>@_usuarioClave.Nombre</strong>.</p><label>Nueva contraseña<input type="password" minlength="8" autocomplete="new-password" @bind="_nuevaClave" /><small>Mínimo 8 caracteres.</small></label><label>Confirmar contraseña<input type="password" minlength="8" autocomplete="new-password" @bind="_confirmarClave" /></label></div><footer><button @onclick="CerrarClave">Cancelar</button><button class="primary" disabled="@_guardando" @onclick="GuardarClave">Restablecer</button></footer></section></div>
+        <p>Define una contraseña temporal para <strong>@_usuarioClave.Nombre</strong>.</p><label>Nueva contraseña<input type="password" minlength="8" autocomplete="new-password" @bind="_nuevaClave" /><small>Mínimo 8 caracteres.</small></label><label>Confirmar contraseña<input type="password" minlength="8" autocomplete="new-password" @bind="_confirmarClave" /></label></div><footer><button @onclick="CerrarClave">Cancelar</button><SaveButton class="primary" Disabled="@_guardando" OnClick="GuardarClave">Restablecer</SaveButton></footer></section></div>
 }
 }
 

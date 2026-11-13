@@ -1,0 +1,44 @@
+@namespace Simetric.Components.Shared
+@using Microsoft.AspNetCore.Components.Forms
+
+<EditForm Model="Model" EditContext="EditContext" FormName="@FormName"
+          Enhance="Enhance" @attributes="Attributes" OnSubmit="HandleSubmitAsync">
+    <CascadingValue Name="SaveFormBusy" Value="_saving">
+        @ChildContent?.Invoke(context)
+    </CascadingValue>
+</EditForm>
+
+@code {
+    [Parameter] public object? Model { get; set; }
+    [Parameter] public EditContext? EditContext { get; set; }
+    [Parameter] public string? FormName { get; set; }
+    [Parameter] public bool Enhance { get; set; }
+    [Parameter] public EventCallback<EditContext> OnSubmit { get; set; }
+    [Parameter] public EventCallback<EditContext> OnValidSubmit { get; set; }
+    [Parameter] public EventCallback<EditContext> OnInvalidSubmit { get; set; }
+    [Parameter] public RenderFragment<EditContext>? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? Attributes { get; set; }
+
+    private bool _saving;
+
+    private async Task HandleSubmitAsync(EditContext editContext)
+    {
+        if (_saving)
+            return;
+
+        _saving = true;
+        try
+        {
+            if (OnSubmit.HasDelegate)
+                await OnSubmit.InvokeAsync(editContext);
+            else if (editContext.Validate())
+                await OnValidSubmit.InvokeAsync(editContext);
+            else
+                await OnInvalidSubmit.InvokeAsync(editContext);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

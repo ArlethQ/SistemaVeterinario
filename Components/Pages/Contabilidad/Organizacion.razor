@@ -261,7 +261,7 @@
             </div>
 
             <div class="editor-body">
-                <EditForm Model="empresaModel" OnSubmit="GuardarEmpresa">
+                <SaveForm Model="empresaModel" OnSubmit="GuardarEmpresa">
                     <div class="form-section">
                         <div class="form-section-head">
                             <i class="bi bi-building"></i>
@@ -283,14 +283,14 @@
                             </div>
                         </div>
 
-                        <button type="submit" class="primary-btn form-submit" disabled="@(!puedeAdministrar || guardandoEmpresa)">
+                        <SaveButton Type="submit" class="primary-btn form-submit" Disabled="@(!puedeAdministrar || guardandoEmpresa)">
                             <i class="bi bi-save"></i>
                             <span>@(guardandoEmpresa ? "Guardando" : "Guardar empresa")</span>
-                        </button>
+                        </SaveButton>
                     </div>
-                </EditForm>
+                </SaveForm>
 
-                <EditForm Model="sucursalModel" OnSubmit="GuardarSucursal">
+                <SaveForm Model="sucursalModel" OnSubmit="GuardarSucursal">
                     <div class="form-section">
                         <div class="form-section-head">
                             <i class="bi bi-diagram-3"></i>
@@ -337,13 +337,13 @@
                                 <i class="bi bi-plus-lg"></i>
                                 <span>Limpiar</span>
                             </button>
-                            <button type="submit" class="primary-btn" disabled="@(!puedeAdministrar || guardandoSucursal)">
+                            <SaveButton Type="submit" class="primary-btn" Disabled="@(!puedeAdministrar || guardandoSucursal)">
                                 <i class="bi bi-save"></i>
                                 <span>@(guardandoSucursal ? "Guardando" : editandoSucursal ? "Actualizar" : "Crear")</span>
-                            </button>
+                            </SaveButton>
                         </div>
                     </div>
-                </EditForm>
+                </SaveForm>
 
                 <div class="scope-list">
                     <div class="scope-item">
@@ -430,9 +430,9 @@
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" @onclick="CerrarRolesSucursal">Cerrar</button>
-                            <button type="button" class="primary-btn" disabled="@guardandoRolSucursal" @onclick="GuardarRolSucursalAsync">
+                            <SaveButton Type="button" class="primary-btn" Disabled="@guardandoRolSucursal" OnClick="GuardarRolSucursalAsync">
                                 @(guardandoRolSucursal ? "Guardando…" : "Guardar rol")
-                            </button>
+                            </SaveButton>
                         </div>
                     }
                 </div>

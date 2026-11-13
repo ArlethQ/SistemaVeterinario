@@ -35,9 +35,9 @@
 
         @if (paciente != null)
         {
-            <button class="btn btn-sm btn-success fw-semibold" @onclick="GuardarPreAnestesiaAsync" disabled="@guardando">
+            <SaveButton class="btn btn-sm btn-success fw-semibold" OnClick="GuardarPreAnestesiaAsync" Disabled="@guardando">
                 @(guardando ? "Guardando..." : "Guardar Evaluación")
-            </button>
+            </SaveButton>
             <button class="btn btn-sm btn-danger" @onclick="ExportarPdfAsync">Exportar PDF</button>
             @if (Permisos.Permite("quirofano/anestesia"))
             {
@@ -300,7 +300,7 @@ else
                             <label class="form-label mb-0">Indicaciones / Dosis Pre-Anestésica</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control" @bind="nuevoProd.IndicacionesProd" placeholder="Ej: 0.02 mg/kg IM 20 min antes de inducción" />
-                                <button class="btn btn-primary" @onclick="AgregarProductoPreAnestesiaAsync">Agregar</button>
+                                <SaveButton class="btn btn-primary" OnClick="AgregarProductoPreAnestesiaAsync">Agregar</SaveButton>
                             </div>
                         </div>
                     </div>

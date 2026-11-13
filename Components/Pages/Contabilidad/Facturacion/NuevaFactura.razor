@@ -60,7 +60,7 @@
     }
     else
     {
-    <EditForm Model="@factura" OnValidSubmit="ProcesarGuardado">
+    <SaveForm Model="@factura" OnValidSubmit="ProcesarGuardado">
         <DataAnnotationsValidator />
         <ValidationSummary class="text-danger mb-3" />
 
@@ -1168,9 +1168,9 @@
                                 Cancelar / Limpiar
                             </button>
 
-                            <button type="submit"
-                                    class="n-btn-primary @(mostrarPantallaCargaEmision ? "n-auto-loading" : null)"
-                                    disabled="@(!PuedeIntentarGuardarFactura || mostrarPantallaCargaEmision || facturaSecuenciaPendiente != null)">
+                            <SaveButton Type="submit"
+                                    class="@("n-btn-primary " + (mostrarPantallaCargaEmision ? "n-auto-loading" : null))"
+                                    Disabled="@(!PuedeIntentarGuardarFactura || mostrarPantallaCargaEmision || facturaSecuenciaPendiente != null)">
                                 @if (!mostrarPantallaCargaEmision)
                                 {
                                     <i class="bi bi-check2-circle fs-5 me-2"></i>
@@ -1178,13 +1178,13 @@
                                 @(isDemoMode
                                     ? "Generar Factura (bloqueado)"
                                     : (mostrarPantallaCargaEmision ? "Generando Factura..." : "Generar Factura"))
-                            </button>
+                            </SaveButton>
                         </div>
                     </div>
                 </div>
 </div>
 </div>
-    </EditForm>
+    </SaveForm>
     }
 </div>
 
@@ -1447,7 +1447,7 @@
                 </div>
             </div>
 
-            <EditForm Model="productoModal" OnValidSubmit="GuardarProductoModal">
+            <SaveForm Model="productoModal" OnValidSubmit="GuardarProductoModal">
                 <DataAnnotationsValidator />
 
                 <div class="n-modal-body">
@@ -1687,7 +1687,7 @@
                         <button type="button" class="n-btn-link" @onclick="CerrarModalProducto" disabled="@guardandoProductoModal">
                             Cancelar
                         </button>
-                        <button type="submit" class="n-btn-primary" disabled="@guardandoProductoModal">
+                        <SaveButton Type="submit" class="n-btn-primary" Disabled="@guardandoProductoModal">
                             @if (guardandoProductoModal)
                             {
                                 <span class="spinner-border spinner-border-sm"></span>
@@ -1698,10 +1698,10 @@
                                 <i class="bi bi-check2-circle"></i>
                                 <span>Guardar y usar</span>
                             }
-                        </button>
+                        </SaveButton>
                     </div>
                 </div>
-            </EditForm>
+            </SaveForm>
         </div>
     </div>
 }

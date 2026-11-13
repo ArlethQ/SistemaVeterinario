@@ -120,7 +120,7 @@
                 </button>
             </div>
 
-            <EditForm Model="productModel" OnValidSubmit="GuardarProductoAsync">
+            <SaveForm Model="productModel" OnValidSubmit="GuardarProductoAsync">
                 <DataAnnotationsValidator />
                 <div class="pcm-body">
                     @if (!string.IsNullOrWhiteSpace(createError))
@@ -220,7 +220,7 @@
                     <span><i class="bi bi-lightning-charge"></i> Al guardar se agregara al @ContextLabel.</span>
                     <div>
                         <button type="button" class="n-btn-link" @onclick="CerrarCrearAsync" disabled="@saving">Cancelar</button>
-                        <button type="submit" class="n-btn-primary" disabled="@saving">
+                        <SaveButton Type="submit" class="n-btn-primary" Disabled="@saving">
                             @if (saving)
                             {
                                 <span class="spinner-border spinner-border-sm"></span>
@@ -231,10 +231,10 @@
                                 <i class="bi bi-check2-circle"></i>
                                 <span>Guardar y usar</span>
                             }
-                        </button>
+                        </SaveButton>
                     </div>
                 </div>
-            </EditForm>
+            </SaveForm>
         </div>
     </div>
 }
