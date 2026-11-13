@@ -49,6 +49,10 @@
                         {
                             <option value="0">Todas las sucursales</option>
                         }
+                        else
+                        {
+                            <option value="0">Seleccionar sucursal</option>
+                        }
                         @foreach (var sucursal in SucursalesDisponibles)
                         {
                             <option value="@sucursal.Id">@sucursal.Descripcion</option>
@@ -60,14 +64,14 @@
                 <label for="agenda-medico" class="form-label small mb-0">Médico</label>
                 <select @key="(_sucursalAgenda, _especialidadAgenda)" id="agenda-medico" class="form-select form-select-sm"
                         @bind:get="_medicoAgenda" @bind:set="CambiarMedicoAsync"
-                        disabled="@(!_filtrosCargados || !_puedeVerAgendaCompleta || _medicosAgenda.Count == 0)">
+                        disabled="@(!_filtrosCargados || !_puedeVerAgendaCompleta || _medicosAgenda.Count == 0 || (_especialidadAgenda > 0 && _sucursalAgenda == 0))">
                     @if (_medicosAgenda.Count == 0)
                     {
                         <option value="0">Sin médicos disponibles</option>
                     }
                     else
                     {
-                        @if (_medicosAgenda.Count > 1)
+                        @if (_medicoAgenda == 0 || _medicosAgenda.Count > 1)
                         {
                             <option value="0">Seleccionar médico</option>
                         }
@@ -1422,22 +1426,9 @@
         if (idEsp != _especialidadAgenda)
         {
             _especialidadAgenda = idEsp;
+            _sucursalAgenda = 0;
             _medicoAgenda = 0;
-            var sucsValidas = SucursalesDisponibles;
-
-            if (_sucursalAgenda > 0 && !sucsValidas.Any(s => s.Id == _sucursalAgenda))
-            {
-                _sucursalAgenda = sucsValidas.FirstOrDefault()?.Id ?? 0;
-            }
-            else if (_sucursalAgenda <= 0 && sucsValidas.Count > 0)
-            {
-                _sucursalAgenda = sucsValidas.FirstOrDefault()?.Id ?? 0;
-            }
-
-            _cargandoInicial = true;
-            _citas = [];
-            _slotsMes = [];
-            ActualizarMedicosAgenda();
+            _medicosAgenda = MedicosDisponibles;
             await CargarAgendaAsync();
         }
     }
@@ -1500,7 +1491,8 @@
 
         try
         {
-            if (_sucursales.Count == 0 || (localidad > 0 && medico <= 0))
+            if (_sucursales.Count == 0 || (_especialidadAgenda > 0 && localidad <= 0) ||
+                (localidad > 0 && medico <= 0))
                 return;
 
             var citas = AdmisionService.ObtenerCitasPorFechaAsync(inicio, hasta, medico, localidad > 0 ? localidad : null);
