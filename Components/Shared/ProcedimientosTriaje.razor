@@ -69,7 +69,7 @@
             </label>
             <div class="col-md-1">
                 <button type="button" class="btn btn-sm btn-primary w-100" aria-label="Agregar procedimiento"
-                        disabled="@(_seleccion is null || _cantidad < 1)" @onclick="AgregarSeleccionAsync">
+                        disabled="@(_cargando || _seleccion is null || _cantidad < 1)" @onclick="AgregarSeleccionAsync">
                     <i class="bi bi-plus-lg"></i>
                 </button>
             </div>
@@ -164,9 +164,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await CargarCatalogoAsync();
-        await CargarRegistradosAsync();
-        _cargando = false;
+        await Task.WhenAll(CargarCatalogoAsync(), CargarRegistradosAsync());
     }
 
     private async Task CargarCatalogoAsync()
@@ -201,11 +199,16 @@
             Logger.LogError(ex, "Error al cargar los procedimientos de la orden {Orden}", IdOrden);
             _errorLista = true;
         }
+        finally
+        {
+            _cargando = false;
+            StateHasChanged();
+        }
     }
 
     private async Task AgregarAsync(int idProducto)
     {
-        if (SoloLectura || _agregando || !Coincidencias.Any(p => p.Id == idProducto))
+        if (SoloLectura || _cargando || _agregando || !Coincidencias.Any(p => p.Id == idProducto))
             return;
 
         _agregando = true;

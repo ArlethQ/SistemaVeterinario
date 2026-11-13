@@ -1295,6 +1295,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
             WHERE p.IDUSUARIO = @IdUsuario AND ISNULL(p.ESTADO, 1) = 1
                 AND UPPER(LTRIM(RTRIM(t.DESCRIPCION))) IN ('PROCEDIMIENTO', 'PROCEDIMIENTOS', 'SERVICIOS')
+                AND UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) NOT IN ('CONSULTA', 'CONSULTAS')
                 AND (@IdProducto IS NULL OR p.CODIGO = @IdProducto)
             ORDER BY p.NOMBRE
             """, new { IdProducto = idProducto, IdUsuario = 1_000_000 + Math.Max(1, _session.Localidad) })).ToList();

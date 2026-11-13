@@ -26,7 +26,8 @@
         <div class="d-flex gap-2 align-items-center agenda-toolbar">
             <div>
                 <label for="agenda-especialidad" class="form-label small mb-0">Especialidad</label>
-                <select id="agenda-especialidad" class="form-select form-select-sm" value="@_especialidadAgenda" @onchange="CambiarEspecialidadAsync">
+                <select id="agenda-especialidad" class="form-select form-select-sm"
+                        @bind:get="_especialidadAgenda" @bind:set="CambiarEspecialidadAsync" disabled="@(!_filtrosCargados)">
                     <option value="0">Todas las especialidades</option>
                     @foreach (var esp in _especialidades)
                     {
@@ -36,7 +37,8 @@
             </div>
             <div>
                 <label for="agenda-sucursal" class="form-label small mb-0">Sucursal</label>
-                <select id="agenda-sucursal" class="form-select form-select-sm" value="@_sucursalAgenda" @onchange="CambiarSucursalAsync">
+                <select @key="_especialidadAgenda" id="agenda-sucursal" class="form-select form-select-sm"
+                        @bind:get="_sucursalAgenda" @bind:set="CambiarSucursalAsync" disabled="@(!_filtrosCargados)">
                     @if (SucursalesDisponibles.Count == 0)
                     {
                         <option value="0">Sin sucursales disponibles</option>
@@ -56,19 +58,20 @@
             </div>
             <div>
                 <label for="agenda-medico" class="form-label small mb-0">Médico</label>
-                <select id="agenda-medico" class="form-select form-select-sm" value="@_medicoAgenda"
-                        disabled="@(!_puedeVerAgendaCompleta || _cargandoInicial || MedicosDisponibles.Count == 0)" @onchange="CambiarMedicoAsync">
-                    @if (MedicosDisponibles.Count == 0)
+                <select @key="(_sucursalAgenda, _especialidadAgenda)" id="agenda-medico" class="form-select form-select-sm"
+                        @bind:get="_medicoAgenda" @bind:set="CambiarMedicoAsync"
+                        disabled="@(!_filtrosCargados || !_puedeVerAgendaCompleta || _medicosAgenda.Count == 0)">
+                    @if (_medicosAgenda.Count == 0)
                     {
                         <option value="0">Sin médicos disponibles</option>
                     }
                     else
                     {
-                        @if (MedicosDisponibles.Count > 1)
+                        @if (_medicosAgenda.Count > 1)
                         {
                             <option value="0">Seleccionar médico</option>
                         }
-                        @foreach (var medico in MedicosDisponibles)
+                        @foreach (var medico in _medicosAgenda)
                         {
                             <option value="@medico.Id">@medico.Descripcion</option>
                         }
@@ -631,7 +634,7 @@
                     <div class="row g-2 align-items-center">
                         <div class="col-md-6">
                             <label class="form-label small fw-bold mb-0">Médico Veterinario</label>
-                            <select class="form-select form-select-sm" value="@_idMedicoFiltro" @onchange="CambiarMedicoAsync">
+                            <select class="form-select form-select-sm" value="@_idMedicoFiltro" @onchange="OnMedicoFormChanged">
                                 @foreach (var m in _medicos)
                                 {
                                     <option value="@m.Id">@m.Descripcion</option>
@@ -933,6 +936,7 @@
     private int _idMedicoFiltro;
     private DateTime _fechaAgenda = AhoraClinica.Date;
     private bool _cargandoInicial = true;
+    private bool _filtrosCargados;
     private string _mensaje = string.Empty;
     private string _mensajeModal = string.Empty;
     private bool _mensajeEsError;
@@ -1409,14 +1413,16 @@
             : sucsValidas.FirstOrDefault()?.Id ?? 0;
 
         ActualizarMedicosAgenda();
+        _filtrosCargados = true;
         await CargarAgendaAsync();
     }
 
-    private async Task CambiarEspecialidadAsync(ChangeEventArgs e)
+    private async Task CambiarEspecialidadAsync(int idEsp)
     {
-        if (int.TryParse(e.Value?.ToString(), out int idEsp))
+        if (idEsp != _especialidadAgenda)
         {
             _especialidadAgenda = idEsp;
+            _medicoAgenda = 0;
             var sucsValidas = SucursalesDisponibles;
 
             if (_sucursalAgenda > 0 && !sucsValidas.Any(s => s.Id == _sucursalAgenda))
@@ -1436,11 +1442,12 @@
         }
     }
 
-    private async Task CambiarSucursalAsync(ChangeEventArgs e)
+    private async Task CambiarSucursalAsync(int idSuc)
     {
-        if (int.TryParse(e.Value?.ToString(), out int idSuc))
+        if (idSuc != _sucursalAgenda)
         {
             _sucursalAgenda = idSuc;
+            _medicoAgenda = 0;
             _cargandoInicial = true;
             _citas = [];
             _slotsMes = [];
@@ -1529,9 +1536,9 @@
 
     private void ActualizarCitasDelDia() => _citas = _citasMes[_fechaAgenda.Date].ToList();
 
-    private async Task CambiarMedicoAsync(ChangeEventArgs e)
+    private async Task CambiarMedicoAsync(int idMed)
     {
-        if (int.TryParse(e.Value?.ToString(), out int idMed) && _puedeVerAgendaCompleta &&
+        if (_puedeVerAgendaCompleta &&
             (idMed == 0 || _medicosAgenda.Any(medico => medico.Id == idMed)))
         {
             _medicoAgenda = idMed;
