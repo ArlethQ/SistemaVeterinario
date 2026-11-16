@@ -386,3 +386,36 @@ public sealed record MonitoreoParametroReglaDto(
     decimal? Paso,
     string Ayuda,
     string[]? ValoresPermitidos = null);
+
+public sealed class OrdenHospitalizacionColaDto
+{
+    public int OrdenAtencionId { get; set; }
+    public int Nhcl { get; set; }
+    public string Paciente { get; set; } = string.Empty;
+    public string Cliente { get; set; } = string.Empty;
+    public string Especie { get; set; } = string.Empty;
+    public string Sexo { get; set; } = string.Empty;
+    public string Medico { get; set; } = string.Empty;
+    public string Especialidad { get; set; } = string.Empty;
+    public DateTime FechaOrden { get; set; }
+    public string Estado { get; set; } = string.Empty;
+    public string Etapa { get; set; } = string.Empty;
+    public int? JaulaId { get; set; }
+    public string JaulaCodigo { get; set; } = string.Empty;
+    public bool YaIngresado { get; set; }
+}
+
+public sealed class IngresoHospitalizacionDto
+{
+    public int Id { get; set; }
+    public int IdOrden { get; set; }
+    public int Nhcl { get; set; }
+    public int? IdJaula { get; set; }
+    public string UbicacionJaula { get; set; } = string.Empty;
+    public string Indicaciones { get; set; } = string.Empty;
+    public string HidratacionFluidoterapia { get; set; } = string.Empty;
+    public string DietaCuidados { get; set; } = string.Empty;
+    public DateTime? FechaIngreso { get; set; }
+    public int IdUsuario { get; set; }
+    public string Estado { get; set; } = "A";
+}

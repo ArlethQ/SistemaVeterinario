@@ -17,6 +17,11 @@ public interface IGestionMigradaService
     Task<List<ConsultorioClinicoDto>> ObtenerConsultoriosAsync(bool soloActivos = false);
     Task<bool> GuardarConsultorioAsync(ConsultorioClinicoDto item, int idUsuario);
     Task<bool> CambiarEstadoConsultorioAsync(int id, string estado, int idUsuario);
+    Task<List<JaulaClinicaDto>> ObtenerJaulasAsync(bool soloActivas = false, int? idLocalidad = null);
+    Task<bool> GuardarJaulaAsync(JaulaClinicaDto item, int idUsuario);
+    Task<(int Creadas, int Omitidas)> GuardarJaulasLoteAsync(int idLocalidad, int idPiso, int idConsultorio, string prefijo, int desde, int hasta, string? observacion, int idUsuario);
+    Task<bool> CambiarEstadoJaulaAsync(int id, string estado, int idUsuario);
+    Task<bool> CambiarOcupacionJaulaAsync(int id, bool ocupada, int? nhcl, int? idOrden, int idUsuario);
     Task<List<ExcepcionHorarioDto>> ObtenerExcepcionesAsync(DateTime desde, DateTime hasta);
     Task<bool> GuardarExcepcionAsync(ExcepcionHorarioDto item, int idUsuario);
     Task<bool> DesactivarExcepcionAsync(int id, int idUsuario);
@@ -237,6 +242,157 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     {
         var ok = await db.ExecuteAsync("UPDATE vt_consultorios SET cons_estado=@Estado WHERE cons_id=@Id", new { Id = id, Estado = estado == "I" ? "I" : "A" }) > 0;
         if (ok) await db.RegistrarBitacoraAsync($"Cambio de estado de consultorio clínico {id}", idUsuario);
+        return ok;
+    }
+
+    private async Task AsegurarTablaJaulasAsync()
+    {
+        await db.ExecuteAsync(@"
+            IF OBJECT_ID('dbo.vt_jaulas', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.vt_jaulas (
+                    jau_id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    jau_codigo NVARCHAR(50) NOT NULL,
+                    jau_localidad INT NOT NULL,
+                    jau_piso INT NOT NULL,
+                    jau_consultorio INT NOT NULL,
+                    jau_observacion NVARCHAR(200) NULL,
+                    jau_ocupada BIT NOT NULL CONSTRAINT DF_vt_jaulas_ocupada DEFAULT(0),
+                    jau_nhcl_actual INT NULL,
+                    jau_orden_actual INT NULL,
+                    jau_estado CHAR(1) NOT NULL CONSTRAINT DF_vt_jaulas_estado DEFAULT('A'),
+                    CONSTRAINT FK_vt_jaulas_piso FOREIGN KEY (jau_piso) REFERENCES dbo.vt_pisos(piso_id),
+                    CONSTRAINT FK_vt_jaulas_consultorio FOREIGN KEY (jau_consultorio) REFERENCES dbo.vt_consultorios(cons_id),
+                    CONSTRAINT UQ_vt_jaulas_consultorio_codigo UNIQUE (jau_consultorio, jau_codigo)
+                );
+            END;");
+    }
+
+    public async Task<List<JaulaClinicaDto>> ObtenerJaulasAsync(bool soloActivas = false, int? idLocalidad = null)
+    {
+        await AsegurarTablaJaulasAsync();
+        return (await db.QueryAsync<JaulaClinicaDto>(@"
+            SELECT j.jau_id AS Id,
+                   RTRIM(j.jau_codigo) AS Codigo,
+                   j.jau_localidad AS IdLocalidad,
+                   RTRIM(ISNULL(l.loc_descripcion, '')) AS Localidad,
+                   j.jau_piso AS IdPiso,
+                   RTRIM(ISNULL(p.piso_nombre, '')) AS Piso,
+                   j.jau_consultorio AS IdConsultorio,
+                   RTRIM(ISNULL(c.cons_nombre, '')) AS Consultorio,
+                   RTRIM(ISNULL(j.jau_observacion, '')) AS Observacion,
+                   CAST(ISNULL(j.jau_ocupada, 0) AS BIT) AS Ocupada,
+                   j.jau_nhcl_actual AS NhclActual,
+                   j.jau_orden_actual AS OrdenActual,
+                   RTRIM(ISNULL(pac.mas_nombre, '')) AS PacienteActual,
+                   ISNULL(j.jau_estado, 'A') AS Estado
+            FROM vt_jaulas j
+            INNER JOIN vt_pisos p ON p.piso_id = j.jau_piso
+            INNER JOIN vt_consultorios c ON c.cons_id = j.jau_consultorio
+            LEFT JOIN vt_localidades l ON l.loc_id = j.jau_localidad
+            LEFT JOIN vt_pacientes pac ON pac.mas_nhcl = j.jau_nhcl_actual
+            WHERE (@SoloActivas = 0 OR (ISNULL(j.jau_estado, 'A') = 'A' AND ISNULL(c.cons_estado, 'A') = 'A' AND ISNULL(p.piso_estado, 'A') = 'A'))
+              AND (@IdLocalidad IS NULL OR @IdLocalidad = 0 OR j.jau_localidad = @IdLocalidad)
+            ORDER BY l.loc_descripcion, p.piso_nombre, c.cons_nombre, j.jau_codigo",
+            new { SoloActivas = soloActivas, IdLocalidad = idLocalidad })).ToList();
+    }
+
+    public async Task<bool> GuardarJaulaAsync(JaulaClinicaDto item, int idUsuario)
+    {
+        await AsegurarTablaJaulasAsync();
+        if (item.IdLocalidad <= 0 || item.IdPiso <= 0 || item.IdConsultorio <= 0 || string.IsNullOrWhiteSpace(item.Codigo))
+            return false;
+
+        string codigo = item.Codigo.Trim();
+        var repetido = await db.QueryFirstOrDefaultAsync<int>(@"
+            SELECT COUNT(1)
+            FROM vt_jaulas
+            WHERE jau_consultorio = @IdConsultorio
+              AND UPPER(LTRIM(RTRIM(jau_codigo))) = UPPER(@Codigo)
+              AND jau_id <> @Id",
+            new { item.IdConsultorio, Codigo = codigo, item.Id });
+
+        if (repetido > 0) return false;
+
+        string sql = item.Id > 0
+            ? @"UPDATE vt_jaulas
+                SET jau_codigo = @Codigo,
+                    jau_localidad = @IdLocalidad,
+                    jau_piso = @IdPiso,
+                    jau_consultorio = @IdConsultorio,
+                    jau_observacion = @Observacion,
+                    jau_estado = @Estado
+                WHERE jau_id = @Id"
+            : @"INSERT INTO vt_jaulas (jau_codigo, jau_localidad, jau_piso, jau_consultorio, jau_observacion, jau_ocupada, jau_estado)
+                VALUES (@Codigo, @IdLocalidad, @IdPiso, @IdConsultorio, @Observacion, 0, 'A')";
+
+        var ok = await db.ExecuteAsync(sql, new
+        {
+            item.Id,
+            Codigo = codigo,
+            item.IdLocalidad,
+            item.IdPiso,
+            item.IdConsultorio,
+            Observacion = string.IsNullOrWhiteSpace(item.Observacion) ? null : item.Observacion.Trim(),
+            Estado = item.Estado == "I" ? "I" : "A"
+        }) > 0;
+
+        if (ok) await db.RegistrarBitacoraAsync($"Jaula clínica: {codigo}", idUsuario);
+        return ok;
+    }
+
+    public async Task<(int Creadas, int Omitidas)> GuardarJaulasLoteAsync(
+        int idLocalidad, int idPiso, int idConsultorio, string prefijo, int desde, int hasta, string? observacion, int idUsuario)
+    {
+        await AsegurarTablaJaulasAsync();
+        if (idLocalidad <= 0 || idPiso <= 0 || idConsultorio <= 0 || desde <= 0 || hasta < desde || hasta - desde > 100)
+            return (0, 0);
+
+        int creadas = 0;
+        int omitidas = 0;
+        string pref = (prefijo ?? string.Empty).Trim();
+
+        for (int n = desde; n <= hasta; n++)
+        {
+            string codigo = string.IsNullOrEmpty(pref) ? n.ToString("D2") : $"{pref}{n:D2}";
+            bool ok = await GuardarJaulaAsync(new JaulaClinicaDto
+            {
+                IdLocalidad = idLocalidad,
+                IdPiso = idPiso,
+                IdConsultorio = idConsultorio,
+                Codigo = codigo,
+                Observacion = observacion ?? string.Empty,
+                Estado = "A"
+            }, idUsuario);
+
+            if (ok) creadas++;
+            else omitidas++;
+        }
+
+        return (creadas, omitidas);
+    }
+
+    public async Task<bool> CambiarEstadoJaulaAsync(int id, string estado, int idUsuario)
+    {
+        await AsegurarTablaJaulasAsync();
+        var ok = await db.ExecuteAsync(
+            "UPDATE vt_jaulas SET jau_estado = @Estado WHERE jau_id = @Id",
+            new { Id = id, Estado = estado == "I" ? "I" : "A" }) > 0;
+        if (ok) await db.RegistrarBitacoraAsync($"Cambio de estado de jaula {id}", idUsuario);
+        return ok;
+    }
+
+    public async Task<bool> CambiarOcupacionJaulaAsync(int id, bool ocupada, int? nhcl, int? idOrden, int idUsuario)
+    {
+        await AsegurarTablaJaulasAsync();
+        var ok = await db.ExecuteAsync(@"
+            UPDATE vt_jaulas
+            SET jau_ocupada = @Ocupada,
+                jau_nhcl_actual = CASE WHEN @Ocupada = 1 THEN @Nhcl ELSE NULL END,
+                jau_orden_actual = CASE WHEN @Ocupada = 1 THEN @IdOrden ELSE NULL END
+            WHERE jau_id = @Id",
+            new { Id = id, Ocupada = ocupada, Nhcl = nhcl, IdOrden = idOrden }) > 0;
+        if (ok) await db.RegistrarBitacoraAsync($"Jaula {id} marcada como {(ocupada ? "ocupada" : "libre")}", idUsuario);
         return ok;
     }
 

@@ -40,6 +40,11 @@ public interface IHospitalizacionService
     Task EliminarNotaImportanteAsync(int idNota);
     Task AgregarObservacionHoraAsync(int idOrden, int nhcl, string hora, string observacion, int responsable, int idLocalidad);
     Task EliminarObservacionHoraAsync(int idObs);
+
+    // 4. Bandeja e Ingreso a Hospitalización
+    Task<List<OrdenHospitalizacionColaDto>> ObtenerColaHospitalizacionAsync(string? filtro = null, int? idLocalidad = null);
+    Task<IngresoHospitalizacionDto> ObtenerIngresoHospitalizacionAsync(int idOrden, int nhcl);
+    Task GuardarIngresoHospitalizacionAsync(IngresoHospitalizacionDto dto, int idUsuario);
 }
 
 public class HospitalizacionService : IHospitalizacionService
@@ -1225,5 +1230,169 @@ public class HospitalizacionService : IHospitalizacionService
     public async Task EliminarObservacionHoraAsync(int idObs)
     {
         await _db.ExecuteAsync("UPDATE hvt_observacioneshoras SET estado = 'I' WHERE id = @Id", new { Id = idObs });
+    }
+
+    // ========================================================================
+    // 4. BANDEJA E INGRESO A HOSPITALIZACIÓN
+    // ========================================================================
+
+    private async Task AsegurarTablaIngresoHospitalizacionAsync()
+    {
+        await _db.ExecuteAsync(@"
+            IF OBJECT_ID('dbo.hvt_ingresoHospitalizacion', 'U') IS NULL
+            CREATE TABLE dbo.hvt_ingresoHospitalizacion (
+                id INT IDENTITY(1,1) PRIMARY KEY,
+                idOrden INT NOT NULL,
+                nhcl INT NOT NULL,
+                idJaula INT NULL,
+                ubicacionJaula NVARCHAR(150) NOT NULL CONSTRAINT DF_hvt_ingHosp_ubic DEFAULT(''),
+                indicaciones NVARCHAR(MAX) NOT NULL CONSTRAINT DF_hvt_ingHosp_ind DEFAULT(''),
+                hidratacionFluidoterapia NVARCHAR(MAX) NOT NULL CONSTRAINT DF_hvt_ingHosp_hidr DEFAULT(''),
+                dietaCuidados NVARCHAR(MAX) NOT NULL CONSTRAINT DF_hvt_ingHosp_dieta DEFAULT(''),
+                fechaIngreso DATETIME NOT NULL CONSTRAINT DF_hvt_ingHosp_fecha DEFAULT(GETDATE()),
+                idUsuario INT NOT NULL DEFAULT(0),
+                estado CHAR(1) NOT NULL CONSTRAINT DF_hvt_ingHosp_est DEFAULT('A'),
+                CONSTRAINT UQ_hvt_ingHosp_orden UNIQUE (idOrden)
+            );");
+    }
+
+    public async Task<List<OrdenHospitalizacionColaDto>> ObtenerColaHospitalizacionAsync(string? filtro = null, int? idLocalidad = null)
+    {
+        await AsegurarTablaIngresoHospitalizacionAsync();
+        var tieneFiltro = !string.IsNullOrWhiteSpace(filtro);
+        var filtroWhere = tieneFiltro
+            ? "AND (p.mas_nombre LIKE @Filtro OR c.pa_apellidos LIKE @Filtro OR c.pa_nombres LIKE @Filtro OR CAST(o.ordenAten_id AS VARCHAR(20)) LIKE @Filtro OR CAST(p.mas_nhcl AS VARCHAR(20)) LIKE @Filtro)"
+            : string.Empty;
+
+        var sql = $@"
+            SELECT TOP (80)
+                o.ordenAten_id AS OrdenAtencionId,
+                p.mas_nhcl AS Nhcl,
+                RTRIM(ISNULL(p.mas_nombre, '')) AS Paciente,
+                RTRIM(ISNULL(c.pa_apellidos, '')) + ' ' + RTRIM(ISNULL(c.pa_nombres, '')) AS Cliente,
+                RTRIM(ISNULL(e.especie_descripcion, 'No Definida')) AS Especie,
+                CASE WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'H' THEN 'Hembra'
+                     WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 'Macho'
+                     ELSE RTRIM(ISNULL(p.mas_sexo, 'Indefinido')) END AS Sexo,
+                RTRIM(ISNULL(u.user_nombre, '')) AS Medico,
+                CASE WHEN ISNULL(o.ordenAten_esProcedimiento, 0) = 1 THEN 'Procedimiento'
+                     ELSE RTRIM(ISNULL(esp.es_descripcion, '')) END AS Especialidad,
+                ISNULL(o.ordenAten_fecha, GETDATE()) AS FechaOrden,
+                RTRIM(ISNULL(o.ordenAten_estado, 'A')) AS Estado,
+                RTRIM(ISNULL(o.ordenAten_etapa, 'Consulta')) AS Etapa,
+                ing.idJaula AS JaulaId,
+                ISNULL(ing.ubicacionJaula, '') AS JaulaCodigo,
+                CAST(CASE WHEN ing.id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS YaIngresado
+            FROM vt_ordenAtencion o
+            INNER JOIN vt_pacientes p ON o.ordenAten_nhcl = p.mas_nhcl
+            INNER JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
+            LEFT JOIN vt_especie e ON p.mas_especie = e.especie_id
+            LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
+            LEFT JOIN vt_especialidades esp ON o.ordenAten_esp_numero = esp.es_id
+            LEFT JOIN hvt_ingresoHospitalizacion ing ON ing.idOrden = o.ordenAten_id AND ing.estado = 'A'
+            WHERE EXISTS (
+                SELECT 1 FROM vt_fichamedica fm
+                WHERE fm.med_orden = o.ordenAten_id
+                  AND ISNULL(fm.med_requiereHospitalizacion, 0) = 1
+            )
+              AND ISNULL(o.ordenAten_estado, 'A') <> 'I'
+              AND ISNULL(o.cierrehospi, 'N') <> 'S'
+              AND (@IdLocalidad IS NULL OR @IdLocalidad <= 0 OR o.ordenAten_idlocalidad = @IdLocalidad)
+              {filtroWhere}
+            ORDER BY CASE WHEN ing.id IS NULL THEN 0 ELSE 1 END, o.ordenAten_id DESC";
+
+        return (await _db.QueryAsync<OrdenHospitalizacionColaDto>(sql, new
+        {
+            Filtro = $"%{filtro?.Trim()}%",
+            IdLocalidad = idLocalidad
+        })).ToList();
+    }
+
+    public async Task<IngresoHospitalizacionDto> ObtenerIngresoHospitalizacionAsync(int idOrden, int nhcl)
+    {
+        await ValidarOrdenPacienteAsync(idOrden, nhcl);
+        await AsegurarTablaIngresoHospitalizacionAsync();
+
+        var existente = await _db.QueryFirstOrDefaultAsync<IngresoHospitalizacionDto>(@"
+            SELECT id AS Id, idOrden AS IdOrden, nhcl AS Nhcl, idJaula AS IdJaula,
+                   ISNULL(ubicacionJaula, '') AS UbicacionJaula,
+                   ISNULL(indicaciones, '') AS Indicaciones,
+                   ISNULL(hidratacionFluidoterapia, '') AS HidratacionFluidoterapia,
+                   ISNULL(dietaCuidados, '') AS DietaCuidados,
+                   fechaIngreso AS FechaIngreso, idUsuario AS IdUsuario, estado AS Estado
+            FROM hvt_ingresoHospitalizacion
+            WHERE idOrden = @IdOrden AND nhcl = @Nhcl",
+            new { IdOrden = idOrden, Nhcl = nhcl });
+
+        return existente ?? new IngresoHospitalizacionDto { IdOrden = idOrden, Nhcl = nhcl };
+    }
+
+    public async Task GuardarIngresoHospitalizacionAsync(IngresoHospitalizacionDto dto, int idUsuario)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+        if (dto.IdOrden <= 0 || dto.Nhcl <= 0)
+            throw new ArgumentException("La orden y NHCL son obligatorios para iniciar la hospitalización.");
+
+        await ValidarOrdenPacienteAsync(dto.IdOrden, dto.Nhcl);
+        await AsegurarTablaIngresoHospitalizacionAsync();
+
+        var jaulaAnterior = await _db.ExecuteScalarAsync<int?>(
+            "SELECT idJaula FROM hvt_ingresoHospitalizacion WHERE idOrden = @IdOrden",
+            new { dto.IdOrden });
+
+        var ubicacion = (dto.UbicacionJaula ?? string.Empty).Trim();
+        var indicaciones = (dto.Indicaciones ?? string.Empty).Trim();
+        var hidratacion = (dto.HidratacionFluidoterapia ?? string.Empty).Trim();
+        var dieta = (dto.DietaCuidados ?? string.Empty).Trim();
+
+        await _db.ExecuteAsync(@"
+            IF EXISTS (SELECT 1 FROM hvt_ingresoHospitalizacion WHERE idOrden = @IdOrden)
+            BEGIN
+                UPDATE hvt_ingresoHospitalizacion
+                SET idJaula = @IdJaula,
+                    ubicacionJaula = @UbicacionJaula,
+                    indicaciones = @Indicaciones,
+                    hidratacionFluidoterapia = @HidratacionFluidoterapia,
+                    dietaCuidados = @DietaCuidados,
+                    idUsuario = @IdUsuario,
+                    estado = 'A'
+                WHERE idOrden = @IdOrden;
+            END
+            ELSE
+            BEGIN
+                INSERT INTO hvt_ingresoHospitalizacion
+                    (idOrden, nhcl, idJaula, ubicacionJaula, indicaciones, hidratacionFluidoterapia, dietaCuidados, idUsuario, estado)
+                VALUES
+                    (@IdOrden, @Nhcl, @IdJaula, @UbicacionJaula, @Indicaciones, @HidratacionFluidoterapia, @DietaCuidados, @IdUsuario, 'A');
+            END
+
+            UPDATE vt_ordenAtencion
+            SET ordenAten_etapa = 'Hospitalización'
+            WHERE ordenAten_id = @IdOrden AND ISNULL(cierrehospi, 'N') <> 'S';
+
+            IF OBJECT_ID('dbo.vt_jaulas', 'U') IS NOT NULL
+            BEGIN
+                IF @JaulaAnterior IS NOT NULL AND @JaulaAnterior > 0 AND (@IdJaula IS NULL OR @IdJaula <> @JaulaAnterior)
+                    UPDATE vt_jaulas SET jau_ocupada = 0, jau_nhcl_actual = NULL, jau_orden_actual = NULL WHERE jau_id = @JaulaAnterior;
+
+                IF @IdJaula IS NOT NULL AND @IdJaula > 0
+                    UPDATE vt_jaulas SET jau_ocupada = 1, jau_nhcl_actual = @Nhcl, jau_orden_actual = @IdOrden WHERE jau_id = @IdJaula;
+            END",
+            new
+            {
+                dto.IdOrden,
+                dto.Nhcl,
+                IdJaula = dto.IdJaula is > 0 ? dto.IdJaula : null,
+                UbicacionJaula = ubicacion,
+                Indicaciones = indicaciones,
+                HidratacionFluidoterapia = hidratacion,
+                DietaCuidados = dieta,
+                IdUsuario = idUsuario,
+                JaulaAnterior = jaulaAnterior
+            });
+
+        await _db.RegistrarBitacoraAsync(
+            $"Ingreso a hospitalización Orden={dto.IdOrden} Jaula={(string.IsNullOrWhiteSpace(ubicacion) ? "Sin asignar" : ubicacion)}",
+            idUsuario, "Hosp_BandejaOrdenes");
     }
 }

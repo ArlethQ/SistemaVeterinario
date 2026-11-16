@@ -490,6 +490,7 @@ public class AuthService : IAuthService
                 (1102, 'Diagnósticos y laboratorio', 11, 'administracion/catalogos-operativos'),
                 (1103, 'Localidades y especialidades', 11, 'administracion/localidades'),
                 (1104, 'Organización de menús', 11, 'administracion/menus'),
+                (1105, 'Jaulas', 11, 'programacion/jaulas'),
                 (1201, 'Usuarios', 12, 'administracion/usuarios'),
                 (1202, 'Roles', 12, 'administracion/roles'),
                 

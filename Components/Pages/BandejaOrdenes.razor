@@ -1,186 +1,459 @@
 @page "/kardex/ordenes"
-@inject IKardexService KardexService
-@inject IAdmisionFacturacionService AdmisionService
+@inject IHospitalizacionService HospService
+@inject IGestionMigradaService GestionService
+@inject SessionStateService Session
 @inject IWebHostEnvironment Env
 @inject SessionControlService SessionControl
 
-<PageTitle>e-ForVets - Bandeja de Órdenes de Atención</PageTitle>
+<PageTitle>e-ForVets - Bandeja de Órdenes de Hospitalización</PageTitle>
 
-<div class="orders-page">
-    <header class="orders-header">
-        <div class="orders-title"><span class="orders-title-icon"><i class="bi bi-clipboard2-pulse-fill"></i></span><div><h1>Bandeja General de <span>Órdenes de Atención</span></h1><p>Gestiona las órdenes activas de pacientes en consulta, hospitalización o cirugía para acceder a su Kardex y fichas clínicas.</p></div></div>
-        <nav class="orders-nav" aria-label="Accesos principales">
-            <a href="/dashboard"><i class="bi bi-house-door-fill"></i> Panel Principal</a>
-            @if (Permisos.Permite("/admision/clientes-pacientes")) { <a href="/admision/clientes-pacientes"><i class="bi bi-people-fill"></i> Clientes / Pacientes</a> }
-            @if (Permisos.Permite("/admision/ordenes")) { <a href="/admision/ordenes" class="nav-green"><i class="bi bi-plus-circle-fill"></i> Recepción y Nueva Orden</a> }
-            @if (Permisos.Permite("/admision/citas")) { <a href="/admision/citas" class="nav-blue"><i class="bi bi-calendar3"></i> Agenda de Citas</a> }
-            @if (Permisos.Permite("/facturacion/proformas")) { <a href="/facturacion/proformas" class="nav-amber"><i class="bi bi-file-earmark-text-fill"></i> Proformas</a> }
-        </nav>
-    </header>
+<div class="container-fluid py-3 hosp-bandeja-page">
+    <div class="card shadow-sm border-0 mb-3 bg-white">
+        <div class="card-body py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <span class="fs-4 text-primary"><i class="bi bi-hospital-fill"></i></span>
+                <div>
+                    <h1 class="h5 mb-0 fw-bold text-dark">Bandeja de Órdenes — Hospitalización 24h</h1>
+                    <small class="text-muted">Pacientes derivados desde SOAP para hospitalización. Inicia su ingreso, asigna ubicación/jaula e indicaciones.</small>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-sm btn-outline-secondary" href="/dashboard"><i class="bi bi-house-door-fill me-1"></i>Panel Principal</a>
+                @if (Permisos.Permite("/hospitalizacion/ficha"))
+                {
+                    <a class="btn btn-sm btn-outline-primary" href="/hospitalizacion/ficha"><i class="bi bi-file-earmark-text me-1"></i>Ficha 24h</a>
+                }
+            </div>
+        </div>
+    </div>
 
-    <section class="orders-kpis" aria-label="Resumen de órdenes">
-        <div class="kpi kpi-total"><span class="kpi-icon"><i class="bi bi-file-earmark-text"></i></span><div><small>Total Órdenes</small><strong>@_ordenes.Count</strong></div><i class="bi bi-graph-up-arrow kpi-tail"></i></div>
-        <div class="kpi kpi-consulta"><span class="kpi-icon"><i class="bi bi-stethoscope"></i></span><div><small>En Consulta</small><strong>@ContarEtapa("consulta")</strong><span class="kpi-bar"><i></i></span></div></div>
-        <div class="kpi kpi-hospital"><span class="kpi-icon"><i class="bi bi-hospital-fill"></i></span><div><small>Hospitalización</small><strong>@ContarEtapa("hospital")</strong><span class="kpi-bar"><i></i></span></div></div>
-        <div class="kpi kpi-cirugia"><span class="kpi-icon"><i class="bi bi-bandaid-fill"></i></span><div><small>En Cirugía</small><strong>@ContarEtapa("cirug")</strong><span class="kpi-bar"><i></i></span></div></div>
-        <div class="kpi kpi-citas"><span class="kpi-icon"><i class="bi bi-calendar-event-fill"></i></span><div><small>Citas de Hoy</small><strong>@_citasHoy</strong><span class="kpi-bar"><i></i></span></div></div>
-    </section>
+    <section class="card shadow-sm border-0 mb-3" aria-label="Cola de órdenes para hospitalización">
+        <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center py-2">
+            <div class="d-flex align-items-center gap-2">
+                <h2 class="h6 mb-0 fw-bold">Cola de hospitalización</h2>
+                <span class="badge text-bg-secondary">@_ordenes.Count</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="input-group input-group-sm" style="width: 280px;">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input class="form-control" autocomplete="off" @bind="_filtro" @bind:event="oninput" @bind:after="BuscarMientrasEscribeAsync" placeholder="Buscar paciente, tutor, orden o NHCL..." />
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="CargarColaAsync" disabled="@_cargando">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+                </button>
+            </div>
+        </div>
 
-    <section class="orders-filters">
-        <div class="filter-search"><label>Filtrar por Paciente, Propietario, N° Orden o NHCL</label><div class="input-icon"><i class="bi bi-search"></i><input autocomplete="off" @bind="_filtro" @bind:event="oninput" @bind:after="BuscarMientrasEscribeAsync" @onkeydown="OnFiltroKeyDown" placeholder="Buscar por paciente, propietario, NHCL o número de orden..." /></div></div>
-        <div class="filter-select"><label><i class="bi bi-paw-fill"></i> Especie</label><select @bind="_especieFiltro"><option value="">Todas</option>@foreach (var especie in EspeciesDisponibles){<option value="@especie">@especie</option>}</select></div>
-        <div class="filter-select"><label><i class="bi bi-list-task"></i> Estado</label><select @bind="_estadoFiltro"><option value="">Todos</option><option value="consulta">En consulta</option><option value="hospital">Hospitalización</option><option value="cirug">En cirugía</option><option value="final">Finalizada</option><option value="pend">Pendiente</option><option value="cancel">Cancelada</option></select></div>
-        <div class="filter-date"><label><i class="bi bi-calendar3"></i> Fecha</label><input type="date" @bind="_fechaFiltro" /></div>
-        <button class="filter-button clear-button" @onclick="LimpiarFiltroAsync"><i class="bi bi-arrow-clockwise"></i> Limpiar</button>
-    </section>
-
-    @if (_cargando)
-    {
-        <div class="orders-loading"><span class="spinner-border spinner-border-sm"></span> Cargando órdenes de atención...</div>
-    }
-    else
-    {
-        <section class="orders-list-card">
-            <div class="orders-list-header"><div><span><i class="bi bi-briefcase-fill"></i></span><h2>Listado de Órdenes de Atención</h2></div><small>@OrdenesFiltradas.Count() registros</small></div>
-            @if (!OrdenesFiltradas.Any())
+        <div class="card-body p-0">
+            @if (_cargando)
             {
-                <div class="orders-empty"><i class="bi bi-inbox"></i><strong>No se encontraron órdenes</strong><span>Prueba con otros criterios de búsqueda.</span></div>
+                <div class="p-3 text-muted small d-flex align-items-center gap-2" role="status">
+                    <span class="spinner-border spinner-border-sm"></span> Cargando órdenes derivadas a hospitalización...
+                </div>
+            }
+            else if (_ordenes.Count == 0)
+            {
+                <div class="p-4 text-center text-muted small">
+                    No hay pacientes marcados para hospitalización desde SOAP en este momento.
+                </div>
             }
             else
             {
-                <div class="table-responsive orders-table-wrapper"><table class="table orders-table align-middle mb-0">
-                    <thead><tr><th>N° Orden</th><th>NHCL</th><th>Paciente</th><th>Propietario</th><th>Médico / Especialidad</th><th>Fecha</th><th class="text-center">Acciones</th></tr></thead>
-                    <tbody>@foreach (var item in OrdenesFiltradas){<tr>
-                        <td><span class="order-number">@item.OrdenAtencionId</span></td><td class="nhcl">@item.Nhcl</td>
-                        <td><div class="patient-cell"><span class="patient-avatar">@if (!string.IsNullOrEmpty(ObtenerFotoPaciente(item.Nhcl))){<img src="@ObtenerFotoPaciente(item.Nhcl)" alt="Foto de @item.Paciente" />}else{<b>@InicialPaciente(item.Paciente)</b>}</span><span class="patient-data"><strong>@item.Paciente <i class="bi @(EsHembra(item.Sexo) ? "bi-gender-female female" : "bi-gender-male male")"></i></strong><small><i class="bi bi-paw-fill"></i> @item.Especie · <em class="@(EsHembra(item.Sexo) ? "female" : "male")">@item.Sexo</em></small></span></div></td>
-                        <td><div class="owner-cell"><i class="bi bi-person-fill"></i>@item.Cliente</div></td><td><div class="doctor-cell"><i class="bi bi-stethoscope"></i><span>@item.Medico<small>@item.Especialidad</small></span></div></td>
-                        <td><div class="date-cell"><i class="bi bi-calendar3"></i><span>@item.FechaOrden.ToString("yyyy-MM-dd")<small><i class="bi bi-clock"></i> @item.FechaOrden.ToString("HH:mm")</small></span></div></td>
-                        <td class="text-center orders-actions-cell"><div class="orders-actions">
-                            @if (Permisos.Permite("/kardex/enfermeria")) { <a class="btn action-main action-kardex" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl"><i class="bi bi-folder-fill"></i> Kardex</a> }
-                            @if (Permisos.Permite("/kardex/signos")) { <a class="btn action-main action-signos" href="/kardex/signos/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-activity"></i> Signos</a> }
-                            @if (Permisos.Permite("/hospitalizacion/ficha")) { <a class="btn action-main action-ficha" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-file-earmark-text-fill"></i> Ficha 24h</a> }
-                            @if (AccionesClinicas.Any(accion => Permisos.Permite(accion.Ruta)))
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Fecha / Hora</th>
+                                <th scope="col">Orden</th>
+                                <th scope="col">Paciente</th>
+                                <th scope="col">Especie</th>
+                                <th scope="col">Tutor</th>
+                                <th scope="col">Médico / Especialidad</th>
+                                <th scope="col">Ubicación / Jaula</th>
+                                <th scope="col">Estado</th>
+                                <th scope="col" class="text-end">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _ordenes)
                             {
-                                <details class="actions-more">
-                                    <summary class="btn action-more-button" title="Más acciones"><i class="bi bi-three-dots-vertical"></i></summary>
-                                    <div class="actions-menu">
-                                        <div class="actions-menu-title">Más acciones clínicas</div>
-                                        @foreach (var accion in AccionesClinicas.Where(accion => Permisos.Permite(accion.Ruta)))
+                                var seleccionado = _ordenSeleccionada?.OrdenAtencionId == item.OrdenAtencionId;
+                                <tr class="@(seleccionado ? "table-primary" : null)">
+                                    <td class="small text-nowrap">
+                                        @item.FechaOrden.ToString("dd/MM/yyyy")<br />
+                                        <span class="text-muted">@item.FechaOrden.ToString("HH:mm")</span>
+                                    </td>
+                                    <td class="fw-semibold text-primary">#@item.OrdenAtencionId</td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="hosp-avatar">
+                                                @if (!string.IsNullOrEmpty(ObtenerFotoPaciente(item.Nhcl)))
+                                                {
+                                                    <img src="@ObtenerFotoPaciente(item.Nhcl)" alt="Foto de @item.Paciente" />
+                                                }
+                                                else
+                                                {
+                                                    <b>@InicialPaciente(item.Paciente)</b>
+                                                }
+                                            </span>
+                                            <div>
+                                                <div class="fw-semibold">@item.Paciente</div>
+                                                <small class="text-muted">NHCL #@item.Nhcl · @item.Sexo</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="small">@item.Especie</td>
+                                    <td class="small">@item.Cliente</td>
+                                    <td class="small">
+                                        <div>@item.Medico</div>
+                                        <span class="text-muted">@item.Especialidad</span>
+                                    </td>
+                                    <td class="small">
+                                        @if (!string.IsNullOrWhiteSpace(item.JaulaCodigo))
                                         {
-                                            <a class="actions-menu-item" href="@($"{accion.Ruta}/{item.OrdenAtencionId}/{item.Nhcl}")">@accion.Texto</a>
+                                            <span class="badge text-bg-info">@item.JaulaCodigo</span>
                                         }
-                                    </div>
-                                </details>
+                                        else
+                                        {
+                                            <span class="text-muted">Sin asignar</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (item.YaIngresado)
+                                        {
+                                            <span class="badge text-bg-success">Hospitalizado</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge text-bg-warning">Pendiente de ingreso</span>
+                                        }
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <button type="button"
+                                                class="btn btn-sm @(item.YaIngresado ? "btn-outline-primary" : "btn-primary")"
+                                                @onclick="() => SeleccionarParaIngresoAsync(item)">
+                                            @(item.YaIngresado ? "Editar ingreso" : "Iniciar hospitalización")
+                                        </button>
+                                        @if (item.YaIngresado)
+                                        {
+                                            @if (Permisos.Permite("/hospitalizacion/ficha"))
+                                            {
+                                                <a class="btn btn-sm btn-outline-secondary ms-1" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl">Ficha 24h</a>
+                                            }
+                                            @if (Permisos.Permite("/kardex/enfermeria"))
+                                            {
+                                                <a class="btn btn-sm btn-outline-secondary ms-1" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl">Kardex</a>
+                                            }
+                                        }
+                                    </td>
+                                </tr>
                             }
-                        </div></td>
-                    </tr>}</tbody>
-                </table></div><footer class="orders-footer">Mostrando @OrdenesFiltradas.Count() de @_ordenes.Count órdenes</footer>
+                        </tbody>
+                    </table>
+                </div>
             }
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(_mensajeAlerta))
+    {
+        <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small shadow-sm" role="alert">
+            <i class="bi @(_esError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@_mensajeAlerta
+            <button type="button" class="btn-close py-2" @onclick="() => _mensajeAlerta = null"></button>
+        </div>
+    }
+
+    @if (_cargandoIngreso)
+    {
+        <div class="card shadow-sm border-0 py-5 text-center text-primary">
+            <div class="card-body">
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                <span class="small fw-semibold">Cargando ficha de ingreso a hospitalización...</span>
+            </div>
+        </div>
+    }
+    else if (_ordenSeleccionada is null)
+    {
+        <div class="card shadow-sm border-0 py-5 text-center text-muted">
+            <div class="card-body">
+                <span class="fs-1 d-block mb-2 text-secondary">🐾</span>
+                <h5>Ningún paciente seleccionado para hospitalización</h5>
+                <p class="small text-muted mb-0">
+                    Selecciona una orden en la cola superior y haz clic en <strong>Iniciar hospitalización</strong>.
+                </p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <section class="card shadow-sm border-0" aria-label="Ingreso a hospitalización">
+            <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
+                <div>
+                    <h3 class="h6 mb-0 fw-bold text-primary">
+                        <i class="bi bi-hospital me-1"></i>Ingreso a Hospitalización — @_ordenSeleccionada.Paciente
+                    </h3>
+                    <small class="text-muted">
+                        Orden #@_ordenSeleccionada.OrdenAtencionId · NHCL #@_ordenSeleccionada.Nhcl · @_ordenSeleccionada.Especie · Tutor: @_ordenSeleccionada.Cliente · Médico: @_ordenSeleccionada.Medico
+                    </small>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CerrarPanelIngreso">Cerrar</button>
+            </div>
+
+            <form class="card-body" @onsubmit="GuardarIngresoAsync" @onsubmit:preventDefault>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold" for="selJaula">Ubicación / Jaula</label>
+                        <select id="selJaula" class="form-select form-select-sm" @bind="_ingreso.IdJaula">
+                            <option value="">-- Seleccionar jaula --</option>
+                            @foreach (var jaula in JaulasParaSeleccion)
+                            {
+                                var etiqueta = string.IsNullOrWhiteSpace(jaula.Piso)
+                                    ? jaula.Codigo
+                                    : $"{jaula.Codigo} ({jaula.Piso} / {jaula.Consultorio})";
+                                <option value="@jaula.Id">@etiqueta @(jaula.Ocupada && jaula.OrdenActual != _ordenSeleccionada.OrdenAtencionId ? "— Ocupada" : "")</option>
+                            }
+                        </select>
+                        @if (_jaulas.Count == 0)
+                        {
+                            <small class="text-muted d-block mt-1">
+                                No hay jaulas registradas aún; cuando se cree el módulo de jaulas aparecerán aquí automáticamente.
+                            </small>
+                        }
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold" for="txtUbicacionManual">Detalle / Referencia de ubicación (opcional)</label>
+                        <input id="txtUbicacionManual" class="form-control form-control-sm" @bind="_ingreso.UbicacionJaula"
+                               placeholder="Ej. Área Caninos, Jaula J-01, Cuidados intensivos..." maxlength="150" />
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold" for="txtIndicaciones">Indicaciones de hospitalización</label>
+                        <textarea id="txtIndicaciones" class="form-control form-control-sm" rows="3" @bind="_ingreso.Indicaciones"
+                                  placeholder="Medicación inicial, frecuencia de controles, monitoreo requerido, alertas clínicas..."></textarea>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold" for="txtHidratacion">Hidratación / Fluidoterapia</label>
+                        <textarea id="txtHidratacion" class="form-control form-control-sm" rows="3" @bind="_ingreso.HidratacionFluidoterapia"
+                                  placeholder="Solución, vía, velocidad de infusión (mL/h), suplementos..."></textarea>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold" for="txtDieta">Dieta y cuidados</label>
+                        <textarea id="txtDieta" class="form-control form-control-sm" rows="3" @bind="_ingreso.DietaCuidados"
+                                  placeholder="Tipo de alimento, frecuencia, ayuno, cuidados de confort/aseo..."></textarea>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="border rounded p-3 bg-light">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div>
+                                    <h4 class="h6 mb-1 fw-bold text-dark"><i class="bi bi-file-earmark-check me-1"></i>Consentimiento de hospitalización</h4>
+                                    <p class="small text-muted mb-0">Espacio reservado para vincular el consentimiento de hospitalización en el siguiente paso.</p>
+                                </div>
+                                <span class="badge text-bg-secondary">Pendiente de vincular</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 pt-3 border-top">
+                    <div class="d-flex flex-wrap gap-2">
+                        @if (_ordenSeleccionada.YaIngresado)
+                        {
+                            @if (Permisos.Permite("/hospitalizacion/ficha"))
+                            {
+                                <a class="btn btn-sm btn-outline-primary" href="/hospitalizacion/ficha/@_ordenSeleccionada.OrdenAtencionId/@_ordenSeleccionada.Nhcl">Ir a Ficha 24h</a>
+                            }
+                            @if (Permisos.Permite("/kardex/enfermeria"))
+                            {
+                                <a class="btn btn-sm btn-outline-primary" href="/kardex/enfermeria?orden=@_ordenSeleccionada.OrdenAtencionId&nhcl=@_ordenSeleccionada.Nhcl">Ir a Kardex</a>
+                            }
+                            @if (Permisos.Permite("/kardex/signos"))
+                            {
+                                <a class="btn btn-sm btn-outline-primary" href="/kardex/signos/@_ordenSeleccionada.OrdenAtencionId/@_ordenSeleccionada.Nhcl">Ir a Signos</a>
+                            }
+                        }
+                    </div>
+                    <button type="submit" class="btn btn-primary" disabled="@_guardando">
+                        @if (_guardando)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            <span>Guardando...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check2-circle me-1"></i>
+                            <span>@(_ordenSeleccionada.YaIngresado ? "Actualizar ingreso" : "Guardar e iniciar hospitalización")</span>
+                        }
+                    </button>
+                </div>
+            </form>
         </section>
     }
 </div>
 
 <style>
-    .orders-page { width: 100%; max-width: 100%; min-width: 0; overflow-x: hidden; font-size: 13px; }
-    .orders-header { margin-bottom: 12px; }
-    .orders-title-icon { width: 40px; height: 44px; font-size: 32px; }
-    .orders-title h1 { font-size: 25px; }
-    .orders-title p { font-size: 13px; }
-    .orders-nav { gap: 7px; }
-    .orders-nav a { padding: 9px 11px; font-size: 12px; }
-    .orders-kpis { gap: 12px; margin-bottom: 12px; }
-    .kpi { min-height: 78px; height: 78px; padding: 8px 12px; gap: 10px; }
-    .kpi-icon { flex-basis: 48px; height: 52px; font-size: 24px; }
-    .kpi small { font-size: 12px; }
-    .kpi strong { font-size: 23px; }
-    .kpi-tail { font-size: 22px; }
-    .kpi-bar { height: 7px; }
-    .orders-filters { gap: 10px; margin-bottom: 12px; padding: 12px; }
-    .orders-filters label { margin-bottom: 5px; font-size: 12px; }
-    .orders-filters input, .orders-filters select { height: 38px; padding: 0 10px; font-size: 12px; }
-    .input-icon input { padding-left: 34px; }
-    .filter-button { height: 40px; font-size: 12px; }
-    .orders-list-header { padding: 6px 10px; }
-    .orders-list-header > div > span { width: 32px; height: 30px; }
-    .orders-list-header h2 { font-size: 14px; }
-    .orders-list-card, .orders-table-wrapper { width: 100%; max-width: 100%; min-width: 0; }
-    .orders-table-wrapper { overflow-x: auto !important; }
-    .orders-table { width: 100%; min-width: 930px; table-layout: fixed; font-size: 10px; }
-    .orders-table th:nth-child(1) { width: 62px; }
-    .orders-table th:nth-child(2) { width: 58px; }
-    .orders-table th:nth-child(3) { width: 175px; }
-    .orders-table th:nth-child(4) { width: 135px; }
-    .orders-table th:nth-child(5) { width: 145px; }
-    .orders-table th:nth-child(6) { width: 95px; }
-    .orders-table th:nth-child(7) { width: 260px; }
-    .orders-table thead th { padding: 6px 4px; font-size: 9px; }
-    .orders-table tbody td { padding: 4px; overflow: hidden; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
-    .order-number { padding: 5px 7px; }
-    .patient-avatar { width: 28px; height: 28px; flex: 0 0 28px; overflow: hidden; }
-    .patient-avatar img { width: 100%; height: 100%; object-fit: cover; }
-    .patient-data { display: grid; min-width: 0; }
-    .patient-data strong { overflow: hidden; text-overflow: ellipsis; }
-    .patient-data small { margin-top: 2px; color: #60748f; font-size: 9px; }
-    .patient-data small i { color: #287bc9; }
-    .patient-data em { font-style: normal; }
-    .patient-cell, .species-cell, .owner-cell, .doctor-cell, .date-cell { gap: 6px; }
-    .species-cell small, .doctor-cell small, .date-cell small { font-size: 9px; }
-    .status-pill { min-width: 86px; padding: 5px 6px; font-size: 9px; }
-    .orders-actions-cell { min-width: 0; overflow: visible !important; }
-    .orders-actions { gap: 4px; }
-    .action-main { min-width: 68px; padding: 6px 7px; font-size: 9px; }
-    .action-ficha { min-width: 76px; }
-    .action-more-button { width: 28px; height: 26px; font-size: 10px; }
-    .orders-footer { padding: 8px 12px; font-size: 11px; }
+    .hosp-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #e9f2ff;
+        color: #1d5fb8;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex: 0 0 32px;
+        font-size: 12px;
+    }
+
+    .hosp-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
 </style>
 
 @code {
-    private static readonly (string Ruta, string Texto)[] AccionesClinicas =
-    [
-        ("/hospitalizacion/monitoreo", "🩺 Monitoreo"),
-        ("/quirofano/preanestesia", "🧪 Pre-Anestesia"),
-        ("/quirofano/anestesia", "🫁 Anestesia"),
-        ("/quirofano/protocolo", "🔪 Protocolo Quirúrgico"),
-        ("/quirofano/recuperacion", "🛏️ Recuperación"),
-        ("/consulta/fichamedica", "📋 Historia Clínica SOAP"),
-        ("/consulta/evoluciones", "📝 Evolución Médica"),
-        ("/consulta/recetario", "💊 Recetario"),
-        ("/consulta/autorizaciones", "📄 Consentimientos y Alta"),
-        ("/diagnostico/laboratorio", "🔬 Laboratorio"),
-        ("/diagnostico/imagenologia", "☢️ RX / Ecografía"),
-        ("/diagnostico/bandeja", "📥 Informes")
-    ];
-
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
 
-    private List<OrdenActivaResumenDto> _ordenes = [];
-    private string _filtro = string.Empty, _filtroAplicado = string.Empty, _especieFiltro = string.Empty, _estadoFiltro = string.Empty;
-    private DateTime? _fechaFiltro;
+    private List<OrdenHospitalizacionColaDto> _ordenes = [];
+    private List<JaulaClinicaDto> _jaulas = [];
+    private OrdenHospitalizacionColaDto? _ordenSeleccionada;
+    private IngresoHospitalizacionDto _ingreso = new();
+
+    private string _filtro = string.Empty;
     private bool _cargando;
-    private int _citasHoy;
+    private bool _cargandoIngreso;
+    private bool _guardando;
+    private string? _mensajeAlerta;
+    private bool _esError;
     private int _versionBusqueda;
 
-    private IEnumerable<OrdenActivaResumenDto> OrdenesFiltradas => _ordenes
-        .Where(x => string.IsNullOrWhiteSpace(_filtro)
-            || x.Paciente.Contains(_filtro, StringComparison.OrdinalIgnoreCase)
-            || x.Cliente.Contains(_filtro, StringComparison.OrdinalIgnoreCase)
-            || x.OrdenAtencionId.ToString().Contains(_filtro, StringComparison.OrdinalIgnoreCase)
-            || x.Nhcl.ToString().Contains(_filtro, StringComparison.OrdinalIgnoreCase))
-        .Where(x => string.IsNullOrEmpty(_especieFiltro) || x.Especie.Equals(_especieFiltro, StringComparison.OrdinalIgnoreCase))
-        .Where(x => string.IsNullOrEmpty(_estadoFiltro) || EstadoVisual(x).Contains(_estadoFiltro, StringComparison.OrdinalIgnoreCase))
-        .Where(x => !_fechaFiltro.HasValue || x.FechaOrden.Date == _fechaFiltro.Value.Date);
-    private IEnumerable<string> EspeciesDisponibles => _ordenes.Select(x => x.Especie).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().Order();
+    private IEnumerable<JaulaClinicaDto> JaulasParaSeleccion => _jaulas
+        .Where(j => !j.Ocupada || j.OrdenActual == _ordenSeleccionada?.OrdenAtencionId || j.Id == _ingreso.IdJaula);
 
-    protected override async Task OnInitializedAsync(){var ordenesTask=CargarOrdenesAsync();var citasTask=AdmisionService.ObtenerCitasPorFechaAsync(DateTime.Today,DateTime.Today);await Task.WhenAll(ordenesTask,citasTask);_citasHoy=citasTask.Result.Count;}
-    private async Task BuscarMientrasEscribeAsync(){int v=++_versionBusqueda;await Task.Delay(250);if(v!=_versionBusqueda)return;await CargarOrdenesAsync();}
-    private async Task CargarOrdenesAsync(){_cargando=true;try{_ordenes=await KardexService.ObtenerOrdenesActivasAsync(_filtro);_filtroAplicado=_filtro;}finally{_cargando=false;}}
-    private async Task LimpiarFiltroAsync(){var recargar=!string.IsNullOrWhiteSpace(_filtroAplicado);_filtro=_filtroAplicado=_especieFiltro=_estadoFiltro=string.Empty;_fechaFiltro=null;if(recargar)await CargarOrdenesAsync();}
-    private async Task OnFiltroKeyDown(KeyboardEventArgs e){if(e.Key=="Enter")await CargarOrdenesAsync();}
-    private int ContarEtapa(string etapa)=>_ordenes.Count(x=>!EsCancelada(x.Estado)&&NormalizarEtapa(x.Etapa).Contains(etapa,StringComparison.OrdinalIgnoreCase));
-    private static string InicialPaciente(string nombre)=>string.IsNullOrWhiteSpace(nombre)?"P":nombre.Trim()[0].ToString().ToUpperInvariant();
-    private string ObtenerFotoPaciente(int nhcl){if(nhcl<=0)return string.Empty;string directorio=Path.Combine(Env.WebRootPath,"PacientesFotos");if(!Directory.Exists(directorio))return string.Empty;string? archivo=Directory.EnumerateFiles(directorio,$"{nhcl}.*").FirstOrDefault();return archivo is null?string.Empty:SessionControl.FirmarFotoUrl(nhcl, File.GetLastWriteTimeUtc(archivo).Ticks);}
-    private static bool EsHembra(string sexo)=>sexo.Contains("hembra",StringComparison.OrdinalIgnoreCase)||sexo.Equals("H",StringComparison.OrdinalIgnoreCase);
-    private static bool EsCancelada(string estado)=>(estado??string.Empty).Trim().Equals("I",StringComparison.OrdinalIgnoreCase)||(estado??string.Empty).Contains("cancel",StringComparison.OrdinalIgnoreCase);
-    private static string NormalizarEtapa(string etapa)=>(etapa??string.Empty).Trim().ToLowerInvariant() switch{"consulta" or "en consulta"=>"consulta","hospitalización" or "hospitalizacion" or "hospitalizado"=>"hospital","quirófano" or "quirofano" or "cirugía" or "cirugia" or "en cirugía"=>"cirug","procesado" or "procesada" or "finalizado" or "finalizada"=>"final","pendiente"=>"pend",var valor=>valor};
-    private static string EstadoVisual(OrdenActivaResumenDto item)=>EsCancelada(item.Estado)?"cancel":NormalizarEtapa(item.Etapa);
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(CargarColaAsync(), CargarJaulasAsync());
+    }
+
+    private async Task CargarJaulasAsync()
+    {
+        try
+        {
+            _jaulas = await GestionService.ObtenerJaulasAsync(soloActivas: true, idLocalidad: Session.Localidad > 0 ? Session.Localidad : null);
+        }
+        catch
+        {
+            _jaulas = [];
+        }
+    }
+
+    private async Task CargarColaAsync()
+    {
+        _cargando = true;
+        try
+        {
+            _ordenes = await HospService.ObtenerColaHospitalizacionAsync(_filtro, Session.Localidad > 0 ? Session.Localidad : null);
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task BuscarMientrasEscribeAsync()
+    {
+        var version = ++_versionBusqueda;
+        await Task.Delay(250);
+        if (version != _versionBusqueda) return;
+        await CargarColaAsync();
+    }
+
+    private async Task SeleccionarParaIngresoAsync(OrdenHospitalizacionColaDto item)
+    {
+        _mensajeAlerta = null;
+        _esError = false;
+        _ordenSeleccionada = item;
+        _cargandoIngreso = true;
+        try
+        {
+            await CargarJaulasAsync();
+            _ingreso = await HospService.ObtenerIngresoHospitalizacionAsync(item.OrdenAtencionId, item.Nhcl);
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"No se pudo cargar el ingreso: {ex.Message}";
+        }
+        finally
+        {
+            _cargandoIngreso = false;
+        }
+    }
+
+    private void CerrarPanelIngreso()
+    {
+        _ordenSeleccionada = null;
+        _ingreso = new();
+    }
+
+    private async Task GuardarIngresoAsync()
+    {
+        if (_ordenSeleccionada is null) return;
+
+        _mensajeAlerta = null;
+        _esError = false;
+        _guardando = true;
+        try
+        {
+            if (_ingreso.IdJaula is > 0)
+            {
+                var jaulaElegida = _jaulas.FirstOrDefault(j => j.Id == _ingreso.IdJaula.Value);
+                if (jaulaElegida != null && string.IsNullOrWhiteSpace(_ingreso.UbicacionJaula))
+                {
+                    _ingreso.UbicacionJaula = jaulaElegida.Codigo;
+                }
+            }
+
+            await HospService.GuardarIngresoHospitalizacionAsync(_ingreso, Session.IdUser);
+            await Task.WhenAll(CargarColaAsync(), CargarJaulasAsync());
+
+            var actualizada = _ordenes.FirstOrDefault(o => o.OrdenAtencionId == _ordenSeleccionada.OrdenAtencionId);
+            if (actualizada != null)
+            {
+                _ordenSeleccionada = actualizada;
+            }
+            else
+            {
+                _ordenSeleccionada.YaIngresado = true;
+            }
+
+            _mensajeAlerta = $"Hospitalización iniciada/actualizada para {_ordenSeleccionada.Paciente} (Orden #{_ordenSeleccionada.OrdenAtencionId}).";
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al guardar ingreso: {ex.Message}";
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private static string InicialPaciente(string nombre) =>
+        string.IsNullOrWhiteSpace(nombre) ? "P" : nombre.Trim()[0].ToString().ToUpperInvariant();
+
+    private string ObtenerFotoPaciente(int nhcl)
+    {
+        if (nhcl <= 0) return string.Empty;
+        var directorio = Path.Combine(Env.WebRootPath, "PacientesFotos");
+        if (!Directory.Exists(directorio)) return string.Empty;
+        var archivo = Directory.EnumerateFiles(directorio, $"{nhcl}.*").FirstOrDefault();
+        return archivo is null ? string.Empty : SessionControl.FirmarFotoUrl(nhcl, File.GetLastWriteTimeUtc(archivo).Ticks);
+    }
 }

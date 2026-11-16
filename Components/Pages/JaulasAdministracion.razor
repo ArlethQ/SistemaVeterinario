@@ -1,0 +1,478 @@
+@page "/programacion/jaulas"
+@inject IGestionMigradaService Service
+@inject SessionStateService Session
+@inject NavigationManager Nav
+
+<PageTitle>Jaulas y espacios de hospitalización | e-ForVets</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h2 class="mb-0">Jaulas de hospitalización</h2>
+            <small class="text-muted">Administración por sede, piso y cuarto/consultorio con mapa visual de disponibilidad.</small>
+        </div>
+        <div class="d-flex gap-2">
+            @if (Permisos.Permite("programacion/consultorios") || Permisos.Permite("programacion/clinica"))
+            {
+                <a class="btn btn-outline-secondary btn-sm" href="/programacion/consultorios">
+                    <i class="bi bi-building me-1"></i>Pisos y consultorios
+                </a>
+            }
+            @if (Permisos.Permite("hospitalizacion/censo"))
+            {
+                <a class="btn btn-outline-primary btn-sm" href="/hospitalizacion/censo">
+                    <i class="bi bi-hospital me-1"></i>Ir a hospitalización
+                </a>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_mensaje))
+    {
+        <div class="alert @(_error ? "alert-danger" : "alert-success") alert-dismissible fade show py-2" role="alert">
+            @_mensaje
+            <button type="button" class="btn-close" @onclick='() => _mensaje = ""'></button>
+        </div>
+    }
+
+    <!-- Formulario de creación / edición -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center bg-white">
+            <span class="fw-bold">
+                <i class="bi bi-grid-3x3-gap-fill text-primary me-1"></i>
+                @(_jaula.Id > 0 ? $"Editar jaula: {_jaula.Codigo}" : "Registrar jaula")
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => _mostrarLote = !_mostrarLote">
+                <i class="bi bi-layers me-1"></i>@(_mostrarLote ? "Ocultar generador rápido" : "Generar varias jaulas")
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Sede *</label>
+                    <select class="form-select form-select-sm" value="@_jaula.IdLocalidad" @onchange="CambiarLocalidadFormulario">
+                        <option value="0">Seleccione sede...</option>
+                        @foreach (var loc in _localidades)
+                        {
+                            <option value="@loc.Id">@loc.Descripcion</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold">Piso *</label>
+                    <select class="form-select form-select-sm" value="@_jaula.IdPiso" @onchange="CambiarPisoFormulario" disabled="@(_jaula.IdLocalidad <= 0)">
+                        <option value="0">Seleccione piso...</option>
+                        @foreach (var p in PisosFormulario)
+                        {
+                            <option value="@p.Id">@p.Nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Cuarto / Consultorio *</label>
+                    <select class="form-select form-select-sm" @bind="_jaula.IdConsultorio" disabled="@(_jaula.IdPiso <= 0)">
+                        <option value="0">Seleccione cuarto...</option>
+                        @foreach (var c in ConsultoriosFormulario)
+                        {
+                            <option value="@c.Id">@c.Nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold">Código / Numeración *</label>
+                    <input class="form-control form-control-sm" placeholder="Ej. J-101, 01" maxlength="50" @bind="_jaula.Codigo" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold">Observación / Tipo</label>
+                    <input class="form-control form-control-sm" placeholder="Ej. Grande, UCI" maxlength="200" @bind="_jaula.Observacion" />
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                @if (_jaula.Id > 0)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelarEdicion">Cancelar</button>
+                }
+                <SaveButton class="btn btn-sm btn-primary px-4" OnClick="GuardarJaulaAsync">
+                    <i class="bi bi-floppy-fill me-1"></i>@(_jaula.Id > 0 ? "Actualizar jaula" : "Guardar jaula")
+                </SaveButton>
+            </div>
+
+            @if (_mostrarLote)
+            {
+                <hr class="my-3" />
+                <div class="bg-light rounded p-3 border">
+                    <div class="fw-semibold small text-primary mb-2">
+                        <i class="bi bi-magic me-1"></i>Generador rápido de jaulas consecutivas (usa la sede, piso y cuarto seleccionados arriba)
+                    </div>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Prefijo (opcional)</label>
+                            <input class="form-control form-control-sm" placeholder="Ej. J- o UCI-" @bind="_lotePrefijo" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Desde #</label>
+                            <input type="number" min="1" max="999" class="form-control form-control-sm" @bind="_loteDesde" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Hasta #</label>
+                            <input type="number" min="1" max="999" class="form-control form-control-sm" @bind="_loteHasta" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Observación común</label>
+                            <input class="form-control form-control-sm" placeholder="Ej. Hospitalización general" @bind="_loteObservacion" />
+                        </div>
+                        <div class="col-md-2">
+                            <SaveButton class="btn btn-sm btn-success w-100" OnClick="GenerarLoteAsync">
+                                Generar rango
+                            </SaveButton>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Filtros y leyenda -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Filtrar sede</label>
+                    <select class="form-select form-select-sm" value="@_filtroLocalidad" @onchange="CambiarFiltroLocalidad">
+                        <option value="0">Todas las sedes</option>
+                        @foreach (var loc in _localidades)
+                        {
+                            <option value="@loc.Id">@loc.Descripcion</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Filtrar piso</label>
+                    <select class="form-select form-select-sm" value="@_filtroPiso" @onchange="CambiarFiltroPiso">
+                        <option value="0">Todos los pisos</option>
+                        @foreach (var p in PisosFiltro)
+                        {
+                            <option value="@p.Id">@p.Nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Filtrar cuarto</label>
+                    <select class="form-select form-select-sm" @bind="_filtroConsultorio">
+                        <option value="0">Todos los cuartos</option>
+                        @foreach (var c in ConsultoriosFiltro)
+                        {
+                            <option value="@c.Id">@c.Nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Disponibilidad</label>
+                    <select class="form-select form-select-sm" @bind="_filtroEstado">
+                        <option value="TODAS">Todas</option>
+                        <option value="LIBRES">Libres</option>
+                        <option value="OCUPADAS">Ocupadas</option>
+                        <option value="INACTIVAS">Inactivas</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Buscar código</label>
+                    <input class="form-control form-control-sm" placeholder="Ej. J-101" @bind="_filtroTexto" @bind:event="oninput" />
+                </div>
+                <div class="col-md-2 d-flex flex-wrap justify-content-md-end gap-1 align-items-center">
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">Libres: @ConteoLibres</span>
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Ocupadas: @ConteoOcupadas</span>
+                    <span class="badge bg-secondary-subtle text-secondary border">Inactivas: @ConteoInactivas</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mapa de cuadrados por Sede / Piso / Cuarto -->
+    @if (!JaulasFiltradas.Any())
+    {
+        <div class="card shadow-sm">
+            <div class="card-body text-center text-muted py-5">
+                <i class="bi bi-grid-3x3 fs-1 d-block mb-2"></i>
+                No hay jaulas registradas con los filtros actuales.
+            </div>
+        </div>
+    }
+    else
+    {
+        @foreach (var grupo in JaulasFiltradas.GroupBy(j => new { j.Localidad, j.Piso, j.Consultorio }))
+        {
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="fw-bold">
+                        <span class="badge bg-primary me-1">@grupo.Key.Localidad</span>
+                        <span class="text-muted">@grupo.Key.Piso</span>
+                        <span class="mx-1 text-muted">·</span>
+                        <span>@grupo.Key.Consultorio</span>
+                    </div>
+                    <small class="text-muted">
+                        @grupo.Count(x => x.Estado == "A" && !x.Ocupada) libres / @grupo.Count(x => x.Estado == "A") activas
+                    </small>
+                </div>
+                <div class="card-body">
+                    <div class="jaulas-grid">
+                        @foreach (var j in grupo)
+                        {
+                            string claseEstado = j.Estado != "A"
+                                ? "jaula-inactiva"
+                                : (j.Ocupada ? "jaula-ocupada" : "jaula-libre");
+
+                            <div class="jaula-tile @claseEstado">
+                                <div class="jaula-tile-top">
+                                    <span class="jaula-status-badge">
+                                        @if (j.Estado != "A")
+                                        {
+                                            <span>INACTIVA</span>
+                                        }
+                                        else if (j.Ocupada)
+                                        {
+                                            <span>OCUPADA</span>
+                                        }
+                                        else
+                                        {
+                                            <span>LIBRE</span>
+                                        }
+                                    </span>
+                                </div>
+
+                                <div class="jaula-tile-center">
+                                    <div class="jaula-codigo">@j.Codigo</div>
+                                    @if (j.Estado == "A" && j.Ocupada)
+                                    {
+                                        <div class="jaula-paciente text-truncate" title="@j.PacienteActual">
+                                            @(!string.IsNullOrWhiteSpace(j.PacienteActual) ? j.PacienteActual : $"NHCL #{j.NhclActual}")
+                                        </div>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(j.Observacion))
+                                    {
+                                        <div class="jaula-obs text-truncate" title="@j.Observacion">@j.Observacion</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="jaula-obs">@(j.Estado == "A" ? "Disponible" : "Deshabilitada")</div>
+                                    }
+                                </div>
+
+                                <div class="jaula-tile-actions">
+                                    <button type="button" class="btn btn-xs btn-outline-primary" title="Editar" @onclick="() => EditarJaula(j)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-xs @(j.Estado == "A" ? "btn-outline-secondary" : "btn-outline-success")"
+                                            title="@(j.Estado == "A" ? "Desactivar" : "Activar")"
+                                            disabled="@(j.Estado == "A" && j.Ocupada)"
+                                            @onclick="() => CambiarEstadoJaulaAsync(j)">
+                                        <i class="bi @(j.Estado == "A" ? "bi-power" : "bi-check-lg")"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+
+    private JaulaClinicaDto _jaula = new();
+    private List<JaulaClinicaDto> _jaulas = [];
+    private List<SelectorClinicoDto> _localidades = [];
+    private List<PisoClinicoDto> _pisos = [];
+    private List<ConsultorioClinicoDto> _consultorios = [];
+
+    private int _filtroLocalidad;
+    private int _filtroPiso;
+    private int _filtroConsultorio;
+    private string _filtroEstado = "TODAS";
+    private string _filtroTexto = "";
+
+    private bool _mostrarLote;
+    private string _lotePrefijo = "J-";
+    private int _loteDesde = 1;
+    private int _loteHasta = 6;
+    private string _loteObservacion = "";
+
+    private string _mensaje = "";
+    private bool _error;
+
+    private IEnumerable<PisoClinicoDto> PisosFormulario =>
+        _pisos.Where(p => p.Estado == "A" && (_jaula.IdLocalidad <= 0 || p.IdLocalidad == _jaula.IdLocalidad));
+
+    private IEnumerable<ConsultorioClinicoDto> ConsultoriosFormulario =>
+        _consultorios.Where(c => c.Estado == "A" && (_jaula.IdPiso <= 0 || c.IdPiso == _jaula.IdPiso));
+
+    private IEnumerable<PisoClinicoDto> PisosFiltro =>
+        _pisos.Where(p => _filtroLocalidad <= 0 || p.IdLocalidad == _filtroLocalidad);
+
+    private IEnumerable<ConsultorioClinicoDto> ConsultoriosFiltro =>
+        _consultorios.Where(c =>
+            (_filtroPiso > 0 && c.IdPiso == _filtroPiso) ||
+            (_filtroPiso <= 0 && (_filtroLocalidad <= 0 || _pisos.Any(p => p.Id == c.IdPiso && p.IdLocalidad == _filtroLocalidad))));
+
+    private IEnumerable<JaulaClinicaDto> JaulasFiltradas =>
+        _jaulas.Where(j =>
+            (_filtroLocalidad <= 0 || j.IdLocalidad == _filtroLocalidad) &&
+            (_filtroPiso <= 0 || j.IdPiso == _filtroPiso) &&
+            (_filtroConsultorio <= 0 || j.IdConsultorio == _filtroConsultorio) &&
+            (_filtroEstado switch
+            {
+                "LIBRES" => j.Estado == "A" && !j.Ocupada,
+                "OCUPADAS" => j.Estado == "A" && j.Ocupada,
+                "INACTIVAS" => j.Estado != "A",
+                _ => true
+            }) &&
+            (string.IsNullOrWhiteSpace(_filtroTexto) ||
+             j.Codigo.Contains(_filtroTexto.Trim(), StringComparison.OrdinalIgnoreCase) ||
+             j.Observacion.Contains(_filtroTexto.Trim(), StringComparison.OrdinalIgnoreCase)));
+
+    private int ConteoLibres => _jaulas.Count(j => (_filtroLocalidad <= 0 || j.IdLocalidad == _filtroLocalidad) && j.Estado == "A" && !j.Ocupada);
+    private int ConteoOcupadas => _jaulas.Count(j => (_filtroLocalidad <= 0 || j.IdLocalidad == _filtroLocalidad) && j.Estado == "A" && j.Ocupada);
+    private int ConteoInactivas => _jaulas.Count(j => (_filtroLocalidad <= 0 || j.IdLocalidad == _filtroLocalidad) && j.Estado != "A");
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        var tLocalidades = Service.ObtenerLocalidadesSelectorAsync();
+        var tPisos = Service.ObtenerPisosAsync();
+        var tConsultorios = Service.ObtenerConsultoriosAsync();
+        var tJaulas = Service.ObtenerJaulasAsync();
+
+        await Task.WhenAll(tLocalidades, tPisos, tConsultorios, tJaulas);
+
+        _localidades = await tLocalidades;
+        _pisos = await tPisos;
+        _consultorios = await tConsultorios;
+        _jaulas = await tJaulas;
+
+        if (Session.Localidad > 0 && _localidades.Any(l => l.Id == Session.Localidad))
+        {
+            _jaula.IdLocalidad = Session.Localidad;
+        }
+    }
+
+    private async Task CargarJaulasAsync()
+    {
+        _jaulas = await Service.ObtenerJaulasAsync();
+    }
+
+    private void CambiarLocalidadFormulario(ChangeEventArgs e)
+    {
+        _jaula.IdLocalidad = int.TryParse(e.Value?.ToString(), out int id) ? id : 0;
+        _jaula.IdPiso = 0;
+        _jaula.IdConsultorio = 0;
+    }
+
+    private void CambiarPisoFormulario(ChangeEventArgs e)
+    {
+        _jaula.IdPiso = int.TryParse(e.Value?.ToString(), out int id) ? id : 0;
+        _jaula.IdConsultorio = 0;
+    }
+
+    private void CambiarFiltroLocalidad(ChangeEventArgs e)
+    {
+        _filtroLocalidad = int.TryParse(e.Value?.ToString(), out int id) ? id : 0;
+        _filtroPiso = 0;
+        _filtroConsultorio = 0;
+    }
+
+    private void CambiarFiltroPiso(ChangeEventArgs e)
+    {
+        _filtroPiso = int.TryParse(e.Value?.ToString(), out int id) ? id : 0;
+        _filtroConsultorio = 0;
+    }
+
+    private async Task GuardarJaulaAsync()
+    {
+        bool ok = await Service.GuardarJaulaAsync(_jaula, Session.IdUser);
+        Mensaje(ok, ok
+            ? "Jaula guardada correctamente."
+            : "Complete sede, piso, cuarto y código, y verifique que el código no esté duplicado en ese cuarto.");
+
+        if (ok)
+        {
+            int locActual = _jaula.IdLocalidad;
+            int pisoActual = _jaula.IdPiso;
+            int consActual = _jaula.IdConsultorio;
+            _jaula = new() { IdLocalidad = locActual, IdPiso = pisoActual, IdConsultorio = consActual };
+            await CargarJaulasAsync();
+        }
+    }
+
+    private async Task GenerarLoteAsync()
+    {
+        if (_jaula.IdLocalidad <= 0 || _jaula.IdPiso <= 0 || _jaula.IdConsultorio <= 0)
+        {
+            Mensaje(false, "Seleccione primero la sede, piso y cuarto/consultorio donde se generarán las jaulas.");
+            return;
+        }
+
+        if (_loteDesde <= 0 || _loteHasta < _loteDesde || _loteHasta - _loteDesde > 100)
+        {
+            Mensaje(false, "Ingrese un rango válido (máximo 100 jaulas por lote).");
+            return;
+        }
+
+        var (creadas, omitidas) = await Service.GuardarJaulasLoteAsync(
+            _jaula.IdLocalidad, _jaula.IdPiso, _jaula.IdConsultorio,
+            _lotePrefijo, _loteDesde, _loteHasta, _loteObservacion, Session.IdUser);
+
+        Mensaje(creadas > 0, creadas > 0
+            ? $"Se generaron {creadas} jaula(s){(omitidas > 0 ? $" y se omitieron {omitidas} duplicadas" : "")}."
+            : "No se pudo generar ninguna jaula (verifique que no estén duplicadas).");
+
+        await CargarJaulasAsync();
+    }
+
+    private void EditarJaula(JaulaClinicaDto j)
+    {
+        _jaula = new()
+        {
+            Id = j.Id,
+            Codigo = j.Codigo,
+            IdLocalidad = j.IdLocalidad,
+            IdPiso = j.IdPiso,
+            IdConsultorio = j.IdConsultorio,
+            Observacion = j.Observacion,
+            Estado = j.Estado
+        };
+    }
+
+    private void CancelarEdicion()
+    {
+        int locActual = _jaula.IdLocalidad;
+        _jaula = new() { IdLocalidad = locActual };
+    }
+
+    private async Task CambiarEstadoJaulaAsync(JaulaClinicaDto j)
+    {
+        if (j.Estado == "A" && j.Ocupada)
+        {
+            Mensaje(false, "No se puede desactivar una jaula que está ocupada actualmente.");
+            return;
+        }
+
+        string nuevoEstado = j.Estado == "A" ? "I" : "A";
+        bool ok = await Service.CambiarEstadoJaulaAsync(j.Id, nuevoEstado, Session.IdUser);
+        if (ok) await CargarJaulasAsync();
+    }
+
+    private void Mensaje(bool ok, string texto)
+    {
+        _error = !ok;
+        _mensaje = texto;
+    }
+}
