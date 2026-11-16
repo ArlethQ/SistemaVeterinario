@@ -26,10 +26,21 @@
         </div>
         <div class="d-flex gap-2 align-items-center agenda-toolbar">
             <div>
+                <label for="agenda-sucursal" class="form-label small mb-0">Sucursal</label>
+                <select id="agenda-sucursal" class="form-select form-select-sm"
+                        @bind:get="_sucursalAgenda" @bind:set="CambiarSucursalAsync" disabled="@(!_filtrosCargados || _sucursales.Count == 0)">
+                    <option value="0">@(_sucursales.Count == 0 ? "Sin sucursales disponibles" : "Todas las sucursales")</option>
+                    @foreach (var sucursal in _sucursales)
+                    {
+                        <option value="@sucursal.Id">@sucursal.Descripcion</option>
+                    }
+                </select>
+            </div>
+            <div>
                 <label for="agenda-especialidad" class="form-label small mb-0">Especialidad</label>
                 <select id="agenda-especialidad" class="form-select form-select-sm"
-                        @bind:get="_especialidadAgenda" @bind:set="CambiarEspecialidadAsync" disabled="@(!_filtrosCargados)">
-                    <option value="0">Todas las especialidades</option>
+                        @bind:get="_especialidadAgenda" @bind:set="CambiarEspecialidadAsync" disabled="@(!_filtrosCargados || _sucursalAgenda <= 0)">
+                    <option value="0">Seleccionar especialidad</option>
                     @foreach (var esp in _especialidades)
                     {
                         <option value="@esp.Id">@esp.Descripcion</option>
@@ -37,38 +48,13 @@
                 </select>
             </div>
             <div>
-                <label for="agenda-sucursal" class="form-label small mb-0">Sucursal</label>
-                <select @key="_especialidadAgenda" id="agenda-sucursal" class="form-select form-select-sm"
-                        @bind:get="_sucursalAgenda" @bind:set="CambiarSucursalAsync" disabled="@(!_filtrosCargados)">
-                    @if (SucursalesDisponibles.Count == 0)
-                    {
-                        <option value="0">Sin sucursales disponibles</option>
-                    }
-                    else
-                    {
-                        @if (_especialidadAgenda <= 0)
-                        {
-                            <option value="0">Todas las sucursales</option>
-                        }
-                        else
-                        {
-                            <option value="0">Seleccionar sucursal</option>
-                        }
-                        @foreach (var sucursal in SucursalesDisponibles)
-                        {
-                            <option value="@sucursal.Id">@sucursal.Descripcion</option>
-                        }
-                    }
-                </select>
-            </div>
-            <div>
                 <label for="agenda-medico" class="form-label small mb-0">Médico</label>
                 <select @key="(_sucursalAgenda, _especialidadAgenda)" id="agenda-medico" class="form-select form-select-sm"
                         @bind:get="_medicoAgenda" @bind:set="CambiarMedicoAsync"
-                        disabled="@(!_filtrosCargados || !_puedeVerAgendaCompleta || _medicosAgenda.Count == 0 || (_especialidadAgenda > 0 && _sucursalAgenda == 0))">
+                        disabled="@(!_filtrosCargados || !_puedeVerAgendaCompleta || _medicosAgenda.Count == 0)">
                     @if (_medicosAgenda.Count == 0)
                     {
-                        <option value="0">Sin médicos disponibles</option>
+                        <option value="0">@(_especialidadAgenda <= 0 ? "Seleccionar médico" : "Sin médicos disponibles")</option>
                     }
                     else
                     {
@@ -128,11 +114,7 @@
 
     @if (_vistaAgenda == "agenda" && !_cargandoInicial)
     {
-        @if (_especialidadAgenda > 0 && SucursalesDisponibles.Count == 0)
-        {
-            <p class="alert alert-light border">No hay sucursales con médicos activos para la especialidad seleccionada.</p>
-        }
-        else if (_sucursales.Count == 0)
+        @if (_sucursales.Count == 0)
         {
             <p class="alert alert-light border">No tienes una sucursal activa asignada para consultar turnos.</p>
         }
@@ -148,7 +130,11 @@
                 </button>
             </div>
         }
-        else if (MedicosDisponibles.Count == 0)
+        else if (_especialidadAgenda <= 0)
+        {
+            <p class="alert alert-light border">Selecciona una especialidad para ver los médicos de la sucursal.</p>
+        }
+        else if (_medicosAgenda.Count == 0)
         {
             <p class="alert alert-light border">No hay médicos disponibles para esta especialidad en la sucursal seleccionada.</p>
         }
@@ -873,26 +859,6 @@
             .Any(s => int.TryParse(s, out var id) && id == idEspecialidad);
     }
 
-    private List<CatalogoItemGenericoDto> SucursalesDisponibles =>
-        _especialidadAgenda <= 0
-            ? _sucursales
-            : _sucursales.Where(s => _medicosPorSucursal.TryGetValue(s.Id, out var meds) && meds.Any(m => MedicoTieneEspecialidad(m, _especialidadAgenda))).ToList();
-
-    private List<CatalogoItemGenericoDto> MedicosDisponibles
-    {
-        get
-        {
-            List<CatalogoItemGenericoDto> lista = _sucursalAgenda <= 0
-                ? _medicos
-                : (_medicosPorSucursal.TryGetValue(_sucursalAgenda, out var meds) ? meds : []);
-
-            if (_especialidadAgenda > 0)
-                lista = lista.Where(m => MedicoTieneEspecialidad(m, _especialidadAgenda)).ToList();
-
-            return lista;
-        }
-    }
-
     private int _sucursalAgenda;
     private int _sucursalHistorial;
     private int _versionHistorial;
@@ -1341,7 +1307,8 @@
             _idMedicoFiltro = _reagendaMedico;
             _medicoAgenda = _reagendaMedico;
             _sucursalAgenda = localidad;
-            await ActualizarMedicosAgendaAsync();
+            _especialidadAgenda = ResolverEspecialidadCita(_citaReagendar);
+            ActualizarMedicosAgenda();
             _citaReagendar = null;
             _citaDetalle = null;
             await CargarAgendaAsync();
@@ -1436,10 +1403,9 @@
                 _especialidadAgenda = yo.IdPadre!.Value;
         }
 
-        var sucsValidas = SucursalesDisponibles;
-        _sucursalAgenda = sucsValidas.Any(sucursal => sucursal.Id == SessionState.Localidad)
+        _sucursalAgenda = _sucursales.Any(sucursal => sucursal.Id == SessionState.Localidad)
             ? SessionState.Localidad
-            : sucsValidas.FirstOrDefault()?.Id ?? 0;
+            : _sucursales.FirstOrDefault()?.Id ?? 0;
 
         ActualizarMedicosAgenda();
         _filtrosCargados = true;
@@ -1452,9 +1418,8 @@
         if (idEsp != _especialidadAgenda)
         {
             _especialidadAgenda = idEsp;
-            _sucursalAgenda = 0;
             _medicoAgenda = 0;
-            _medicosAgenda = MedicosDisponibles;
+            ActualizarMedicosAgenda();
             await CargarAgendaAsync();
         }
     }
@@ -1464,6 +1429,7 @@
         if (idSuc != _sucursalAgenda)
         {
             _sucursalAgenda = idSuc;
+            if (idSuc <= 0) _especialidadAgenda = 0;
             _medicoAgenda = 0;
             _cargandoInicial = true;
             _citas = [];
@@ -1475,7 +1441,9 @@
 
     private void ActualizarMedicosAgenda()
     {
-        _medicosAgenda = MedicosDisponibles;
+        _medicosAgenda = _especialidadAgenda > 0 && _medicosPorSucursal.TryGetValue(_sucursalAgenda, out var medicos)
+            ? medicos.Where(m => MedicoTieneEspecialidad(m, _especialidadAgenda)).ToList()
+            : [];
         if (!_medicosAgenda.Any(medico => medico.Id == _medicoAgenda))
         {
             if (!_puedeVerAgendaCompleta)
@@ -1497,12 +1465,6 @@
         return await AdmisionService.ObtenerMedicosAgendaAsync(sucursal);
     }
 
-    private Task ActualizarMedicosAgendaAsync()
-    {
-        ActualizarMedicosAgenda();
-        return Task.CompletedTask;
-    }
-
     private async Task CargarAgendaAsync()
     {
         var version = ++_versionAgenda;
@@ -1517,12 +1479,11 @@
 
         try
         {
-            if (_sucursales.Count == 0 || (_especialidadAgenda > 0 && localidad <= 0) ||
-                (localidad > 0 && medico <= 0))
+            if (_sucursales.Count == 0)
                 return;
 
             var citas = AdmisionService.ObtenerCitasPorFechaAsync(inicio, hasta, medico, localidad > 0 ? localidad : null);
-            if (localidad > 0)
+            if (localidad > 0 && medico > 0)
             {
                 var horarios = AdmisionService.ObtenerSlotsHorarioMedicoPorRangoAsync(medico, inicio, hasta, localidad);
                 await Task.WhenAll(citas, horarios);
