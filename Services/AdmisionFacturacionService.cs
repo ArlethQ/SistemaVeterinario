@@ -1360,7 +1360,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             BEGIN
                 IF NOT EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @MarcaRecepcion)
                     INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
-                    VALUES (@MarcaRecepcion, @UsuarioSesion, @Ahora, '127.0.0.1', 'BlazorClient');
+                    VALUES (@MarcaRecepcion, @UsuarioSesion, DATEADD(hour, -5, SYSUTCDATETIME()), '127.0.0.1', 'BlazorClient');
 
                 SELECT @Inicio = MIN(vit_idFechaMod) FROM vt_vitacora WITH (UPDLOCK, HOLDLOCK) WHERE vit_detalle = @Marca;
                 IF @Inicio IS NULL
