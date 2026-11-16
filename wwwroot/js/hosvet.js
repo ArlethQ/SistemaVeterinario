@@ -438,6 +438,25 @@ window.hosvetEditor = {
             window.hosvetEditor.selectImage(img);
         }, 80);
     },
+    insertToken: function(elementId, token) {
+        const editor = document.getElementById(elementId);
+        if (!editor || !token) return;
+        editor.focus();
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            const node = document.createTextNode(token);
+            range.insertNode(node);
+            const newRange = document.createRange();
+            newRange.setStartAfter(node);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+        } else {
+            editor.appendChild(document.createTextNode(token));
+        }
+    },
     initImageResizer: function(elementId) {
         const editor = document.getElementById(elementId);
         if (!editor) return;

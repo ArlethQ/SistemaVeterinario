@@ -1,9 +1,12 @@
 @page "/kardex/ordenes"
 @inject IHospitalizacionService HospService
 @inject IGestionMigradaService GestionService
+@inject IConsultaExternaService ConsultaService
+@inject IKardexService KardexService
 @inject SessionStateService Session
 @inject IWebHostEnvironment Env
 @inject SessionControlService SessionControl
+@inject IJSRuntime JS
 
 <PageTitle>e-ForVets - Bandeja de Órdenes de Hospitalización</PageTitle>
 
@@ -30,8 +33,8 @@
     <section class="card shadow-sm border-0 mb-3" aria-label="Cola de órdenes para hospitalización">
         <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center py-2">
             <div class="d-flex align-items-center gap-2">
-                <h2 class="h6 mb-0 fw-bold">Cola de hospitalización</h2>
-                <span class="badge text-bg-secondary">@_ordenes.Count</span>
+                <h2 class="h6 mb-0 fw-bold">Cola de hospitalización (Pendientes de ingreso)</h2>
+                <span class="badge text-bg-warning">@PendientesIngreso.Count()</span>
             </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
                 <div class="input-group input-group-sm" style="width: 280px;">
@@ -51,10 +54,10 @@
                     <span class="spinner-border spinner-border-sm"></span> Cargando órdenes derivadas a hospitalización...
                 </div>
             }
-            else if (_ordenes.Count == 0)
+            else if (!PendientesIngreso.Any())
             {
-                <div class="p-4 text-center text-muted small">
-                    No hay pacientes marcados para hospitalización desde SOAP en este momento.
+                <div class="p-3 text-center text-muted small">
+                    No hay pacientes pendientes de ingreso desde SOAP en este momento.
                 </div>
             }
             else
@@ -69,13 +72,12 @@
                                 <th scope="col">Especie</th>
                                 <th scope="col">Tutor</th>
                                 <th scope="col">Médico / Especialidad</th>
-                                <th scope="col">Ubicación / Jaula</th>
                                 <th scope="col">Estado</th>
                                 <th scope="col" class="text-end">Acción</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var item in _ordenes)
+                            @foreach (var item in PendientesIngreso)
                             {
                                 var seleccionado = _ordenSeleccionada?.OrdenAtencionId == item.OrdenAtencionId;
                                 <tr class="@(seleccionado ? "table-primary" : null)">
@@ -108,43 +110,13 @@
                                         <div>@item.Medico</div>
                                         <span class="text-muted">@item.Especialidad</span>
                                     </td>
-                                    <td class="small">
-                                        @if (!string.IsNullOrWhiteSpace(item.JaulaCodigo))
-                                        {
-                                            <span class="badge text-bg-info">@item.JaulaCodigo</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted">Sin asignar</span>
-                                        }
-                                    </td>
                                     <td>
-                                        @if (item.YaIngresado)
-                                        {
-                                            <span class="badge text-bg-success">Hospitalizado</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge text-bg-warning">Pendiente de ingreso</span>
-                                        }
+                                        <span class="badge text-bg-warning">Pendiente de ingreso</span>
                                     </td>
                                     <td class="text-end text-nowrap">
-                                        <button type="button"
-                                                class="btn btn-sm @(item.YaIngresado ? "btn-outline-primary" : "btn-primary")"
-                                                @onclick="() => SeleccionarParaIngresoAsync(item)">
-                                            @(item.YaIngresado ? "Editar ingreso" : "Iniciar hospitalización")
+                                        <button type="button" class="btn btn-sm btn-primary" @onclick="() => SeleccionarParaIngresoAsync(item)">
+                                            Iniciar hospitalización
                                         </button>
-                                        @if (item.YaIngresado)
-                                        {
-                                            @if (Permisos.Permite("/hospitalizacion/ficha"))
-                                            {
-                                                <a class="btn btn-sm btn-outline-secondary ms-1" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl">Ficha 24h</a>
-                                            }
-                                            @if (Permisos.Permite("/kardex/enfermeria"))
-                                            {
-                                                <a class="btn btn-sm btn-outline-secondary ms-1" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl">Kardex</a>
-                                            }
-                                        }
                                     </td>
                                 </tr>
                             }
@@ -202,7 +174,7 @@
             <form class="card-body" @onsubmit="GuardarIngresoAsync" @onsubmit:preventDefault>
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="form-label small fw-semibold" for="selJaula">Ubicación / Jaula</label>
+                        <label class="form-label small fw-semibold" for="selJaula">Ubicación / Jaula <span class="text-danger">*</span></label>
                         <select id="selJaula" class="form-select form-select-sm" @bind="_ingreso.IdJaula">
                             <option value="">-- Seleccionar jaula --</option>
                             @foreach (var jaula in JaulasParaSeleccion)
@@ -247,12 +219,52 @@
 
                     <div class="col-12">
                         <div class="border rounded p-3 bg-light">
-                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
                                 <div>
-                                    <h4 class="h6 mb-1 fw-bold text-dark"><i class="bi bi-file-earmark-check me-1"></i>Consentimiento de hospitalización</h4>
-                                    <p class="small text-muted mb-0">Espacio reservado para vincular el consentimiento de hospitalización en el siguiente paso.</p>
+                                    <h4 class="h6 mb-1 fw-bold text-dark">
+                                        <i class="bi bi-file-earmark-check me-1 text-primary"></i>Consentimiento Informado de Hospitalización <span class="text-danger">*</span>
+                                        <span class="badge text-bg-dark ms-1">Default</span>
+                                    </h4>
+                                    <p class="small text-muted mb-0">
+                                        Documento oficial predeterminado del sistema (protegido contra eliminación). Puedes descargarlo/imprimirlo, editarlo o subir el escaneo firmado.
+                                    </p>
                                 </div>
-                                <span class="badge text-bg-secondary">Pendiente de vincular</span>
+                                <div>
+                                    @if (!string.IsNullOrWhiteSpace(_consentimiento?.ArchivoUrl))
+                                    {
+                                        <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Firmado / Escaneado adjunto</span>
+                                    }
+                                    else if (_consentimiento?.AutorizacionId > 0)
+                                    {
+                                        <span class="badge text-bg-info"><i class="bi bi-file-earmark-text me-1"></i>Emitido (pendiente de firma)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-secondary">Listo para descargar / firmar</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                                <button type="button" class="btn btn-sm btn-outline-dark" @onclick="ImprimirConsentimientoAsync" disabled="@_procesandoConsentimiento">
+                                    <i class="bi bi-printer-fill me-1"></i>Descargar / Imprimir PDF
+                                </button>
+
+                                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AbrirModalEditorConsentimientoAsync" disabled="@_procesandoConsentimiento">
+                                    <i class="bi bi-pencil-square me-1"></i>Editar documento
+                                </button>
+
+                                <label class="btn btn-sm btn-outline-success mb-0" style="cursor: pointer;">
+                                    <i class="bi bi-cloud-arrow-up-fill me-1"></i>@(string.IsNullOrWhiteSpace(_consentimiento?.ArchivoUrl) ? "Subir firmado (PDF / Foto)" : "Reemplazar firmado")
+                                    <InputFile OnChange="SubirConsentimientoFirmadoAsync" accept="image/*,application/pdf,.doc,.docx" style="display: none;" />
+                                </label>
+
+                                @if (!string.IsNullOrWhiteSpace(_consentimiento?.ArchivoUrl))
+                                {
+                                    <a class="btn btn-sm btn-link text-decoration-none fw-semibold" href="@_consentimiento.ArchivoUrl" target="_blank" rel="noopener">
+                                        <i class="bi bi-paperclip me-1"></i>Ver escaneo (@_consentimiento.ArchivoNombre)
+                                    </a>
+                                }
                             </div>
                         </div>
                     </div>
@@ -292,7 +304,206 @@
             </form>
         </section>
     }
+
+    <section class="card shadow-sm border-0 mt-3" aria-label="Pacientes hospitalizados">
+        <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center py-2">
+            <div class="d-flex align-items-center gap-2">
+                <h2 class="h6 mb-0 fw-bold text-success"><i class="bi bi-hospital-fill me-1"></i>Pacientes Hospitalizados</h2>
+                <span class="badge text-bg-success">@Hospitalizados.Count()</span>
+            </div>
+            <small class="text-muted">Accesos rápidos a Kardex, Signos, Ficha 24h y acciones clínicas</small>
+        </div>
+
+        <div class="card-body p-0">
+            @if (!Hospitalizados.Any())
+            {
+                <div class="p-4 text-center text-muted small">
+                    Aún no hay pacientes ingresados en hospitalización.
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive hosp-list-wrapper">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">N° Orden</th>
+                                <th scope="col">NHCL</th>
+                                <th scope="col">Paciente</th>
+                                <th scope="col">Propietario</th>
+                                <th scope="col">Médico / Especialidad</th>
+                                <th scope="col">Jaula</th>
+                                <th scope="col">Fecha</th>
+                                <th scope="col" class="text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Hospitalizados)
+                            {
+                                <tr>
+                                    <td><span class="fw-bold text-primary">#@item.OrdenAtencionId</span></td>
+                                    <td class="small">@item.Nhcl</td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="hosp-avatar">
+                                                @if (!string.IsNullOrEmpty(ObtenerFotoPaciente(item.Nhcl)))
+                                                {
+                                                    <img src="@ObtenerFotoPaciente(item.Nhcl)" alt="Foto de @item.Paciente" />
+                                                }
+                                                else
+                                                {
+                                                    <b>@InicialPaciente(item.Paciente)</b>
+                                                }
+                                            </span>
+                                            <div>
+                                                <div class="fw-semibold">@item.Paciente</div>
+                                                <small class="text-muted">@item.Especie · @item.Sexo</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="small">@item.Cliente</td>
+                                    <td class="small">
+                                        <div>@item.Medico</div>
+                                        <span class="text-muted">@item.Especialidad</span>
+                                    </td>
+                                    <td class="small">
+                                        @if (!string.IsNullOrWhiteSpace(item.JaulaCodigo))
+                                        {
+                                            <span class="badge text-bg-info">@item.JaulaCodigo</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                    <td class="small text-nowrap">
+                                        @item.FechaOrden.ToString("yyyy-MM-dd")<br />
+                                        <span class="text-muted">@item.FechaOrden.ToString("HH:mm")</span>
+                                    </td>
+                                    <td class="text-center orders-actions-cell">
+                                        <div class="d-inline-flex flex-wrap align-items-center gap-1 justify-content-center">
+                                            @if (Permisos.Permite("/kardex/enfermeria"))
+                                            {
+                                                <a class="btn btn-sm btn-primary" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl"><i class="bi bi-folder-fill me-1"></i>Kardex</a>
+                                            }
+                                            @if (Permisos.Permite("/kardex/signos"))
+                                            {
+                                                <a class="btn btn-sm btn-success" href="/kardex/signos/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-activity me-1"></i>Signos</a>
+                                            }
+                                            @if (Permisos.Permite("/hospitalizacion/ficha"))
+                                            {
+                                                <a class="btn btn-sm btn-purple" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-file-earmark-text-fill me-1"></i>Ficha 24h</a>
+                                            }
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => SeleccionarParaIngresoAsync(item)" title="Editar ingreso / jaula / consentimiento">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </button>
+                                            @if (AccionesClinicas.Any(accion => Permisos.Permite(accion.Ruta)))
+                                            {
+                                                <details class="actions-more">
+                                                    <summary class="btn btn-sm btn-outline-secondary action-more-button" title="Más acciones"><i class="bi bi-three-dots-vertical"></i></summary>
+                                                    <div class="actions-menu">
+                                                        <div class="actions-menu-title">Más acciones clínicas</div>
+                                                        @foreach (var accion in AccionesClinicas.Where(accion => Permisos.Permite(accion.Ruta)))
+                                                        {
+                                                            <a class="actions-menu-item" href="@($"{accion.Ruta}/{item.OrdenAtencionId}/{item.Nhcl}")">@accion.Texto</a>
+                                                        }
+                                                    </div>
+                                                </details>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </section>
 </div>
+
+@if (_mostrarModalConsentimiento && _ordenSeleccionada is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.55);" role="dialog" aria-modal="true" aria-labelledby="modalConsentimientoTitulo">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fw-bold" id="modalConsentimientoTitulo">
+                        <i class="bi bi-file-earmark-richtext me-1 text-primary"></i>Editar Consentimiento de Hospitalización — @_ordenSeleccionada.Paciente
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CerrarModalEditorConsentimiento" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold" for="txtTituloConsentimiento">Título del documento</label>
+                        <input id="txtTituloConsentimiento" class="form-control form-control-sm" @bind="_tituloConsentimiento" maxlength="150" />
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-1 p-1 bg-light border border-bottom-0 rounded-top align-items-center">
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('bold')" title="Negrita"><i class="bi bi-type-bold fw-bold"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('italic')" title="Cursiva"><i class="bi bi-type-italic"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('underline')" title="Subrayado"><i class="bi bi-type-underline"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('strikeThrough')" title="Tachado"><i class="bi bi-type-strikethrough"></i></button>
+                        <span class="vr mx-1 my-1"></span>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('formatBlock', '<h2>')" title="Título H2"><span class="fw-bold small">H2</span></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('formatBlock', '<h3>')" title="Subtítulo H3"><span class="fw-bold small">H3</span></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('formatBlock', '<p>')" title="Párrafo"><span class="small">P</span></button>
+                        <span class="vr mx-1 my-1"></span>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyLeft')" title="Alinear a la izquierda"><i class="bi bi-text-left"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyCenter')" title="Centrar"><i class="bi bi-text-center"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyRight')" title="Alinear a la derecha"><i class="bi bi-text-right"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyFull')" title="Justificar"><i class="bi bi-justify"></i></button>
+                        <span class="vr mx-1 my-1"></span>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('insertUnorderedList')" title="Lista con viñetas"><i class="bi bi-list-ul"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('insertOrderedList')" title="Lista numerada"><i class="bi bi-list-ol"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('insertHorizontalRule')" title="Separador"><i class="bi bi-hr"></i></button>
+                        <span class="vr mx-1 my-1"></span>
+                        <label class="btn btn-sm btn-white border py-0 px-2 shadow-none mb-0 text-primary fw-semibold" style="cursor: pointer;" title="Insertar imagen">
+                            <i class="bi bi-image-fill me-1"></i>Insertar Imagen
+                            <InputFile OnChange="SubirImagenEditorModalAsync" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
+                        </label>
+                        <span class="vr mx-1 my-1"></span>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('undo')" title="Deshacer"><i class="bi bi-arrow-counterclockwise"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('redo')" title="Rehacer"><i class="bi bi-arrow-clockwise"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('removeFormat')" title="Limpiar formato"><i class="bi bi-eraser"></i></button>
+                        <span class="vr mx-1 my-1"></span>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none text-dark fw-semibold" onmousedown="event.preventDefault()"
+                                onclick="window.hosvetEditor.printDocument(document.getElementById('txtTituloConsentimiento')?.value, window.hosvetEditor.getContent('editorConsentimientoHosp'))" title="Imprimir o guardar PDF">
+                            <i class="bi bi-printer-fill me-1"></i>Imprimir / PDF
+                        </button>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center gap-1 px-2 py-1 bg-primary bg-opacity-10 border border-top-0 border-bottom-0 small">
+                        <span class="fw-semibold text-primary me-1"><i class="bi bi-magic me-1"></i>Campos automáticos:</span>
+                        @foreach (var campo in CamposAutomaticosPlantilla)
+                        {
+                            <button type="button"
+                                    class="btn btn-xs btn-outline-primary bg-white py-0 px-2"
+                                    style="font-size: 0.75rem;"
+                                    onmousedown="event.preventDefault()"
+                                    onclick="@($"window.hosvetEditor.insertToken('editorConsentimientoHosp', '{campo.Token}')")"
+                                    title="@($"Inserta {campo.Token} — se rellena automáticamente al procesar la plantilla")">
+                                + @campo.Etiqueta
+                            </button>
+                        }
+                    </div>
+
+                    <div id="editorConsentimientoHosp"
+                         contenteditable="true"
+                         class="border rounded-bottom p-3 bg-white shadow-sm"
+                         style="min-height: 360px; max-height: 55vh; overflow-y: auto; outline: none; line-height: 1.5; font-size: 0.92rem;">
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CerrarModalEditorConsentimiento">Cancelar</button>
+                    <button type="button" class="btn btn-sm btn-primary" @onclick="GuardarConsentimientoDesdeModalAsync" disabled="@_procesandoConsentimiento">
+                        <i class="bi bi-floppy-fill me-1"></i>Guardar documento
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 <style>
     .hosp-avatar {
@@ -314,23 +525,134 @@
         height: 100%;
         object-fit: cover;
     }
+
+    .btn-purple {
+        background: #6d28d9;
+        border-color: #6d28d9;
+        color: #fff;
+    }
+
+    .btn-purple:hover {
+        background: #5b21b6;
+        border-color: #5b21b6;
+        color: #fff;
+    }
+
+    .hosp-list-wrapper {
+        overflow: visible !important;
+    }
+
+    .orders-actions-cell {
+        overflow: visible !important;
+    }
+
+    .actions-more {
+        position: relative;
+        display: inline-block;
+    }
+
+    .actions-more summary {
+        list-style: none;
+    }
+
+    .actions-more summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .actions-menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 4px);
+        min-width: 220px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+        padding: 6px;
+        z-index: 1050;
+        text-align: left;
+    }
+
+    .actions-menu-title {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: #64748b;
+        padding: 4px 8px 6px;
+    }
+
+    .actions-menu-item {
+        display: block;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        color: #1e293b;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .actions-menu-item:hover {
+        background: #f1f5f9;
+        color: #0f172a;
+    }
 </style>
 
 @code {
+    private static readonly (string Etiqueta, string Token)[] CamposAutomaticosPlantilla =
+    [
+        ("Dueño", "[NOMBRECLIENTE]"),
+        ("Cédula", "[CEDULA]"),
+        ("Teléfono", "[TELEFONOPIE]"),
+        ("Dirección", "[DIRECCION]"),
+        ("Mascota", "[MASCOTA]"),
+        ("NHCL", "[NHCL]"),
+        ("Especie", "[ESPECIE]"),
+        ("Raza", "[RAZA]"),
+        ("Sexo", "[SEXO]"),
+        ("Edad", "[EDAD]"),
+        ("Médico", "[MEDICO]"),
+        ("Fecha", "[FECHAPIE]")
+    ];
+
+    private static readonly (string Ruta, string Texto)[] AccionesClinicas =
+    [
+        ("/hospitalizacion/monitoreo", "🩺 Monitoreo"),
+        ("/quirofano/preanestesia", "🧪 Pre-Anestesia"),
+        ("/quirofano/anestesia", "🫁 Anestesia"),
+        ("/quirofano/protocolo", "🔪 Protocolo Quirúrgico"),
+        ("/quirofano/recuperacion", "🛏️ Recuperación"),
+        ("/consulta/fichamedica", "📋 Historia Clínica SOAP"),
+        ("/consulta/evoluciones", "📝 Evolución Médica"),
+        ("/consulta/recetario", "💊 Recetario"),
+        ("/consulta/autorizaciones", "📄 Consentimientos y Alta"),
+        ("/diagnostico/laboratorio", "🔬 Laboratorio"),
+        ("/diagnostico/imagenologia", "☢️ RX / Ecografía"),
+        ("/diagnostico/bandeja", "📥 Informes")
+    ];
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
 
     private List<OrdenHospitalizacionColaDto> _ordenes = [];
     private List<JaulaClinicaDto> _jaulas = [];
     private OrdenHospitalizacionColaDto? _ordenSeleccionada;
     private IngresoHospitalizacionDto _ingreso = new();
+    private AutorizacionClinicaDto? _consentimiento;
 
     private string _filtro = string.Empty;
+    private string _tituloConsentimiento = "Consentimiento Informado de Hospitalización";
+    private string _htmlConsentimiento = string.Empty;
     private bool _cargando;
     private bool _cargandoIngreso;
     private bool _guardando;
+    private bool _procesandoConsentimiento;
+    private bool _mostrarModalConsentimiento;
+    private bool _inicializarEditorModal;
     private string? _mensajeAlerta;
     private bool _esError;
     private int _versionBusqueda;
+
+    private IEnumerable<OrdenHospitalizacionColaDto> PendientesIngreso => _ordenes.Where(x => !x.YaIngresado);
+    private IEnumerable<OrdenHospitalizacionColaDto> Hospitalizados => _ordenes.Where(x => x.YaIngresado);
 
     private IEnumerable<JaulaClinicaDto> JaulasParaSeleccion => _jaulas
         .Where(j => !j.Ocupada || j.OrdenActual == _ordenSeleccionada?.OrdenAtencionId || j.Id == _ingreso.IdJaula);
@@ -383,6 +705,7 @@
         {
             await CargarJaulasAsync();
             _ingreso = await HospService.ObtenerIngresoHospitalizacionAsync(item.OrdenAtencionId, item.Nhcl);
+            await CargarConsentimientoOrdenAsync(item.OrdenAtencionId, item.Nhcl);
         }
         catch (Exception ex)
         {
@@ -399,6 +722,227 @@
     {
         _ordenSeleccionada = null;
         _ingreso = new();
+        _consentimiento = null;
+        _htmlConsentimiento = string.Empty;
+        _mostrarModalConsentimiento = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_inicializarEditorModal && _mostrarModalConsentimiento)
+        {
+            _inicializarEditorModal = false;
+            await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorConsentimientoHosp", _htmlConsentimiento);
+        }
+    }
+
+    private async Task CargarConsentimientoOrdenAsync(int idOrden, int nhcl)
+    {
+        var autorizaciones = await ConsultaService.ObtenerAutorizacionesPacienteAsync(nhcl);
+        var existente = autorizaciones.FirstOrDefault(a =>
+            a.Orden == idOrden &&
+            (a.Tipo.Equals("HOSPITALIZACION", StringComparison.OrdinalIgnoreCase)
+             || a.Documento.Contains("Hospitaliz", StringComparison.OrdinalIgnoreCase)));
+
+        if (existente != null)
+        {
+            _consentimiento = existente;
+            _tituloConsentimiento = existente.Documento;
+            _htmlConsentimiento = existente.DetalleHtml;
+            return;
+        }
+
+        _consentimiento = null;
+        var plantilla = await ConsultaService.ObtenerPlantillaHospitalizacionDefaultAsync();
+        _tituloConsentimiento = plantilla?.FormNombre ?? "Consentimiento Informado de Hospitalización";
+        _htmlConsentimiento = plantilla != null
+            ? await ConsultaService.ProcesarPlantillaConDatosPacienteAsync(plantilla.FormId, nhcl)
+            : string.Empty;
+    }
+
+    private async Task<AutorizacionClinicaDto?> AsegurarAutorizacionGuardadaAsync()
+    {
+        if (_ordenSeleccionada is null) return null;
+        if (_consentimiento?.AutorizacionId > 0) return _consentimiento;
+
+        var cab = await KardexService.ObtenerCabeceraPacienteAsync(_ordenSeleccionada.OrdenAtencionId, _ordenSeleccionada.Nhcl);
+        var nueva = new AutorizacionClinicaDto
+        {
+            Nhcl = _ordenSeleccionada.Nhcl,
+            Orden = _ordenSeleccionada.OrdenAtencionId,
+            Cliente = cab?.ClienteCodigo ?? 0,
+            IdUser = Session.CurrentUser?.UserNumero ?? Session.IdUser,
+            Documento = _tituloConsentimiento,
+            Tipo = "HOSPITALIZACION",
+            DetalleHtml = _htmlConsentimiento
+        };
+
+        await ConsultaService.GuardarAutorizacionAsync(nueva);
+        await CargarConsentimientoOrdenAsync(_ordenSeleccionada.OrdenAtencionId, _ordenSeleccionada.Nhcl);
+        return _consentimiento;
+    }
+
+    private async Task ImprimirConsentimientoAsync()
+    {
+        if (_ordenSeleccionada is null) return;
+        _procesandoConsentimiento = true;
+        try
+        {
+            await AsegurarAutorizacionGuardadaAsync();
+            await JS.InvokeVoidAsync("hosvetEditor.printDocument", _tituloConsentimiento, _htmlConsentimiento);
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al imprimir consentimiento: {ex.Message}";
+        }
+        finally
+        {
+            _procesandoConsentimiento = false;
+        }
+    }
+
+    private void AbrirModalEditorConsentimientoAsync()
+    {
+        _mostrarModalConsentimiento = true;
+        _inicializarEditorModal = true;
+    }
+
+    private void CerrarModalEditorConsentimiento()
+    {
+        _mostrarModalConsentimiento = false;
+        _inicializarEditorModal = false;
+    }
+
+    private async Task GuardarConsentimientoDesdeModalAsync()
+    {
+        if (_ordenSeleccionada is null) return;
+        _procesandoConsentimiento = true;
+        _mensajeAlerta = null;
+        _esError = false;
+        try
+        {
+            var html = await JS.InvokeAsync<string>("hosvetEditor.getContent", "editorConsentimientoHosp");
+            if (!string.IsNullOrWhiteSpace(html))
+            {
+                _htmlConsentimiento = html;
+            }
+
+            if (_consentimiento?.AutorizacionId > 0)
+            {
+                await ConsultaService.ActualizarDetalleAutorizacionAsync(_consentimiento.AutorizacionId, _tituloConsentimiento, _htmlConsentimiento);
+                await CargarConsentimientoOrdenAsync(_ordenSeleccionada.OrdenAtencionId, _ordenSeleccionada.Nhcl);
+            }
+            else
+            {
+                await AsegurarAutorizacionGuardadaAsync();
+            }
+
+            _mostrarModalConsentimiento = false;
+            _mensajeAlerta = "Consentimiento de hospitalización guardado correctamente.";
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al guardar consentimiento: {ex.Message}";
+        }
+        finally
+        {
+            _procesandoConsentimiento = false;
+        }
+    }
+
+    private async Task SubirImagenEditorModalAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file is null || file.Size > 5 * 1024 * 1024) return;
+
+            var uploadsFolder = Path.Combine(Env.WebRootPath, "imagenes", "documentos");
+            if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+
+            var ext = Path.GetExtension(file.Name);
+            if (string.IsNullOrWhiteSpace(ext)) ext = ".png";
+            var fileName = $"doc_img_{Guid.NewGuid():N}{ext}";
+            var filePath = Path.Combine(uploadsFolder, fileName);
+
+            await using (var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024))
+            await using (var fs = new FileStream(filePath, FileMode.Create))
+            {
+                await stream.CopyToAsync(fs);
+            }
+
+            await JS.InvokeVoidAsync("hosvetEditor.insertImage", "editorConsentimientoHosp", $"/imagenes/documentos/{fileName}");
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"No se pudo insertar la imagen: {ex.Message}";
+        }
+    }
+
+    private async Task SubirConsentimientoFirmadoAsync(InputFileChangeEventArgs e)
+    {
+        if (_ordenSeleccionada is null) return;
+        _procesandoConsentimiento = true;
+        _mensajeAlerta = null;
+        _esError = false;
+        try
+        {
+            var file = e.File;
+            if (file is null) return;
+            if (file.Size > 25 * 1024 * 1024)
+            {
+                _esError = true;
+                _mensajeAlerta = "El archivo firmado no puede superar los 25MB.";
+                return;
+            }
+
+            var auth = await AsegurarAutorizacionGuardadaAsync();
+            if (auth is null || auth.AutorizacionId <= 0)
+            {
+                _esError = true;
+                _mensajeAlerta = "No se pudo registrar el documento de consentimiento para adjuntar el escaneo.";
+                return;
+            }
+
+            var uploadsFolder = Path.Combine(Env.WebRootPath, "archivosPacientes", _ordenSeleccionada.Nhcl.ToString(), "autorizaciones");
+            if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+
+            var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(ext)) ext = ".pdf";
+            var fileName = $"Firmado_{auth.AutorizacionId}_Hosp_{DateTime.Now:yyyyMMddHHmmss}{ext}";
+            var filePath = Path.Combine(uploadsFolder, fileName);
+
+            await using (var stream = file.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024))
+            await using (var fs = new FileStream(filePath, FileMode.Create))
+            {
+                await stream.CopyToAsync(fs);
+            }
+
+            var fileUrl = $"/archivosPacientes/{_ordenSeleccionada.Nhcl}/autorizaciones/{fileName}";
+            var ok = await ConsultaService.ActualizarArchivoAutorizacionAsync(auth.AutorizacionId, fileUrl, file.Name);
+            if (ok)
+            {
+                await CargarConsentimientoOrdenAsync(_ordenSeleccionada.OrdenAtencionId, _ordenSeleccionada.Nhcl);
+                _mensajeAlerta = $"Consentimiento firmado '{file.Name}' subido y vinculado correctamente.";
+            }
+            else
+            {
+                _esError = true;
+                _mensajeAlerta = "No se pudo vincular el archivo firmado en la base de datos.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al subir documento firmado: {ex.Message}";
+        }
+        finally
+        {
+            _procesandoConsentimiento = false;
+        }
     }
 
     private async Task GuardarIngresoAsync()
@@ -407,6 +951,23 @@
 
         _mensajeAlerta = null;
         _esError = false;
+
+        var tieneJaula = _ingreso.IdJaula is > 0 || !string.IsNullOrWhiteSpace(_ingreso.UbicacionJaula);
+        if (!tieneJaula)
+        {
+            _esError = true;
+            _mensajeAlerta = "Debes seleccionar una jaula o especificar la ubicación del paciente antes de guardar.";
+            return;
+        }
+
+        var tieneDocumentoFirmado = _consentimiento != null && !string.IsNullOrWhiteSpace(_consentimiento.ArchivoUrl);
+        if (!tieneDocumentoFirmado)
+        {
+            _esError = true;
+            _mensajeAlerta = "Debes subir el documento firmado (PDF o imagen) del consentimiento de hospitalización antes de guardar.";
+            return;
+        }
+
         _guardando = true;
         try
         {
@@ -419,20 +980,14 @@
                 }
             }
 
+            var pacienteNombre = _ordenSeleccionada.Paciente;
+            var ordenId = _ordenSeleccionada.OrdenAtencionId;
+
             await HospService.GuardarIngresoHospitalizacionAsync(_ingreso, Session.IdUser);
             await Task.WhenAll(CargarColaAsync(), CargarJaulasAsync());
 
-            var actualizada = _ordenes.FirstOrDefault(o => o.OrdenAtencionId == _ordenSeleccionada.OrdenAtencionId);
-            if (actualizada != null)
-            {
-                _ordenSeleccionada = actualizada;
-            }
-            else
-            {
-                _ordenSeleccionada.YaIngresado = true;
-            }
-
-            _mensajeAlerta = $"Hospitalización iniciada/actualizada para {_ordenSeleccionada.Paciente} (Orden #{_ordenSeleccionada.OrdenAtencionId}).";
+            CerrarPanelIngreso();
+            _mensajeAlerta = $"Hospitalización iniciada/actualizada para {pacienteNombre} (Orden #{ordenId}).";
         }
         catch (Exception ex)
         {

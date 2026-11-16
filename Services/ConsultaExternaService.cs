@@ -54,11 +54,13 @@ public interface IConsultaExternaService
 
     // 6. Autorizaciones / Consentimientos y Alta Médica (vt_autorizaciones + vt_formatos + qvt_formulario_alta)
     Task<List<FormatoPlantillaDto>> ObtenerPlantillasFormatosAsync(string? tipo = null);
+    Task<FormatoPlantillaDto?> ObtenerPlantillaHospitalizacionDefaultAsync();
     Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl);
     Task<bool> GuardarPlantillaFormatoAsync(int formId, string nombre, string html);
     Task<(bool Ok, string? Mensaje)> EliminarPlantillaFormatoAsync(int formId);
     Task<List<AutorizacionClinicaDto>> ObtenerAutorizacionesPacienteAsync(int nhcl);
     Task<bool> GuardarAutorizacionAsync(AutorizacionClinicaDto dto);
+    Task<bool> ActualizarDetalleAutorizacionAsync(int autorizacionId, string documento, string detalleHtml);
     Task<bool> ActualizarArchivoAutorizacionAsync(int autorizacionId, string? archivoUrl, string? archivoNombre);
     Task<FormularioAltaMedicaDto> ObtenerFormularioAltaAsync(int idOrden, int nhcl);
     Task<bool> GuardarFormularioAltaAsync(FormularioAltaMedicaDto dto, int idUsuario);
@@ -1513,8 +1515,42 @@ public class ConsultaExternaService : IConsultaExternaService
     // ========================================================================
     // 6. AUTORIZACIONES / CONSENTIMIENTOS Y ALTA MÉDICA (vt_autorizaciones + qvt_formulario_alta)
     // ========================================================================
+    private static bool _plantillaHospVerificada;
+
+    private async Task AsegurarPlantillaHospitalizacionDefaultAsync()
+    {
+        if (_plantillaHospVerificada) return;
+
+        const string htmlDefault = @"<h2 style=""text-align:center;"">CONSENTIMIENTO INFORMADO DE HOSPITALIZACIÓN VETERINARIA</h2>
+<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cédula de identidad N° <strong>[CEDULA]</strong>, en mi calidad de propietario/a o responsable legal del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL], Especie: <strong>[ESPECIE]</strong>, Raza: <strong>[RAZA]</strong>, Sexo: <strong>[SEXO]</strong>, Edad: <strong>[EDAD]</strong>), autorizo expresamente su ingreso y permanencia en el área de <strong>Hospitalización 24 Horas</strong> bajo la supervisión del médico veterinario responsable (<strong>[MEDICO]</strong>) y el equipo clínico de turno.</p>
+<h3>1. Alcance de la atención hospitalaria</h3>
+<p>Comprendo y autorizo la realización de procedimientos de monitoreo de signos vitales, canalización venosa, fluidoterapia, administración de medicación prescrita, toma de muestras de laboratorio, estudios de imagen y cuidados de enfermería necesarios para la estabilización y tratamiento del paciente.</p>
+<h3>2. Riesgos y evolución clínica</h3>
+<p>Se me ha informado de manera clara sobre el estado clínico actual del paciente, los posibles riesgos asociados a su patología o a los procedimientos terapéuticos y que la evolución clínica puede variar según la respuesta individual del animal. En caso de emergencia vital, autorizo las maniobras de estabilización inmediata mientras se me contacta al teléfono <strong>[TELEFONOPIE]</strong>.</p>
+<h3>3. Compromiso administrativo</h3>
+<p>Acepto los costos diarios de estancia hospitalaria, insumos, fármacos y exámenes complementarios generados durante la internación.</p>
+<p>Fecha de emisión: <strong>[FECHAPIE]</strong></p>
+<br/>
+<table style=""width:100%; border-collapse:collapse; margin-top:24px;"">
+<tr>
+<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Firma del Propietario / Responsable</strong><br/>C.I.: [CEDULA]</td>
+<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Médico Veterinario / Responsable de Ingreso</strong><br/>[MEDICO]</td>
+</tr>
+</table>";
+
+        await _db.ExecuteAsync(@"
+            IF NOT EXISTS (SELECT 1 FROM vt_formatos WHERE form_tipo = 'HOSPITALIZACION')
+            BEGIN
+                INSERT INTO vt_formatos (form_nombre, form_tipo, form_archivoHtml, form_es_sistema)
+                VALUES (N'Consentimiento Informado de Hospitalización', 'HOSPITALIZACION', @Html, 1);
+            END", new { Html = htmlDefault });
+
+        _plantillaHospVerificada = true;
+    }
+
     public async Task<List<FormatoPlantillaDto>> ObtenerPlantillasFormatosAsync(string? tipo = null)
     {
+        await AsegurarPlantillaHospitalizacionDefaultAsync();
         const string sql = @"
             SELECT
                 CAST(form_id AS INT) AS FormId,
@@ -1539,6 +1575,22 @@ public class ConsultaExternaService : IConsultaExternaService
             }
         }
         return res;
+    }
+
+    public async Task<FormatoPlantillaDto?> ObtenerPlantillaHospitalizacionDefaultAsync()
+    {
+        await AsegurarPlantillaHospitalizacionDefaultAsync();
+        const string sql = @"
+            SELECT TOP 1
+                CAST(form_id AS INT) AS FormId,
+                RTRIM(ISNULL(form_nombre, '')) AS FormNombre,
+                RTRIM(ISNULL(form_tipo, '')) AS FormTipo,
+                ISNULL(CAST(form_archivoHtml AS VARCHAR(MAX)), '') AS FormArchivoHtml,
+                CAST(ISNULL(form_es_sistema, 1) AS BIT) AS EsSistema
+            FROM vt_formatos
+            WHERE form_tipo = 'HOSPITALIZACION'
+            ORDER BY form_id ASC";
+        return await _db.QueryFirstOrDefaultAsync<FormatoPlantillaDto>(sql);
     }
 
     public async Task<bool> GuardarPlantillaFormatoAsync(int formId, string nombre, string html)
@@ -1751,6 +1803,23 @@ public class ConsultaExternaService : IConsultaExternaService
             Documento = doc
         });
         return true;
+    }
+
+    public async Task<bool> ActualizarDetalleAutorizacionAsync(int autorizacionId, string documento, string detalleHtml)
+    {
+        if (autorizacionId <= 0 || string.IsNullOrWhiteSpace(detalleHtml)) return false;
+
+        var doc = string.IsNullOrWhiteSpace(documento) ? "Consentimiento Informado de Hospitalización" : documento.Trim();
+        if (doc.Length > 150) doc = doc.Substring(0, 150);
+
+        var filas = await _db.ExecuteAsync(@"
+            UPDATE vt_autorizaciones
+            SET autorizacion_documento = @Documento,
+                autorizacion_detalle = @DetalleHtml
+            WHERE autorizacion_id = @AutorizacionId",
+            new { AutorizacionId = autorizacionId, Documento = doc, DetalleHtml = detalleHtml });
+
+        return filas > 0;
     }
 
     public async Task<FormularioAltaMedicaDto> ObtenerFormularioAltaAsync(int idOrden, int nhcl)
