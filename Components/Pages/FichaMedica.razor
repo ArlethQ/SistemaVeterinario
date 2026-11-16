@@ -1129,13 +1129,12 @@
     private bool FichaCargada => Paciente != null && IdOrden > 0 && !CargandoInicial;
     private bool FichaEditable => !SoloVer && FichaCargada &&
         (Session.TipoUser == 1
-            ? ((_estadoOrden is ("A" or "E") && (_inicioConsultaUtc.HasValue || _triajeMedicoPendiente)) || _estadoOrden == "T")
+            ? ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || _estadoOrden == "T")
             : (OrdenActualResumen is { } ord
                 && ord.IdMedico == Session.IdUser
                 && ord.EnVentanaEdicion24h
-                && ((_estadoOrden is ("A" or "E") && (_inicioConsultaUtc.HasValue || _triajeMedicoPendiente)) || _estadoOrden == "T")));
+                && ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || _estadoOrden == "T")));
     private DateTime? _inicioConsultaUtc;
-    private bool _triajeMedicoPendiente;
     private DateTime? _finConsultaUtc;
     private string? _estadoOrden;
     private bool _verHistorial;
@@ -1328,7 +1327,6 @@
 
     private async Task CargarDatosCompletosAsync()
     {
-        _triajeMedicoPendiente = false;
         _inicioConsultaUtc = null;
         _finConsultaUtc = null;
         MensajeAlerta = null;
@@ -1379,12 +1377,7 @@
         {
             _inicioConsultaUtc = await AdmisionService.IniciarAtencionClinicaAsync(IdOrden, Nhcl, triaje: false);
             if (!_inicioConsultaUtc.HasValue)
-            {
-                _triajeMedicoPendiente = Session.TipoUser == 2 &&
-                    (await AdmisionService.ObtenerColaClinicaAsync(triaje: true, idOrden: IdOrden)).Any();
-                if (!_triajeMedicoPendiente)
-                    MensajeAlerta = "La consulta estará disponible cuando se complete el triaje requerido.";
-            }
+                MensajeAlerta = "No se pudo iniciar la consulta de esta orden.";
         }
 
         var tFicha = ConsultaService.ObtenerFichaMedicaAsync(IdOrden, Nhcl);

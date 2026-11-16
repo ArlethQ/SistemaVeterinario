@@ -518,7 +518,10 @@ public class ConsultaExternaService : IConsultaExternaService
                     IF NOT EXISTS (
                         SELECT 1 FROM vt_ordenAtencion o WITH (UPDLOCK, HOLDLOCK)
                         WHERE o.ordenAten_id = @MedOrden AND o.ordenAten_nhcl = @MedNhcl
-                          AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                          AND (ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                            OR (o.ordenAten_estado = 'T' AND EXISTS (
+                                SELECT 1 FROM vt_vitacora v
+                                WHERE v.vit_detalle = CONCAT('Ficha Médica SOAP guardada Orden #', @MedOrden, ' NHCL #', @MedNhcl))))
                           AND EXISTS (
                               SELECT 1 FROM vt_usuarios u
                               JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
@@ -532,7 +535,7 @@ public class ConsultaExternaService : IConsultaExternaService
 
                     UPDATE vt_ordenAtencion
                     SET ordenAten_idEnfermero = CASE WHEN ISNULL(ordenAten_esProcedimiento, 0) = 0 AND ISNULL(ordenAten_triajeMedico, 0) = 1 THEN ordenAten_idEnfermero ELSE @MedIdUser END,
-                        ordenAten_estado = CASE WHEN ordenAten_esProcedimiento = 1 THEN 'T' ELSE 'E' END,
+                        ordenAten_estado = CASE WHEN ordenAten_esProcedimiento = 1 OR ordenAten_estado = 'T' THEN 'T' ELSE 'E' END,
                         ordenAten_etapa = CASE WHEN ordenAten_esProcedimiento = 1 THEN 'Procesado' ELSE ordenAten_etapa END,
                         ordenAten_fechaProcesado = CASE WHEN ordenAten_esProcedimiento = 1 THEN GETDATE() ELSE ordenAten_fechaProcesado END
                     WHERE ordenAten_id = @MedOrden;

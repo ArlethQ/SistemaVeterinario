@@ -3,9 +3,9 @@
 @inject IJSRuntime JS
 @inject ILogger<ColaOrdenesClinicas> Logger
 
-<section class="card shadow-sm border-0 mb-3" aria-label="Cola de órdenes del día">
+<section class="card shadow-sm border-0 mb-3" aria-label="Cola de órdenes">
     <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
-        <h5 class="mb-0">@(UnificarConTriaje ? "Cola de órdenes del día" : Triaje ? "Cola de triaje" : "Cola de consulta") <span class="badge text-bg-secondary">@_ordenes.Count</span></h5>
+        <h5 class="mb-0">@(UnificarConTriaje ? "Cola de órdenes" : Triaje ? "Cola de triaje" : "Cola de consulta") <span class="badge text-bg-secondary">@_ordenes.Count</span></h5>
         <button type="button" class="btn btn-sm btn-outline-primary" @onclick="CambiarSonidoAsync" aria-pressed="@(_sonidoActivo ? "true" : "false")">
             @(_sonidoActivo ? "Silenciar emergencias" : "Activar sonido de emergencias")
         </button>
@@ -25,7 +25,7 @@
     </div>
     @if (_ordenes.Count == 0)
     {
-        <p class="text-muted p-3 mb-0">@(_cargada ? "No hay órdenes en cola para hoy." : "Cargando órdenes del día…")</p>
+        <p class="text-muted p-3 mb-0">@(_cargada ? "No hay órdenes en cola." : "Cargando órdenes…")</p>
     }
     else
     {
@@ -47,7 +47,7 @@
                                 @if (Triaje) { <td>@orden.Especie</td><td>@orden.Especialidad</td> }
                                 <td>@(EsTriaje(orden) && (!orden.TriajeMedico || orden.EsProcedimiento) ? (string.IsNullOrWhiteSpace(orden.Enfermero) ? "Disponible" : orden.Enfermero) : orden.Medico)</td>
                                 @if (UnificarConTriaje) { <td>@(EsTriaje(orden) ? "Triaje" : "Consulta")</td> }
-                                <td>@(orden.Estado.Trim() == "E" ? "En atención" : "En espera")</td>
+                                <td>@(EstaEnEspera(orden) ? "En espera" : "En atención")</td>
                                 <td>
                                     @if (orden.FechaRecepcion is DateTime recepcion)
                                     {
@@ -82,8 +82,7 @@
     private readonly CancellationTokenSource _cancelacion = new();
     private readonly HashSet<(int Id, DateTime Asignacion)> _vistas = [];
     private List<OrdenAtencionResumenDto> _ordenes = [];
-    private HashSet<int> _ordenesTriaje = [];
-    private bool EsTriaje(OrdenAtencionResumenDto orden) => Triaje || _ordenesTriaje.Contains(orden.IdOrden);
+    private bool EsTriaje(OrdenAtencionResumenDto orden) => Triaje || (UnificarConTriaje && orden.FinTriaje is null);
     private DateTime _dia;
     private bool _cargada;
     private bool _sonidoActivo;
@@ -91,9 +90,8 @@
 
     private string TextoAccion(OrdenAtencionResumenDto orden)
     {
-        if (orden.Estado.Trim() != "A") return "Abrir";
-        if (EsTriaje(orden)) return "Iniciar triaje";
-        return UnificarConTriaje ? "Iniciar consulta" : "Abrir";
+        if (Triaje) return orden.InicioTriaje is null ? "Iniciar triaje" : "Abrir";
+        return orden.InicioConsulta is null ? "Iniciar consulta" : "Abrir";
     }
 
     private string RutaOrden(OrdenAtencionResumenDto orden) =>
@@ -120,9 +118,10 @@
         _ => "text-bg-success"
     };
 
-    private static bool EstaEnEspera(OrdenAtencionResumenDto orden) => orden.Estado.Trim() == "A";
+    private bool EstaEnEspera(OrdenAtencionResumenDto orden) =>
+        Triaje ? orden.InicioTriaje is null : orden.InicioConsulta is null;
 
-    private static bool EmergenciaSinConfirmar(OrdenAtencionResumenDto orden) =>
+    private bool EmergenciaSinConfirmar(OrdenAtencionResumenDto orden) =>
         Prioridad(orden) == 0 && EstaEnEspera(orden) && orden.FechaRecepcion is null;
 
     private bool _disposed;
@@ -206,14 +205,6 @@
         {
             var dia = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Date;
             var ordenes = await AdmisionService.ObtenerColaClinicaAsync(Triaje);
-            if (UnificarConTriaje)
-            {
-                var triajes = await AdmisionService.ObtenerColaClinicaAsync(true);
-                var idsConsulta = ordenes.Select(o => o.IdOrden).ToHashSet();
-                _ordenesTriaje = triajes.Where(o => !idsConsulta.Contains(o.IdOrden)).Select(o => o.IdOrden).ToHashSet();
-                ordenes = ordenes.Concat(triajes.Where(o => _ordenesTriaje.Contains(o.IdOrden)))
-                    .OrderBy(o => o.FechaAsignacion).ThenBy(o => o.IdOrden).ToList();
-            }
             token.ThrowIfCancellationRequested();
             if (dia != _dia)
             {

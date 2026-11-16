@@ -85,6 +85,19 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         ) recepcion
         """;
 
+    private const string PrefijoPrioridad = "Prioridad inicial Orden #";
+    private const string ConsultaPrioridadOrden = """
+        OUTER APPLY (
+            SELECT TOP (1) RIGHT(RTRIM(v.vit_detalle), CHARINDEX(' ', REVERSE(RTRIM(v.vit_detalle))) - 1) AS Color
+            FROM vt_vitacora v
+            WHERE v.vit_detalle IN (
+                CONCAT(@PrefijoPrioridad, o.ordenAten_id, ' red'),
+                CONCAT(@PrefijoPrioridad, o.ordenAten_id, ' yellow'),
+                CONCAT(@PrefijoPrioridad, o.ordenAten_id, ' green'))
+            ORDER BY v.vit_idFechaMod
+        ) prioridad
+        """;
+
     private const string PrefijoAsignacion = "Asignación de orden #";
     private const string SucursalesAsignadas = @"SELECT ul_idLocalidad
         FROM vt_usuarioLocalidades
@@ -1061,9 +1074,6 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 SET XACT_ABORT ON;
                 BEGIN TRANSACTION;
 
-                IF @ColorTriaje IS NOT NULL AND RTRIM(@ColorTriaje) <> ''
-                    UPDATE vt_pacientes SET mas_colortriaje = @ColorTriaje WHERE mas_nhcl = @Nhcl;
-
                 DECLARE @Prefijo VARCHAR(10);
                 DECLARE @TurnoCodigo VARCHAR(20);
                 DECLARE @SiguienteNum INT;
@@ -1123,13 +1133,22 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 DECLARE @NuevaOrden INT = CAST(SCOPE_IDENTITY() AS INT);
                 INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
                 VALUES (CONCAT(@PrefijoAsignacion, @NuevaOrden), @IdUsuario, DATEADD(hour, -5, SYSUTCDATETIME()), @IpOrigen, 'BlazorClient');
+                INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
+                VALUES (CONCAT(@PrefijoPrioridad, @NuevaOrden, ' ', @ColorTriaje), @IdUsuario,
+                    DATEADD(hour, -5, SYSUTCDATETIME()), @IpOrigen, 'BlazorClient');
                 COMMIT TRANSACTION;
                 SELECT @NuevaOrden;";
 
             int idNueva = await _db.ExecuteScalarAsync<int>(insertSql, new
             {
                 PrefijoAsignacion,
-                orden.ColorTriaje,
+                PrefijoPrioridad,
+                ColorTriaje = orden.ColorTriaje?.Trim().ToLowerInvariant() switch
+                {
+                    "red" => "red",
+                    "yellow" => "yellow",
+                    _ => "green"
+                },
                 orden.Nhcl,
                 orden.NombrePropietario,
                 orden.IdCliente,
@@ -1197,7 +1216,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(o.ordenAten_etapa, 'Consulta') AS Etapa,
                 ISNULL(o.ordenAten_Tipo, 'M') AS TipoOrigen,
                 ISNULL(o.ordenAten_Despacho, 0) AS TipoDespacho,
-                ISNULL(p.mas_colortriaje, 'green') AS ColorTriaje,
+                RTRIM(COALESCE(prioridad.Color, p.mas_colortriaje, 'green')) AS ColorTriaje,
                 'N' AS Facturado,
                 '' AS NumFacturaBc
             FROM vt_ordenAtencion o WITH (NOLOCK)
@@ -1223,6 +1242,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 WHERE v.vit_detalle = CONCAT('Inicio de consulta Orden #', o.ordenAten_id)
             ) consulta
             {ConsultaRecepcionOrden}
+            {ConsultaPrioridadOrden}
             WHERE o.ordenAten_fecha = @Fecha
               AND {AlcanceOrden}
               AND (@TodasSucursales = 1 OR @LocalidadSesion <= 0 OR o.ordenAten_idlocalidad = @LocalidadSesion)
@@ -1240,6 +1260,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 Etapa = etapa?.Trim() ?? string.Empty,
                 Rol = _session.TipoUser,
                 PrefijoRecepcion,
+                PrefijoPrioridad,
                 TodasSucursales = todasSucursales && EsRolSinRestriccionSucursal(_session.TipoUser),
                 VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
                 LocalidadSesion = _session.Localidad,
@@ -1342,12 +1363,16 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             SET XACT_ABORT ON;
             BEGIN TRANSACTION;
             DECLARE @Inicio datetime, @Ahora datetime = GETDATE();
-            UPDATE o SET ordenAten_estado = 'E',
+            UPDATE o SET ordenAten_estado = CASE WHEN o.ordenAten_estado = 'T' THEN 'T' ELSE 'E' END,
                 ordenAten_idEnfermero = CASE WHEN @Triaje = 1 AND (ISNULL(o.ordenAten_esProcedimiento, 0) = 1 OR ISNULL(o.ordenAten_triajeMedico, 0) = 0) THEN @UsuarioSesion ELSE o.ordenAten_idEnfermero END,
                 ordenAten_fechaenAtencion = CASE WHEN ISNULL(o.ordenAten_estado, 'A') = 'A' THEN @Ahora ELSE o.ordenAten_fechaenAtencion END
             FROM vt_ordenAtencion o
             WHERE o.ordenAten_id = @IdOrden AND o.ordenAten_nhcl = @Nhcl
-              AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E') AND {AlcanceOrden}
+              AND (ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                OR (@Triaje = 1 AND o.ordenAten_estado = 'T' AND EXISTS (
+                    SELECT 1 FROM vt_vitacora v
+                    WHERE v.vit_detalle = CONCAT('Ficha Médica SOAP guardada Orden #', o.ordenAten_id, ' NHCL #', o.ordenAten_nhcl))))
+              AND {AlcanceOrden}
               AND EXISTS (
                   SELECT 1 FROM vt_usuarios u
                   JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
@@ -1355,7 +1380,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     AND (@Triaje = 0 OR {ResponsableTriaje}))
               AND ((@Triaje = 1 AND NOT EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @FinTriaje))
                 OR (@Triaje = 0 AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
-                    AND EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @FinTriaje)));
+                    AND ((@Rol = 2 AND o.ordenAten_idMedico = @UsuarioSesion)
+                        OR EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @FinTriaje))));
             IF @@ROWCOUNT = 1
             BEGIN
                 IF NOT EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @MarcaRecepcion)
@@ -1553,7 +1579,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             SELECT o.ordenAten_id AS IdOrden,
                    o.ordenAten_nhcl AS Nhcl,
                    ISNULL(o.ordenAten_turno, '') AS Turno,
-                   RTRIM(ISNULL(p.mas_colortriaje, 'green')) AS ColorTriaje,
+                   RTRIM(COALESCE(prioridad.Color, p.mas_colortriaje, 'green')) AS ColorTriaje,
                    ISNULL(p.mas_nombre, '') AS Mascota,
                    o.ordenAten_esp_numero AS IdEspecialidad,
                    ISNULL(e.es_descripcion, '') AS Especialidad,
@@ -1568,6 +1594,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    ) THEN 1 ELSE 0 END AS bit) AS PuedeAbrirCola,
                    ISNULL(o.ordenAten_estado, 'A') AS Estado,
                    CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento,
+                   fases.InicioTriaje,
+                   fases.FinTriaje,
+                   fases.InicioConsulta,
                    recepcion.FechaRecepcion,
                    ISNULL(recepcion.RecibidaPor, '') AS RecibidaPor,
                    COALESCE(asignacion.Fecha, historica.Fecha,
@@ -1591,25 +1620,38 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 WHERE asignacion.Fecha IS NULL
                   AND v.vit_detalle LIKE CONCAT('Cambio de médico/especialidad en orden #', o.ordenAten_id, ': médico %, especialidad %')
             ) historica
+            OUTER APPLY (
+                SELECT MIN(CASE WHEN v.vit_detalle = marcas.Triaje THEN v.vit_idFechaMod END) AS InicioTriaje,
+                       MIN(CASE WHEN v.vit_detalle = marcas.FinTriaje THEN v.vit_idFechaMod END) AS FinTriaje,
+                       MIN(CASE WHEN v.vit_detalle = marcas.Consulta THEN v.vit_idFechaMod END) AS InicioConsulta
+                FROM (VALUES (
+                    CONCAT('Inicio de triaje Orden #', o.ordenAten_id),
+                    CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id),
+                    CONCAT('Inicio de consulta Orden #', o.ordenAten_id)
+                )) marcas(Triaje, FinTriaje, Consulta)
+                JOIN vt_vitacora v ON v.vit_detalle IN (marcas.Triaje, marcas.FinTriaje, marcas.Consulta)
+            ) fases
             {ConsultaRecepcionOrden}
+            {ConsultaPrioridadOrden}
             WHERE ((@IdOrden IS NOT NULL AND o.ordenAten_id = @IdOrden)
-                OR (@IdOrden IS NULL AND o.ordenAten_fecha >= @Hoy AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
+                OR (@IdOrden IS NULL AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
                     AND ((@LocalidadSesion <= 0 AND NOT (@Rol = 1 AND @Triaje = 1))
-                         OR o.ordenAten_idlocalidad = @LocalidadSesion)
-                    AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')))
+                         OR o.ordenAten_idlocalidad = @LocalidadSesion)))
               AND {AlcanceOrden}
               AND (
-                   (@Triaje = 0 AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
+                   (@Triaje = 0 AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                        AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
                         AND (@Rol <> 2 OR o.ordenAten_idMedico = @Usuario)
-                        AND EXISTS (SELECT 1 FROM vt_vitacora v
-                            WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id)))
-                   OR (@Triaje = 1 AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                        AND (@Rol = 2 OR fases.FinTriaje IS NOT NULL))
+                   OR (@Triaje = 1 AND (ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                        OR (o.ordenAten_estado = 'T' AND EXISTS (
+                            SELECT 1 FROM vt_vitacora v
+                            WHERE v.vit_detalle = CONCAT('Ficha Médica SOAP guardada Orden #', o.ordenAten_id, ' NHCL #', o.ordenAten_nhcl))))
                         AND ((@Rol = 1 AND @IdOrden IS NULL AND o.ordenAten_idlocalidad = @LocalidadSesion)
                             OR EXISTS (SELECT 1 FROM vt_usuarios u
                                 JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
                                 WHERE u.user_numero = @Usuario AND u.user_estado = 'A' AND {ResponsableTriaje}))
-                        AND NOT EXISTS (SELECT 1 FROM vt_vitacora v
-                            WHERE v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', o.ordenAten_id)))
+                        AND fases.FinTriaje IS NULL)
               )
             ORDER BY FechaAsignacion, o.ordenAten_id;";
 
@@ -1624,6 +1666,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             Usuario = _session.IdUser,
             UsuarioSesion = _session.IdUser,
             PrefijoRecepcion,
+            PrefijoPrioridad,
             PrefijoAsignacion
         })).ToList();
     }
