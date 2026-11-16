@@ -1282,7 +1282,12 @@ public class HospitalizacionService : IHospitalizacionService
                 RTRIM(ISNULL(o.ordenAten_etapa, 'Consulta')) AS Etapa,
                 ing.idJaula AS JaulaId,
                 ISNULL(ing.ubicacionJaula, '') AS JaulaCodigo,
-                CAST(CASE WHEN ing.id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS YaIngresado
+                CAST(CASE WHEN ing.id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS YaIngresado,
+                CAST(CASE WHEN EXISTS (
+                    SELECT 1 FROM vt_fichamedica fm2
+                    WHERE fm2.med_orden = o.ordenAten_id
+                      AND UPPER(RTRIM(ISNULL(fm2.med_pregunta, 'N'))) = 'S'
+                ) THEN 1 ELSE 0 END AS BIT) AS RequiereCirugia
             FROM vt_ordenAtencion o
             INNER JOIN vt_pacientes p ON o.ordenAten_nhcl = p.mas_nhcl
             INNER JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo

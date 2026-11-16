@@ -556,6 +556,12 @@
                                            IdOrden="@_ordenModal.OrdenAtencionId"
                                            Nhcl="@_ordenModal.Nhcl" />
                     break;
+                case "cirugia":
+                    <ProgramacionClinica @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                         ModoModal="true"
+                                         IdOrden="@_ordenModal.OrdenAtencionId"
+                                         Nhcl="@_ordenModal.Nhcl" />
+                    break;
                 case "preanestesia":
                     <PreAnestesia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                   IdOrden="@_ordenModal.OrdenAtencionId"
@@ -810,6 +816,7 @@
         ("signos", "📈", "Signos", "/kardex/signos"),
         ("ficha24h", "📄", "Ficha 24h", "/hospitalizacion/ficha"),
         ("monitoreo", "🩺", "Monitoreo", "/hospitalizacion/monitoreo"),
+        ("cirugia", "📅", "Programación Cirugía", "/programacion/clinica"),
         ("preanestesia", "🧪", "Pre-Anestesia", "/quirofano/preanestesia"),
         ("anestesia", "🫁", "Anestesia", "/quirofano/anestesia"),
         ("protocolo", "🔪", "Protocolo Quirúrgico", "/quirofano/protocolo"),
@@ -831,8 +838,15 @@
     private IngresoHospitalizacionDto _ingreso = new();
     private AutorizacionClinicaDto? _consentimiento;
 
+    private static readonly HashSet<string> PestanasCirugia =
+    [
+        "cirugia", "preanestesia", "anestesia", "protocolo", "recuperacion"
+    ];
+
     private IEnumerable<(string Id, string Icono, string Titulo, string Permiso)> PestanasDisponiblesModal =>
-        PestanasModulos.Where(t => Permisos.Permite(t.Permiso));
+        PestanasModulos.Where(t =>
+            Permisos.Permite(t.Permiso)
+            && (!PestanasCirugia.Contains(t.Id) || (_ordenModal?.RequiereCirugia ?? false)));
 
     private string _filtro = string.Empty;
     private string _tituloConsentimiento = "Consentimiento Informado de Hospitalización";

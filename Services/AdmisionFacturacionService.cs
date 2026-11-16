@@ -1912,6 +1912,20 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         var citas = (await ObtenerCitasPorFechaAsync(desde, hasta, idMedico, idLocalidad))
             .Where(c => c.CiLocalidad == idLocalidad && c.CiEstado != "I" && c.CiEstadoCita != "X")
             .ToLookup(c => c.CiFecha.Date);
+
+        var cirugias = new List<(DateTime Fecha, string Inicio, string Fin)>();
+        var tieneTablaCirugias = await _db.ExecuteScalarAsync<int>("SELECT CASE WHEN OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL THEN 1 ELSE 0 END");
+        if (tieneTablaCirugias == 1)
+        {
+            cirugias = (await _db.QueryAsync<(DateTime Fecha, string Inicio, string Fin)>(@"
+                SELECT CAST(fechacirugia AS date), RTRIM(horainicio), RTRIM(horafinalizacion)
+                FROM qvt_calendario_cirugias
+                WHERE ISNULL(estado, 'A') = 'A'
+                  AND (codmed = @IdMedico OR localidad = @IdLocalidad)
+                  AND fechacirugia >= @Desde AND fechacirugia < DATEADD(day, 1, @Hasta)", parametros)).ToList();
+        }
+        var cirugiasPorDia = cirugias.ToLookup(c => c.Fecha);
+
         var bloqueosPorDia = bloqueos.ToLookup(b => b.Fecha);
         for (var fecha = desde.Date; fecha <= hasta.Date; fecha = fecha.AddDays(1))
         {
@@ -1935,13 +1949,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     var cita = citas[fecha].FirstOrDefault(c => TimeSpan.TryParse(c.CiHora, out var horaCita) &&
                         horaCita.Hours == hora.Hours && horaCita.Minutes == hora.Minutes);
                     bool bloqueado = bloqueosPorDia[fecha].Any(b => EstaEnRango(hora, b.Desde, b.Hasta));
+                    bool enCirugia = cirugiasPorDia[fecha].Any(c => EstaEnRango(hora, c.Inicio, c.Fin));
                     slots.TryAdd(textoHora, new SlotHorarioMedicoDto
                     {
                         Hora = textoHora,
-                        Bloqueado = bloqueado,
-                        Disponible = !bloqueado && cita == null,
+                        Bloqueado = bloqueado || enCirugia,
+                        Disponible = !bloqueado && !enCirugia && cita == null,
                         CitaExistente = cita,
-                        MotivoEstado = bloqueado ? "Bloqueo / excepción" : cita != null ? "Reservado" : "Disponible"
+                        MotivoEstado = bloqueado ? "Bloqueo / excepción" : enCirugia ? "Cirugía programada" : cita != null ? "Reservado" : "Disponible"
                     });
                 }
             }
