@@ -199,6 +199,8 @@ public class OrdenAtencionResumenDto
     public DateTime Fecha { get; set; }
     public string Hora { get; set; } = string.Empty;
     public DateTime FechaAsignacion { get; set; }
+    public DateTime? FechaRecepcion { get; set; }
+    public string RecibidaPor { get; set; } = string.Empty;
     public DateTime? InicioTriaje { get; set; }
     public DateTime? FinTriaje { get; set; }
     public DateTime? InicioConsulta { get; set; }

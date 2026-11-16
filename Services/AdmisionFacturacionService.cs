@@ -30,7 +30,7 @@ public interface IAdmisionFacturacionService
     Task<List<ConteoMedicoEsperaDto>> ObtenerConteoMedicosEsperaAsync(DateTime fecha, int idLocalidad);
     Task<bool> TieneOrdenActivaHoyAsync(int nhcl, int idEspecialidad, DateTime fecha);
     Task<int> CrearOrdenAtencionAsync(NuevaOrdenAtencionDto orden, int idUsuario, string ipOrigen);
-    Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "");
+    Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "", bool todasSucursales = false);
     Task<List<OrdenPacienteResumenDto>> ObtenerOrdenesPacienteAsync(int nhcl);
     Task<bool> PuedeConsultarOrdenAsync(int idOrden, int nhcl);
     Task<DateTime?> IniciarAtencionClinicaAsync(int idOrden, int nhcl, bool triaje);
@@ -73,6 +73,18 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     private readonly ISqlDataService _db;
     private readonly SessionStateService _session;
     private static bool EsRolSinRestriccionSucursal(int rol) => rol is 1 or 4 or 12;
+    private const string PrefijoRecepcion = "Recepción confirmada Orden #";
+    private const string ConsultaRecepcionOrden = """
+        OUTER APPLY (
+            SELECT TOP (1) v.vit_idFechaMod AS FechaRecepcion,
+                COALESCE(NULLIF(RTRIM(actor.user_nombre), ''), CONCAT('Usuario #', v.vit_idUser)) AS RecibidaPor
+            FROM vt_vitacora v
+            LEFT JOIN vt_usuarios actor ON actor.user_numero = v.vit_idUser
+            WHERE v.vit_detalle = CONCAT(@PrefijoRecepcion, o.ordenAten_id)
+            ORDER BY v.vit_idFechaMod, v.vit_idUser
+        ) recepcion
+        """;
+
     private const string PrefijoAsignacion = "Asignación de orden #";
     private const string SucursalesAsignadas = @"SELECT ul_idLocalidad
         FROM vt_usuarioLocalidades
@@ -1149,7 +1161,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         throw new InvalidOperationException("SQL Server no confirmó la creación de la orden de atención.");
     }
 
-    public async Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "")
+    public async Task<List<OrdenAtencionResumenDto>> ObtenerOrdenesDelDiaAsync(DateTime fecha, string filtro = "", string etapa = "", bool todasSucursales = false)
     {
         if (!_session.IsAuthenticated) return [];
 
@@ -1176,6 +1188,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 o.ordenAten_fecha AS Fecha,
                 ISNULL(o.ordenAten_hora, '') AS Hora,
                 ISNULL(o.ordenAten_estado, 'A') AS Estado,
+                recepcion.FechaRecepcion,
+                ISNULL(recepcion.RecibidaPor, '') AS RecibidaPor,
                 triaje.InicioTriaje,
                 triajeFinalizado.FinTriaje,
                 consulta.InicioConsulta,
@@ -1208,9 +1222,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 FROM vt_vitacora v WITH (NOLOCK)
                 WHERE v.vit_detalle = CONCAT('Inicio de consulta Orden #', o.ordenAten_id)
             ) consulta
+            {ConsultaRecepcionOrden}
             WHERE o.ordenAten_fecha = @Fecha
               AND {AlcanceOrden}
-              AND (@LocalidadSesion <= 0 OR o.ordenAten_idlocalidad = @LocalidadSesion)
+              AND (@TodasSucursales = 1 OR @LocalidadSesion <= 0 OR o.ordenAten_idlocalidad = @LocalidadSesion)
               AND ISNULL(o.ordenAten_estado, 'A') <> 'I'
               AND (@Etapa = '' OR o.ordenAten_etapa = @Etapa)
               AND (@Filtro = '' OR o.ordenAten_nombre LIKE '%' + @Filtro + '%' OR p.mas_nombre LIKE '%' + @Filtro + '%' OR ISNULL(o.ordenAten_turno, '') LIKE '%' + @Filtro + '%' OR CAST(o.ordenAten_id AS VARCHAR) = @Filtro)
@@ -1224,6 +1239,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 Filtro = filtro?.Trim() ?? string.Empty,
                 Etapa = etapa?.Trim() ?? string.Empty,
                 Rol = _session.TipoUser,
+                PrefijoRecepcion,
+                TodasSucursales = todasSucursales && EsRolSinRestriccionSucursal(_session.TipoUser),
                 VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
                 LocalidadSesion = _session.Localidad,
                 UsuarioSesion = _session.IdUser
@@ -1341,6 +1358,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     AND EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @FinTriaje)));
             IF @@ROWCOUNT = 1
             BEGIN
+                IF NOT EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @MarcaRecepcion)
+                    INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
+                    VALUES (@MarcaRecepcion, @UsuarioSesion, @Ahora, '127.0.0.1', 'BlazorClient');
+
                 SELECT @Inicio = MIN(vit_idFechaMod) FROM vt_vitacora WITH (UPDLOCK, HOLDLOCK) WHERE vit_detalle = @Marca;
                 IF @Inicio IS NULL
                 BEGIN
@@ -1356,6 +1377,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             IdOrden = idOrden,
             Nhcl = nhcl,
             Triaje = triaje,
+            MarcaRecepcion = $"{PrefijoRecepcion}{idOrden}",
             Marca = triaje ? $"Inicio de triaje Orden #{idOrden}" : $"Inicio de consulta Orden #{idOrden}",
             FinTriaje = $"Triaje de ingreso completado Orden #{idOrden}",
             Rol = _session.TipoUser,
@@ -1531,6 +1553,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             SELECT o.ordenAten_id AS IdOrden,
                    o.ordenAten_nhcl AS Nhcl,
                    ISNULL(o.ordenAten_turno, '') AS Turno,
+                   RTRIM(ISNULL(p.mas_colortriaje, 'green')) AS ColorTriaje,
                    ISNULL(p.mas_nombre, '') AS Mascota,
                    o.ordenAten_esp_numero AS IdEspecialidad,
                    ISNULL(e.es_descripcion, '') AS Especialidad,
@@ -1545,6 +1568,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    ) THEN 1 ELSE 0 END AS bit) AS PuedeAbrirCola,
                    ISNULL(o.ordenAten_estado, 'A') AS Estado,
                    CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento,
+                   recepcion.FechaRecepcion,
+                   ISNULL(recepcion.RecibidaPor, '') AS RecibidaPor,
                    COALESCE(asignacion.Fecha, historica.Fecha,
                        DATEADD(second, DATEDIFF(second, CAST('00:00' AS time),
                            COALESCE(TRY_CONVERT(time, o.ordenAten_hora), CAST('00:00' AS time))),
@@ -1566,6 +1591,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 WHERE asignacion.Fecha IS NULL
                   AND v.vit_detalle LIKE CONCAT('Cambio de médico/especialidad en orden #', o.ordenAten_id, ': médico %, especialidad %')
             ) historica
+            {ConsultaRecepcionOrden}
             WHERE ((@IdOrden IS NOT NULL AND o.ordenAten_id = @IdOrden)
                 OR (@IdOrden IS NULL AND o.ordenAten_fecha >= @Hoy AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
                     AND ((@LocalidadSesion <= 0 AND NOT (@Rol = 1 AND @Triaje = 1))
@@ -1597,6 +1623,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LocalidadSesion = _session.Localidad,
             Usuario = _session.IdUser,
             UsuarioSesion = _session.IdUser,
+            PrefijoRecepcion,
             PrefijoAsignacion
         })).ToList();
     }

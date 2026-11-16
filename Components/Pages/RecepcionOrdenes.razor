@@ -286,6 +286,13 @@
                     </div>
                 </div>
                 <div class="card-body p-0">
+                    @if (SessionState.TipoUser is 1 or 4 or 12)
+                    {
+                        <label class="form-check ms-3 my-2">
+                            <input type="checkbox" class="form-check-input" @bind="_todasSucursales" @bind:after="CargarOrdenesAsync" />
+                            Todas las sucursales
+                        </label>
+                    }
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0 small">
                             <thead class="table-light">
@@ -296,6 +303,7 @@
                                     <th>Paciente (NHCL)</th>
                                     <th>Propietario</th>
                                     <th>Especialidad / Doctor que Atiende</th>
+                                    <th>Recepción</th>
                                     <th>Etapa Actual</th>
                                     <th>Proforma</th>
                                     <th class="text-end">Accesos Clínicos Directos</th>
@@ -305,7 +313,7 @@
                                 @if (OrdenesMostradas.Count == 0)
                                 {
                                     <tr>
-                                        <td colspan="9" class="text-center text-muted py-4">
+                                        <td colspan="10" class="text-center text-muted py-4">
                                             No hay órdenes en curso en este momento.
                                         </td>
                                     </tr>
@@ -347,6 +355,10 @@
                                                 <div class="fw-bold text-dark">
                                                     <i class="bi bi-person-badge-fill text-primary me-1"></i>Dr(a). @o.Medico
                                                 </div>
+                                                @if (!string.IsNullOrWhiteSpace(o.Enfermero))
+                                                {
+                                                    <small class="text-muted">Enf. @o.Enfermero</small>
+                                                }
                                                 <div class="d-flex align-items-center gap-1 mt-1">
                                                     <span class="badge bg-light text-primary border font-monospace" style="font-size:0.7rem;">@(string.IsNullOrWhiteSpace(o.CodigoEspecialidad) ? "GEN" : o.CodigoEspecialidad)</span>
                                                     <small class="text-muted">@o.Especialidad</small>
@@ -355,6 +367,17 @@
                                                         <span class="badge bg-info text-dark ms-1" style="font-size:0.7rem;"><i class="bi bi-door-open-fill me-1"></i>@o.Consultorio</span>
                                                     }
                                                 </div>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (o.FechaRecepcion is DateTime recepcion)
+                                            {
+                                                <div>@o.RecibidaPor</div>
+                                                <small class="text-muted">@recepcion.ToString("HH:mm:ss")</small>
+                                            }
+                                            else
+                                            {
+                                                <small class="text-muted">Sin confirmar</small>
                                             }
                                         </td>
                                         <td>
@@ -581,6 +604,7 @@
     private string _filtroPaciente = string.Empty;
     private string _filtroOrdenTexto = string.Empty;
     private string _filtroEtapa = string.Empty;
+    private bool _todasSucursales;
     private DateTime _fechaConsulta = DateTime.Today;
     private bool _cargandoInicial = true;
     private string _mensajeAlerta = string.Empty;
@@ -1314,7 +1338,7 @@
 
     private async Task CargarOrdenesAsync()
     {
-        _ordenes = await AdmisionService.ObtenerOrdenesDelDiaAsync(_fechaConsulta, _filtroOrdenTexto, _filtroEtapa);
+        _ordenes = await AdmisionService.ObtenerOrdenesDelDiaAsync(_fechaConsulta, _filtroOrdenTexto, _filtroEtapa, _todasSucursales);
         _conteoMedicos = await AdmisionService.ObtenerConteoMedicosEsperaAsync(_fechaConsulta, SessionState.Localidad);
         if (SessionState.TipoUser == 2)
         {

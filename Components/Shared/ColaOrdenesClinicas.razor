@@ -7,13 +7,22 @@
     <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
         <h5 class="mb-0">@(UnificarConTriaje ? "Cola de órdenes del día" : Triaje ? "Cola de triaje" : "Cola de consulta") <span class="badge text-bg-secondary">@_ordenes.Count</span></h5>
         <button type="button" class="btn btn-sm btn-outline-primary" @onclick="CambiarSonidoAsync" aria-pressed="@(_sonidoActivo ? "true" : "false")">
-            @(_sonidoActivo ? "Silenciar avisos" : "Activar avisos sonoros")
+            @(_sonidoActivo ? "Silenciar emergencias" : "Activar sonido de emergencias")
         </button>
     </div>
     @if (_error is not null)
     {
         <p class="text-danger small p-3 mb-0" role="status">@_error</p>
     }
+    @{ var emergencias = _ordenes.Count(EmergenciaSinConfirmar); }
+    <div role="status" aria-live="assertive">
+        @if (emergencias > 0)
+        {
+            <div class="alert alert-danger rounded-0 mb-0">
+                <strong>Emergencias en espera (@emergencias)</strong>
+            </div>
+        }
+    </div>
     @if (_ordenes.Count == 0)
     {
         <p class="text-muted p-3 mb-0">@(_cargada ? "No hay órdenes en cola para hoy." : "Cargando órdenes del día…")</p>
@@ -23,32 +32,42 @@
         <div class="table-responsive">
             <table class="table table-sm table-hover align-middle mb-0">
                 <thead>
-                    <tr><th scope="col">Hora de asignación</th><th scope="col">Orden</th><th scope="col">Paciente</th>@if (Triaje) { <th scope="col">Especie</th><th scope="col">Especialidad</th> }<th scope="col">Asignado a</th>@if (UnificarConTriaje) { <th scope="col">Etapa</th> }<th scope="col">Estado</th><th scope="col">Acción</th></tr>
+                    <tr><th scope="col">Hora de asignación</th><th scope="col">Orden</th><th scope="col">Paciente</th>@if (Triaje) { <th scope="col">Especie</th><th scope="col">Especialidad</th> }<th scope="col">Asignado a</th>@if (UnificarConTriaje) { <th scope="col">Etapa</th> }<th scope="col">Estado</th><th scope="col">Recepción</th><th scope="col">Acción</th></tr>
                 </thead>
-                <tbody>
-                    @foreach (var orden in _ordenes)
-                    {
-                        <tr @key="orden.IdOrden" class="@(OrdenSeleccionada == orden.IdOrden ? "table-active" : null)">
-                            <td>@orden.FechaAsignacion.ToString("HH:mm:ss")</td>
-                            <td>#@orden.IdOrden @orden.Turno</td>
-                            <td>@orden.Mascota <small class="text-muted">NHCL #@orden.Nhcl</small></td>
-                            @if (Triaje) { <td>@orden.Especie</td><td>@orden.Especialidad</td> }
-                            <td>@(Triaje && !orden.TriajeMedico ? (string.IsNullOrWhiteSpace(orden.Enfermero) ? "Disponible" : orden.Enfermero) : orden.Medico)</td>
-                            @if (UnificarConTriaje) { <td>@(EsTriaje(orden) ? "Triaje" : "Consulta")</td> }
-                            <td>@(orden.Estado.Trim() == "E" ? "En atención" : "En espera")</td>
-                            <td>
-                                @if (orden.PuedeAbrirCola)
-                                {
-                                    <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(TextoAccion(orden)) <span class="visually-hidden">orden #@orden.IdOrden</span></a>
-                                }
-                                else
-                                {
-                                    <span class="text-muted small">Atiende el responsable asignado</span>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
+                @foreach (var grupo in _ordenes.GroupBy(Prioridad).OrderBy(g => g.Key))
+                {
+                    <tbody>
+                        <tr><th scope="rowgroup" colspan="@(7 + (Triaje ? 2 : 0) + (UnificarConTriaje ? 1 : 0))" class="@ClasePrioridad(grupo.Key)">@TextoPrioridad(grupo.Key) · @grupo.Count(EstaEnEspera) en espera</th></tr>
+                        @foreach (var orden in grupo)
+                        {
+                            <tr @key="orden.IdOrden" class="@(OrdenSeleccionada == orden.IdOrden ? "table-active" : null)">
+                                <td>@orden.FechaAsignacion.ToString("HH:mm:ss")</td>
+                                <td>#@orden.IdOrden @orden.Turno</td>
+                                <td>@orden.Mascota <small class="text-muted">NHCL #@orden.Nhcl</small></td>
+                                @if (Triaje) { <td>@orden.Especie</td><td>@orden.Especialidad</td> }
+                                <td>@(EsTriaje(orden) && (!orden.TriajeMedico || orden.EsProcedimiento) ? (string.IsNullOrWhiteSpace(orden.Enfermero) ? "Disponible" : orden.Enfermero) : orden.Medico)</td>
+                                @if (UnificarConTriaje) { <td>@(EsTriaje(orden) ? "Triaje" : "Consulta")</td> }
+                                <td>@(orden.Estado.Trim() == "E" ? "En atención" : "En espera")</td>
+                                <td>
+                                    @if (orden.FechaRecepcion is DateTime recepcion)
+                                    {
+                                        <span>@orden.RecibidaPor <small class="text-muted">@recepcion.ToString("HH:mm:ss")</small></span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (orden.PuedeAbrirCola)
+                                    {
+                                        <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(TextoAccion(orden)) <span class="visually-hidden">orden #@orden.IdOrden</span></a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">Atiende el responsable asignado</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                }
             </table>
         </div>
     }
@@ -79,6 +98,32 @@
 
     private string RutaOrden(OrdenAtencionResumenDto orden) =>
         $"{(Triaje && !AbrirEnSoap ? "/admision/triaje" : "/consulta/fichamedica")}/{orden.IdOrden}/{orden.Nhcl}";
+
+    private static int Prioridad(OrdenAtencionResumenDto orden) => orden.ColorTriaje?.Trim().ToLowerInvariant() switch
+    {
+        "red" => 0,
+        "yellow" => 1,
+        _ => 2
+    };
+
+    private static string TextoPrioridad(int prioridad) => prioridad switch
+    {
+        0 => "Emergencia",
+        1 => "Prioritario",
+        _ => "Estándar"
+    };
+
+    private static string ClasePrioridad(int prioridad) => prioridad switch
+    {
+        0 => "text-bg-danger",
+        1 => "text-bg-warning",
+        _ => "text-bg-success"
+    };
+
+    private static bool EstaEnEspera(OrdenAtencionResumenDto orden) => orden.Estado.Trim() == "A";
+
+    private static bool EmergenciaSinConfirmar(OrdenAtencionResumenDto orden) =>
+        Prioridad(orden) == 0 && EstaEnEspera(orden) && orden.FechaRecepcion is null;
 
     private bool _disposed;
 
@@ -156,7 +201,7 @@
 
     private async Task ActualizarAsync(CancellationToken token, bool permitirSonido = true)
     {
-        bool hayNuevas = false;
+        bool hayNuevasEmergencias = false;
         try
         {
             var dia = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Date;
@@ -176,11 +221,11 @@
                 _dia = dia;
             }
 
-            foreach (var orden in ordenes)
-                hayNuevas |= _vistas.Add((orden.IdOrden, orden.FechaAsignacion));
+            foreach (var orden in ordenes.Where(EmergenciaSinConfirmar))
+                hayNuevasEmergencias |= _vistas.Add((orden.IdOrden, orden.FechaAsignacion));
 
             _ordenes = ordenes;
-            hayNuevas &= _cargada;
+            hayNuevasEmergencias &= _cargada;
             _cargada = true;
             _error = null;
         }
@@ -200,7 +245,7 @@
             return;
         }
 
-        if (permitirSonido && hayNuevas && _sonidoActivo)
+        if (permitirSonido && hayNuevasEmergencias && _sonidoActivo)
         {
             try
             {
