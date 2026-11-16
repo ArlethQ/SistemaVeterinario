@@ -1218,7 +1218,26 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(o.ordenAten_Despacho, 0) AS TipoDespacho,
                 RTRIM(COALESCE(prioridad.Color, p.mas_colortriaje, 'green')) AS ColorTriaje,
                 'N' AS Facturado,
-                '' AS NumFacturaBc
+                '' AS NumFacturaBc,
+                CAST(CASE WHEN EXISTS (
+                    SELECT 1 FROM hvt_cabFicha hf WITH (NOLOCK)
+                    WHERE hf.idOrden = o.ordenAten_id AND ISNULL(hf.estado, 'A') = 'A'
+                ) OR EXISTS (
+                    SELECT 1 FROM hvt_cabMonitoreo hm WITH (NOLOCK)
+                    WHERE hm.idOrden = o.ordenAten_id AND ISNULL(hm.cierre, 'N') = 'N'
+                ) THEN 1 ELSE 0 END AS BIT) AS TieneHospitalizacionActiva,
+                CAST(CASE WHEN EXISTS (
+                    SELECT 1 FROM qvt_ingresocirugia ic WITH (NOLOCK)
+                    WHERE ic.id_orden = o.ordenAten_id
+                ) THEN 1 ELSE 0 END AS BIT) AS TienePreanestesia,
+                CAST(CASE WHEN EXISTS (
+                    SELECT 1 FROM qvt_Protocolo qp WITH (NOLOCK)
+                    WHERE qp.idOrden = o.ordenAten_id
+                ) THEN 1 ELSE 0 END AS BIT) AS TieneProtocoloQuirurgico,
+                CAST(CASE WHEN EXISTS (
+                    SELECT 1 FROM qvt_formulario_alta fa WITH (NOLOCK)
+                    WHERE fa.idOrden = o.ordenAten_id
+                ) THEN 1 ELSE 0 END AS BIT) AS TieneAlta
             FROM vt_ordenAtencion o WITH (NOLOCK)
             LEFT JOIN vt_pacientes p WITH (NOLOCK) ON o.ordenAten_nhcl = p.mas_nhcl
             LEFT JOIN vt_clientes c WITH (NOLOCK) ON o.ordenAten_idcliente = c.pa_codigo
@@ -1576,6 +1595,30 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         if (!_session.IsAuthenticated) return [];
 
         string sql = $@"
+            ;WITH Candidatas AS (
+                SELECT TOP (100)
+                       o.ordenAten_id, o.ordenAten_nhcl, o.ordenAten_turno,
+                       o.ordenAten_esp_numero, o.ordenAten_idMedico, o.ordenAten_idEnfermero,
+                       o.ordenAten_triajeMedico, o.ordenAten_estado, o.ordenAten_esProcedimiento,
+                       o.ordenAten_hora, o.ordenAten_fecha, o.ordenAten_idlocalidad
+                FROM vt_ordenAtencion o
+                WHERE ((@IdOrden IS NOT NULL AND o.ordenAten_id = @IdOrden)
+                    OR (@IdOrden IS NULL
+                        AND o.ordenAten_fecha >= DATEADD(day, -7, @Hoy)
+                        AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
+                        AND ((@LocalidadSesion <= 0 AND NOT (@Rol = 1 AND @Triaje = 1))
+                             OR o.ordenAten_idlocalidad = @LocalidadSesion)
+                        AND (
+                             (@Triaje = 0 AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                                  AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
+                                  AND (@Rol <> 2 OR o.ordenAten_idMedico = @Usuario))
+                             OR (@Triaje = 1 AND (
+                                  ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                                  OR (o.ordenAten_estado = 'T' AND o.ordenAten_fecha >= @Hoy)))
+                        )))
+                  AND {AlcanceOrden}
+                ORDER BY o.ordenAten_id DESC
+            )
             SELECT o.ordenAten_id AS IdOrden,
                    o.ordenAten_nhcl AS Nhcl,
                    ISNULL(o.ordenAten_turno, '') AS Turno,
@@ -1603,7 +1646,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                        DATEADD(second, DATEDIFF(second, CAST('00:00' AS time),
                            COALESCE(TRY_CONVERT(time, o.ordenAten_hora), CAST('00:00' AS time))),
                            CAST(CAST(o.ordenAten_fecha AS date) AS datetime))) AS FechaAsignacion
-            FROM vt_ordenAtencion o
+            FROM Candidatas o
             LEFT JOIN vt_pacientes p ON p.mas_nhcl = o.ordenAten_nhcl
             LEFT JOIN vt_especialidades e ON e.es_id = o.ordenAten_esp_numero
             LEFT JOIN vt_especie es ON es.especie_id = p.mas_especie
@@ -1612,12 +1655,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             OUTER APPLY (
                 SELECT MAX(v.vit_idFechaMod) AS Fecha
                 FROM vt_vitacora v
-                WHERE v.vit_detalle LIKE CONCAT(@PrefijoAsignacion, o.ordenAten_id)
+                WHERE v.vit_idFechaMod >= DATEADD(day, -14, @Hoy)
+                  AND v.vit_detalle LIKE CONCAT(@PrefijoAsignacion, o.ordenAten_id)
             ) asignacion
             OUTER APPLY (
                 SELECT MAX(v.vit_idFechaMod) AS Fecha
                 FROM vt_vitacora v
                 WHERE asignacion.Fecha IS NULL
+                  AND v.vit_idFechaMod >= DATEADD(day, -14, @Hoy)
                   AND v.vit_detalle LIKE CONCAT('Cambio de médico/especialidad en orden #', o.ordenAten_id, ': médico %, especialidad %')
             ) historica
             OUTER APPLY (
@@ -1630,15 +1675,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     CONCAT('Inicio de consulta Orden #', o.ordenAten_id)
                 )) marcas(Triaje, FinTriaje, Consulta)
                 JOIN vt_vitacora v ON v.vit_detalle IN (marcas.Triaje, marcas.FinTriaje, marcas.Consulta)
+                    AND v.vit_idFechaMod >= DATEADD(day, -14, @Hoy)
             ) fases
             {ConsultaRecepcionOrden}
             {ConsultaPrioridadOrden}
-            WHERE ((@IdOrden IS NOT NULL AND o.ordenAten_id = @IdOrden)
-                OR (@IdOrden IS NULL AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
-                    AND ((@LocalidadSesion <= 0 AND NOT (@Rol = 1 AND @Triaje = 1))
-                         OR o.ordenAten_idlocalidad = @LocalidadSesion)))
-              AND {AlcanceOrden}
-              AND (
+            WHERE (
                    (@Triaje = 0 AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                         AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
                         AND (@Rol <> 2 OR o.ordenAten_idMedico = @Usuario)
@@ -1646,7 +1687,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    OR (@Triaje = 1 AND (ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                         OR (o.ordenAten_estado = 'T' AND EXISTS (
                             SELECT 1 FROM vt_vitacora v
-                            WHERE v.vit_detalle = CONCAT('Ficha Médica SOAP guardada Orden #', o.ordenAten_id, ' NHCL #', o.ordenAten_nhcl))))
+                            WHERE v.vit_idFechaMod >= @Hoy
+                              AND v.vit_detalle = CONCAT('Ficha Médica SOAP guardada Orden #', o.ordenAten_id, ' NHCL #', o.ordenAten_nhcl))))
                         AND ((@Rol = 1 AND @IdOrden IS NULL AND o.ordenAten_idlocalidad = @LocalidadSesion)
                             OR EXISTS (SELECT 1 FROM vt_usuarios u
                                 JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero

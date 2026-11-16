@@ -212,6 +212,10 @@ public class OrdenAtencionResumenDto
     public string ColorTriaje { get; set; } = "green";
     public string Facturado { get; set; } = "N";
     public string NumFacturaBc { get; set; } = string.Empty;
+    public bool TieneHospitalizacionActiva { get; set; }
+    public bool TienePreanestesia { get; set; }
+    public bool TieneProtocoloQuirurgico { get; set; }
+    public bool TieneAlta { get; set; }
 
     public string DespachoDescripcion => TipoDespacho switch
     {

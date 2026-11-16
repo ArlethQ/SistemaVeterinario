@@ -620,19 +620,37 @@
         ("TRIAJE", "En triaje", "attention", "▣", "bg-info text-dark"),
         ("ESPERA_CONSULTA", "En espera de consulta", "waiting", "⌛", "bg-warning text-dark"),
         ("CONSULTA", "En consulta", "pending", "✚", "bg-primary"),
+        ("QUIROFANO_PENDIENTE", "Para cirugía", "waiting", "🔪", "bg-danger-subtle text-danger border border-danger-subtle"),
+        ("PREANESTESIA", "Pre-anestesia", "attention", "💉", "bg-danger"),
+        ("CIRUGIA", "En cirugía", "attention", "🩺", "bg-danger"),
+        ("HOSP_PENDIENTE", "Para hospitalización", "waiting", "🏥", "bg-info-subtle text-info-emphasis border border-info-subtle"),
+        ("HOSPITALIZACION", "En hospitalización 24h", "pending", "🛏️", "bg-info text-dark"),
+        ("PRE_ALTA", "Pre-alta / Alta", "finished", "📄", "bg-success-subtle text-success border border-success-subtle"),
         ("FINALIZADO", "Finalizado", "finished", "◉", "bg-secondary"),
         ("OTRO", "Otros estados", "finished", "•", "bg-secondary")
     ];
 
-    private static string ObtenerEstadoClinico(OrdenAtencionResumenDto orden) => orden.Estado switch
+    private static string ObtenerEstadoClinico(OrdenAtencionResumenDto orden)
     {
-        "A" => "ESPERA",
-        "E" when orden.InicioTriaje.HasValue && !orden.FinTriaje.HasValue => "TRIAJE",
-        "E" when orden.FinTriaje.HasValue && !orden.InicioConsulta.HasValue && !orden.EsProcedimiento => "ESPERA_CONSULTA",
-        "E" => "CONSULTA",
-        "T" => "FINALIZADO",
-        _ => "OTRO"
-    };
+        if (orden.Estado == "T") return "FINALIZADO";
+        if (orden.Estado == "P" || orden.TieneAlta) return "PRE_ALTA";
+        if (orden.TieneHospitalizacionActiva) return "HOSPITALIZACION";
+        if (orden.TieneProtocoloQuirurgico) return "CIRUGIA";
+        if (orden.TienePreanestesia) return "PREANESTESIA";
+        if (string.Equals(orden.Etapa, "Hospitalización", StringComparison.OrdinalIgnoreCase) || orden.TipoDespacho == 3)
+            return "HOSP_PENDIENTE";
+        if (string.Equals(orden.Etapa, "Quirófano", StringComparison.OrdinalIgnoreCase) || orden.TipoDespacho == 4)
+            return "QUIROFANO_PENDIENTE";
+
+        return orden.Estado switch
+        {
+            "A" => "ESPERA",
+            "E" when orden.InicioTriaje.HasValue && !orden.FinTriaje.HasValue => "TRIAJE",
+            "E" when orden.FinTriaje.HasValue && !orden.InicioConsulta.HasValue && !orden.EsProcedimiento => "ESPERA_CONSULTA",
+            "E" => "CONSULTA",
+            _ => "OTRO"
+        };
+    }
 
     private List<OrdenAtencionResumenDto> FiltrarPorEtapa(string etapa) =>
         _ordenes.Where(o => ObtenerEstadoClinico(o) == etapa).OrderBy(o => o.IdOrden).ToList();
