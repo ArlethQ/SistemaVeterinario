@@ -382,34 +382,12 @@
                                     </td>
                                     <td class="text-center orders-actions-cell">
                                         <div class="d-inline-flex flex-wrap align-items-center gap-1 justify-content-center">
-                                            @if (Permisos.Permite("/kardex/enfermeria"))
-                                            {
-                                                <a class="btn btn-sm btn-primary" href="/kardex/enfermeria?orden=@item.OrdenAtencionId&nhcl=@item.Nhcl"><i class="bi bi-folder-fill me-1"></i>Kardex</a>
-                                            }
-                                            @if (Permisos.Permite("/kardex/signos"))
-                                            {
-                                                <a class="btn btn-sm btn-success" href="/kardex/signos/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-activity me-1"></i>Signos</a>
-                                            }
-                                            @if (Permisos.Permite("/hospitalizacion/ficha"))
-                                            {
-                                                <a class="btn btn-sm btn-purple" href="/hospitalizacion/ficha/@item.OrdenAtencionId/@item.Nhcl"><i class="bi bi-file-earmark-text-fill me-1"></i>Ficha 24h</a>
-                                            }
+                                            <button type="button" class="btn btn-sm btn-purple fw-semibold" @onclick="() => AbrirModalModulos(item)">
+                                                <i class="bi bi-window-stack me-1"></i>Expediente / Módulos
+                                            </button>
                                             <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => SeleccionarParaIngresoAsync(item)" title="Editar ingreso / jaula / consentimiento">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>
-                                            @if (AccionesClinicas.Any(accion => Permisos.Permite(accion.Ruta)))
-                                            {
-                                                <details class="actions-more">
-                                                    <summary class="btn btn-sm btn-outline-secondary action-more-button" title="Más acciones"><i class="bi bi-three-dots-vertical"></i></summary>
-                                                    <div class="actions-menu">
-                                                        <div class="actions-menu-title">Más acciones clínicas</div>
-                                                        @foreach (var accion in AccionesClinicas.Where(accion => Permisos.Permite(accion.Ruta)))
-                                                        {
-                                                            <a class="actions-menu-item" href="@($"{accion.Ruta}/{item.OrdenAtencionId}/{item.Nhcl}")">@accion.Texto</a>
-                                                        }
-                                                    </div>
-                                                </details>
-                                            }
                                         </div>
                                     </td>
                                 </tr>
@@ -505,6 +483,134 @@
     </div>
 }
 
+@if (_ordenModal is not null)
+{
+    <div class="hosp-modal-backdrop" @onclick="CerrarModalModulos"></div>
+    <section class="hosp-expediente-modal" role="dialog" aria-modal="true" aria-label="Expediente clínico del paciente">
+        <header class="hosp-expediente-header">
+            <div>
+                <small class="text-uppercase fw-bold text-muted">
+                    NHCL #@_ordenModal.Nhcl · @_ordenModal.Especie · @_ordenModal.Sexo · Tutor: @_ordenModal.Cliente
+                </small>
+                <h5 class="mb-0 fw-bold text-dark">Expediente del paciente: @_ordenModal.Paciente</h5>
+            </div>
+
+            <div class="d-flex align-items-center gap-2 ms-auto me-3">
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6">
+                    <i class="bi bi-file-earmark-medical me-1"></i>Orden #@_ordenModal.OrdenAtencionId
+                </span>
+                @if (!string.IsNullOrWhiteSpace(_ordenModal.JaulaCodigo))
+                {
+                    <span class="badge text-bg-info px-2 py-2">
+                        <i class="bi bi-box-seam me-1"></i>@_ordenModal.JaulaCodigo
+                    </span>
+                }
+            </div>
+
+            <button type="button" class="hosp-modal-close" title="Cerrar" @onclick="CerrarModalModulos">×</button>
+        </header>
+
+        <div class="hosp-expediente-tabs">
+            <ul class="nav nav-tabs flex-nowrap">
+                @foreach (var tab in PestanasDisponiblesModal)
+                {
+                    <li class="nav-item">
+                        <button type="button"
+                                class="nav-link @(_pestanaModuloActiva == tab.Id ? "active fw-bold text-dark" : "text-primary")"
+                                @onclick="() => _pestanaModuloActiva = tab.Id">
+                            <span class="me-1">@tab.Icono</span> @tab.Titulo
+                        </button>
+                    </li>
+                }
+            </ul>
+        </div>
+
+        <div class="hosp-expediente-modal-body">
+            @switch (_pestanaModuloActiva)
+            {
+                case "soap":
+                    <FichaMedica @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                 IdOrden="@_ordenModal.OrdenAtencionId"
+                                 Nhcl="@_ordenModal.Nhcl"
+                                 ModoModal="true"
+                                 SoloLectura="true" />
+                    break;
+                case "kardex":
+                    <KardexEnfermeria @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                      IdOrden="@_ordenModal.OrdenAtencionId"
+                                      Nhcl="@_ordenModal.Nhcl"
+                                      ModoModal="true" />
+                    break;
+                case "signos":
+                    <EnfermeriaSignos @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                      IdOrden="@_ordenModal.OrdenAtencionId"
+                                      Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "ficha24h":
+                    <FichaHospitalizacion @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                          IdOrden="@_ordenModal.OrdenAtencionId"
+                                          Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "monitoreo":
+                    <MonitoreoHospitalario @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                           IdOrden="@_ordenModal.OrdenAtencionId"
+                                           Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "preanestesia":
+                    <PreAnestesia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                  IdOrden="@_ordenModal.OrdenAtencionId"
+                                  Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "anestesia":
+                    <HojaAnestesia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                   IdOrden="@_ordenModal.OrdenAtencionId"
+                                   Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "protocolo":
+                    <ProtocoloQuirurgico @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                         IdOrden="@_ordenModal.OrdenAtencionId"
+                                         Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "recuperacion":
+                    <SalaRecuperacion @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                      IdOrden="@_ordenModal.OrdenAtencionId"
+                                      Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "evoluciones":
+                    <EvolucionMedica @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                     IdOrden="@_ordenModal.OrdenAtencionId"
+                                     Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "recetario":
+                    <RecetarioMedico @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                     IdOrden="@_ordenModal.OrdenAtencionId"
+                                     Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "consentimientos":
+                    <AutorizacionesAlta @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                        IdOrden="@_ordenModal.OrdenAtencionId"
+                                        Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "laboratorio":
+                    <OrdenesLaboratorio @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                        IdOrden="@_ordenModal.OrdenAtencionId"
+                                        Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "imagenologia":
+                    <OrdenesImagenologia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                         IdOrden="@_ordenModal.OrdenAtencionId"
+                                         Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "informes":
+                    <BandejaResultadosDiagnosticos @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                                   IdOrden="@_ordenModal.OrdenAtencionId"
+                                                   Nhcl="@_ordenModal.Nhcl" />
+                    break;
+            }
+        </div>
+    </section>
+}
+
 <style>
     .hosp-avatar {
         width: 32px;
@@ -596,6 +702,88 @@
         background: #f1f5f9;
         color: #0f172a;
     }
+
+    .hosp-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.52);
+        backdrop-filter: blur(2px);
+        z-index: 1050;
+    }
+
+    .hosp-expediente-modal {
+        position: fixed;
+        inset: 3vh 2.5vw;
+        background: #f8fafc;
+        border-radius: 16px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+        z-index: 1055;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .hosp-expediente-header {
+        background: #fff;
+        padding: 12px 20px;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .hosp-modal-close {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        font-size: 20px;
+        line-height: 1;
+        color: #475569;
+        cursor: pointer;
+    }
+
+    .hosp-modal-close:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+    }
+
+    .hosp-expediente-tabs {
+        background: #fff;
+        padding: 6px 16px 0;
+        border-bottom: 1px solid #e2e8f0;
+        overflow-x: auto;
+    }
+
+    .hosp-expediente-tabs .nav-tabs {
+        border-bottom: none;
+        gap: 4px;
+    }
+
+    .hosp-expediente-tabs .nav-link {
+        white-space: nowrap;
+        font-size: 12.5px;
+        padding: 8px 12px;
+        border-radius: 8px 8px 0 0;
+    }
+
+    .hosp-expediente-modal-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px 16px;
+    }
+
+    /* Oculta selectores y buscadores de orden dentro del modal porque la orden ya está fija */
+    .hosp-expediente-modal-body .buscador-orden-clinica,
+    .hosp-expediente-modal-body .no-print .row > .col-md-5:first-child,
+    .hosp-expediente-modal-body .no-print .row > .col-md-4:first-child,
+    .hosp-expediente-modal-body .no-print .row > .col-md-3,
+    .hosp-expediente-modal-body select[style*="280px"],
+    .hosp-expediente-modal-body div:has(> select[style*="280px"]) {
+        display: none !important;
+    }
 </style>
 
 @code {
@@ -615,28 +803,36 @@
         ("Fecha", "[FECHAPIE]")
     ];
 
-    private static readonly (string Ruta, string Texto)[] AccionesClinicas =
+    private static readonly (string Id, string Icono, string Titulo, string Permiso)[] PestanasModulos =
     [
-        ("/hospitalizacion/monitoreo", "🩺 Monitoreo"),
-        ("/quirofano/preanestesia", "🧪 Pre-Anestesia"),
-        ("/quirofano/anestesia", "🫁 Anestesia"),
-        ("/quirofano/protocolo", "🔪 Protocolo Quirúrgico"),
-        ("/quirofano/recuperacion", "🛏️ Recuperación"),
-        ("/consulta/fichamedica", "📋 Historia Clínica SOAP"),
-        ("/consulta/evoluciones", "📝 Evolución Médica"),
-        ("/consulta/recetario", "💊 Recetario"),
-        ("/consulta/autorizaciones", "📄 Consentimientos y Alta"),
-        ("/diagnostico/laboratorio", "🔬 Laboratorio"),
-        ("/diagnostico/imagenologia", "☢️ RX / Ecografía"),
-        ("/diagnostico/bandeja", "📥 Informes")
+        ("soap", "📋", "Historia Clínica SOAP", "/consulta/fichamedica"),
+        ("kardex", "📁", "Kardex", "/kardex/enfermeria"),
+        ("signos", "📈", "Signos", "/kardex/signos"),
+        ("ficha24h", "📄", "Ficha 24h", "/hospitalizacion/ficha"),
+        ("monitoreo", "🩺", "Monitoreo", "/hospitalizacion/monitoreo"),
+        ("preanestesia", "🧪", "Pre-Anestesia", "/quirofano/preanestesia"),
+        ("anestesia", "🫁", "Anestesia", "/quirofano/anestesia"),
+        ("protocolo", "🔪", "Protocolo Quirúrgico", "/quirofano/protocolo"),
+        ("recuperacion", "🛏️", "Recuperación", "/quirofano/recuperacion"),
+        ("evoluciones", "📝", "Evolución Médica", "/consulta/evoluciones"),
+        ("recetario", "💊", "Recetario", "/consulta/recetario"),
+        ("consentimientos", "📄", "Consentimientos y Alta", "/consulta/autorizaciones"),
+        ("laboratorio", "🔬", "Laboratorio", "/diagnostico/laboratorio"),
+        ("imagenologia", "☢️", "RX / Ecografía", "/diagnostico/imagenologia"),
+        ("informes", "📥", "Informes", "/diagnostico/bandeja")
     ];
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
 
     private List<OrdenHospitalizacionColaDto> _ordenes = [];
     private List<JaulaClinicaDto> _jaulas = [];
     private OrdenHospitalizacionColaDto? _ordenSeleccionada;
+    private OrdenHospitalizacionColaDto? _ordenModal;
+    private string _pestanaModuloActiva = "kardex";
     private IngresoHospitalizacionDto _ingreso = new();
     private AutorizacionClinicaDto? _consentimiento;
+
+    private IEnumerable<(string Id, string Icono, string Titulo, string Permiso)> PestanasDisponiblesModal =>
+        PestanasModulos.Where(t => Permisos.Permite(t.Permiso));
 
     private string _filtro = string.Empty;
     private string _tituloConsentimiento = "Consentimiento Informado de Hospitalización";
@@ -725,6 +921,19 @@
         _consentimiento = null;
         _htmlConsentimiento = string.Empty;
         _mostrarModalConsentimiento = false;
+    }
+
+    private void AbrirModalModulos(OrdenHospitalizacionColaDto item)
+    {
+        _ordenModal = item;
+        Session.SeleccionarOrden(item.OrdenAtencionId, item.Nhcl, item.Paciente);
+        var primera = PestanasDisponiblesModal.FirstOrDefault().Id;
+        _pestanaModuloActiva = string.IsNullOrWhiteSpace(primera) ? "kardex" : primera;
+    }
+
+    private void CerrarModalModulos()
+    {
+        _ordenModal = null;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
