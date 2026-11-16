@@ -521,10 +521,10 @@ else if (paciente != null)
         cargandoInicial = true;
         await Task.Yield();
 
-        ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
-
-        if (IdOrden <= 0)
+        var cargarOrdenesPrimero = IdOrden <= 0;
+        if (cargarOrdenesPrimero)
         {
+            ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
             var ordenInicial = Session.OrdenActiva.HasValue
                 ? ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == Session.OrdenActiva.Value)
                 : ordenesActivas.FirstOrDefault();
@@ -539,9 +539,15 @@ else if (paciente != null)
         if (IdOrden > 0)
         {
             ordenInput = IdOrden;
-            await CargarDatosAsync();
+            await CargarDatosAsync(navegar: false);
         }
         cargandoInicial = false;
+
+        if (!cargarOrdenesPrimero)
+        {
+            StateHasChanged();
+            ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+        }
     }
 
     private void CambiarTab(int tab)
@@ -611,7 +617,7 @@ else if (paciente != null)
         await CargarDatosAsync();
     }
 
-    private async Task CargarDatosAsync()
+    private async Task CargarDatosAsync(bool navegar = true)
     {
         var p = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
         if (p != null)
@@ -635,7 +641,11 @@ else if (paciente != null)
             paciente = p;
             nhclInput = Nhcl;
             ordenInput = IdOrden;
-            Nav.NavigateTo($"/quirofano/recuperacion/{IdOrden}/{Nhcl}", false);
+            var ruta = $"/quirofano/recuperacion/{IdOrden}/{Nhcl}";
+            if (navegar && Nav.Uri != Nav.ToAbsoluteUri(ruta).AbsoluteUri)
+            {
+                Nav.NavigateTo(ruta);
+            }
         }
         else
         {

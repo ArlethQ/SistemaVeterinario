@@ -509,12 +509,16 @@ else if (paciente != null)
         cargandoInicial = true;
         await Task.Yield();
 
-        var tProf = KardexService.ObtenerProfesionalesQuirurgicosAsync();
-        var tOrd = KardexService.ObtenerOrdenesActivasAsync();
-        await Task.WhenAll(tProf, tOrd);
+        var cargarOrdenesPrimero = IdOrden <= 0 && Session.OrdenActiva is not > 0;
+        var tareaProfesionales = KardexService.ObtenerProfesionalesQuirurgicosAsync();
+        if (cargarOrdenesPrimero)
+        {
+            var tareaOrdenes = KardexService.ObtenerOrdenesActivasAsync();
+            await Task.WhenAll(tareaProfesionales, tareaOrdenes);
+            ordenesActivas = await tareaOrdenes;
+        }
 
-        profesionales = await tProf;
-        ordenesActivas = await tOrd;
+        profesionales = await tareaProfesionales;
 
         if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
         {
@@ -530,9 +534,15 @@ else if (paciente != null)
         if (IdOrden > 0)
         {
             ordenInput = IdOrden;
-            await CargarDatosAsync();
+            await CargarDatosAsync(navegar: false);
         }
         cargandoInicial = false;
+
+        if (!cargarOrdenesPrimero)
+        {
+            StateHasChanged();
+            ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+        }
     }
 
     private void CambiarTab(int tab)
@@ -700,7 +710,7 @@ else if (paciente != null)
         }
     }
 
-    private async Task CargarDatosAsync()
+    private async Task CargarDatosAsync(bool navegar = true)
     {
         var p = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
         if (p != null)
@@ -713,7 +723,11 @@ else if (paciente != null)
             CalcularDuracionCirugia();
             paciente = p;
             CargarArchivosQuirurgicos();
-            Nav.NavigateTo($"/quirofano/protocolo/{IdOrden}/{Nhcl}", false);
+            var ruta = $"/quirofano/protocolo/{IdOrden}/{Nhcl}";
+            if (navegar && Nav.Uri != Nav.ToAbsoluteUri(ruta).AbsoluteUri)
+            {
+                Nav.NavigateTo(ruta);
+            }
         }
         else
         {

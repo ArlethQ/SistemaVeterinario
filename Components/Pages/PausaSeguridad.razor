@@ -347,7 +347,11 @@ else if (paciente != null)
         cargandoInicial = true;
         await Task.Yield();
 
-        ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+        var cargarOrdenesPrimero = IdOrden <= 0 && Session.OrdenActiva is not > 0;
+        if (cargarOrdenesPrimero)
+        {
+            ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+        }
 
         if (IdOrden <= 0 && Session.OrdenActiva.HasValue && Session.OrdenActiva.Value > 0)
         {
@@ -364,9 +368,15 @@ else if (paciente != null)
         {
             ordenInput = IdOrden;
             nhclInput = Nhcl;
-            await CargarDatosAsync();
+            await CargarDatosAsync(navegar: false);
         }
         cargandoInicial = false;
+
+        if (!cargarOrdenesPrimero)
+        {
+            StateHasChanged();
+            ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+        }
     }
 
     private async Task OnInputKeyDown(KeyboardEventArgs e)
@@ -429,7 +439,7 @@ else if (paciente != null)
         await CargarDatosAsync();
     }
 
-    private async Task CargarDatosAsync()
+    private async Task CargarDatosAsync(bool navegar = true)
     {
         var p = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
         if (p != null)
@@ -440,7 +450,11 @@ else if (paciente != null)
             Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
             pausaDto = await QuirofanoService.ObtenerPausaSeguridadAsync(IdOrden, Nhcl);
             paciente = p;
-            Nav.NavigateTo($"/quirofano/pausa-seguridad/{IdOrden}/{Nhcl}", false);
+            var ruta = $"/quirofano/pausa-seguridad/{IdOrden}/{Nhcl}";
+            if (navegar && Nav.Uri != Nav.ToAbsoluteUri(ruta).AbsoluteUri)
+            {
+                Nav.NavigateTo(ruta);
+            }
         }
         else
         {
