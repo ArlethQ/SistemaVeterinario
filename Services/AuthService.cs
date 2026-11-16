@@ -378,7 +378,8 @@ public class AuthService : IAuthService
                          (4, 'Hospitalización 24h'), (5, 'Quirófano y anestesia'),
                          (6, 'Consulta e historia'), (8, 'Laboratorio e imagen'),
                          (9, 'Facturación'), (10, 'Contabilidad'),
-                         (11, 'Configuración clínica'), (12, 'Seguridad'), (13, 'Enfermería')) grupos(Sec, Descripcion)
+                         (11, 'Configuración clínica'), (12, 'Seguridad'), (13, 'Enfermería'),
+                         (14, 'Organización')) grupos(Sec, Descripcion)
             WHERE NOT EXISTS (SELECT 1 FROM vt_menuDinamico m
                               WHERE m.secNuevoMenu = grupos.Sec AND ISNULL(LTRIM(RTRIM(m.url)), '') = '');
 
@@ -414,7 +415,6 @@ public class AuthService : IAuthService
                 (610, 'Historial del paciente', 6, 'consulta/historial'),
                 (701, 'Operaciones clínicas', 7, 'operaciones/clinicas'),
                 (702, 'Programación clínica', 7, 'programacion/clinica'),
-                (703, 'Pisos y consultorios', 7, 'programacion/consultorios'),
                 (801, 'Órdenes de laboratorio', 8, 'diagnostico/laboratorio'),
                 (802, 'Rayos X y ecografía', 8, 'diagnostico/imagenologia'),
                 (803, 'Bandeja de resultados', 8, 'diagnostico/bandeja'),
@@ -490,12 +490,13 @@ public class AuthService : IAuthService
                 (1102, 'Diagnósticos y laboratorio', 11, 'administracion/catalogos-operativos'),
                 (1103, 'Localidades y especialidades', 11, 'administracion/localidades'),
                 (1104, 'Organización de menús', 11, 'administracion/menus'),
-                (1105, 'Jaulas', 11, 'programacion/jaulas'),
                 (1201, 'Usuarios', 12, 'administracion/usuarios'),
                 (1202, 'Roles', 12, 'administracion/roles'),
                 
                 (1204, 'Asignar permisos', 12, 'administracion/roles-permisos'),
-                (1205, 'Bitácora de auditoría', 12, 'administracion/bitacora');
+                (1205, 'Bitácora de auditoría', 12, 'administracion/bitacora'),
+                (1401, 'Pisos y consultorios', 14, 'programacion/consultorios'),
+                (1402, 'Jaulas', 14, 'programacion/jaulas');
 
             UPDATE dest
             SET dest.descripcion = CASE WHEN NULLIF(LTRIM(RTRIM(dest.descripcion)), '') IS NULL

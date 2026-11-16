@@ -205,16 +205,9 @@
                     <NavLink class="menu-link" href="operaciones/clinicas"><MenuIcon Name="hospital" /><span>Operaciones clínicas</span></NavLink>
                 }
 
-                @if (TienePermiso("programacion/clinica") || TienePermiso("programacion/consultorios"))
+                @if (TienePermiso("programacion/clinica"))
                 {
-                    @if (TienePermiso("programacion/clinica"))
-                    {
-                        <NavLink class="menu-link" href="programacion/clinica"><MenuIcon Name="surgery" /><span>Programación clínica</span></NavLink>
-                    }
-                    @if (TienePermiso("programacion/consultorios") || TienePermiso("programacion/clinica"))
-                    {
-                        <NavLink class="menu-link" href="programacion/consultorios"><MenuIcon Name="hospital" /><span>Pisos y consultorios</span></NavLink>
-                    }
+                    <NavLink class="menu-link" href="programacion/clinica"><MenuIcon Name="surgery" /><span>Programación clínica</span></NavLink>
                 }
 
                 @if (TieneAlguno(RutasLaboratorio))
@@ -420,13 +413,26 @@
                             {
                                 <NavLink href="administracion/localidades">Localidades y especialidades</NavLink>
                             }
-                            @if (TienePermiso("programacion/jaulas") || TienePermiso("programacion/consultorios") || TienePermiso("administracion/localidades"))
-                            {
-                                <NavLink href="programacion/jaulas">Jaulas</NavLink>
-                            }
                             @if (TienePermiso("administracion/menus"))
                             {
                                 <NavLink href="administracion/menus">Organización de menús</NavLink>
+                            }
+                        </div>
+                    </details>
+                }
+
+                @if (TieneAlguno(RutasOrganizacion))
+                {
+                    <details>
+                        <summary><MenuIcon Name="hospital" /><span>Organización</span><i>⌄</i></summary>
+                        <div class="submenu">
+                            @if (TienePermiso("programacion/consultorios") || TienePermiso("programacion/clinica"))
+                            {
+                                <NavLink href="programacion/consultorios">Pisos y consultorios</NavLink>
+                            }
+                            @if (TienePermiso("programacion/jaulas") || TienePermiso("programacion/consultorios") || TienePermiso("programacion/clinica"))
+                            {
+                                <NavLink href="programacion/jaulas">Jaulas</NavLink>
                             }
                         </div>
                     </details>
@@ -530,7 +536,6 @@
         ..RutasConsulta,
         "operaciones/clinicas",
         "programacion/clinica",
-        "programacion/consultorios",
         ..RutasLaboratorio
     ];
 
@@ -589,8 +594,14 @@
         "administracion/diagnosticos",
         "administracion/productos",
         "administracion/localidades",
-        "programacion/jaulas",
         "administracion/menus"
+    ];
+
+    private static readonly string[] RutasOrganizacion =
+    [
+        "programacion/consultorios",
+        "programacion/jaulas",
+        "programacion/clinica"
     ];
 
     private static readonly string[] RutasSeguridad =
@@ -605,6 +616,7 @@
     private static readonly string[] RutasSistema =
     [
         ..RutasConfiguracionClinica,
+        ..RutasOrganizacion,
         ..RutasSeguridad
     ];
 
