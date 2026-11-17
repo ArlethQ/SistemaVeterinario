@@ -175,7 +175,7 @@
                     </div>
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
-                            <thead><tr><th>Código</th><th>Descripción</th>@if (MuestraGrupo){<th>@EtiquetaGrupo</th>}@if (_tipo == "grupos-productos"){<th>Aplica para</th>}@if (_tipo == "productos"){<th>Subcategoría</th><th>Tipo</th><th>IVA</th><th class="text-end">Precio</th>}<th>Estado</th><th>Acciones</th></tr></thead>
+                            <thead><tr><th>Código</th><th>Descripción</th>@if (MuestraGrupo){<th>@EtiquetaGrupo</th>}@if (_tipo == "grupos-productos"){<th>Aplica para</th>}@if (_tipo == "productos"){<th>Subcategoría</th><th>Tipo</th><th>Unidad</th><th class="text-end">Conversión</th><th>IVA</th><th class="text-end">Precio</th>}<th>Estado</th><th>Acciones</th></tr></thead>
                             <tbody>
                                 @if (Paginados.Any())
                                 {
@@ -220,9 +220,26 @@
                                                         {
                                                             <span class="badge text-bg-light border ms-1" title="No va al inventario">Sin inv.</span>
                                                         }
-                                                        <span class="badge bg-secondary-subtle text-dark border ms-1" title="Unidad de medida y factor de conversión">
-                                                            @(string.IsNullOrWhiteSpace(x.UnidadMedida) ? "UNIDAD" : x.UnidadMedida)@(x.FactorConversion > 1 ? $" × {x.FactorConversion:G29}" : "")
-                                                        </span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (x.Tipo == "S" || x.Tipo == "SERVICIO")
+                                                    {
+                                                        <span class="text-muted">—</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-dark border">@(string.IsNullOrWhiteSpace(x.UnidadMedida) ? "UNIDAD" : x.UnidadMedida)</span>
+                                                    }
+                                                </td>
+                                                <td class="text-end fw-semibold">
+                                                    @if (x.Tipo == "S" || x.Tipo == "SERVICIO")
+                                                    {
+                                                        <span class="text-muted fw-normal">—</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        @x.FactorConversion.ToString("G29")
                                                     }
                                                 </td>
                                                 <td>@TarifaDescripcion(x)</td>
@@ -252,7 +269,7 @@
                                 else
                                 {
                                     <tr>
-                                        <td colspan="9" class="text-center text-muted py-4">No hay registros que coincidan con los filtros seleccionados.</td>
+                                        <td colspan="11" class="text-center text-muted py-4">No hay registros que coincidan con los filtros seleccionados.</td>
                                     </tr>
                                 }
                             </tbody>
