@@ -246,6 +246,9 @@ public sealed class EContaxSeguridadService(IDbContextFactory<AppDbContext> fact
         var esAdmin = actor.EsJefeEmpresa || miembro.EsAdminSucursal;
         var perfiles = await db.EContaxPerfiles.AsNoTracking().Where(x => x.IdEmpresa == actor.IdEmpresa && x.Estado &&
             (actor.EsJefeEmpresa || x.IdSucursal == null || x.IdSucursal == actor.IdSucursal)).OrderBy(x => x.Nombre).ToListAsync();
+        var tieneInvitaciones = esAdmin && await db.Database
+            .SqlQuery<int>($"SELECT CASE WHEN OBJECT_ID(N'dbo.ECONTAX_INVITACION', N'U') IS NULL THEN 0 ELSE 1 END AS [Value]")
+            .FirstOrDefaultAsync() == 1;
         return new()
         {
             Contexto = actor, Miembro = miembro, EsAdmin = esAdmin,
@@ -260,7 +263,7 @@ public sealed class EContaxSeguridadService(IDbContextFactory<AppDbContext> fact
                          (x.Usuario != null && x.Usuario.idJefe == actor.IdUsuarioTitular && x.Usuario.estadoAsociado == true)) &&
                         (actor.EsJefeEmpresa || x.IdSucursal == actor.IdSucursal || x.IdUsuario == userId)).ToListAsync()
                 : new(),
-            Invitaciones = esAdmin ? await db.EContaxInvitaciones.AsNoTracking().Where(x => x.IdEmpresa == actor.IdEmpresa &&
+            Invitaciones = tieneInvitaciones ? await db.EContaxInvitaciones.AsNoTracking().Where(x => x.IdEmpresa == actor.IdEmpresa &&
                 (actor.EsJefeEmpresa || x.IdSucursal == actor.IdSucursal) && !x.Cancelada && x.Aceptada == null && x.Vence > DateTime.UtcNow)
                 .OrderByDescending(x => x.IdInvitacion).ToListAsync() : new(),
             Menus = esAdmin ? await GetMenusAsync(userId) : new(),
