@@ -326,6 +326,18 @@
                             {
                                 <NavLink href="contabilidad/cuentas-por-cobrar">Cuentas por cobrar y abonos</NavLink>
                             }
+                            @if (TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/cuentas-por-cobrar"))
+                            {
+                                <NavLink href="contabilidad/cuentas-por-pagar">Cuentas por pagar</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/cuentas-por-pagar/registrar") || TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/cuentas-por-cobrar"))
+                            {
+                                <NavLink href="contabilidad/cuentas-por-pagar/registrar">Registrar cuenta por pagar</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/cuentas-por-pagar/estado-cuenta") || TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/proveedores"))
+                            {
+                                <NavLink href="contabilidad/cuentas-por-pagar/estado-cuenta">Estado de cuenta proveedores</NavLink>
+                            }
                             @if (TienePermiso("contabilidad/clientes"))
                             {
                                 <NavLink href="contabilidad/clientes">Clientes contables</NavLink>
@@ -333,6 +345,14 @@
                             @if (TienePermiso("contabilidad/proveedores"))
                             {
                                 <NavLink href="contabilidad/proveedores">Proveedores</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/mis-compras") || TienePermiso("contabilidad/compras/importar-xml"))
+                            {
+                                <NavLink href="contabilidad/mis-compras">Mis compras</NavLink>
+                            }
+                            @if (TienePermiso("contabilidad/compras/nueva-factura") || TienePermiso("contabilidad/compras/importar-xml"))
+                            {
+                                <NavLink href="contabilidad/compras/nueva-factura">Nueva factura de compra</NavLink>
                             }
                             @if (TienePermiso("contabilidad/compras/importar-xml"))
                             {
@@ -581,8 +601,13 @@
     [
         "contabilidad",
         "contabilidad/cuentas-por-cobrar",
+        "contabilidad/cuentas-por-pagar",
+        "contabilidad/cuentas-por-pagar/registrar",
+        "contabilidad/cuentas-por-pagar/estado-cuenta",
         "contabilidad/clientes",
         "contabilidad/proveedores",
+        "contabilidad/mis-compras",
+        "contabilidad/compras/nueva-factura",
         "contabilidad/compras/importar-xml",
         "contabilidad/compras/ordenes",
         "contabilidad/compras/recepciones",
