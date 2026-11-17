@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Data;
 using Simetric.DTOs.EContax;
@@ -11,6 +12,7 @@ public sealed class EContaxTenantService
     public const string RolJefeEmpresa = "JEFE_EMPRESA";
     public const string RolAdminSucursal = "ADMIN_SUCURSAL";
     public const string RolUsuarioSucursal = "USUARIO_SUCURSAL";
+    private static readonly ConcurrentDictionary<int, bool> _localidadesSincronizadas = new();
 
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
 
@@ -167,6 +169,7 @@ public sealed class EContaxTenantService
 
     public async Task<List<EContaxSucursalDto>> GetSucursalesEmpresaAsync(AppDbContext context, int empresaId, bool includeInactive = false)
     {
+        await SincronizarLocalidadesVeterinariaSiAplicaAsync(context, empresaId);
         var query = context.EContaxSucursales
             .AsNoTracking()
             .Where(x => x.IdEmpresa == empresaId);
@@ -240,6 +243,126 @@ public sealed class EContaxTenantService
         asignacion.IdSucursal = sucursalId;
         asignacion.FechaActualizacion = DateTime.UtcNow;
         await context.SaveChangesAsync();
+    }
+
+    private static async Task SincronizarLocalidadesVeterinariaSiAplicaAsync(AppDbContext context, int empresaId)
+    {
+        if (empresaId <= 0 || _localidadesSincronizadas.ContainsKey(empresaId))
+            return;
+
+        try
+        {
+            var existeTabla = await context.Database
+                .SqlQuery<int>($"SELECT CASE WHEN OBJECT_ID(N'dbo.vt_localidades', N'U') IS NULL THEN 0 ELSE 1 END AS [Value]")
+                .FirstOrDefaultAsync();
+            if (existeTabla != 1)
+            {
+                _localidadesSincronizadas[empresaId] = true;
+                return;
+            }
+
+            var localidades = await context.Database
+                .SqlQuery<LocalidadVeterinariaRow>($@"
+                    SELECT loc_id AS LocId,
+                           RTRIM(ISNULL(loc_descripcion, '')) AS Nombre,
+                           RTRIM(ISNULL(loc_prefijo, '')) AS Codigo,
+                           RTRIM(ISNULL(loc_direccion, '')) AS Direccion
+                    FROM dbo.vt_localidades
+                    WHERE ISNULL(loc_estado, 'A') = 'A'
+                      AND NULLIF(LTRIM(RTRIM(loc_descripcion)), '') IS NOT NULL
+                    ORDER BY loc_id")
+                .ToListAsync();
+
+            if (localidades.Count == 0)
+            {
+                _localidadesSincronizadas[empresaId] = true;
+                return;
+            }
+
+            var sucursales = await context.EContaxSucursales
+                .Where(x => x.IdEmpresa == empresaId)
+                .ToListAsync();
+
+            bool cambio = false;
+            foreach (var loc in localidades)
+            {
+                var porNombre = sucursales.FirstOrDefault(s =>
+                    string.Equals(s.Nombre?.Trim(), loc.Nombre, StringComparison.OrdinalIgnoreCase));
+
+                if (porNombre is not null)
+                    continue;
+
+                var placeholderMatriz = sucursales.FirstOrDefault(s =>
+                    s.IdSucursal == loc.LocId &&
+                    string.Equals(s.Nombre?.Trim(), "Matriz", StringComparison.OrdinalIgnoreCase));
+
+                if (placeholderMatriz is not null)
+                {
+                    placeholderMatriz.Nombre = loc.Nombre;
+                    if (!string.IsNullOrWhiteSpace(loc.Codigo)) placeholderMatriz.Codigo = loc.Codigo;
+                    if (!string.IsNullOrWhiteSpace(loc.Direccion)) placeholderMatriz.Direccion = loc.Direccion;
+                    placeholderMatriz.Estado = true;
+                    placeholderMatriz.FechaActualizacion = DateTime.UtcNow;
+                    cambio = true;
+                    continue;
+                }
+
+                int idSucursal = sucursales.Any(s => s.IdSucursal == loc.LocId)
+                    ? (sucursales.Max(s => (int?)s.IdSucursal) ?? 0) + 1
+                    : loc.LocId;
+
+                var nueva = new EContaxSucursal
+                {
+                    IdEmpresa = empresaId,
+                    IdSucursal = idSucursal,
+                    Nombre = loc.Nombre,
+                    Codigo = string.IsNullOrWhiteSpace(loc.Codigo) ? idSucursal.ToString("000") : loc.Codigo,
+                    Direccion = string.IsNullOrWhiteSpace(loc.Direccion) ? null : loc.Direccion,
+                    Estado = true,
+                    FechaCreacion = DateTime.UtcNow
+                };
+                sucursales.Add(nueva);
+                context.EContaxSucursales.Add(nueva);
+                cambio = true;
+            }
+
+            if (cambio)
+                await context.SaveChangesAsync();
+
+            var tieneColsMapeo = await context.Database
+                .SqlQuery<int>($"SELECT CASE WHEN COL_LENGTH(N'dbo.vt_localidades', N'idEmpresa') IS NOT NULL AND COL_LENGTH(N'dbo.vt_localidades', N'idSucursal') IS NOT NULL THEN 1 ELSE 0 END AS [Value]")
+                .FirstOrDefaultAsync();
+
+            if (tieneColsMapeo == 1)
+            {
+                foreach (var loc in localidades)
+                {
+                    var suc = sucursales.FirstOrDefault(s =>
+                        string.Equals(s.Nombre?.Trim(), loc.Nombre, StringComparison.OrdinalIgnoreCase));
+                    if (suc is not null)
+                    {
+                        await context.Database.ExecuteSqlInterpolatedAsync($@"
+                            UPDATE dbo.vt_localidades
+                            SET idEmpresa = {empresaId}, idSucursal = {suc.IdSucursal}
+                            WHERE loc_id = {loc.LocId} AND (idEmpresa IS NULL OR idSucursal IS NULL)");
+                    }
+                }
+            }
+
+            _localidadesSincronizadas[empresaId] = true;
+        }
+        catch
+        {
+            // No bloquear la consulta de sucursales si el esquema veterinario difiere.
+        }
+    }
+
+    private sealed class LocalidadVeterinariaRow
+    {
+        public int LocId { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string Codigo { get; set; } = string.Empty;
+        public string Direccion { get; set; } = string.Empty;
     }
 
     public static bool EsRolJefeEmpresa(string? rol)
