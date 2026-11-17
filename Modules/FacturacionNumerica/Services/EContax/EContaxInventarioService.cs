@@ -38,9 +38,9 @@ public sealed class EContaxInventarioService
         var idsSucursal = sucursalesConsulta.Select(x => x.IdSucursal).ToList();
         var productosQuery = context.Productos
             .AsNoTracking()
-            .Where(p => p.Idempresa == userContext.IdEmpresa && p.Estado == true &&
+            .Where(p => p.Estado != false &&
                         (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
-                        (p.Idsucursal.HasValue && idsSucursal.Contains(p.Idsucursal.Value) ||
+                        ((p.Idempresa == userContext.IdEmpresa && p.Idsucursal.HasValue && idsSucursal.Contains(p.Idsucursal.Value)) ||
                          context.EContaxProductosSucursales.Any(a => a.CodigoProducto == p.Codigo &&
                              a.IdEmpresa == userContext.IdEmpresa && idsSucursal.Contains(a.IdSucursal))));
 
@@ -1172,9 +1172,9 @@ public sealed class EContaxInventarioService
 
     private async Task<Producto?> ObtenerProductoInventariableAsync(AppDbContext context, int empresa, int sucursal, int codigo)
     {
-        return await context.Productos.FirstOrDefaultAsync(p => p.Codigo == codigo && p.Idempresa == empresa && p.Estado == true &&
+        return await context.Productos.FirstOrDefaultAsync(p => p.Codigo == codigo && p.Estado != false &&
             (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
-            (p.Idsucursal == sucursal || context.EContaxProductosSucursales.Any(x =>
+            ((p.Idempresa == empresa && p.Idsucursal == sucursal) || context.EContaxProductosSucursales.Any(x =>
                 x.CodigoProducto == codigo && x.IdEmpresa == empresa && x.IdSucursal == sucursal)));
     }
 
@@ -1196,9 +1196,10 @@ public sealed class EContaxInventarioService
 
         var query = context.Productos
             .AsNoTracking()
-            .Where(p => p.Estado == true &&
+            .Where(p => p.Estado != false &&
                         (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
                         (p.Idempresa == userContext.IdEmpresa ||
+                         p.Idusuario >= 1_000_000 ||
                          (p.Idempresa == null && p.Idusuario.HasValue && usuariosEmpresa.Contains(p.Idusuario.Value))));
 
         if (!string.IsNullOrWhiteSpace(filtro))
@@ -1290,9 +1291,10 @@ public sealed class EContaxInventarioService
                 var sucursal = ResolverSucursalUnica(userContext, sucursales, item.IdSucursal);
                 var producto = await context.Productos.FirstOrDefaultAsync(p =>
                     p.Codigo == item.CodigoProducto &&
-                    p.Estado == true &&
+                    p.Estado != false &&
                     (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
                     (p.Idempresa == userContext.IdEmpresa ||
+                     p.Idusuario >= 1_000_000 ||
                      (p.Idempresa == null && p.Idusuario.HasValue && usuariosEmpresa.Contains(p.Idusuario.Value))));
 
                 if (producto is null)
@@ -1305,7 +1307,7 @@ public sealed class EContaxInventarioService
 
                 bool yaAsignado = await context.EContaxProductosSucursales.AnyAsync(x =>
                     x.CodigoProducto == producto.Codigo && x.IdEmpresa == userContext.IdEmpresa && x.IdSucursal == sucursal.IdSucursal);
-                if (!yaAsignado && producto.Idsucursal != sucursal.IdSucursal)
+                if (!yaAsignado && (producto.Idempresa != userContext.IdEmpresa || producto.Idsucursal != sucursal.IdSucursal))
                 {
                     context.EContaxProductosSucursales.Add(new EContaxProductoSucursal
                     {
