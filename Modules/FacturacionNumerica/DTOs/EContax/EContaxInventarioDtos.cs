@@ -7,6 +7,8 @@ public sealed class EContaxInventarioItemDto
     public string? NombreProducto { get; set; }
     public int IdSucursal { get; set; }
     public string? NombreSucursal { get; set; }
+    public string UnidadMedida { get; set; } = "UNIDAD";
+    public decimal FactorConversion { get; set; } = 1m;
     public decimal StockActual { get; set; }
     public decimal StockReservado { get; set; }
     public decimal StockDisponible => Math.Max(0, StockActual - StockReservado);
@@ -202,6 +204,8 @@ public sealed class EContaxProductoParaStockDto
     public string? CodigoPrincipal { get; set; }
     public string? NombreProducto { get; set; }
     public string? Categoria { get; set; }
+    public string UnidadMedida { get; set; } = "UNIDAD";
+    public decimal FactorConversion { get; set; } = 1m;
     public decimal CostoReferencia { get; set; }
     public decimal StockActual { get; set; }
     public decimal StockMinimo { get; set; }

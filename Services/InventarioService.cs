@@ -57,7 +57,7 @@ public class InventarioService : IInventarioService
                     Inventory = 0,
                     Available = 0,
                     UnitPrice = x.Precio ?? 0,
-                    BaseUnitOfMeasureCode = "UND",
+                    BaseUnitOfMeasureCode = string.IsNullOrWhiteSpace(x.UnidadMedida) ? "UND" : x.UnidadMedida,
                     Location = "VETERINARIA"
                 }));
         }

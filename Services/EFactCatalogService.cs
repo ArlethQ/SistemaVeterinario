@@ -81,6 +81,8 @@ public sealed class EFactCatalogService(
                 Subgrupo = x.IdsubtipoNavigation != null ? x.IdsubtipoNavigation.Descripcion ?? string.Empty : string.Empty,
                 Tipo = (x.Tipocompravena == "S" || x.Tipocompravena == "SERVICIO") ? "S" : "B",
                 Inventario = x.Inventario ?? true,
+                UnidadMedida = string.IsNullOrWhiteSpace(x.UnidadMedida) ? "UNIDAD" : x.UnidadMedida.Trim().ToUpper(),
+                FactorConversion = x.FactorConversionInventario <= 0 ? 1m : x.FactorConversionInventario,
                 CodigoImpuesto = x.Codigoimpuesto ?? string.Empty,
                 PorcentajeImpuesto = x.Porcentajeimpuesto ?? string.Empty,
                 Estado = x.Estado == false ? "I" : "A"
@@ -227,6 +229,12 @@ public sealed class EFactCatalogService(
             entity.Idsubtipo = item.IdSubgrupo;
             entity.Tipocompravena = esServicio ? "S" : "B";
             entity.Inventario = esServicio ? false : item.Inventario;
+            entity.UnidadMedida = esServicio
+                ? "UNIDAD"
+                : (string.IsNullOrWhiteSpace(item.UnidadMedida) ? "UNIDAD" : item.UnidadMedida.Trim().ToUpperInvariant());
+            entity.FactorConversionInventario = esServicio || item.FactorConversion <= 0
+                ? 1m
+                : Math.Round(item.FactorConversion, 4);
             entity.Codigoimpuesto = item.CodigoImpuesto == "2" ? "2" : null;
             entity.Porcentajeimpuesto = entity.Codigoimpuesto == "2" ? item.PorcentajeImpuesto : null;
             entity.Estado = item.Estado != "I";

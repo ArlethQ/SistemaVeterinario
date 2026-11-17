@@ -105,7 +105,9 @@
                             <th>Código</th>
                             <th>Producto</th>
                             <th>Categoría</th>
+                            <th>Unidad / Factor</th>
                             <th class="text-end">Stock actual</th>
+                            <th style="width:145px;">Modo ingreso</th>
                             <th style="width:115px;">Cantidad (+)</th>
                             <th style="width:115px;">Costo unit.</th>
                             <th style="width:95px;">Mínimo</th>
@@ -118,7 +120,7 @@
                         @if (!FilasFiltradas.Any())
                         {
                             <tr>
-                                <td colspan="11" class="text-center text-muted py-4">No se encontraron productos con los filtros actuales.</td>
+                                <td colspan="13" class="text-center text-muted py-4">No se encontraron productos con los filtros actuales.</td>
                             </tr>
                         }
                         else
@@ -138,11 +140,35 @@
                                         }
                                     </td>
                                     <td class="small text-muted">@fila.Categoria</td>
-                                    <td class="text-end fw-bold @(fila.StockActual <= 0 ? "text-danger" : "text-success")">@fila.StockActual.ToString("N2")</td>
+                                    <td>
+                                        <span class="badge bg-secondary-subtle text-dark border">
+                                            @fila.UnidadMedida@(fila.FactorConversion > 1 ? $" × {fila.FactorConversion:G29}" : "")
+                                        </span>
+                                    </td>
+                                    <td class="text-end fw-bold @(fila.StockActual <= 0 ? "text-danger" : "text-success")">
+                                        @fila.StockActual.ToString("N2") <small class="text-muted fw-normal">@fila.UnidadMedida</small>
+                                    </td>
+                                    <td>
+                                        @if (fila.FactorConversion > 1)
+                                        {
+                                            <select class="form-select form-select-sm" @bind="fila.PorEnvase">
+                                                <option value="true">Envases (×@fila.FactorConversion.ToString("G29"))</option>
+                                                <option value="false">Directo (@fila.UnidadMedida)</option>
+                                            </select>
+                                        }
+                                        else
+                                        {
+                                            <span class="small text-muted">Directo (@fila.UnidadMedida)</span>
+                                        }
+                                    </td>
                                     <td>
                                         <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end"
                                                value="@fila.Cantidad"
                                                @onchange="e => ActualizarCantidad(fila, e.Value)" />
+                                        @if (fila.FactorConversion > 1 && fila.PorEnvase && fila.Cantidad > 0)
+                                        {
+                                            <small class="text-primary d-block text-end">= @((fila.Cantidad * fila.FactorConversion).ToString("N2")) @fila.UnidadMedida</small>
+                                        }
                                     </td>
                                     <td>
                                         <input type="number" min="0" step="0.0001" class="form-control form-control-sm text-end"
@@ -276,6 +302,9 @@
                 CodigoPrincipal = p.CodigoPrincipal,
                 NombreProducto = p.NombreProducto,
                 Categoria = p.Categoria ?? "General",
+                UnidadMedida = string.IsNullOrWhiteSpace(p.UnidadMedida) ? "UNIDAD" : p.UnidadMedida,
+                FactorConversion = p.FactorConversion <= 0 ? 1m : p.FactorConversion,
+                PorEnvase = p.FactorConversion > 1,
                 StockActual = p.StockActual,
                 StockMinimo = p.StockMinimo,
                 StockMaximo = p.StockMaximo,
@@ -335,17 +364,23 @@
         _mensaje = null;
         try
         {
-            var payload = seleccionados.Select(f => new EContaxInicializarStockItemDto
+            var payload = seleccionados.Select(f =>
             {
-                CodigoProducto = f.CodigoProducto,
-                IdSucursal = _sucursalId,
-                Cantidad = f.Cantidad,
-                CostoUnitario = f.CostoUnitario,
-                StockMinimo = f.StockMinimo,
-                StockMaximo = f.StockMaximo,
-                NumeroLote = string.IsNullOrWhiteSpace(f.NumeroLote) ? null : f.NumeroLote.Trim(),
-                FechaVencimiento = f.FechaVencimiento,
-                Observacion = "Asignación de stock desde catálogo de productos"
+                decimal factor = (f.FactorConversion > 1 && f.PorEnvase) ? f.FactorConversion : 1m;
+                decimal cantidadReal = f.Cantidad * factor;
+                decimal costoReal = (factor > 1 && f.CostoUnitario > 0) ? Math.Round(f.CostoUnitario / factor, 4) : f.CostoUnitario;
+                return new EContaxInicializarStockItemDto
+                {
+                    CodigoProducto = f.CodigoProducto,
+                    IdSucursal = _sucursalId,
+                    Cantidad = cantidadReal,
+                    CostoUnitario = costoReal,
+                    StockMinimo = f.StockMinimo,
+                    StockMaximo = f.StockMaximo,
+                    NumeroLote = string.IsNullOrWhiteSpace(f.NumeroLote) ? null : f.NumeroLote.Trim(),
+                    FechaVencimiento = f.FechaVencimiento,
+                    Observacion = "Asignación de stock desde catálogo de productos"
+                };
             }).ToList();
 
             var response = await Http.PostAsJsonAsync($"api/e-contax/inventarios/inicializar-stock?userId={_usuarioId}", payload);
@@ -378,6 +413,9 @@
         public string? CodigoPrincipal { get; set; }
         public string? NombreProducto { get; set; }
         public string Categoria { get; set; } = "General";
+        public string UnidadMedida { get; set; } = "UNIDAD";
+        public decimal FactorConversion { get; set; } = 1m;
+        public bool PorEnvase { get; set; }
         public decimal StockActual { get; set; }
         public decimal Cantidad { get; set; }
         public decimal CostoUnitario { get; set; }

@@ -220,6 +220,9 @@
                                                         {
                                                             <span class="badge text-bg-light border ms-1" title="No va al inventario">Sin inv.</span>
                                                         }
+                                                        <span class="badge bg-secondary-subtle text-dark border ms-1" title="Unidad de medida y factor de conversión">
+                                                            @(string.IsNullOrWhiteSpace(x.UnidadMedida) ? "UNIDAD" : x.UnidadMedida)@(x.FactorConversion > 1 ? $" × {x.FactorConversion:G29}" : "")
+                                                        </span>
                                                     }
                                                 </td>
                                                 <td>@TarifaDescripcion(x)</td>
@@ -282,6 +285,21 @@
                     @if (_edit.Tipo == "B")
                     {
                         <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="checkInventario" @bind="_edit.Inventario" /><label class="form-check-label" for="checkInventario">Va al inventario</label></div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label>Unidad de medida</label>
+                                <select class="form-select" @bind="_edit.UnidadMedida">
+                                    @foreach (var u in UnidadesMedidaCatalogo)
+                                    {
+                                        <option value="@u">@u</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label title="Cantidad de unidades de medida que contiene 1 envase/caja">Factor / Contenido</label>
+                                <input class="form-control" type="number" min="0.0001" step="0.01" @bind="_edit.FactorConversion" />
+                            </div>
+                        </div>
                     }
                 }
                 @if (MuestraGrupo)
@@ -328,13 +346,20 @@
         </div>
         @if (_vista is not null)
         {
-            <div class="card mt-3 border-info"><div class="card-header d-flex justify-content-between"><strong>Detalle del producto</strong><button class="btn-close" @onclick="CerrarVista"></button></div><div class="card-body"><div class="row g-3"><div class="col-md-4"><small class="text-muted d-block">Nombre</small><strong>@_vista.Descripcion</strong></div><div class="col-md-2"><small class="text-muted d-block">Código</small><strong>@(string.IsNullOrWhiteSpace(_vista.Codigo) ? $"#{_vista.Id}" : _vista.Codigo)</strong></div><div class="col-md-2"><small class="text-muted d-block">Tipo</small><strong>@(_vista.Tipo == "S" || _vista.Tipo == "SERVICIO" ? "Servicio (S)" : "Bien (B)")</strong></div>@if (_vista.Tipo != "S" && _vista.Tipo != "SERVICIO"){<div class="col-md-2"><small class="text-muted d-block">Inventario</small><strong>@(_vista.Inventario ? "Sí va al inventario" : "No va al inventario")</strong></div>}<div class="col-md-2"><small class="text-muted d-block">Precio base</small><strong>@_vista.Precio?.ToString("C2")</strong></div><div class="col-md-2"><small class="text-muted d-block">IVA</small><strong>@TarifaDescripcion(_vista)</strong></div><div class="col-md-4"><small class="text-muted d-block">Categoría</small><strong>@(string.IsNullOrWhiteSpace(_vista.Grupo) ? "Sin categoría" : _vista.Grupo)</strong></div><div class="col-md-4"><small class="text-muted d-block">Subcategoría</small><strong>@(string.IsNullOrWhiteSpace(_vista.Subgrupo) ? "Sin subcategoría" : _vista.Subgrupo)</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio 2</small><strong>@(_vista.Precio2?.ToString("C2") ?? "—")</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio 3</small><strong>@(_vista.Precio3?.ToString("C2") ?? "—")</strong></div><div class="col-md-2"><small class="text-muted d-block">Estado</small><strong>@(_vista.Estado == "I" ? "Inactivo" : "Activo")</strong></div></div></div></div>
+            <div class="card mt-3 border-info"><div class="card-header d-flex justify-content-between"><strong>Detalle del producto</strong><button class="btn-close" @onclick="CerrarVista"></button></div><div class="card-body"><div class="row g-3"><div class="col-md-4"><small class="text-muted d-block">Nombre</small><strong>@_vista.Descripcion</strong></div><div class="col-md-2"><small class="text-muted d-block">Código</small><strong>@(string.IsNullOrWhiteSpace(_vista.Codigo) ? $"#{_vista.Id}" : _vista.Codigo)</strong></div><div class="col-md-2"><small class="text-muted d-block">Tipo</small><strong>@(_vista.Tipo == "S" || _vista.Tipo == "SERVICIO" ? "Servicio (S)" : "Bien (B)")</strong></div>@if (_vista.Tipo != "S" && _vista.Tipo != "SERVICIO"){<div class="col-md-2"><small class="text-muted d-block">Inventario</small><strong>@(_vista.Inventario ? "Sí va al inventario" : "No va al inventario")</strong></div><div class="col-md-2"><small class="text-muted d-block">Unidad / Factor</small><strong>@_vista.UnidadMedida × @_vista.FactorConversion.ToString("G29")</strong></div>}<div class="col-md-2"><small class="text-muted d-block">Precio base</small><strong>@_vista.Precio?.ToString("C2")</strong></div><div class="col-md-2"><small class="text-muted d-block">IVA</small><strong>@TarifaDescripcion(_vista)</strong></div><div class="col-md-4"><small class="text-muted d-block">Categoría</small><strong>@(string.IsNullOrWhiteSpace(_vista.Grupo) ? "Sin categoría" : _vista.Grupo)</strong></div><div class="col-md-4"><small class="text-muted d-block">Subcategoría</small><strong>@(string.IsNullOrWhiteSpace(_vista.Subgrupo) ? "Sin subcategoría" : _vista.Subgrupo)</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio 2</small><strong>@(_vista.Precio2?.ToString("C2") ?? "—")</strong></div><div class="col-md-2"><small class="text-muted d-block">Precio 3</small><strong>@(_vista.Precio3?.ToString("C2") ?? "—")</strong></div><div class="col-md-2"><small class="text-muted d-block">Estado</small><strong>@(_vista.Estado == "I" ? "Inactivo" : "Activo")</strong></div></div></div></div>
         }
     </div>
 }
 
 @code {
     private bool _autorizado, _error, _aplicaIva, _guardando, _cargando, _importandoExcel;
+    private static readonly string[] UnidadesMedidaCatalogo =
+    [
+        "UNIDAD", "TABLETA", "CAPSULA", "ML", "CC", "L", "GALON",
+        "MG", "MCG", "G", "KG", "LB", "OZ",
+        "DOSIS", "UI", "AMPOLLA", "FRASCO", "PIPETA", "SOBRE", "TUBO",
+        "PAR", "ROLLO", "METRO", "CM", "PAQUETE", "CAJA", "TIRILLA", "KIT"
+    ];
     private static readonly string[] ColumnasExcel =
         ["Código", "Descripción", "Tipo (B/S)", "Precio base", "Precio 2", "Precio 3",
          "Categoría", "Subcategoría", "Inventario (Sí/No)", "Código tarifa IVA", "Estado (A/I)"];
@@ -751,6 +776,8 @@
             Subgrupo = idSubgrupoValido.HasValue ? x.Subgrupo : string.Empty,
             Tipo = tipoNorm,
             Inventario = x.Inventario,
+            UnidadMedida = string.IsNullOrWhiteSpace(x.UnidadMedida) ? "UNIDAD" : x.UnidadMedida,
+            FactorConversion = x.FactorConversion <= 0 ? 1m : x.FactorConversion,
             CodigoImpuesto = x.CodigoImpuesto,
             PorcentajeImpuesto = x.PorcentajeImpuesto,
             Estado = x.Estado

@@ -55,7 +55,7 @@ public sealed class EContaxInventarioService
 
         var productos = await productosQuery
             .OrderBy(p => p.Nombre)
-            .Select(p => new { p.Codigo, p.CodigoPrincipal, p.Nombre, p.Idsucursal })
+            .Select(p => new { p.Codigo, p.CodigoPrincipal, p.Nombre, p.Idsucursal, p.UnidadMedida, p.FactorConversionInventario })
             .ToListAsync();
         var codigos = productos.Select(x => x.Codigo).ToList();
         var asignaciones = await context.EContaxProductosSucursales.AsNoTracking()
@@ -112,6 +112,8 @@ public sealed class EContaxInventarioService
                         NombreProducto = producto.Nombre,
                         IdSucursal = sucursal.IdSucursal,
                         NombreSucursal = nombresSucursal.GetValueOrDefault(sucursal.IdSucursal),
+                        UnidadMedida = string.IsNullOrWhiteSpace(producto.UnidadMedida) ? "UNIDAD" : producto.UnidadMedida.Trim().ToUpperInvariant(),
+                        FactorConversion = producto.FactorConversionInventario <= 0 ? 1m : producto.FactorConversionInventario,
                         StockActual = stock,
                          StockReservado = existencia?.StockReservado ?? 0,
                         StockDisponibleVigente = stockDisponibleVigente,
@@ -1219,6 +1221,8 @@ public sealed class EContaxInventarioService
                 p.CodigoPrincipal,
                 p.Nombre,
                 p.ValorUnitario,
+                p.UnidadMedida,
+                p.FactorConversionInventario,
                 Categoria = p.TipoProductoNavigation != null ? p.TipoProductoNavigation.Descripcion : null
             })
             .ToListAsync();
@@ -1243,6 +1247,8 @@ public sealed class EContaxInventarioService
                     CodigoPrincipal = p.CodigoPrincipal,
                     NombreProducto = p.Nombre,
                     Categoria = string.IsNullOrWhiteSpace(p.Categoria) ? "General" : p.Categoria.Trim(),
+                    UnidadMedida = string.IsNullOrWhiteSpace(p.UnidadMedida) ? "UNIDAD" : p.UnidadMedida.Trim().ToUpperInvariant(),
+                    FactorConversion = p.FactorConversionInventario <= 0 ? 1m : p.FactorConversionInventario,
                     CostoReferencia = p.ValorUnitario ?? 0m,
                     StockActual = ex?.StockActual ?? 0m,
                     StockMinimo = ex?.StockMinimo ?? 0m,
