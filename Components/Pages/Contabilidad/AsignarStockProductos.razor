@@ -151,9 +151,11 @@
                                     <td>
                                         @if (fila.FactorConversion > 1)
                                         {
-                                            <select class="form-select form-select-sm" @bind="fila.PorEnvase">
-                                                <option value="true">Envases (×@fila.FactorConversion.ToString("G29"))</option>
-                                                <option value="false">Directo (@fila.UnidadMedida)</option>
+                                            <select class="form-select form-select-sm"
+                                                    value="@(fila.PorEnvase ? "envase" : "directo")"
+                                                    @onchange='e => fila.PorEnvase = string.Equals(e.Value?.ToString(), "envase", StringComparison.Ordinal)'>
+                                                <option value="envase">Envases (×@fila.FactorConversion.ToString("G29"))</option>
+                                                <option value="directo">Directo (@fila.UnidadMedida)</option>
                                             </select>
                                         }
                                         else
