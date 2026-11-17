@@ -142,11 +142,19 @@
         }
 
         usuarioId = ObtenerIdUsuario(user);
+        if (usuarioId <= 0)
+        {
+            error = "Sesión no válida.";
+            cargando = false;
+            return;
+        }
+
         var isSuperAdmin = string.Equals(user.FindFirst("IdTipoUsuario")?.Value, AppAccessService.AdminRoleId, StringComparison.OrdinalIgnoreCase);
         var access = await AppAccessService.CanAccessAsync(usuarioId, EContaxRoutes.ServiceKey, isSuperAdmin);
         if (!access.HasAccess)
         {
-            Nav.NavigateTo($"/suscripciones?servicio={Uri.EscapeDataString(EContaxRoutes.ServiceKey)}", true);
+            error = "No tienes acceso habilitado al módulo de Bodegas.";
+            cargando = false;
             return;
         }
 

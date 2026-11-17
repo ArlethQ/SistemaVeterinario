@@ -43,6 +43,14 @@ public class InventarioOperacionesBase : ComponentBase
         if (!firstRender) return;
         var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
         _usuarioId = int.TryParse(user.FindFirst("IdUsuario")?.Value ?? user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+        if (_usuarioId <= 0)
+        {
+            Error = "Sesión no válida.";
+            Cargando = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         await CargarAsync();
         await InvokeAsync(StateHasChanged);
     }
