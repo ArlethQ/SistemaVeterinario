@@ -241,77 +241,112 @@
                     <details>
                         <summary><MenuIcon Name="billing" /><span>Facturación</span><i>⌄</i></summary>
                         <div class="submenu">
-                            @if (TienePermiso("facturacion/proformas"))
+                            @if (TieneAlguno("facturacion/proformas", "facturacion/productos", "facturacion/nueva", "facturas"))
                             {
-                                <NavLink href="facturacion/proformas">Pre-facturación veterinaria</NavLink>
+                                <details class="submenu-group" open>
+                                    <summary><span>Ventas y Comprobantes</span><i>⌄</i></summary>
+                                    <div class="submenu">
+                                        @if (TienePermiso("facturacion/proformas"))
+                                        {
+                                            <NavLink href="facturacion/proformas">Pre-facturación veterinaria</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/productos"))
+                                        {
+                                            <NavLink href="facturacion/productos">Productos y servicios</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/nueva"))
+                                        {
+                                            <NavLink href="facturacion/nueva">Nueva factura electrónica</NavLink>
+                                        }
+                                        @if (TienePermiso("facturas"))
+                                        {
+                                            <NavLink href="facturas">Facturas emitidas</NavLink>
+                                        }
+                                    </div>
+                                </details>
                             }
-                            @if (TienePermiso("facturacion/productos"))
+
+                            @if (TieneAlguno("facturacion/nota-credito", "facturacion/notas-credito-generadas", "facturacion/nota-debito", "facturacion/notas-debito-generadas", "facturacion/guia-remision", "facturacion/guias-remision-generadas"))
                             {
-                                <NavLink href="facturacion/productos">Productos y servicios</NavLink>
+                                <details class="submenu-group">
+                                    <summary><span>Notas y Guías</span><i>⌄</i></summary>
+                                    <div class="submenu">
+                                        @if (TienePermiso("facturacion/nota-credito"))
+                                        {
+                                            <NavLink href="facturacion/nota-credito">Nota de crédito</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/notas-credito-generadas"))
+                                        {
+                                            <NavLink href="facturacion/notas-credito-generadas">Notas de crédito emitidas</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/nota-debito"))
+                                        {
+                                            <NavLink href="facturacion/nota-debito">Nota de débito</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/notas-debito-generadas"))
+                                        {
+                                            <NavLink href="facturacion/notas-debito-generadas">Notas de débito emitidas</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/guia-remision"))
+                                        {
+                                            <NavLink href="facturacion/guia-remision">Guía de remisión</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/guias-remision-generadas"))
+                                        {
+                                            <NavLink href="facturacion/guias-remision-generadas">Guías emitidas</NavLink>
+                                        }
+                                    </div>
+                                </details>
                             }
-                            @if (TienePermiso("facturacion/nueva"))
+
+                            @if (TieneAlguno("compras/importar-xml", "facturacion/retenciones-generadas", "compras/nueva-liquidacion", "compras/liquidaciones-generadas", "contabilidad/compra-documentos"))
                             {
-                                <NavLink href="facturacion/nueva">Nueva factura electrónica</NavLink>
+                                <details class="submenu-group">
+                                    <summary><span>Compras y Retenciones</span><i>⌄</i></summary>
+                                    <div class="submenu">
+                                        @if (TienePermiso("compras/importar-xml"))
+                                        {
+                                            <NavLink href="compras/importar-xml">Importar compra / generar retención</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/retenciones-generadas"))
+                                        {
+                                            <NavLink href="facturacion/retenciones-generadas">Retenciones</NavLink>
+                                        }
+                                        @if (TienePermiso("compras/nueva-liquidacion"))
+                                        {
+                                            <NavLink href="compras/nueva-liquidacion">Liquidación de compra</NavLink>
+                                        }
+                                        @if (TienePermiso("compras/liquidaciones-generadas"))
+                                        {
+                                            <NavLink href="compras/liquidaciones-generadas">Liquidaciones emitidas</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/compra-documentos"))
+                                        {
+                                            <NavLink href="contabilidad/compra-documentos">Recargar documentos</NavLink>
+                                        }
+                                    </div>
+                                </details>
                             }
-                            @if (TienePermiso("facturas"))
+
+                            @if (TieneAlguno("facturacion/configuracion/emisor", "facturacion/configuracion/firma", "facturacion/configuracion/caja"))
                             {
-                                <NavLink href="facturas">Facturas emitidas</NavLink>
-                            }
-                            @if (TienePermiso("facturacion/nota-credito"))
-                            {
-                                <NavLink href="facturacion/nota-credito">Nota de crédito</NavLink>
-                            }
-                            @if (TienePermiso("facturacion/notas-credito-generadas"))
-                            {
-                                <NavLink href="facturacion/notas-credito-generadas">Notas de crédito emitidas</NavLink>
-                            }
-                            @if (TienePermiso("facturacion/nota-debito"))
-                            {
-                                <NavLink href="facturacion/nota-debito">Nota de débito</NavLink>
-                            }
-                            @if (TienePermiso("facturacion/notas-debito-generadas"))
-                            {
-                                <NavLink href="facturacion/notas-debito-generadas">Notas de débito emitidas</NavLink>
-                            }
-                            @if (TienePermiso("facturacion/guia-remision"))
-                            {
-                                <NavLink href="facturacion/guia-remision">Guía de remisión</NavLink>
-                            }
-                            @if (TienePermiso("facturacion/guias-remision-generadas"))
-                            {
-                                <NavLink href="facturacion/guias-remision-generadas">Guías emitidas</NavLink>
-                            }
-                            @if (TienePermiso("compras/importar-xml"))
-                            {
-                                <NavLink href="compras/importar-xml">Importar compra / generar retención</NavLink>
-                            }
-                            @if (TienePermiso("facturacion/retenciones-generadas"))
-                            {
-                                <NavLink href="facturacion/retenciones-generadas">Retenciones</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/compra-documentos"))
-                            {
-                                <NavLink href="contabilidad/compra-documentos">Recargar documentos</NavLink>
-                            }
-                            @if (TienePermiso("compras/nueva-liquidacion"))
-                            {
-                                <NavLink href="compras/nueva-liquidacion">Liquidación de compra</NavLink>
-                            }
-                            @if (TienePermiso("compras/liquidaciones-generadas"))
-                            {
-                                <NavLink href="compras/liquidaciones-generadas">Liquidaciones emitidas</NavLink>
-                            }
-                            @if (TienePermiso("facturacion/configuracion/emisor"))
-                            {
-                                <NavLink href="facturacion/configuracion/emisor">Configurar emisor</NavLink>
-                            }
-                            @if (TienePermiso("facturacion/configuracion/firma"))
-                            {
-                                <NavLink href="facturacion/configuracion/firma">Firma electrónica</NavLink>
-                            }
-                            @if (TienePermiso("facturacion/configuracion/caja"))
-                            {
-                                <NavLink href="facturacion/configuracion/caja">Caja y secuenciales</NavLink>
+                                <details class="submenu-group">
+                                    <summary><span>Configuración SRI</span><i>⌄</i></summary>
+                                    <div class="submenu">
+                                        @if (TienePermiso("facturacion/configuracion/emisor"))
+                                        {
+                                            <NavLink href="facturacion/configuracion/emisor">Configurar emisor</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/configuracion/firma"))
+                                        {
+                                            <NavLink href="facturacion/configuracion/firma">Firma electrónica</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/configuracion/caja"))
+                                        {
+                                            <NavLink href="facturacion/configuracion/caja">Caja y secuenciales</NavLink>
+                                        }
+                                    </div>
+                                </details>
                             }
                         </div>
                     </details>
@@ -322,93 +357,137 @@
                     <details>
                         <summary><MenuIcon Name="billing" /><span>Contabilidad</span><i>⌄</i></summary>
                         <div class="submenu">
-                            @if (TienePermiso("contabilidad/cuentas-por-cobrar"))
+                            @if (TieneAlguno("contabilidad/cuentas-por-cobrar", "contabilidad/cuentas-por-pagar", "contabilidad/cuentas-por-pagar/registrar", "contabilidad/cuentas-por-pagar/estado-cuenta", "contabilidad/clientes", "contabilidad/proveedores"))
                             {
-                                <NavLink href="contabilidad/cuentas-por-cobrar">Cuentas por cobrar y abonos</NavLink>
+                                <details class="submenu-group" open>
+                                    <summary><span>Cartera y Terceros</span><i>⌄</i></summary>
+                                    <div class="submenu">
+                                        @if (TienePermiso("contabilidad/cuentas-por-cobrar"))
+                                        {
+                                            <NavLink href="contabilidad/cuentas-por-cobrar">Cuentas por cobrar y abonos</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/cuentas-por-cobrar"))
+                                        {
+                                            <NavLink href="contabilidad/cuentas-por-pagar">Cuentas por pagar</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/cuentas-por-pagar/registrar") || TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/cuentas-por-cobrar"))
+                                        {
+                                            <NavLink href="contabilidad/cuentas-por-pagar/registrar">Registrar cuenta por pagar</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/cuentas-por-pagar/estado-cuenta") || TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/proveedores"))
+                                        {
+                                            <NavLink href="contabilidad/cuentas-por-pagar/estado-cuenta">Estado de cuenta proveedores</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/clientes"))
+                                        {
+                                            <NavLink href="contabilidad/clientes">Clientes contables</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/proveedores"))
+                                        {
+                                            <NavLink href="contabilidad/proveedores">Proveedores</NavLink>
+                                        }
+                                    </div>
+                                </details>
                             }
-                            @if (TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/cuentas-por-cobrar"))
+
+                            @if (TieneAlguno("contabilidad/mis-compras", "contabilidad/compras/nueva-factura", "contabilidad/compras/importar-xml", "contabilidad/compras/ordenes", "contabilidad/compras/recepciones"))
                             {
-                                <NavLink href="contabilidad/cuentas-por-pagar">Cuentas por pagar</NavLink>
+                                <details class="submenu-group">
+                                    <summary><span>Compras</span><i>⌄</i></summary>
+                                    <div class="submenu">
+                                        @if (TienePermiso("contabilidad/mis-compras") || TienePermiso("contabilidad/compras/importar-xml"))
+                                        {
+                                            <NavLink href="contabilidad/mis-compras">Mis compras</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/compras/nueva-factura") || TienePermiso("contabilidad/compras/importar-xml"))
+                                        {
+                                            <NavLink href="contabilidad/compras/nueva-factura">Nueva factura de compra</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/compras/importar-xml"))
+                                        {
+                                            <NavLink href="contabilidad/compras/importar-xml">Importar compras</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/compras/ordenes"))
+                                        {
+                                            <NavLink href="contabilidad/compras/ordenes">Órdenes de compra</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/compras/recepciones"))
+                                        {
+                                            <NavLink href="contabilidad/compras/recepciones">Recepciones de compra</NavLink>
+                                        }
+                                    </div>
+                                </details>
                             }
-                            @if (TienePermiso("contabilidad/cuentas-por-pagar/registrar") || TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/cuentas-por-cobrar"))
+
+                            @if (TieneAlguno("contabilidad/inventarios", "contabilidad/inventarios/asignar-stock", "contabilidad/inventarios/bodegas", "contabilidad/inventarios/operaciones", "contabilidad/inventarios/reportes"))
                             {
-                                <NavLink href="contabilidad/cuentas-por-pagar/registrar">Registrar cuenta por pagar</NavLink>
+                                <details class="submenu-group">
+                                    <summary><span>Inventario y Kardex</span><i>⌄</i></summary>
+                                    <div class="submenu">
+                                        @if (TienePermiso("contabilidad/inventarios"))
+                                        {
+                                            <NavLink href="contabilidad/inventarios">Inventario y kardex</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/inventarios/asignar-stock") || TienePermiso("contabilidad/inventarios"))
+                                        {
+                                            <NavLink href="contabilidad/inventarios/asignar-stock">Asignar stock a productos</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/inventarios/bodegas"))
+                                        {
+                                            <NavLink href="contabilidad/inventarios/bodegas">Bodegas</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/inventarios/operaciones"))
+                                        {
+                                            <NavLink href="contabilidad/inventarios/operaciones">Operaciones de inventario</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/inventarios/reportes"))
+                                        {
+                                            <NavLink href="contabilidad/inventarios/reportes">Reportes de inventario</NavLink>
+                                        }
+                                    </div>
+                                </details>
                             }
-                            @if (TienePermiso("contabilidad/cuentas-por-pagar/estado-cuenta") || TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/proveedores"))
+
+                            @if (TieneAlguno("contabilidad/reportes/documentos", "contabilidad/parametrizacion", "contabilidad/configuracion/general", "contabilidad/organizacion"))
                             {
-                                <NavLink href="contabilidad/cuentas-por-pagar/estado-cuenta">Estado de cuenta proveedores</NavLink>
+                                <details class="submenu-group">
+                                    <summary><span>Reportes y Configuración</span><i>⌄</i></summary>
+                                    <div class="submenu">
+                                        @if (TienePermiso("contabilidad/reportes/documentos"))
+                                        {
+                                            <NavLink href="contabilidad/reportes/documentos">Reportes contables</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/parametrizacion"))
+                                        {
+                                            <NavLink href="contabilidad/parametrizacion">Parametrización</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/configuracion/general"))
+                                        {
+                                            <NavLink href="contabilidad/configuracion/general">Configuración contable</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/organizacion") || TienePermiso("contabilidad/configuracion/general"))
+                                        {
+                                            <NavLink href="contabilidad/organizacion">Organización contable</NavLink>
+                                        }
+                                    </div>
+                                </details>
                             }
-                            @if (TienePermiso("contabilidad/clientes"))
+
+                            @if (TieneAlguno("contabilidad/administracion/usuarios", "contabilidad/administracion/roles"))
                             {
-                                <NavLink href="contabilidad/clientes">Clientes contables</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/proveedores"))
-                            {
-                                <NavLink href="contabilidad/proveedores">Proveedores</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/mis-compras") || TienePermiso("contabilidad/compras/importar-xml"))
-                            {
-                                <NavLink href="contabilidad/mis-compras">Mis compras</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/compras/nueva-factura") || TienePermiso("contabilidad/compras/importar-xml"))
-                            {
-                                <NavLink href="contabilidad/compras/nueva-factura">Nueva factura de compra</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/compras/importar-xml"))
-                            {
-                                <NavLink href="contabilidad/compras/importar-xml">Importar compras</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/compras/ordenes"))
-                            {
-                                <NavLink href="contabilidad/compras/ordenes">Órdenes de compra</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/compras/recepciones"))
-                            {
-                                <NavLink href="contabilidad/compras/recepciones">Recepciones de compra</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/inventarios"))
-                            {
-                                <NavLink href="contabilidad/inventarios">Inventario y kardex</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/inventarios/asignar-stock") || TienePermiso("contabilidad/inventarios"))
-                            {
-                                <NavLink href="contabilidad/inventarios/asignar-stock">Asignar stock a productos</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/inventarios/bodegas"))
-                            {
-                                <NavLink href="contabilidad/inventarios/bodegas">Bodegas</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/inventarios/operaciones"))
-                            {
-                                <NavLink href="contabilidad/inventarios/operaciones">Operaciones de inventario</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/inventarios/reportes"))
-                            {
-                                <NavLink href="contabilidad/inventarios/reportes">Reportes de inventario</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/reportes/documentos"))
-                            {
-                                <NavLink href="contabilidad/reportes/documentos">Reportes contables</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/parametrizacion"))
-                            {
-                                <NavLink href="contabilidad/parametrizacion">Parametrización</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/configuracion/general"))
-                            {
-                                <NavLink href="contabilidad/configuracion/general">Configuración contable</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/organizacion") || TienePermiso("contabilidad/configuracion/general"))
-                            {
-                                <NavLink href="contabilidad/organizacion">Organización contable</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/administracion/usuarios"))
-                            {
-                                <NavLink href="contabilidad/administracion/usuarios">Usuarios contables</NavLink>
-                            }
-                            @if (TienePermiso("contabilidad/administracion/roles"))
-                            {
-                                <NavLink href="contabilidad/administracion/roles">Roles y permisos</NavLink>
+                                <details class="submenu-group">
+                                    <summary><span>Seguridad Contable</span><i>⌄</i></summary>
+                                    <div class="submenu">
+                                        @if (TienePermiso("contabilidad/administracion/usuarios"))
+                                        {
+                                            <NavLink href="contabilidad/administracion/usuarios">Usuarios contables</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/administracion/roles"))
+                                        {
+                                            <NavLink href="contabilidad/administracion/roles">Roles y permisos</NavLink>
+                                        }
+                                    </div>
+                                </details>
                             }
                         </div>
                     </details>
