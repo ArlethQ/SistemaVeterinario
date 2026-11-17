@@ -913,3 +913,60 @@ window.hosvetSessionWatcher = (() => {
         }
     };
 })();
+
+window.hosvetDraft = {
+    save(key, value) {
+        try { localStorage.setItem('hosvet.draft.' + key, value); } catch { }
+    },
+    load(key) {
+        try { return localStorage.getItem('hosvet.draft.' + key); } catch { return null; }
+    },
+    remove(key) {
+        try { localStorage.removeItem('hosvet.draft.' + key); } catch { }
+    },
+    hasSurgeryDraft(idOrden) {
+        try {
+            const prefijos = ['preanestesia_', 'pausaseguridad_', 'anestesia_', 'protocolo_', 'recuperacion_', 'cirugia_'];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (!k || !k.startsWith('hosvet.draft.')) continue;
+                const sub = k.substring('hosvet.draft.'.length);
+                if (prefijos.some(p => sub.startsWith(p + idOrden + '_'))) return true;
+                if (sub.startsWith('signos_' + idOrden + '_')) {
+                    const raw = localStorage.getItem(k);
+                    if (raw) {
+                        const obj = JSON.parse(raw);
+                        if (Array.isArray(obj?.Fechas) && obj.Fechas.some(f => f && f.DiasPostQuirurgico != null && Number(f.DiasPostQuirurgico) > 0)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } catch { }
+        return false;
+    },
+    clearSurgeryDrafts(idOrden) {
+        try {
+            const prefijos = ['preanestesia_', 'pausaseguridad_', 'anestesia_', 'protocolo_', 'recuperacion_', 'cirugia_'];
+            const borrar = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (!k || !k.startsWith('hosvet.draft.')) continue;
+                const sub = k.substring('hosvet.draft.'.length);
+                if (prefijos.some(p => sub.startsWith(p + idOrden + '_'))) {
+                    borrar.push(k);
+                } else if (sub.startsWith('signos_' + idOrden + '_')) {
+                    const raw = localStorage.getItem(k);
+                    if (raw) {
+                        const obj = JSON.parse(raw);
+                        if (Array.isArray(obj?.Fechas)) {
+                            obj.Fechas.forEach(f => { if (f) f.DiasPostQuirurgico = null; });
+                            localStorage.setItem(k, JSON.stringify(obj));
+                        }
+                    }
+                }
+            }
+            borrar.forEach(k => localStorage.removeItem(k));
+        } catch { }
+    }
+};

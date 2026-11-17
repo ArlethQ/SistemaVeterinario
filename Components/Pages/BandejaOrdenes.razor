@@ -527,17 +527,27 @@
     <div class="hosp-modal-backdrop" @onclick="CerrarModalModulos"></div>
     <section class="hosp-expediente-modal" role="dialog" aria-modal="true" aria-label="Expediente clínico del paciente">
         <header class="hosp-expediente-header">
-            <div>
-                <small class="text-uppercase fw-bold text-muted">
-                    NHCL #@_ordenModal.Nhcl · @_ordenModal.Especie · @_ordenModal.Sexo · Tutor: @_ordenModal.Cliente
-                </small>
-                <h5 class="mb-0 fw-bold text-dark">Expediente del paciente: @_ordenModal.Paciente</h5>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button"
+                        class="hosp-sidebar-toggle @(_sidebarModalAbierta ? "active" : "")"
+                        title="@(_sidebarModalAbierta ? "Ocultar menú lateral" : "Mostrar menú lateral")"
+                        aria-pressed="@_sidebarModalAbierta"
+                        @onclick="() => _sidebarModalAbierta = !_sidebarModalAbierta">
+                    <i class="bi bi-layout-sidebar"></i>
+                </button>
+                <div>
+                    <small class="text-uppercase fw-bold text-muted">
+                        NHCL #@_ordenModal.Nhcl · @_ordenModal.Especie · @_ordenModal.Sexo · Tutor: @_ordenModal.Cliente
+                    </small>
+                    <h5 class="mb-0 fw-bold text-dark">Expediente del paciente: @_ordenModal.Paciente</h5>
+                </div>
             </div>
 
-            <div class="d-flex flex-wrap align-items-center gap-3 ms-auto me-3">
-                <div class="d-flex flex-wrap align-items-center gap-3 px-3 py-1 bg-light border rounded">
+            <div class="d-flex flex-wrap align-items-center gap-2 ms-auto me-2">
+                <div class="d-flex flex-wrap align-items-center gap-3 px-2 py-1 bg-light border rounded">
                     <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" id="chkModalCirugia"
+                        <input @key="(_ordenModal.OrdenAtencionId, _ordenModal.RequiereCirugia, _switchCirugiaVersion)"
+                               class="form-check-input" type="checkbox" id="chkModalCirugia"
                                checked="@_ordenModal.RequiereCirugia"
                                disabled="@(_guardandoChecksModal || (_tieneDatosCirugia && _ordenModal.RequiereCirugia))"
                                title="@(_tieneDatosCirugia && _ordenModal.RequiereCirugia ? "No se puede deshabilitar porque ya hay registros en módulos de cirugía" : "Habilitar o deshabilitar módulos de cirugía")"
@@ -558,7 +568,7 @@
                     </div>
                 </div>
 
-                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6">
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-2">
                     <i class="bi bi-file-earmark-medical me-1"></i>Orden #@_ordenModal.OrdenAtencionId
                 </span>
                 @if (!string.IsNullOrWhiteSpace(_ordenModal.JaulaCodigo))
@@ -580,27 +590,221 @@
             </div>
         }
 
-        <div class="hosp-expediente-tabs">
-            <ul class="nav nav-tabs flex-nowrap">
-                @foreach (var tab in PestanasDisponiblesModal)
-                {
-                    var bloqueada = EstaPestanaBloqueada(tab.Id);
-                    <li class="nav-item">
-                        <button type="button"
-                                disabled="@bloqueada"
-                                title="@(bloqueada ? "Pestaña bloqueada según los checks de Cirugía / Hospitalización" : tab.Titulo)"
-                                class="nav-link @(bloqueada ? "disabled text-muted opacity-50" : _pestanaModuloActiva == tab.Id ? "active fw-bold text-dark" : "text-primary")"
-                                @onclick="() => CambiarPestanaModalAsync(tab.Id)">
-                            <span class="me-1">@(bloqueada ? "🔒" : tab.Icono)</span> @tab.Titulo
-                        </button>
-                    </li>
-                }
-            </ul>
-        </div>
+        <div class="hosp-expediente-workspace">
+            @if (_sidebarModalAbierta)
+            {
+                var gruposSidebar = PestanasDisponiblesModal
+                    .GroupBy(t => t.Grupo)
+                    .ToList();
+                <aside class="hosp-expediente-sidebar" aria-label="Menú del expediente">
+                    @for (var gIdx = 0; gIdx < gruposSidebar.Count; gIdx++)
+                    {
+                        var grupo = gruposSidebar[gIdx];
+                        if (gIdx > 0)
+                        {
+                            <div class="hosp-sidebar-divider"></div>
+                        }
+                        if (!string.IsNullOrWhiteSpace(grupo.Key))
+                        {
+                            <div class="hosp-sidebar-group-title">@grupo.Key</div>
+                        }
+                        @foreach (var tab in grupo)
+                        {
+                            var bloqueada = EstaPestanaBloqueada(tab.Id);
+                            var activa = _pestanaModuloActiva == tab.Id;
+                            <button type="button"
+                                    disabled="@bloqueada"
+                                    title="@(bloqueada ? "Módulo bloqueado según los switches de Cirugía / Hospitalización" : tab.Titulo)"
+                                    class="hosp-sidebar-item @(activa ? "active" : "") @(bloqueada ? "locked" : "")"
+                                    @onclick="() => CambiarPestanaModalAsync(tab.Id)">
+                                <i class="bi @(bloqueada ? "bi-lock" : tab.Icono) hosp-sidebar-icon"></i>
+                                <span class="hosp-sidebar-label">@tab.Titulo</span>
+                            </button>
+                        }
+                    }
+                </aside>
+            }
 
-        <div class="hosp-expediente-modal-body">
+            <div class="hosp-expediente-modal-body">
             @switch (_pestanaModuloActiva)
             {
+                case "resumen":
+                    @if (_cargandoResumen)
+                    {
+                        <div class="py-4 text-center text-primary small">
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>Cargando resumen clínico del paciente...
+                        </div>
+                    }
+                    else
+                    {
+                        var fotoResumen = ObtenerFotoPaciente(_ordenModal.Nhcl);
+                        <div class="d-flex flex-column gap-3">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                                    <span class="hosp-avatar" style="width: 64px; height: 64px; flex: 0 0 64px; font-size: 22px;">
+                                        @if (!string.IsNullOrEmpty(fotoResumen))
+                                        {
+                                            <img src="@fotoResumen" alt="Foto de @_ordenModal.Paciente" />
+                                        }
+                                        else
+                                        {
+                                            <b>@InicialPaciente(_ordenModal.Paciente)</b>
+                                        }
+                                    </span>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                                            <h4 class="h5 mb-0 fw-bold text-dark">@_ordenModal.Paciente</h4>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">NHCL #@_ordenModal.Nhcl</span>
+                                            <span class="badge @ClaseTipoAtencion(_ordenModal)">@_ordenModal.TipoAtencionTexto</span>
+                                            @if (_ordenModal.RequiereHospitalizacion)
+                                            {
+                                                <span class="badge text-bg-info">
+                                                    <i class="bi bi-box-seam me-1"></i>@(string.IsNullOrWhiteSpace(_ordenModal.JaulaCodigo) ? "Sin jaula" : _ordenModal.JaulaCodigo)
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge text-bg-secondary">Ambulatorio</span>
+                                            }
+                                        </div>
+                                        <div class="small text-muted">
+                                            <strong>@(_resumenCabecera?.Raza ?? "—")</strong> · @_ordenModal.Especie · @_ordenModal.Sexo
+                                            @if (_resumenCabecera != null)
+                                            {
+                                                <span> · Edad: @_resumenCabecera.EdadTexto · @_resumenCabecera.Origen</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="border rounded p-2 bg-light small" style="min-width: 240px;">
+                                        <div class="text-uppercase fw-bold text-muted" style="font-size: 10px;">Tutor / Médico</div>
+                                        <div class="fw-semibold text-dark"><i class="bi bi-person-circle me-1 text-primary"></i>@(_resumenCabecera?.ClienteNombre ?? _ordenModal.Cliente)</div>
+                                        @if (!string.IsNullOrWhiteSpace(_resumenCabecera?.ClienteCedula))
+                                        {
+                                            <div class="text-muted">C.I.: @_resumenCabecera.ClienteCedula</div>
+                                        }
+                                        <div class="text-muted"><i class="bi bi-stethoscope me-1"></i>Dr(a). @(_resumenCabecera?.MedicoResponsable ?? _ordenModal.Medico)</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-lg-6 d-flex flex-column gap-3">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-header bg-white fw-bold text-primary py-2">
+                                            <i class="bi bi-hospital me-1"></i>Indicaciones de Ingreso y Cuidados
+                                        </div>
+                                        <div class="card-body small d-flex flex-column gap-2">
+                                            @if (_ordenModal.RequiereHospitalizacion)
+                                            {
+                                                <div class="d-flex flex-wrap gap-3 pb-2 border-bottom">
+                                                    <div><strong>Ubicación / Jaula:</strong> <span class="badge text-bg-info">@(string.IsNullOrWhiteSpace(_resumenIngreso?.UbicacionJaula) ? _ordenModal.JaulaCodigo : _resumenIngreso.UbicacionJaula)</span></div>
+                                                    @if (_resumenIngreso?.FechaIngreso is { } fi)
+                                                    {
+                                                        <div><strong>Fecha de ingreso:</strong> @fi.ToString("dd/MM/yyyy HH:mm")</div>
+                                                    }
+                                                </div>
+                                                <div>
+                                                    <div class="fw-semibold text-secondary">Indicaciones de hospitalización</div>
+                                                    <div class="p-2 bg-light rounded border mt-1">@(string.IsNullOrWhiteSpace(_resumenIngreso?.Indicaciones) ? "Sin indicaciones registradas." : _resumenIngreso.Indicaciones)</div>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-semibold text-secondary">Hidratación / Fluidoterapia</div>
+                                                    <div class="p-2 bg-light rounded border mt-1">@(string.IsNullOrWhiteSpace(_resumenIngreso?.HidratacionFluidoterapia) ? "Sin fluidoterapia registrada." : _resumenIngreso.HidratacionFluidoterapia)</div>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-semibold text-secondary">Dieta y cuidados</div>
+                                                    <div class="p-2 bg-light rounded border mt-1">@(string.IsNullOrWhiteSpace(_resumenIngreso?.DietaCuidados) ? "Sin dieta o cuidados especiales registrados." : _resumenIngreso.DietaCuidados)</div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="alert alert-light border mb-0">
+                                                    Paciente en modalidad ambulatoria (**Cirugía sin hospitalización**). Si requiere internación posterior, activa el switch **Requiere Hospitalización** arriba.
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-6 d-flex flex-column gap-3">
+                                    @if (_ordenModal.RequiereCirugia)
+                                    {
+                                        <div class="card border-0 shadow-sm">
+                                            <div class="card-header bg-white fw-bold text-primary py-2 d-flex justify-content-between align-items-center">
+                                                <span><i class="bi bi-calendar2-check me-1"></i>Cirugía Programada</span>
+                                                @if (!EstaPestanaBloqueada("cirugia"))
+                                                {
+                                                    <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" @onclick='() => CambiarPestanaModalAsync("cirugia")'>Ir a Programación</button>
+                                                }
+                                            </div>
+                                            <div class="card-body small">
+                                                @if (_resumenCirugias.Count > 0)
+                                                {
+                                                    <div class="d-flex flex-column gap-2">
+                                                        @foreach (var cir in _resumenCirugias)
+                                                        {
+                                                            <div class="p-2 bg-light rounded border d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                                <div>
+                                                                    <div class="fw-semibold text-dark">@cir.Procedimiento</div>
+                                                                    <div class="text-muted">Cirujano: @cir.Medico</div>
+                                                                </div>
+                                                                <span class="badge text-bg-primary">@cir.Fecha.ToString("dd/MM/yyyy") · @cir.HoraInicio - @cir.HoraFin</span>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">Aún no hay cirugía agendada para este paciente.</span>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+
+                                    <div class="card border-0 shadow-sm">
+                                        <div class="card-header bg-white fw-bold text-primary py-2">
+                                            <i class="bi bi-file-earmark-check me-1"></i>Consentimientos y Documentos
+                                        </div>
+                                        <div class="card-body small">
+                                            @if (_resumenAutorizaciones.Count > 0)
+                                            {
+                                                <div class="d-flex flex-column gap-2">
+                                                    @foreach (var auth in _resumenAutorizaciones)
+                                                    {
+                                                        <div class="p-2 bg-light rounded border d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                            <div>
+                                                                <div class="fw-semibold text-dark">@auth.Documento</div>
+                                                                @if (!string.IsNullOrWhiteSpace(auth.ArchivoUrl))
+                                                                {
+                                                                    <span class="badge text-bg-success">Firmado / Escaneado</span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="badge text-bg-info">Emitido sin escaneo</span>
+                                                                }
+                                                            </div>
+                                                            <div class="d-flex gap-1">
+                                                                @if (!string.IsNullOrWhiteSpace(auth.ArchivoUrl))
+                                                                {
+                                                                    <a class="btn btn-xs btn-outline-success py-0 px-2" href="@auth.ArchivoUrl" target="_blank" rel="noopener">Ver escaneo</a>
+                                                                }
+                                                                <button type="button" class="btn btn-xs btn-outline-dark py-0 px-2" @onclick="() => ImprimirResumenAutorizacionAsync(auth)">Imprimir</button>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">No hay consentimientos registrados para esta orden todavía.</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    break;
                 case "soap":
                     <FichaMedica @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                  IdOrden="@_ordenModal.OrdenAtencionId"
@@ -617,12 +821,15 @@
                 case "signos":
                     <EnfermeriaSignos @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                       IdOrden="@_ordenModal.OrdenAtencionId"
-                                      Nhcl="@_ordenModal.Nhcl" />
+                                      Nhcl="@_ordenModal.Nhcl"
+                                      ModoModal="true"
+                                      RequiereCirugia="@_ordenModal.RequiereCirugia" />
                     break;
                 case "ficha24h":
                     <FichaHospitalizacion @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                           IdOrden="@_ordenModal.OrdenAtencionId"
-                                          Nhcl="@_ordenModal.Nhcl" />
+                                          Nhcl="@_ordenModal.Nhcl"
+                                          ModoModal="true" />
                     break;
                 case "monitoreo":
                     <MonitoreoHospitalario @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
@@ -691,8 +898,34 @@
                                                    Nhcl="@_ordenModal.Nhcl" />
                     break;
             }
+            </div>
         </div>
     </section>
+
+    @if (_confirmarDesactivarCirugia)
+    {
+        <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(15,23,42,0.55); z-index: 1070;" role="dialog" aria-modal="true" aria-labelledby="modalConfirmCirugiaTitulo">
+            <div class="modal-dialog modal-dialog-centered modal-sm" style="max-width: 430px;">
+                <div class="modal-content shadow border-0">
+                    <div class="modal-header bg-warning bg-opacity-25 py-2">
+                        <h5 class="modal-title h6 fw-bold text-dark mb-0" id="modalConfirmCirugiaTitulo">
+                            <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>Confirmar desactivación
+                        </h5>
+                        <button type="button" class="btn-close" @onclick="CancelarDesactivarCirugia" aria-label="Cerrar"></button>
+                    </div>
+                    <div class="modal-body small">
+                        <p class="mb-0">
+                            Tienes datos en borrador de cirugía o <strong>Días PostQuirúrgico</strong> sin guardar. Si desactivas <strong>Requiere Cirugía</strong>, esos borradores se limpiarán. ¿Deseas continuar?
+                        </p>
+                    </div>
+                    <div class="modal-footer py-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelarDesactivarCirugia">Cancelar</button>
+                        <button type="button" class="btn btn-sm btn-danger" @onclick="ConfirmarDesactivarCirugiaAsync">Sí, desactivar y limpiar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 <style>
@@ -853,17 +1086,134 @@
         border-radius: 8px 8px 0 0;
     }
 
+    .hosp-expediente-workspace {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .hosp-sidebar-toggle {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        color: #475569;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+        cursor: pointer;
+        transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .hosp-sidebar-toggle:hover {
+        background: #f1f5f9;
+        color: #1e293b;
+        border-color: #94a3b8;
+    }
+
+    .hosp-sidebar-toggle.active {
+        background: #dbeafe;
+        color: #1d4ed8;
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+    }
+
+    .hosp-expediente-sidebar {
+        width: 232px;
+        flex: 0 0 232px;
+        background: #ffffff;
+        border-right: 1px solid #e2e8f0;
+        padding: 12px 10px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .hosp-sidebar-divider {
+        height: 1px;
+        background: #e2e8f0;
+        margin: 8px 6px;
+    }
+
+    .hosp-sidebar-group-title {
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #64748b;
+        padding: 2px 10px 4px;
+        user-select: none;
+    }
+
+    .hosp-sidebar-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        text-align: left;
+        border: none;
+        background: transparent;
+        padding: 7px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #1e293b;
+        cursor: pointer;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .hosp-sidebar-item:hover:not(:disabled) {
+        background: #f1f5f9;
+        color: #1d4ed8;
+    }
+
+    .hosp-sidebar-item.active {
+        background: #e0edff;
+        color: #1d4ed8;
+        font-weight: 600;
+    }
+
+    .hosp-sidebar-item.active .hosp-sidebar-icon {
+        color: #2563eb;
+    }
+
+    .hosp-sidebar-item.locked {
+        opacity: 0.48;
+        cursor: not-allowed;
+        color: #94a3b8;
+    }
+
+    .hosp-sidebar-icon {
+        width: 18px;
+        text-align: center;
+        flex: 0 0 18px;
+        font-size: 14px;
+        color: #475569;
+        line-height: 1;
+    }
+
+    .hosp-sidebar-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
     .hosp-expediente-modal-body {
         flex: 1;
+        min-width: 0;
         overflow-y: auto;
         padding: 12px 16px;
     }
 
     /* Oculta selectores y buscadores de orden dentro del modal porque la orden ya está fija */
     .hosp-expediente-modal-body .buscador-orden-clinica,
-    .hosp-expediente-modal-body .no-print .row > .col-md-5:first-child,
-    .hosp-expediente-modal-body .no-print .row > .col-md-4:first-child,
-    .hosp-expediente-modal-body .no-print .row > .col-md-3,
+    .hosp-expediente-modal-body > .container-fluid > .card.no-print:first-child .row > .col-md-5:first-child,
+    .hosp-expediente-modal-body > .container-fluid > .card.no-print:first-child .row > .col-md-4:first-child,
+    .hosp-expediente-modal-body > .container-fluid > .card.no-print:first-child .row > .col-md-3,
     .hosp-expediente-modal-body select[style*="280px"],
     .hosp-expediente-modal-body div:has(> select[style*="280px"]) {
         display: none !important;
@@ -887,25 +1237,26 @@
         ("Fecha", "[FECHAPIE]")
     ];
 
-    private static readonly (string Id, string Icono, string Titulo, string Permiso)[] PestanasModulos =
+    private static readonly (string Id, string Icono, string Titulo, string Permiso, string Grupo)[] PestanasModulos =
     [
-        ("soap", "📋", "Historia Clínica SOAP", "/consulta/fichamedica"),
-        ("ficha24h", "📄", "Ficha 24h", "/hospitalizacion/ficha"),
-        ("kardex", "📁", "Kardex", "/kardex/enfermeria"),
-        ("signos", "📈", "Signos", "/kardex/signos"),
-        ("monitoreo", "🩺", "Monitoreo", "/hospitalizacion/monitoreo"),
-        ("evoluciones", "📝", "Evolución Médica", "/consulta/evoluciones"),
-        ("laboratorio", "🔬", "Laboratorio", "/diagnostico/laboratorio"),
-        ("imagenologia", "☢️", "RX / Ecografía", "/diagnostico/imagenologia"),
-        ("informes", "📥", "Informes", "/diagnostico/bandeja"),
-        ("cirugia", "📅", "Programación Cirugía", "/programacion/clinica"),
-        ("preanestesia", "🧪", "Pre-Anestesia", "/quirofano/preanestesia"),
-        ("pausaseguridad", "🛡️", "Pausa de Seguridad", "/quirofano/pausa-seguridad"),
-        ("anestesia", "🫁", "Anestesia", "/quirofano/anestesia"),
-        ("protocolo", "🔪", "Protocolo Quirúrgico", "/quirofano/protocolo"),
-        ("recuperacion", "🛏️", "Recuperación", "/quirofano/recuperacion"),
-        ("recetario", "💊", "Recetario", "/consulta/recetario"),
-        ("consentimientos", "📄", "Consentimientos y Alta", "/consulta/autorizaciones")
+        ("resumen", "bi-house", "Resumen", "/kardex/ordenes", ""),
+        ("soap", "bi-file-earmark-text", "Historia Clínica SOAP", "/consulta/fichamedica", "ATENCIÓN CLÍNICA"),
+        ("evoluciones", "bi-activity", "Evolución Médica", "/consulta/evoluciones", "ATENCIÓN CLÍNICA"),
+        ("ficha24h", "bi-calendar2-check", "Ficha 24h", "/hospitalizacion/ficha", "HOSPITALIZACIÓN"),
+        ("kardex", "bi-folder", "Kardex", "/kardex/enfermeria", "HOSPITALIZACIÓN"),
+        ("signos", "bi-heart-pulse", "Signos", "/kardex/signos", "HOSPITALIZACIÓN"),
+        ("monitoreo", "bi-display", "Monitoreo", "/hospitalizacion/monitoreo", "HOSPITALIZACIÓN"),
+        ("laboratorio", "bi-eyedropper", "Laboratorio", "/diagnostico/laboratorio", "DIAGNÓSTICO"),
+        ("imagenologia", "bi-radioactive", "RX / Ecografía", "/diagnostico/imagenologia", "DIAGNÓSTICO"),
+        ("informes", "bi-file-text", "Informes", "/diagnostico/bandeja", "DIAGNÓSTICO"),
+        ("cirugia", "bi-calendar-event", "Programación de cirugía", "/programacion/clinica", "CIRUGÍA"),
+        ("preanestesia", "bi-clipboard2-pulse", "Preanestesia", "/quirofano/preanestesia", "CIRUGÍA"),
+        ("pausaseguridad", "bi-shield-check", "Pausa de seguridad", "/quirofano/pausa-seguridad", "CIRUGÍA"),
+        ("anestesia", "bi-lungs", "Anestesia", "/quirofano/anestesia", "CIRUGÍA"),
+        ("protocolo", "bi-scissors", "Protocolo quirúrgico", "/quirofano/protocolo", "CIRUGÍA"),
+        ("recuperacion", "bi-hospital", "Recuperación", "/quirofano/recuperacion", "CIRUGÍA"),
+        ("recetario", "bi-capsule", "Recetario", "/consulta/recetario", "ALTA Y RECETARIO"),
+        ("consentimientos", "bi-file-earmark-check", "Consentimientos y Alta", "/consulta/autorizaciones", "ALTA Y RECETARIO")
     ];
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
 
@@ -913,9 +1264,13 @@
     private List<JaulaClinicaDto> _jaulas = [];
     private OrdenHospitalizacionColaDto? _ordenSeleccionada;
     private OrdenHospitalizacionColaDto? _ordenModal;
-    private string _pestanaModuloActiva = "kardex";
+    private string _pestanaModuloActiva = "resumen";
     private IngresoHospitalizacionDto _ingreso = new();
-    private AutorizacionClinicaDto? _consentimiento;
+    private PacienteHeaderDto? _resumenCabecera;
+    private IngresoHospitalizacionDto? _resumenIngreso;
+    private List<AutorizacionClinicaDto> _resumenAutorizaciones = [];
+    private List<CirugiaProgramadaDto> _resumenCirugias = [];
+    private bool _cargandoResumen;
 
     private static readonly HashSet<string> PestanasCirugia =
     [
@@ -930,9 +1285,12 @@
     private bool _tieneDatosCirugia;
     private bool _tieneDatosHospitalizacion;
     private bool _guardandoChecksModal;
+    private bool _confirmarDesactivarCirugia;
+    private bool _sidebarModalAbierta = true;
+    private int _switchCirugiaVersion;
     private string? _mensajeModal;
 
-    private IEnumerable<(string Id, string Icono, string Titulo, string Permiso)> PestanasDisponiblesModal =>
+    private IEnumerable<(string Id, string Icono, string Titulo, string Permiso, string Grupo)> PestanasDisponiblesModal =>
         PestanasModulos.Where(t => Permisos.Permite(t.Permiso));
 
     private bool EstaPestanaBloqueada(string id) =>
@@ -1057,7 +1415,6 @@
     {
         _ordenSeleccionada = null;
         _ingreso = new();
-        _consentimiento = null;
         _htmlConsentimiento = string.Empty;
         _mostrarModalConsentimiento = false;
     }
@@ -1067,9 +1424,39 @@
         _ordenModal = item;
         _mensajeModal = null;
         Session.SeleccionarOrden(item.OrdenAtencionId, item.Nhcl, item.Paciente);
-        await RefrescarEstadoBloqueosModalAsync();
-        var primeraDesbloqueada = PestanasDisponiblesModal.FirstOrDefault(t => !EstaPestanaBloqueada(t.Id)).Id;
-        _pestanaModuloActiva = string.IsNullOrWhiteSpace(primeraDesbloqueada) ? "soap" : primeraDesbloqueada;
+        _pestanaModuloActiva = "resumen";
+        await Task.WhenAll(RefrescarEstadoBloqueosModalAsync(), CargarResumenModalAsync());
+    }
+
+    private async Task CargarResumenModalAsync()
+    {
+        if (_ordenModal is null) return;
+        _cargandoResumen = true;
+        try
+        {
+            var idOrden = _ordenModal.OrdenAtencionId;
+            var nhcl = _ordenModal.Nhcl;
+            var tCab = KardexService.ObtenerCabeceraPacienteAsync(idOrden, nhcl);
+            var tIng = HospService.ObtenerIngresoHospitalizacionAsync(idOrden, nhcl);
+            var tAuth = ConsultaService.ObtenerAutorizacionesPacienteAsync(nhcl);
+            var tCir = GestionService.ObtenerCirugiasAsync(DateTime.Today.AddDays(-7), DateTime.Today.AddMonths(6));
+            await Task.WhenAll(tCab, tIng, tAuth, tCir);
+
+            _resumenCabecera = await tCab;
+            _resumenIngreso = await tIng;
+            _resumenAutorizaciones = (await tAuth).Where(a => a.Orden == idOrden).ToList();
+            _resumenCirugias = (await tCir).Where(c => c.Estado == "A" && c.Nhcl == nhcl).ToList();
+        }
+        finally
+        {
+            _cargandoResumen = false;
+        }
+    }
+
+    private async Task ImprimirResumenAutorizacionAsync(AutorizacionClinicaDto auth)
+    {
+        if (string.IsNullOrWhiteSpace(auth.DetalleHtml)) return;
+        await JS.InvokeVoidAsync("hosvetEditor.printDocument", auth.Documento, auth.DetalleHtml);
     }
 
     private async Task RefrescarEstadoBloqueosModalAsync()
@@ -1080,18 +1467,55 @@
         _tieneDatosHospitalizacion = estado.TieneDatosHospitalizacion;
     }
 
+    private async Task OnSelectModuloModalChangedAsync(ChangeEventArgs e)
+    {
+        var tabId = e.Value?.ToString();
+        if (!string.IsNullOrWhiteSpace(tabId))
+        {
+            await CambiarPestanaModalAsync(tabId);
+        }
+    }
+
     private async Task CambiarPestanaModalAsync(string tabId)
     {
         if (EstaPestanaBloqueada(tabId)) return;
         _pestanaModuloActiva = tabId;
         await RefrescarEstadoBloqueosModalAsync();
+        if (tabId == "resumen")
+        {
+            await CargarResumenModalAsync();
+        }
     }
 
     private async Task OnToggleCirugiaModalAsync(ChangeEventArgs e)
     {
         if (_ordenModal is null) return;
         var nuevo = e.Value is bool b ? b : string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+        if (!nuevo)
+        {
+            var tieneBorrador = await JS.InvokeAsync<bool>("hosvetDraft.hasSurgeryDraft", _ordenModal.OrdenAtencionId);
+            if (tieneBorrador)
+            {
+                _confirmarDesactivarCirugia = true;
+                return;
+            }
+        }
+        _confirmarDesactivarCirugia = false;
         await ActualizarChecksModalAsync(nuevo, _ordenModal.RequiereHospitalizacion);
+    }
+
+    private async Task ConfirmarDesactivarCirugiaAsync()
+    {
+        if (_ordenModal is null) return;
+        _confirmarDesactivarCirugia = false;
+        await JS.InvokeVoidAsync("hosvetDraft.clearSurgeryDrafts", _ordenModal.OrdenAtencionId);
+        await ActualizarChecksModalAsync(false, _ordenModal.RequiereHospitalizacion);
+    }
+
+    private void CancelarDesactivarCirugia()
+    {
+        _confirmarDesactivarCirugia = false;
+        _switchCirugiaVersion++;
     }
 
     private async Task OnToggleHospitalizacionModalAsync(ChangeEventArgs e)
@@ -1137,6 +1561,7 @@
     {
         _ordenModal = null;
         _mensajeModal = null;
+        _confirmarDesactivarCirugia = false;
         await CargarColaAsync();
     }
 

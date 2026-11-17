@@ -47,6 +47,7 @@ public interface IHospitalizacionService
     Task GuardarIngresoHospitalizacionAsync(IngresoHospitalizacionDto dto, int idUsuario);
     Task<(bool TieneDatosCirugia, bool TieneDatosHospitalizacion)> VerificarDatosModulosOrdenAsync(int idOrden, int nhcl);
     Task<bool> ActualizarIndicacionesModalAsync(int idOrden, int nhcl, bool requiereCirugia, bool requiereHospitalizacion, int idUsuario);
+    Task<bool> OrdenRequiereCirugiaAsync(int idOrden);
 }
 
 public class HospitalizacionService : IHospitalizacionService
@@ -1421,6 +1422,7 @@ public class HospitalizacionService : IHospitalizacionService
                     OR EXISTS (SELECT 1 FROM qvt_RegistroAnestesia WHERE idOrden = @IdOrden)
                     OR EXISTS (SELECT 1 FROM qvt_Protocolo WHERE idOrden = @IdOrden)
                     OR EXISTS (SELECT 1 FROM qvt_observaciones_recuperacion WHERE idOrden = @IdOrden AND estado = 'A')
+                    OR EXISTS (SELECT 1 FROM qvt_enfFechas WHERE idOrdenAtencion = @IdOrden AND diaPostquirurgico IS NOT NULL AND diaPostquirurgico > 0)
                 THEN 1 ELSE 0 END AS BIT) AS TieneCirugia,
                 CAST(CASE WHEN
                     EXISTS (SELECT 1 FROM hvt_ingresoHospitalizacion WHERE idOrden = @IdOrden AND estado = 'A')
@@ -1475,5 +1477,16 @@ public class HospitalizacionService : IHospitalizacionService
                 idUsuario, "Hosp_BandejaOrdenes");
         }
         return filas > 0;
+    }
+
+    public async Task<bool> OrdenRequiereCirugiaAsync(int idOrden)
+    {
+        if (idOrden <= 0) return false;
+        var count = await _db.ExecuteScalarAsync<int>(@"
+            SELECT COUNT(1) FROM vt_fichamedica
+            WHERE med_orden = @IdOrden
+              AND UPPER(RTRIM(ISNULL(med_pregunta, 'N'))) = 'S'",
+            new { IdOrden = idOrden });
+        return count > 0;
     }
 }

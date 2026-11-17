@@ -1,5 +1,6 @@
 @page "/hospitalizacion/ficha"
 @page "/hospitalizacion/ficha/{IdOrden:int}/{Nhcl:int}"
+@using System.Text.Json
 @inject IKardexService KardexService
 @inject IHospitalizacionService HospService
 @inject IInventarioService InventarioService
@@ -14,39 +15,42 @@
     <div class="card shadow-sm border-0 mb-3 no-print">
         <div class="card-body py-2 px-3 bg-light rounded">
             <div class="row g-2 align-items-center">
-                <div class="col-md-4 position-relative">
-                    <label class="form-label small fw-bold mb-1 text-primary">Buscar Paciente Hospitalizado (Pre-Ficha):</label>
-                    <div class="input-group input-group-sm">
-                        <input type="text" class="form-control" autocomplete="off" placeholder="Nombre mascota, propietario o NHCL..."
-                               @bind="_filtroOrden" @bind:event="oninput" @bind:after="BuscarOrdenesAutoAsync"
-                               @onfocus="() => _mostrarSugerenciasOrden = !string.IsNullOrWhiteSpace(_filtroOrden)"
-                               @onblur="CerrarSugerenciasOrdenConRetrasoAsync"
-                               @onkeydown="BuscarOrdenesConEnterAsync" />
+                @if (!ModoModal)
+                {
+                    <div class="col-md-4 position-relative">
+                        <label class="form-label small fw-bold mb-1 text-primary">Buscar Paciente Hospitalizado (Pre-Ficha):</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" autocomplete="off" placeholder="Nombre mascota, propietario o NHCL..."
+                                   @bind="_filtroOrden" @bind:event="oninput" @bind:after="BuscarOrdenesAutoAsync"
+                                   @onfocus="() => _mostrarSugerenciasOrden = !string.IsNullOrWhiteSpace(_filtroOrden)"
+                                   @onblur="CerrarSugerenciasOrdenConRetrasoAsync"
+                                   @onkeydown="BuscarOrdenesConEnterAsync" />
+                        </div>
+                        @if (_mostrarSugerenciasOrden && _ordenesActivas.Count > 0 && !string.IsNullOrWhiteSpace(_filtroOrden))
+                        {
+                            <div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto;">
+                                @foreach (var ord in _ordenesActivas)
+                                {
+                                    <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start"
+                                            @onmousedown="() => SeleccionarOrdenSugeridaAsync(ord)">
+                                        <strong>#@ord.IdOrdenAtencion</strong> | NHCL:@ord.Nhcl — @ord.Paciente <small class="text-muted">(@ord.Cliente)</small>
+                                    </button>
+                                }
+                            </div>
+                        }
                     </div>
-                    @if (_mostrarSugerenciasOrden && _ordenesActivas.Count > 0 && !string.IsNullOrWhiteSpace(_filtroOrden))
-                    {
-                        <div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto;">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">Seleccionar Orden:</label>
+                        <select class="form-select form-select-sm" value="@IdOrden" @onchange="OnOrdenChangedAsync">
+                            <option value="0">-- Seleccione Paciente --</option>
                             @foreach (var ord in _ordenesActivas)
                             {
-                                <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start"
-                                        @onmousedown="() => SeleccionarOrdenSugeridaAsync(ord)">
-                                    <strong>#@ord.IdOrdenAtencion</strong> | NHCL:@ord.Nhcl — @ord.Paciente <small class="text-muted">(@ord.Cliente)</small>
-                                </button>
+                                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
                             }
-                        </div>
-                    }
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-bold mb-1">Seleccionar Orden:</label>
-                    <select class="form-select form-select-sm" value="@IdOrden" @onchange="OnOrdenChangedAsync">
-                        <option value="0">-- Seleccione Paciente --</option>
-                        @foreach (var ord in _ordenesActivas)
-                        {
-                            <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
-                        }
-                    </select>
-                </div>
-                <div class="col-md-5 text-end pt-3">
+                        </select>
+                    </div>
+                }
+                <div class="@(ModoModal ? "col-12 text-end" : "col-md-5 text-end pt-3")">
                     @if (_paciente is not null)
                     {
                         <div class="btn-group btn-group-sm">
@@ -96,8 +100,15 @@
         {
             <div class="alert alert-info shadow-sm">Vista previa de la ficha. Seleccione un paciente para habilitar el ingreso y guardado de información.</div>
         }
+        @if (_borradorRestaurado)
+        {
+            <div class="alert alert-warning py-2 small d-flex justify-content-between align-items-center mb-2 no-print" role="status">
+                <span><i class="bi bi-journal-check me-1"></i><strong>Borrador recuperado automáticamente.</strong> Presiona <strong>Guardar Hoja</strong> para confirmarlo en el sistema.</span>
+                <button type="button" class="btn btn-xs btn-outline-dark py-0 px-2" @onclick="DescartarBorradorAsync">Descartar borrador</button>
+            </div>
+        }
         <fieldset disabled="@(_paciente is null)" class="m-0 p-0 border-0">
-        <div id="area-impresion-ficha">
+        <div id="area-impresion-ficha" @onfocusout="GuardarBorradorAutoAsync" @oninput="ProgramarBorradorAutoAsync">
             <!-- CABECERA DEL PACIENTE Y METADATOS DE LA HOJA -->
             <div class="card shadow-sm border-0 mb-3">
                 <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
@@ -117,7 +128,7 @@
                                 <option value="@h">Hoja #@h</option>
                             }
                         </select>
-                        @if (Permisos.Permite("hospitalizacion/monitoreo"))
+                        @if (!ModoModal && Permisos.Permite("hospitalizacion/monitoreo"))
                         {
                             <a href="/hospitalizacion/monitoreo/@IdOrden/@Nhcl" class="btn btn-sm btn-warning fw-semibold no-print">
                             🩺 Ir a Monitoreo 24h
@@ -179,7 +190,11 @@
                                        @bind="_busquedaBc" @bind:event="oninput" @bind:after="BuscarCatalogoAutoAsync" @onkeydown="BuscarCatalogoConEnterAsync" />
                             </div>
                         </div>
-                        @if (_resultadosBc.Count > 0)
+                        @if (_buscandoCatalogo)
+                        {
+                            <div class="col-md-8 text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Buscando en catálogo...</div>
+                        }
+                        else if (_resultadosBc.Count > 0)
                         {
                             <div class="col-md-8">
                                 <div class="d-flex gap-2 align-items-center">
@@ -503,6 +518,7 @@
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
+    [Parameter] public bool ModoModal { get; set; }
 
     private string _filtroOrden = string.Empty;
     private List<OrdenActivaResumenDto> _ordenesActivas = [];
@@ -525,6 +541,11 @@
     private bool _buscandoOrdenes;
     private bool _buscandoCatalogo;
     private bool _catalogoBuscado;
+    private bool _borradorRestaurado;
+    private bool _pendienteRestaurarBorrador;
+    private int _versionBorrador;
+    private string _jsonInicial = string.Empty;
+    private int _versionCatalogo;
     private string? _mensajeAlerta;
     private bool _esError;
 
@@ -543,7 +564,7 @@
             var tVias = KardexService.ObtenerViasAdministracionAsync();
             var tRitmos = HospService.ObtenerRitmosHorariosAsync();
             var tCond = HospService.ObtenerCondicionesAsync();
-            var tOrd = KardexService.ObtenerOrdenesActivasAsync();
+            var tOrd = ModoModal ? Task.FromResult<List<OrdenActivaResumenDto>>([]) : KardexService.ObtenerOrdenesActivasAsync();
             await Task.WhenAll(tVias, tRitmos, tCond, tOrd);
 
             _vias = await tVias;
@@ -642,6 +663,80 @@
             Nhcl = _paciente.Nhcl;
             Session.SeleccionarOrden(idOrden, Nhcl, _paciente.PacienteNombre);
             _sheet = await tSheet;
+            _jsonInicial = JsonSerializer.Serialize(_sheet);
+            _pendienteRestaurarBorrador = true;
+            _borradorRestaurado = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_pendienteRestaurarBorrador && _paciente is not null && !_cargandoInicial)
+        {
+            _pendienteRestaurarBorrador = false;
+            await IntentarRestaurarBorradorAsync();
+        }
+    }
+
+    private string ClaveBorrador => $"ficha24h_{_paciente?.OrdenAtencionId ?? IdOrden}_{_sheet.Hoja}";
+
+    private async Task ProgramarBorradorAutoAsync()
+    {
+        var v = ++_versionBorrador;
+        await Task.Delay(250);
+        if (v != _versionBorrador) return;
+        await GuardarBorradorAutoAsync();
+    }
+
+    private async Task GuardarBorradorAutoAsync()
+    {
+        if (_paciente is null || IdOrden <= 0 || _sheet.Cerrada) return;
+        try
+        {
+            var json = JsonSerializer.Serialize(_sheet);
+            if (json == _jsonInicial)
+            {
+                await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador);
+                _borradorRestaurado = false;
+                return;
+            }
+            await JS.InvokeVoidAsync("hosvetDraft.save", ClaveBorrador, json);
+        }
+        catch { }
+    }
+
+    private async Task IntentarRestaurarBorradorAsync()
+    {
+        if (_sheet.Cerrada) return;
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("hosvetDraft.load", ClaveBorrador);
+            if (string.IsNullOrWhiteSpace(json)) return;
+            var borrador = JsonSerializer.Deserialize<FichaHospitalizacionSheetDto>(json);
+            if (borrador is not null && borrador.Hoja == _sheet.Hoja)
+            {
+                if (JsonSerializer.Serialize(borrador) == _jsonInicial)
+                {
+                    await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador);
+                    _borradorRestaurado = false;
+                    return;
+                }
+                _sheet = borrador;
+                _borradorRestaurado = true;
+                StateHasChanged();
+            }
+        }
+        catch { }
+    }
+
+    private async Task DescartarBorradorAsync()
+    {
+        try { await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador); } catch { }
+        _borradorRestaurado = false;
+        if (_paciente is not null)
+        {
+            await CargarFichaCompletaAsync(_paciente.OrdenAtencionId, _paciente.Nhcl, _sheet.Hoja);
+            _pendienteRestaurarBorrador = false;
         }
     }
 
@@ -661,6 +756,9 @@
         try
         {
             await HospService.GuardarFichaHospitalizacionAsync(_sheet, Session.IdUser);
+            _jsonInicial = JsonSerializer.Serialize(_sheet);
+            try { await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador); } catch { }
+            _borradorRestaurado = false;
             _esError = false;
             _mensajeAlerta = $"Hoja #{_sheet.Hoja} de la Ficha de Hospitalización guardada correctamente.";
         }
@@ -709,10 +807,12 @@
 
     private async Task BuscarCatalogoAutoAsync()
     {
+        var version = ++_versionCatalogo;
         if (string.IsNullOrWhiteSpace(_busquedaBc))
         {
             _resultadosBc = [];
             _catalogoBuscado = false;
+            _buscandoCatalogo = false;
             return;
         }
 
@@ -720,11 +820,24 @@
         _catalogoBuscado = true;
         try
         {
-            _resultadosBc = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaBc.Trim(), Session.Localidad, Session.Apostrofe);
+            await Task.Delay(220);
+            if (version != _versionCatalogo) return;
+
+            var resultados = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaBc.Trim(), Session.Localidad, Session.Apostrofe);
+            if (version != _versionCatalogo) return;
+
+            _resultadosBc = resultados;
             _productoBcSeleccionadoId = _resultadosBc.Count > 0 ? ProductoKey(_resultadosBc[0]) : string.Empty;
         }
         catch { }
-        finally { _buscandoCatalogo = false; }
+        finally
+        {
+            if (version == _versionCatalogo)
+            {
+                _buscandoCatalogo = false;
+                StateHasChanged();
+            }
+        }
     }
 
     private async Task BuscarCatalogoBcAsync()
