@@ -88,7 +88,7 @@
                                     <optgroup label="⭐ Plantillas Personalizadas (Creadas por usuario)">
                                         @foreach (var f in Plantillas.Where(p => p.EsPersonalizada))
                                         {
-                                            <option value="@f.FormId">⭐ @f.FormNombre (Personalizada)</option>
+                                            <option value="@f.FormId">⭐ @f.FormNombre (PERSONALIZADA)</option>
                                         }
                                     </optgroup>
                                 }
@@ -96,7 +96,8 @@
                                 <optgroup label="📋 Plantillas Oficiales del Sistema (Predeterminadas)">
                                     @foreach (var f in Plantillas.Where(p => !p.EsPersonalizada))
                                     {
-                                        <option value="@f.FormId">📋 @f.FormNombre (@(f.FormTipo == "TUERI" ? "Silvestre" : (f.FormTipo == "HDEV" ? "Doméstico" : f.FormTipo)))</option>
+                                        var tipoTexto = (f.FormTipo == "TUERI" ? "SILVESTRE" : (f.FormTipo == "HDEV" ? "DOMÉSTICO" : f.FormTipo)).ToUpperInvariant();
+                                        <option value="@f.FormId">📋 @f.FormNombre (@tipoTexto)</option>
                                     }
                                 </optgroup>
                             </select>

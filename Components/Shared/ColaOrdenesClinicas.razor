@@ -125,6 +125,7 @@
         Prioridad(orden) == 0 && EstaEnEspera(orden) && orden.FechaRecepcion is null;
 
     private bool _disposed;
+    private bool _actualizando;
 
     public Task RefrescarAsync()
     {
@@ -186,7 +187,7 @@
 
     private async Task ActualizarPeriodicamenteAsync(CancellationToken token)
     {
-        using var reloj = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        using var reloj = new PeriodicTimer(TimeSpan.FromSeconds(30));
         try
         {
             while (await reloj.WaitForNextTickAsync(token))
@@ -200,6 +201,8 @@
 
     private async Task ActualizarAsync(CancellationToken token, bool permitirSonido = true)
     {
+        if (_actualizando) return;
+        _actualizando = true;
         bool hayNuevasEmergencias = false;
         try
         {
@@ -224,6 +227,10 @@
         {
             Logger.LogWarning(ex, "No se pudo actualizar la cola clínica.");
             _error = "No se pudo actualizar la cola. Se volverá a intentar.";
+        }
+        finally
+        {
+            _actualizando = false;
         }
 
         token.ThrowIfCancellationRequested();

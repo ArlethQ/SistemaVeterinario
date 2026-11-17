@@ -55,6 +55,7 @@ public interface IConsultaExternaService
     // 6. Autorizaciones / Consentimientos y Alta Médica (vt_autorizaciones + vt_formatos + qvt_formulario_alta)
     Task<List<FormatoPlantillaDto>> ObtenerPlantillasFormatosAsync(string? tipo = null);
     Task<FormatoPlantillaDto?> ObtenerPlantillaHospitalizacionDefaultAsync();
+    Task<FormatoPlantillaDto?> ObtenerPlantillaPorTipoONombreAsync(string tipo, string? nombreContiene = null);
     Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl);
     Task<bool> GuardarPlantillaFormatoAsync(int formId, string nombre, string html);
     Task<(bool Ok, string? Mensaje)> EliminarPlantillaFormatoAsync(int formId);
@@ -1538,12 +1539,51 @@ public class ConsultaExternaService : IConsultaExternaService
 </tr>
 </table>";
 
+        const string htmlCirugiaDefault = @"<h2 style=""text-align:center;"">CONSENTIMIENTO INFORMADO DE CIRUGÍA VETERINARIA</h2>
+<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cédula de identidad N° <strong>[CEDULA]</strong>, propietario/a o responsable legal del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL], Especie: <strong>[ESPECIE]</strong>, Raza: <strong>[RAZA]</strong>, Sexo: <strong>[SEXO]</strong>, Edad: <strong>[EDAD]</strong>), autorizo al médico veterinario <strong>[MEDICO]</strong> y al equipo quirúrgico a realizar el procedimiento quirúrgico indicado.</p>
+<h3>1. Información sobre el procedimiento y riesgos</h3>
+<p>Declaro haber recibido explicación clara sobre la naturaleza del procedimiento quirúrgico, los beneficios esperados, las posibles complicaciones intraoperatorias o postoperatorias (hemorragia, infección, dehiscencia de sutura, reacciones adversas o riesgo vital inherente al cuadro clínico) y las alternativas disponibles.</p>
+<h3>2. Autorización ante imprevistos</h3>
+<p>En caso de presentarse hallazgos o emergencias durante la cirugía, autorizo al equipo quirúrgico a tomar las decisiones médicas necesarias para resguardar la vida y bienestar del paciente, comunicándose al teléfono <strong>[TELEFONOPIE]</strong>.</p>
+<p>Fecha de emisión: <strong>[FECHAPIE]</strong></p>
+<br/>
+<table style=""width:100%; border-collapse:collapse; margin-top:24px;"">
+<tr>
+<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Firma del Propietario / Responsable</strong><br/>C.I.: [CEDULA]</td>
+<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Cirujano / Médico Responsable</strong><br/>[MEDICO]</td>
+</tr>
+</table>";
+
+        const string htmlAnestesiaDefault = @"<h2 style=""text-align:center;"">AUTORIZACIÓN DE ANESTESIA VETERINARIA</h2>
+<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cédula de identidad N° <strong>[CEDULA]</strong>, responsable del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL], Especie: <strong>[ESPECIE]</strong>, Raza: <strong>[RAZA]</strong>, Edad: <strong>[EDAD]</strong>), autorizo la administración de protocolos de sedación, analgesia y anestesia general o regional necesarios para el procedimiento indicado por <strong>[MEDICO]</strong>.</p>
+<p>Comprendo que todo procedimiento anestésico conlleva riesgos fisiológicos individuales y autorizo las maniobras de soporte vital en caso de requerirse. Teléfono de contacto: <strong>[TELEFONOPIE]</strong>.</p>
+<p>Fecha: <strong>[FECHAPIE]</strong></p>
+<br/>
+<table style=""width:100%; border-collapse:collapse; margin-top:24px;"">
+<tr>
+<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Firma del Propietario / Responsable</strong><br/>C.I.: [CEDULA]</td>
+<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Médico / Anestesista</strong><br/>[MEDICO]</td>
+</tr>
+</table>";
+
         await _db.ExecuteAsync(@"
             IF NOT EXISTS (SELECT 1 FROM vt_formatos WHERE form_tipo = 'HOSPITALIZACION')
             BEGIN
                 INSERT INTO vt_formatos (form_nombre, form_tipo, form_archivoHtml, form_es_sistema)
-                VALUES (N'Consentimiento Informado de Hospitalización', 'HOSPITALIZACION', @Html, 1);
-            END", new { Html = htmlDefault });
+                VALUES (N'Consentimiento Informado de Hospitalización', 'HOSPITALIZACION', @HtmlHosp, 1);
+            END
+
+            IF NOT EXISTS (SELECT 1 FROM vt_formatos WHERE form_tipo = 'CIRUGIA')
+            BEGIN
+                INSERT INTO vt_formatos (form_nombre, form_tipo, form_archivoHtml, form_es_sistema)
+                VALUES (N'Consentimiento Informado de Cirugía', 'CIRUGIA', @HtmlCir, 1);
+            END
+
+            IF NOT EXISTS (SELECT 1 FROM vt_formatos WHERE form_nombre LIKE '%Anestesia%')
+            BEGIN
+                INSERT INTO vt_formatos (form_nombre, form_tipo, form_archivoHtml, form_es_sistema)
+                VALUES (N'Autorizacion de Anestesia', 'AUTORIZACION', @HtmlAnest, 1);
+            END", new { HtmlHosp = htmlDefault, HtmlCir = htmlCirugiaDefault, HtmlAnest = htmlAnestesiaDefault });
 
         _plantillaHospVerificada = true;
     }
@@ -1578,6 +1618,9 @@ public class ConsultaExternaService : IConsultaExternaService
     }
 
     public async Task<FormatoPlantillaDto?> ObtenerPlantillaHospitalizacionDefaultAsync()
+        => await ObtenerPlantillaPorTipoONombreAsync("HOSPITALIZACION");
+
+    public async Task<FormatoPlantillaDto?> ObtenerPlantillaPorTipoONombreAsync(string tipo, string? nombreContiene = null)
     {
         await AsegurarPlantillaHospitalizacionDefaultAsync();
         const string sql = @"
@@ -1588,9 +1631,10 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(CAST(form_archivoHtml AS VARCHAR(MAX)), '') AS FormArchivoHtml,
                 CAST(ISNULL(form_es_sistema, 1) AS BIT) AS EsSistema
             FROM vt_formatos
-            WHERE form_tipo = 'HOSPITALIZACION'
-            ORDER BY form_id ASC";
-        return await _db.QueryFirstOrDefaultAsync<FormatoPlantillaDto>(sql);
+            WHERE (@Nombre IS NOT NULL AND form_nombre LIKE '%' + @Nombre + '%')
+               OR (@Nombre IS NULL AND UPPER(RTRIM(ISNULL(form_tipo, ''))) = UPPER(@Tipo))
+            ORDER BY CASE WHEN ISNULL(form_es_sistema, 0) = 1 THEN 0 ELSE 1 END, form_id ASC";
+        return await _db.QueryFirstOrDefaultAsync<FormatoPlantillaDto>(sql, new { Tipo = tipo, Nombre = nombreContiene });
     }
 
     public async Task<bool> GuardarPlantillaFormatoAsync(int formId, string nombre, string html)

@@ -45,6 +45,8 @@ public interface IHospitalizacionService
     Task<List<OrdenHospitalizacionColaDto>> ObtenerColaHospitalizacionAsync(string? filtro = null, int? idLocalidad = null);
     Task<IngresoHospitalizacionDto> ObtenerIngresoHospitalizacionAsync(int idOrden, int nhcl);
     Task GuardarIngresoHospitalizacionAsync(IngresoHospitalizacionDto dto, int idUsuario);
+    Task<(bool TieneDatosCirugia, bool TieneDatosHospitalizacion)> VerificarDatosModulosOrdenAsync(int idOrden, int nhcl);
+    Task<bool> ActualizarIndicacionesModalAsync(int idOrden, int nhcl, bool requiereCirugia, bool requiereHospitalizacion, int idUsuario);
 }
 
 public class HospitalizacionService : IHospitalizacionService
@@ -1284,6 +1286,11 @@ public class HospitalizacionService : IHospitalizacionService
                 ISNULL(ing.ubicacionJaula, '') AS JaulaCodigo,
                 CAST(CASE WHEN ing.id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS YaIngresado,
                 CAST(CASE WHEN EXISTS (
+                    SELECT 1 FROM vt_fichamedica fm1
+                    WHERE fm1.med_orden = o.ordenAten_id
+                      AND ISNULL(fm1.med_requiereHospitalizacion, 0) = 1
+                ) THEN 1 ELSE 0 END AS BIT) AS RequiereHospitalizacion,
+                CAST(CASE WHEN EXISTS (
                     SELECT 1 FROM vt_fichamedica fm2
                     WHERE fm2.med_orden = o.ordenAten_id
                       AND UPPER(RTRIM(ISNULL(fm2.med_pregunta, 'N'))) = 'S'
@@ -1298,7 +1305,8 @@ public class HospitalizacionService : IHospitalizacionService
             WHERE EXISTS (
                 SELECT 1 FROM vt_fichamedica fm
                 WHERE fm.med_orden = o.ordenAten_id
-                  AND ISNULL(fm.med_requiereHospitalizacion, 0) = 1
+                  AND (ISNULL(fm.med_requiereHospitalizacion, 0) = 1
+                       OR UPPER(RTRIM(ISNULL(fm.med_pregunta, 'N'))) = 'S')
             )
               AND ISNULL(o.ordenAten_estado, 'A') <> 'I'
               AND ISNULL(o.cierrehospi, 'N') <> 'S'
@@ -1399,5 +1407,73 @@ public class HospitalizacionService : IHospitalizacionService
         await _db.RegistrarBitacoraAsync(
             $"Ingreso a hospitalización Orden={dto.IdOrden} Jaula={(string.IsNullOrWhiteSpace(ubicacion) ? "Sin asignar" : ubicacion)}",
             idUsuario, "Hosp_BandejaOrdenes");
+    }
+
+    public async Task<(bool TieneDatosCirugia, bool TieneDatosHospitalizacion)> VerificarDatosModulosOrdenAsync(int idOrden, int nhcl)
+    {
+        await AsegurarTablaIngresoHospitalizacionAsync();
+        const string sql = @"
+            SELECT
+                CAST(CASE WHEN
+                    (OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL AND EXISTS (
+                        SELECT 1 FROM qvt_calendario_cirugias WHERE nhcl = @Nhcl AND estado = 'A' AND fechacirugia >= CAST(GETDATE() AS date)))
+                    OR EXISTS (SELECT 1 FROM qvt_preanestesia WHERE orden = @IdOrden)
+                    OR EXISTS (SELECT 1 FROM qvt_RegistroAnestesia WHERE idOrden = @IdOrden)
+                    OR EXISTS (SELECT 1 FROM qvt_Protocolo WHERE idOrden = @IdOrden)
+                    OR EXISTS (SELECT 1 FROM qvt_observaciones_recuperacion WHERE idOrden = @IdOrden AND estado = 'A')
+                THEN 1 ELSE 0 END AS BIT) AS TieneCirugia,
+                CAST(CASE WHEN
+                    EXISTS (SELECT 1 FROM hvt_ingresoHospitalizacion WHERE idOrden = @IdOrden AND estado = 'A')
+                    OR EXISTS (SELECT 1 FROM qvt_enfSignosVitales WHERE idOrdenAtencion = @IdOrden)
+                    OR EXISTS (SELECT 1 FROM hvt_bloque1ficha WHERE idorden = @IdOrden AND NULLIF(LTRIM(RTRIM(ISNULL(medicacion, ''))), '') IS NOT NULL)
+                    OR EXISTS (SELECT 1 FROM hvt_bloque2ficha WHERE idorden = @IdOrden AND NULLIF(LTRIM(RTRIM(ISNULL(alimentacion, ''))), '') IS NOT NULL)
+                    OR EXISTS (SELECT 1 FROM hvt_bloque3ficha WHERE idorden = @IdOrden AND NULLIF(LTRIM(RTRIM(ISNULL(fluidoterapia, ''))), '') IS NOT NULL)
+                    OR EXISTS (SELECT 1 FROM hvt_bloqueMonitoreo WHERE idorden = @IdOrden AND NULLIF(LTRIM(RTRIM(
+                        ISNULL(txt1,'') + ISNULL(txt2,'') + ISNULL(txt3,'') + ISNULL(txt4,'') +
+                        ISNULL(txt5,'') + ISNULL(txt6,'') + ISNULL(txt7,'') + ISNULL(txt8,'') +
+                        ISNULL(txt9,'') + ISNULL(txt10,'') + ISNULL(txt11,'') + ISNULL(txt12,'') +
+                        ISNULL(txt13,'') + ISNULL(txt14,'') + ISNULL(txt15,'') + ISNULL(txt16,'') +
+                        ISNULL(txt17,'') + ISNULL(txt18,'') + ISNULL(txt19,'') + ISNULL(txt20,'') +
+                        ISNULL(txt21,'') + ISNULL(txt22,'') + ISNULL(txt23,'') + ISNULL(txt24,''))), '') IS NOT NULL)
+                THEN 1 ELSE 0 END AS BIT) AS TieneHospitalizacion;";
+
+        var res = await _db.QueryFirstOrDefaultAsync<(bool TieneCirugia, bool TieneHospitalizacion)>(sql, new { IdOrden = idOrden, Nhcl = nhcl });
+        return (res.TieneCirugia, res.TieneHospitalizacion);
+    }
+
+    public async Task<bool> ActualizarIndicacionesModalAsync(int idOrden, int nhcl, bool requiereCirugia, bool requiereHospitalizacion, int idUsuario)
+    {
+        if (idOrden <= 0 || nhcl <= 0) return false;
+        await ValidarOrdenPacienteAsync(idOrden, nhcl);
+
+        var actuales = await VerificarDatosModulosOrdenAsync(idOrden, nhcl);
+        if (!requiereCirugia && actuales.TieneDatosCirugia)
+            throw new InvalidOperationException("No se puede deshabilitar Cirugía porque ya existen registros en sus módulos.");
+        if (!requiereHospitalizacion && actuales.TieneDatosHospitalizacion)
+            throw new InvalidOperationException("No se puede deshabilitar Hospitalización porque ya existen registros en sus módulos.");
+
+        var filas = await _db.ExecuteAsync(@"
+            UPDATE vt_fichamedica
+            SET med_pregunta = @Pregunta,
+                med_requiereHospitalizacion = @ReqHosp,
+                med_idmodifica = @IdUsuario,
+                med_fechamodifica = GETDATE()
+            WHERE med_orden = @IdOrden AND med_nhcl = @Nhcl;",
+            new
+            {
+                IdOrden = idOrden,
+                Nhcl = nhcl,
+                Pregunta = requiereCirugia ? "S" : "N",
+                ReqHosp = requiereHospitalizacion ? 1 : 0,
+                IdUsuario = idUsuario
+            });
+
+        if (filas > 0)
+        {
+            await _db.RegistrarBitacoraAsync(
+                $"Actualizó indicaciones desde bandeja Orden={idOrden} Cirugía={requiereCirugia} Hosp={requiereHospitalizacion}",
+                idUsuario, "Hosp_BandejaOrdenes");
+        }
+        return filas > 0;
     }
 }

@@ -30,10 +30,10 @@
         </div>
     </div>
 
-    <section class="card shadow-sm border-0 mb-3" aria-label="Cola de órdenes para hospitalización">
+    <section class="card shadow-sm border-0 mb-3" aria-label="Cola de ingreso">
         <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center py-2">
             <div class="d-flex align-items-center gap-2">
-                <h2 class="h6 mb-0 fw-bold">Cola de hospitalización (Pendientes de ingreso)</h2>
+                <h2 class="h6 mb-0 fw-bold">Cola de ingreso (Pendientes)</h2>
                 <span class="badge text-bg-warning">@PendientesIngreso.Count()</span>
             </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
@@ -72,6 +72,7 @@
                                 <th scope="col">Especie</th>
                                 <th scope="col">Tutor</th>
                                 <th scope="col">Médico / Especialidad</th>
+                                <th scope="col">Tipo</th>
                                 <th scope="col">Estado</th>
                                 <th scope="col" class="text-end">Acción</th>
                             </tr>
@@ -110,12 +111,15 @@
                                         <div>@item.Medico</div>
                                         <span class="text-muted">@item.Especialidad</span>
                                     </td>
+                                    <td class="small">
+                                        <span class="badge @ClaseTipoAtencion(item)">@item.TipoAtencionTexto</span>
+                                    </td>
                                     <td>
                                         <span class="badge text-bg-warning">Pendiente de ingreso</span>
                                     </td>
                                     <td class="text-end text-nowrap">
                                         <button type="button" class="btn btn-sm btn-primary" @onclick="() => SeleccionarParaIngresoAsync(item)">
-                                            Iniciar hospitalización
+                                            Iniciar ingreso
                                         </button>
                                     </td>
                                 </tr>
@@ -149,20 +153,21 @@
         <div class="card shadow-sm border-0 py-5 text-center text-muted">
             <div class="card-body">
                 <span class="fs-1 d-block mb-2 text-secondary">🐾</span>
-                <h5>Ningún paciente seleccionado para hospitalización</h5>
+                <h5>Ningún paciente seleccionado para ingreso</h5>
                 <p class="small text-muted mb-0">
-                    Selecciona una orden en la cola superior y haz clic en <strong>Iniciar hospitalización</strong>.
+                    Selecciona una orden en la cola superior y haz clic en <strong>Iniciar ingreso</strong>.
                 </p>
             </div>
         </div>
     }
     else
     {
-        <section class="card shadow-sm border-0" aria-label="Ingreso a hospitalización">
+        <section class="card shadow-sm border-0" aria-label="Ingreso del paciente">
             <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
                 <div>
                     <h3 class="h6 mb-0 fw-bold text-primary">
-                        <i class="bi bi-hospital me-1"></i>Ingreso a Hospitalización — @_ordenSeleccionada.Paciente
+                        <i class="bi bi-hospital me-1"></i>Ingreso — @_ordenSeleccionada.Paciente
+                        <span class="badge @ClaseTipoAtencion(_ordenSeleccionada) ms-1">@_ordenSeleccionada.TipoAtencionTexto</span>
                     </h3>
                     <small class="text-muted">
                         Orden #@_ordenSeleccionada.OrdenAtencionId · NHCL #@_ordenSeleccionada.Nhcl · @_ordenSeleccionada.Especie · Tutor: @_ordenSeleccionada.Cliente · Médico: @_ordenSeleccionada.Medico
@@ -173,101 +178,122 @@
 
             <form class="card-body" @onsubmit="GuardarIngresoAsync" @onsubmit:preventDefault>
                 <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label small fw-semibold" for="selJaula">Ubicación / Jaula <span class="text-danger">*</span></label>
-                        <select id="selJaula" class="form-select form-select-sm" @bind="_ingreso.IdJaula">
-                            <option value="">-- Seleccionar jaula --</option>
-                            @foreach (var jaula in JaulasParaSeleccion)
-                            {
-                                var etiqueta = string.IsNullOrWhiteSpace(jaula.Piso)
-                                    ? jaula.Codigo
-                                    : $"{jaula.Codigo} ({jaula.Piso} / {jaula.Consultorio})";
-                                <option value="@jaula.Id">@etiqueta @(jaula.Ocupada && jaula.OrdenActual != _ordenSeleccionada.OrdenAtencionId ? "— Ocupada" : "")</option>
-                            }
-                        </select>
-                        @if (_jaulas.Count == 0)
-                        {
-                            <small class="text-muted d-block mt-1">
-                                No hay jaulas registradas aún; cuando se cree el módulo de jaulas aparecerán aquí automáticamente.
-                            </small>
-                        }
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label small fw-semibold" for="txtUbicacionManual">Detalle / Referencia de ubicación (opcional)</label>
-                        <input id="txtUbicacionManual" class="form-control form-control-sm" @bind="_ingreso.UbicacionJaula"
-                               placeholder="Ej. Área Caninos, Jaula J-01, Cuidados intensivos..." maxlength="150" />
-                    </div>
-
-                    <div class="col-12">
-                        <label class="form-label small fw-semibold" for="txtIndicaciones">Indicaciones de hospitalización</label>
-                        <textarea id="txtIndicaciones" class="form-control form-control-sm" rows="3" @bind="_ingreso.Indicaciones"
-                                  placeholder="Medicación inicial, frecuencia de controles, monitoreo requerido, alertas clínicas..."></textarea>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label small fw-semibold" for="txtHidratacion">Hidratación / Fluidoterapia</label>
-                        <textarea id="txtHidratacion" class="form-control form-control-sm" rows="3" @bind="_ingreso.HidratacionFluidoterapia"
-                                  placeholder="Solución, vía, velocidad de infusión (mL/h), suplementos..."></textarea>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label small fw-semibold" for="txtDieta">Dieta y cuidados</label>
-                        <textarea id="txtDieta" class="form-control form-control-sm" rows="3" @bind="_ingreso.DietaCuidados"
-                                  placeholder="Tipo de alimento, frecuencia, ayuno, cuidados de confort/aseo..."></textarea>
-                    </div>
-
-                    <div class="col-12">
-                        <div class="border rounded p-3 bg-light">
-                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                                <div>
-                                    <h4 class="h6 mb-1 fw-bold text-dark">
-                                        <i class="bi bi-file-earmark-check me-1 text-primary"></i>Consentimiento Informado de Hospitalización <span class="text-danger">*</span>
-                                        <span class="badge text-bg-dark ms-1">Default</span>
-                                    </h4>
-                                    <p class="small text-muted mb-0">
-                                        Documento oficial predeterminado del sistema (protegido contra eliminación). Puedes descargarlo/imprimirlo, editarlo o subir el escaneo firmado.
-                                    </p>
-                                </div>
-                                <div>
-                                    @if (!string.IsNullOrWhiteSpace(_consentimiento?.ArchivoUrl))
-                                    {
-                                        <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Firmado / Escaneado adjunto</span>
-                                    }
-                                    else if (_consentimiento?.AutorizacionId > 0)
-                                    {
-                                        <span class="badge text-bg-info"><i class="bi bi-file-earmark-text me-1"></i>Emitido (pendiente de firma)</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge text-bg-secondary">Listo para descargar / firmar</span>
-                                    }
-                                </div>
-                            </div>
-
-                            <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
-                                <button type="button" class="btn btn-sm btn-outline-dark" @onclick="ImprimirConsentimientoAsync" disabled="@_procesandoConsentimiento">
-                                    <i class="bi bi-printer-fill me-1"></i>Descargar / Imprimir PDF
-                                </button>
-
-                                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AbrirModalEditorConsentimientoAsync" disabled="@_procesandoConsentimiento">
-                                    <i class="bi bi-pencil-square me-1"></i>Editar documento
-                                </button>
-
-                                <label class="btn btn-sm btn-outline-success mb-0" style="cursor: pointer;">
-                                    <i class="bi bi-cloud-arrow-up-fill me-1"></i>@(string.IsNullOrWhiteSpace(_consentimiento?.ArchivoUrl) ? "Subir firmado (PDF / Foto)" : "Reemplazar firmado")
-                                    <InputFile OnChange="SubirConsentimientoFirmadoAsync" accept="image/*,application/pdf,.doc,.docx" style="display: none;" />
-                                </label>
-
-                                @if (!string.IsNullOrWhiteSpace(_consentimiento?.ArchivoUrl))
+                    @if (_ordenSeleccionada.RequiereHospitalizacion)
+                    {
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold" for="selJaula">Ubicación / Jaula <span class="text-danger">*</span></label>
+                            <select id="selJaula" class="form-select form-select-sm" @bind="_ingreso.IdJaula">
+                                <option value="">-- Seleccionar jaula --</option>
+                                @foreach (var jaula in JaulasParaSeleccion)
                                 {
-                                    <a class="btn btn-sm btn-link text-decoration-none fw-semibold" href="@_consentimiento.ArchivoUrl" target="_blank" rel="noopener">
-                                        <i class="bi bi-paperclip me-1"></i>Ver escaneo (@_consentimiento.ArchivoNombre)
-                                    </a>
+                                    var etiqueta = string.IsNullOrWhiteSpace(jaula.Piso)
+                                        ? jaula.Codigo
+                                        : $"{jaula.Codigo} ({jaula.Piso} / {jaula.Consultorio})";
+                                    <option value="@jaula.Id">@etiqueta @(jaula.Ocupada && jaula.OrdenActual != _ordenSeleccionada.OrdenAtencionId ? "— Ocupada" : "")</option>
                                 }
+                            </select>
+                            @if (_jaulas.Count == 0)
+                            {
+                                <small class="text-muted d-block mt-1">
+                                    No hay jaulas registradas aún; cuando se cree el módulo de jaulas aparecerán aquí automáticamente.
+                                </small>
+                            }
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold" for="txtUbicacionManual">Detalle / Referencia de ubicación (opcional)</label>
+                            <input id="txtUbicacionManual" class="form-control form-control-sm" @bind="_ingreso.UbicacionJaula"
+                                   placeholder="Ej. Área Caninos, Jaula J-01, Cuidados intensivos..." maxlength="150" />
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold" for="txtIndicaciones">Indicaciones de hospitalización</label>
+                            <textarea id="txtIndicaciones" class="form-control form-control-sm" rows="3" @bind="_ingreso.Indicaciones"
+                                      placeholder="Medicación inicial, frecuencia de controles, monitoreo requerido, alertas clínicas..."></textarea>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold" for="txtHidratacion">Hidratación / Fluidoterapia</label>
+                            <textarea id="txtHidratacion" class="form-control form-control-sm" rows="3" @bind="_ingreso.HidratacionFluidoterapia"
+                                      placeholder="Solución, vía, velocidad de infusión (mL/h), suplementos..."></textarea>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold" for="txtDieta">Dieta y cuidados</label>
+                            <textarea id="txtDieta" class="form-control form-control-sm" rows="3" @bind="_ingreso.DietaCuidados"
+                                      placeholder="Tipo de alimento, frecuencia, ayuno, cuidados de confort/aseo..."></textarea>
+                        </div>
+                    }
+
+                    @if (_ordenSeleccionada.RequiereCirugia)
+                    {
+                        <div class="col-12">
+                            <div class="border rounded p-3 bg-white">
+                                <h4 class="h6 mb-2 fw-bold text-primary">
+                                    <i class="bi bi-calendar2-check me-1"></i>Programación de Cirugía (Médico encargado, fecha y hora libre)
+                                </h4>
+                                <ProgramacionClinica @key="_ordenSeleccionada.OrdenAtencionId"
+                                                     ModoModal="true"
+                                                     IdOrden="@_ordenSeleccionada.OrdenAtencionId"
+                                                     Nhcl="@_ordenSeleccionada.Nhcl" />
                             </div>
                         </div>
-                    </div>
+                    }
+
+                    @foreach (var doc in DocumentosIngresoVisibles)
+                    {
+                        <div class="col-12">
+                            <div class="border rounded p-3 bg-light">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                                    <div>
+                                        <h4 class="h6 mb-1 fw-bold text-dark">
+                                            <i class="bi bi-file-earmark-check me-1 text-primary"></i>@doc.Titulo <span class="text-danger">*</span>
+                                            <span class="badge text-bg-dark ms-1">DEFAULT</span>
+                                        </h4>
+                                        <p class="small text-muted mb-0">
+                                            Documento oficial predeterminado del sistema (protegido contra eliminación). Puedes descargarlo/imprimirlo, editarlo o subir el escaneo firmado.
+                                        </p>
+                                    </div>
+                                    <div>
+                                        @if (!string.IsNullOrWhiteSpace(doc.Autorizacion?.ArchivoUrl))
+                                        {
+                                            <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Firmado / Escaneado adjunto</span>
+                                        }
+                                        else if (doc.Autorizacion?.AutorizacionId > 0)
+                                        {
+                                            <span class="badge text-bg-info"><i class="bi bi-file-earmark-text me-1"></i>Emitido (pendiente de firma)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge text-bg-secondary">Listo para descargar / firmar</span>
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                                    <button type="button" class="btn btn-sm btn-outline-dark" @onclick="() => ImprimirConsentimientoAsync(doc.Clave)" disabled="@_procesandoConsentimiento">
+                                        <i class="bi bi-printer-fill me-1"></i>Descargar / Imprimir PDF
+                                    </button>
+
+                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AbrirModalEditorConsentimientoAsync(doc.Clave)" disabled="@_procesandoConsentimiento">
+                                        <i class="bi bi-pencil-square me-1"></i>Editar documento
+                                    </button>
+
+                                    <label class="btn btn-sm btn-outline-success mb-0" style="cursor: pointer;">
+                                        <i class="bi bi-cloud-arrow-up-fill me-1"></i>@(string.IsNullOrWhiteSpace(doc.Autorizacion?.ArchivoUrl) ? "Subir firmado (PDF / Foto)" : "Reemplazar firmado")
+                                        <InputFile OnChange="@(e => SubirConsentimientoFirmadoAsync(e, doc.Clave))" accept="image/*,application/pdf,.doc,.docx" style="display: none;" />
+                                    </label>
+
+                                    @if (!string.IsNullOrWhiteSpace(doc.Autorizacion?.ArchivoUrl))
+                                    {
+                                        <a class="btn btn-sm btn-link text-decoration-none fw-semibold" href="@doc.Autorizacion.ArchivoUrl" target="_blank" rel="noopener">
+                                            <i class="bi bi-paperclip me-1"></i>Ver escaneo (@doc.Autorizacion.ArchivoNombre)
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
                 </div>
 
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 pt-3 border-top">
@@ -297,7 +323,7 @@
                         else
                         {
                             <i class="bi bi-check2-circle me-1"></i>
-                            <span>@(_ordenSeleccionada.YaIngresado ? "Actualizar ingreso" : "Guardar e iniciar hospitalización")</span>
+                            <span>@(_ordenSeleccionada.YaIngresado ? "Actualizar ingreso" : "Guardar e iniciar ingreso")</span>
                         }
                     </button>
                 </div>
@@ -305,20 +331,20 @@
         </section>
     }
 
-    <section class="card shadow-sm border-0 mt-3" aria-label="Pacientes hospitalizados">
+    <section class="card shadow-sm border-0 mt-3" aria-label="Pacientes en hospitalización o cirugía">
         <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center py-2">
             <div class="d-flex align-items-center gap-2">
-                <h2 class="h6 mb-0 fw-bold text-success"><i class="bi bi-hospital-fill me-1"></i>Pacientes Hospitalizados</h2>
+                <h2 class="h6 mb-0 fw-bold text-success"><i class="bi bi-hospital-fill me-1"></i>Pacientes en Hospitalización / Cirugía</h2>
                 <span class="badge text-bg-success">@Hospitalizados.Count()</span>
             </div>
-            <small class="text-muted">Accesos rápidos a Kardex, Signos, Ficha 24h y acciones clínicas</small>
+            <small class="text-muted">Expediente integrado con pestañas bloqueadas según indicación de SOAP</small>
         </div>
 
         <div class="card-body p-0">
             @if (!Hospitalizados.Any())
             {
                 <div class="p-4 text-center text-muted small">
-                    Aún no hay pacientes ingresados en hospitalización.
+                    Aún no hay pacientes en hospitalización o cirugía.
                 </div>
             }
             else
@@ -332,6 +358,7 @@
                                 <th scope="col">Paciente</th>
                                 <th scope="col">Propietario</th>
                                 <th scope="col">Médico / Especialidad</th>
+                                <th scope="col">Modalidad</th>
                                 <th scope="col">Jaula</th>
                                 <th scope="col">Fecha</th>
                                 <th scope="col" class="text-center">Acciones</th>
@@ -367,7 +394,16 @@
                                         <span class="text-muted">@item.Especialidad</span>
                                     </td>
                                     <td class="small">
-                                        @if (!string.IsNullOrWhiteSpace(item.JaulaCodigo))
+                                        <span class="badge @ClaseTipoAtencion(item)">
+                                            @item.TipoAtencionTexto
+                                        </span>
+                                    </td>
+                                    <td class="small">
+                                        @if (!item.RequiereHospitalizacion)
+                                        {
+                                            <span class="text-muted">Ambulatorio</span>
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(item.JaulaCodigo))
                                         {
                                             <span class="badge text-bg-info">@item.JaulaCodigo</span>
                                         }
@@ -382,12 +418,15 @@
                                     </td>
                                     <td class="text-center orders-actions-cell">
                                         <div class="d-inline-flex flex-wrap align-items-center gap-1 justify-content-center">
-                                            <button type="button" class="btn btn-sm btn-purple fw-semibold" @onclick="() => AbrirModalModulos(item)">
+                                            <button type="button" class="btn btn-sm btn-purple fw-semibold" @onclick="() => AbrirModalModulosAsync(item)">
                                                 <i class="bi bi-window-stack me-1"></i>Expediente / Módulos
                                             </button>
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => SeleccionarParaIngresoAsync(item)" title="Editar ingreso / jaula / consentimiento">
-                                                <i class="bi bi-pencil-square"></i>
-                                            </button>
+                                            @if (item.RequiereHospitalizacion)
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => SeleccionarParaIngresoAsync(item)" title="Editar ingreso / jaula / consentimiento">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                </button>
+                                            }
                                         </div>
                                     </td>
                                 </tr>
@@ -495,7 +534,30 @@
                 <h5 class="mb-0 fw-bold text-dark">Expediente del paciente: @_ordenModal.Paciente</h5>
             </div>
 
-            <div class="d-flex align-items-center gap-2 ms-auto me-3">
+            <div class="d-flex flex-wrap align-items-center gap-3 ms-auto me-3">
+                <div class="d-flex flex-wrap align-items-center gap-3 px-3 py-1 bg-light border rounded">
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="chkModalCirugia"
+                               checked="@_ordenModal.RequiereCirugia"
+                               disabled="@(_guardandoChecksModal || (_tieneDatosCirugia && _ordenModal.RequiereCirugia))"
+                               title="@(_tieneDatosCirugia && _ordenModal.RequiereCirugia ? "No se puede deshabilitar porque ya hay registros en módulos de cirugía" : "Habilitar o deshabilitar módulos de cirugía")"
+                               @onchange="OnToggleCirugiaModalAsync" />
+                        <label class="form-check-label small fw-semibold" for="chkModalCirugia">
+                            Requiere Cirugía @if (_tieneDatosCirugia && _ordenModal.RequiereCirugia) { <span title="Con registros">🔒</span> }
+                        </label>
+                    </div>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="chkModalHospitalizacion"
+                               checked="@_ordenModal.RequiereHospitalizacion"
+                               disabled="@(_guardandoChecksModal || (_tieneDatosHospitalizacion && _ordenModal.RequiereHospitalizacion))"
+                               title="@(_tieneDatosHospitalizacion && _ordenModal.RequiereHospitalizacion ? "No se puede deshabilitar porque ya hay registros en módulos de hospitalización" : "Habilitar o deshabilitar módulos de hospitalización")"
+                               @onchange="OnToggleHospitalizacionModalAsync" />
+                        <label class="form-check-label small fw-semibold" for="chkModalHospitalizacion">
+                            Requiere Hospitalización @if (_tieneDatosHospitalizacion && _ordenModal.RequiereHospitalizacion) { <span title="Con registros">🔒</span> }
+                        </label>
+                    </div>
+                </div>
+
                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6">
                     <i class="bi bi-file-earmark-medical me-1"></i>Orden #@_ordenModal.OrdenAtencionId
                 </span>
@@ -510,15 +572,26 @@
             <button type="button" class="hosp-modal-close" title="Cerrar" @onclick="CerrarModalModulos">×</button>
         </header>
 
+        @if (!string.IsNullOrWhiteSpace(_mensajeModal))
+        {
+            <div class="alert alert-warning alert-dismissible fade show py-1 px-3 mb-0 rounded-0 small" role="alert">
+                @_mensajeModal
+                <button type="button" class="btn-close py-1" @onclick="() => _mensajeModal = null"></button>
+            </div>
+        }
+
         <div class="hosp-expediente-tabs">
             <ul class="nav nav-tabs flex-nowrap">
                 @foreach (var tab in PestanasDisponiblesModal)
                 {
+                    var bloqueada = EstaPestanaBloqueada(tab.Id);
                     <li class="nav-item">
                         <button type="button"
-                                class="nav-link @(_pestanaModuloActiva == tab.Id ? "active fw-bold text-dark" : "text-primary")"
-                                @onclick="() => _pestanaModuloActiva = tab.Id">
-                            <span class="me-1">@tab.Icono</span> @tab.Titulo
+                                disabled="@bloqueada"
+                                title="@(bloqueada ? "Pestaña bloqueada según los checks de Cirugía / Hospitalización" : tab.Titulo)"
+                                class="nav-link @(bloqueada ? "disabled text-muted opacity-50" : _pestanaModuloActiva == tab.Id ? "active fw-bold text-dark" : "text-primary")"
+                                @onclick="() => CambiarPestanaModalAsync(tab.Id)">
+                            <span class="me-1">@(bloqueada ? "🔒" : tab.Icono)</span> @tab.Titulo
                         </button>
                     </li>
                 }
@@ -566,6 +639,11 @@
                     <PreAnestesia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                   IdOrden="@_ordenModal.OrdenAtencionId"
                                   Nhcl="@_ordenModal.Nhcl" />
+                    break;
+                case "pausaseguridad":
+                    <PausaSeguridad @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                    IdOrden="@_ordenModal.OrdenAtencionId"
+                                    Nhcl="@_ordenModal.Nhcl" />
                     break;
                 case "anestesia":
                     <HojaAnestesia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
@@ -812,21 +890,22 @@
     private static readonly (string Id, string Icono, string Titulo, string Permiso)[] PestanasModulos =
     [
         ("soap", "📋", "Historia Clínica SOAP", "/consulta/fichamedica"),
+        ("ficha24h", "📄", "Ficha 24h", "/hospitalizacion/ficha"),
         ("kardex", "📁", "Kardex", "/kardex/enfermeria"),
         ("signos", "📈", "Signos", "/kardex/signos"),
-        ("ficha24h", "📄", "Ficha 24h", "/hospitalizacion/ficha"),
         ("monitoreo", "🩺", "Monitoreo", "/hospitalizacion/monitoreo"),
+        ("evoluciones", "📝", "Evolución Médica", "/consulta/evoluciones"),
+        ("laboratorio", "🔬", "Laboratorio", "/diagnostico/laboratorio"),
+        ("imagenologia", "☢️", "RX / Ecografía", "/diagnostico/imagenologia"),
+        ("informes", "📥", "Informes", "/diagnostico/bandeja"),
         ("cirugia", "📅", "Programación Cirugía", "/programacion/clinica"),
         ("preanestesia", "🧪", "Pre-Anestesia", "/quirofano/preanestesia"),
+        ("pausaseguridad", "🛡️", "Pausa de Seguridad", "/quirofano/pausa-seguridad"),
         ("anestesia", "🫁", "Anestesia", "/quirofano/anestesia"),
         ("protocolo", "🔪", "Protocolo Quirúrgico", "/quirofano/protocolo"),
         ("recuperacion", "🛏️", "Recuperación", "/quirofano/recuperacion"),
-        ("evoluciones", "📝", "Evolución Médica", "/consulta/evoluciones"),
         ("recetario", "💊", "Recetario", "/consulta/recetario"),
-        ("consentimientos", "📄", "Consentimientos y Alta", "/consulta/autorizaciones"),
-        ("laboratorio", "🔬", "Laboratorio", "/diagnostico/laboratorio"),
-        ("imagenologia", "☢️", "RX / Ecografía", "/diagnostico/imagenologia"),
-        ("informes", "📥", "Informes", "/diagnostico/bandeja")
+        ("consentimientos", "📄", "Consentimientos y Alta", "/consulta/autorizaciones")
     ];
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
 
@@ -840,13 +919,62 @@
 
     private static readonly HashSet<string> PestanasCirugia =
     [
-        "cirugia", "preanestesia", "anestesia", "protocolo", "recuperacion"
+        "cirugia", "preanestesia", "pausaseguridad", "anestesia", "protocolo", "recuperacion"
     ];
 
+    private static readonly HashSet<string> PestanasHospitalizacion =
+    [
+        "ficha24h", "kardex", "signos", "monitoreo"
+    ];
+
+    private bool _tieneDatosCirugia;
+    private bool _tieneDatosHospitalizacion;
+    private bool _guardandoChecksModal;
+    private string? _mensajeModal;
+
     private IEnumerable<(string Id, string Icono, string Titulo, string Permiso)> PestanasDisponiblesModal =>
-        PestanasModulos.Where(t =>
-            Permisos.Permite(t.Permiso)
-            && (!PestanasCirugia.Contains(t.Id) || (_ordenModal?.RequiereCirugia ?? false)));
+        PestanasModulos.Where(t => Permisos.Permite(t.Permiso));
+
+    private bool EstaPestanaBloqueada(string id) =>
+        (_ordenModal is not null && PestanasCirugia.Contains(id) && !_ordenModal.RequiereCirugia)
+        || (_ordenModal is not null && PestanasHospitalizacion.Contains(id) && !_ordenModal.RequiereHospitalizacion);
+
+    private IEnumerable<OrdenHospitalizacionColaDto> PendientesIngreso =>
+        _ordenes.Where(x => !x.YaIngresado);
+    private IEnumerable<OrdenHospitalizacionColaDto> Hospitalizados =>
+        _ordenes.Where(x => x.YaIngresado);
+
+    private sealed class DocIngresoEstado
+    {
+        public string Clave { get; init; } = string.Empty;
+        public string Tipo { get; init; } = string.Empty;
+        public string? NombreContiene { get; init; }
+        public string Titulo { get; set; } = string.Empty;
+        public string Html { get; set; } = string.Empty;
+        public AutorizacionClinicaDto? Autorizacion { get; set; }
+    }
+
+    private readonly Dictionary<string, DocIngresoEstado> _docsIngreso = new()
+    {
+        ["hosp"] = new() { Clave = "hosp", Tipo = "HOSPITALIZACION", Titulo = "Consentimiento Informado de Hospitalización" },
+        ["anest"] = new() { Clave = "anest", Tipo = "AUTORIZACION", NombreContiene = "Anestesia", Titulo = "Autorizacion de Anestesia" },
+        ["cir"] = new() { Clave = "cir", Tipo = "CIRUGIA", Titulo = "Consentimiento Informado de Cirugía" }
+    };
+    private string _claveDocEditando = "hosp";
+
+    private IEnumerable<DocIngresoEstado> DocumentosIngresoVisibles
+    {
+        get
+        {
+            if (_ordenSeleccionada is null) yield break;
+            if (_ordenSeleccionada.RequiereHospitalizacion) yield return _docsIngreso["hosp"];
+            if (_ordenSeleccionada.RequiereCirugia)
+            {
+                yield return _docsIngreso["anest"];
+                yield return _docsIngreso["cir"];
+            }
+        }
+    }
 
     private string _filtro = string.Empty;
     private string _tituloConsentimiento = "Consentimiento Informado de Hospitalización";
@@ -860,9 +988,6 @@
     private string? _mensajeAlerta;
     private bool _esError;
     private int _versionBusqueda;
-
-    private IEnumerable<OrdenHospitalizacionColaDto> PendientesIngreso => _ordenes.Where(x => !x.YaIngresado);
-    private IEnumerable<OrdenHospitalizacionColaDto> Hospitalizados => _ordenes.Where(x => x.YaIngresado);
 
     private IEnumerable<JaulaClinicaDto> JaulasParaSeleccion => _jaulas
         .Where(j => !j.Ocupada || j.OrdenActual == _ordenSeleccionada?.OrdenAtencionId || j.Id == _ingreso.IdJaula);
@@ -937,17 +1062,82 @@
         _mostrarModalConsentimiento = false;
     }
 
-    private void AbrirModalModulos(OrdenHospitalizacionColaDto item)
+    private async Task AbrirModalModulosAsync(OrdenHospitalizacionColaDto item)
     {
         _ordenModal = item;
+        _mensajeModal = null;
         Session.SeleccionarOrden(item.OrdenAtencionId, item.Nhcl, item.Paciente);
-        var primera = PestanasDisponiblesModal.FirstOrDefault().Id;
-        _pestanaModuloActiva = string.IsNullOrWhiteSpace(primera) ? "kardex" : primera;
+        await RefrescarEstadoBloqueosModalAsync();
+        var primeraDesbloqueada = PestanasDisponiblesModal.FirstOrDefault(t => !EstaPestanaBloqueada(t.Id)).Id;
+        _pestanaModuloActiva = string.IsNullOrWhiteSpace(primeraDesbloqueada) ? "soap" : primeraDesbloqueada;
     }
 
-    private void CerrarModalModulos()
+    private async Task RefrescarEstadoBloqueosModalAsync()
+    {
+        if (_ordenModal is null) return;
+        var estado = await HospService.VerificarDatosModulosOrdenAsync(_ordenModal.OrdenAtencionId, _ordenModal.Nhcl);
+        _tieneDatosCirugia = estado.TieneDatosCirugia;
+        _tieneDatosHospitalizacion = estado.TieneDatosHospitalizacion;
+    }
+
+    private async Task CambiarPestanaModalAsync(string tabId)
+    {
+        if (EstaPestanaBloqueada(tabId)) return;
+        _pestanaModuloActiva = tabId;
+        await RefrescarEstadoBloqueosModalAsync();
+    }
+
+    private async Task OnToggleCirugiaModalAsync(ChangeEventArgs e)
+    {
+        if (_ordenModal is null) return;
+        var nuevo = e.Value is bool b ? b : string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+        await ActualizarChecksModalAsync(nuevo, _ordenModal.RequiereHospitalizacion);
+    }
+
+    private async Task OnToggleHospitalizacionModalAsync(ChangeEventArgs e)
+    {
+        if (_ordenModal is null) return;
+        var nuevo = e.Value is bool b ? b : string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+        await ActualizarChecksModalAsync(_ordenModal.RequiereCirugia, nuevo);
+    }
+
+    private async Task ActualizarChecksModalAsync(bool reqCirugia, bool reqHosp)
+    {
+        if (_ordenModal is null) return;
+        _mensajeModal = null;
+        _guardandoChecksModal = true;
+        try
+        {
+            await RefrescarEstadoBloqueosModalAsync();
+            await HospService.ActualizarIndicacionesModalAsync(_ordenModal.OrdenAtencionId, _ordenModal.Nhcl, reqCirugia, reqHosp, Session.IdUser);
+            _ordenModal.RequiereCirugia = reqCirugia;
+            _ordenModal.RequiereHospitalizacion = reqHosp;
+
+            if (EstaPestanaBloqueada(_pestanaModuloActiva))
+            {
+                var primera = PestanasDisponiblesModal.FirstOrDefault(t => !EstaPestanaBloqueada(t.Id)).Id;
+                _pestanaModuloActiva = string.IsNullOrWhiteSpace(primera) ? "soap" : primera;
+            }
+
+            await CargarColaAsync();
+            var refOrd = _ordenes.FirstOrDefault(o => o.OrdenAtencionId == _ordenModal.OrdenAtencionId);
+            if (refOrd != null) _ordenModal = refOrd;
+        }
+        catch (Exception ex)
+        {
+            _mensajeModal = ex.Message;
+        }
+        finally
+        {
+            _guardandoChecksModal = false;
+        }
+    }
+
+    private async Task CerrarModalModulos()
     {
         _ordenModal = null;
+        _mensajeModal = null;
+        await CargarColaAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -962,31 +1152,42 @@
     private async Task CargarConsentimientoOrdenAsync(int idOrden, int nhcl)
     {
         var autorizaciones = await ConsultaService.ObtenerAutorizacionesPacienteAsync(nhcl);
-        var existente = autorizaciones.FirstOrDefault(a =>
-            a.Orden == idOrden &&
-            (a.Tipo.Equals("HOSPITALIZACION", StringComparison.OrdinalIgnoreCase)
-             || a.Documento.Contains("Hospitaliz", StringComparison.OrdinalIgnoreCase)));
-
-        if (existente != null)
+        foreach (var item in _docsIngreso.Values)
         {
-            _consentimiento = existente;
-            _tituloConsentimiento = existente.Documento;
-            _htmlConsentimiento = existente.DetalleHtml;
-            return;
-        }
+            var existente = autorizaciones.FirstOrDefault(a =>
+                a.Orden == idOrden &&
+                (item.NombreContiene != null
+                    ? a.Documento.Contains(item.NombreContiene, StringComparison.OrdinalIgnoreCase)
+                    : (a.Tipo.Equals(item.Tipo, StringComparison.OrdinalIgnoreCase)
+                       || a.Documento.Contains(item.Tipo == "CIRUGIA" ? "Cirug" : "Hospitaliz", StringComparison.OrdinalIgnoreCase))));
 
-        _consentimiento = null;
-        var plantilla = await ConsultaService.ObtenerPlantillaHospitalizacionDefaultAsync();
-        _tituloConsentimiento = plantilla?.FormNombre ?? "Consentimiento Informado de Hospitalización";
-        _htmlConsentimiento = plantilla != null
-            ? await ConsultaService.ProcesarPlantillaConDatosPacienteAsync(plantilla.FormId, nhcl)
-            : string.Empty;
+            if (existente != null)
+            {
+                item.Autorizacion = existente;
+                item.Titulo = existente.Documento;
+                item.Html = existente.DetalleHtml;
+            }
+            else
+            {
+                item.Autorizacion = null;
+                var plantilla = await ConsultaService.ObtenerPlantillaPorTipoONombreAsync(item.Tipo, item.NombreContiene);
+                item.Titulo = plantilla?.FormNombre ?? item.Clave switch
+                {
+                    "anest" => "Autorizacion de Anestesia",
+                    "cir" => "Consentimiento Informado de Cirugía",
+                    _ => "Consentimiento Informado de Hospitalización"
+                };
+                item.Html = plantilla != null
+                    ? await ConsultaService.ProcesarPlantillaConDatosPacienteAsync(plantilla.FormId, nhcl)
+                    : string.Empty;
+            }
+        }
     }
 
-    private async Task<AutorizacionClinicaDto?> AsegurarAutorizacionGuardadaAsync()
+    private async Task<AutorizacionClinicaDto?> AsegurarAutorizacionGuardadaAsync(string clave)
     {
-        if (_ordenSeleccionada is null) return null;
-        if (_consentimiento?.AutorizacionId > 0) return _consentimiento;
+        if (_ordenSeleccionada is null || !_docsIngreso.TryGetValue(clave, out var doc)) return null;
+        if (doc.Autorizacion?.AutorizacionId > 0) return doc.Autorizacion;
 
         var cab = await KardexService.ObtenerCabeceraPacienteAsync(_ordenSeleccionada.OrdenAtencionId, _ordenSeleccionada.Nhcl);
         var nueva = new AutorizacionClinicaDto
@@ -995,29 +1196,29 @@
             Orden = _ordenSeleccionada.OrdenAtencionId,
             Cliente = cab?.ClienteCodigo ?? 0,
             IdUser = Session.CurrentUser?.UserNumero ?? Session.IdUser,
-            Documento = _tituloConsentimiento,
-            Tipo = "HOSPITALIZACION",
-            DetalleHtml = _htmlConsentimiento
+            Documento = doc.Titulo,
+            Tipo = doc.Tipo,
+            DetalleHtml = doc.Html
         };
 
         await ConsultaService.GuardarAutorizacionAsync(nueva);
         await CargarConsentimientoOrdenAsync(_ordenSeleccionada.OrdenAtencionId, _ordenSeleccionada.Nhcl);
-        return _consentimiento;
+        return doc.Autorizacion;
     }
 
-    private async Task ImprimirConsentimientoAsync()
+    private async Task ImprimirConsentimientoAsync(string clave)
     {
-        if (_ordenSeleccionada is null) return;
+        if (_ordenSeleccionada is null || !_docsIngreso.TryGetValue(clave, out var doc)) return;
         _procesandoConsentimiento = true;
         try
         {
-            await AsegurarAutorizacionGuardadaAsync();
-            await JS.InvokeVoidAsync("hosvetEditor.printDocument", _tituloConsentimiento, _htmlConsentimiento);
+            await AsegurarAutorizacionGuardadaAsync(clave);
+            await JS.InvokeVoidAsync("hosvetEditor.printDocument", doc.Titulo, doc.Html);
         }
         catch (Exception ex)
         {
             _esError = true;
-            _mensajeAlerta = $"Error al imprimir consentimiento: {ex.Message}";
+            _mensajeAlerta = $"Error al imprimir documento: {ex.Message}";
         }
         finally
         {
@@ -1025,8 +1226,12 @@
         }
     }
 
-    private void AbrirModalEditorConsentimientoAsync()
+    private void AbrirModalEditorConsentimientoAsync(string clave)
     {
+        if (!_docsIngreso.TryGetValue(clave, out var doc)) return;
+        _claveDocEditando = clave;
+        _tituloConsentimiento = doc.Titulo;
+        _htmlConsentimiento = doc.Html;
         _mostrarModalConsentimiento = true;
         _inicializarEditorModal = true;
     }
@@ -1039,7 +1244,7 @@
 
     private async Task GuardarConsentimientoDesdeModalAsync()
     {
-        if (_ordenSeleccionada is null) return;
+        if (_ordenSeleccionada is null || !_docsIngreso.TryGetValue(_claveDocEditando, out var doc)) return;
         _procesandoConsentimiento = true;
         _mensajeAlerta = null;
         _esError = false;
@@ -1051,23 +1256,26 @@
                 _htmlConsentimiento = html;
             }
 
-            if (_consentimiento?.AutorizacionId > 0)
+            doc.Titulo = _tituloConsentimiento;
+            doc.Html = _htmlConsentimiento;
+
+            if (doc.Autorizacion?.AutorizacionId > 0)
             {
-                await ConsultaService.ActualizarDetalleAutorizacionAsync(_consentimiento.AutorizacionId, _tituloConsentimiento, _htmlConsentimiento);
+                await ConsultaService.ActualizarDetalleAutorizacionAsync(doc.Autorizacion.AutorizacionId, doc.Titulo, doc.Html);
                 await CargarConsentimientoOrdenAsync(_ordenSeleccionada.OrdenAtencionId, _ordenSeleccionada.Nhcl);
             }
             else
             {
-                await AsegurarAutorizacionGuardadaAsync();
+                await AsegurarAutorizacionGuardadaAsync(_claveDocEditando);
             }
 
             _mostrarModalConsentimiento = false;
-            _mensajeAlerta = "Consentimiento de hospitalización guardado correctamente.";
+            _mensajeAlerta = $"Documento '{doc.Titulo}' guardado correctamente.";
         }
         catch (Exception ex)
         {
             _esError = true;
-            _mensajeAlerta = $"Error al guardar consentimiento: {ex.Message}";
+            _mensajeAlerta = $"Error al guardar documento: {ex.Message}";
         }
         finally
         {
@@ -1105,9 +1313,9 @@
         }
     }
 
-    private async Task SubirConsentimientoFirmadoAsync(InputFileChangeEventArgs e)
+    private async Task SubirConsentimientoFirmadoAsync(InputFileChangeEventArgs e, string clave)
     {
-        if (_ordenSeleccionada is null) return;
+        if (_ordenSeleccionada is null || !_docsIngreso.TryGetValue(clave, out var doc)) return;
         _procesandoConsentimiento = true;
         _mensajeAlerta = null;
         _esError = false;
@@ -1122,11 +1330,11 @@
                 return;
             }
 
-            var auth = await AsegurarAutorizacionGuardadaAsync();
+            var auth = await AsegurarAutorizacionGuardadaAsync(clave);
             if (auth is null || auth.AutorizacionId <= 0)
             {
                 _esError = true;
-                _mensajeAlerta = "No se pudo registrar el documento de consentimiento para adjuntar el escaneo.";
+                _mensajeAlerta = "No se pudo registrar el documento para adjuntar el escaneo.";
                 return;
             }
 
@@ -1135,7 +1343,7 @@
 
             var ext = Path.GetExtension(file.Name).ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(ext)) ext = ".pdf";
-            var fileName = $"Firmado_{auth.AutorizacionId}_Hosp_{DateTime.Now:yyyyMMddHHmmss}{ext}";
+            var fileName = $"Firmado_{auth.AutorizacionId}_{clave}_{DateTime.Now:yyyyMMddHHmmss}{ext}";
             var filePath = Path.Combine(uploadsFolder, fileName);
 
             await using (var stream = file.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024))
@@ -1149,7 +1357,7 @@
             if (ok)
             {
                 await CargarConsentimientoOrdenAsync(_ordenSeleccionada.OrdenAtencionId, _ordenSeleccionada.Nhcl);
-                _mensajeAlerta = $"Consentimiento firmado '{file.Name}' subido y vinculado correctamente.";
+                _mensajeAlerta = $"Documento firmado '{file.Name}' subido y vinculado correctamente.";
             }
             else
             {
@@ -1175,20 +1383,25 @@
         _mensajeAlerta = null;
         _esError = false;
 
-        var tieneJaula = _ingreso.IdJaula is > 0 || !string.IsNullOrWhiteSpace(_ingreso.UbicacionJaula);
-        if (!tieneJaula)
+        if (_ordenSeleccionada.RequiereHospitalizacion)
         {
-            _esError = true;
-            _mensajeAlerta = "Debes seleccionar una jaula o especificar la ubicación del paciente antes de guardar.";
-            return;
+            var tieneJaula = _ingreso.IdJaula is > 0 || !string.IsNullOrWhiteSpace(_ingreso.UbicacionJaula);
+            if (!tieneJaula)
+            {
+                _esError = true;
+                _mensajeAlerta = "Debes seleccionar una jaula o especificar la ubicación del paciente antes de guardar.";
+                return;
+            }
         }
 
-        var tieneDocumentoFirmado = _consentimiento != null && !string.IsNullOrWhiteSpace(_consentimiento.ArchivoUrl);
-        if (!tieneDocumentoFirmado)
+        foreach (var doc in DocumentosIngresoVisibles)
         {
-            _esError = true;
-            _mensajeAlerta = "Debes subir el documento firmado (PDF o imagen) del consentimiento de hospitalización antes de guardar.";
-            return;
+            if (doc.Autorizacion is null || string.IsNullOrWhiteSpace(doc.Autorizacion.ArchivoUrl))
+            {
+                _esError = true;
+                _mensajeAlerta = $"Debes subir el documento firmado (PDF o imagen) de '{doc.Titulo}' antes de guardar.";
+                return;
+            }
         }
 
         _guardando = true;
@@ -1222,6 +1435,14 @@
             _guardando = false;
         }
     }
+
+    private static string ClaseTipoAtencion(OrdenHospitalizacionColaDto item) => (item.RequiereCirugia, item.RequiereHospitalizacion) switch
+    {
+        (true, true) => "text-bg-primary",
+        (true, false) => "text-bg-warning",
+        (false, true) => "text-bg-info",
+        _ => "text-bg-secondary"
+    };
 
     private static string InicialPaciente(string nombre) =>
         string.IsNullOrWhiteSpace(nombre) ? "P" : nombre.Trim()[0].ToString().ToUpperInvariant();

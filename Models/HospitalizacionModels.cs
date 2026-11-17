@@ -403,7 +403,16 @@ public sealed class OrdenHospitalizacionColaDto
     public int? JaulaId { get; set; }
     public string JaulaCodigo { get; set; } = string.Empty;
     public bool YaIngresado { get; set; }
+    public bool RequiereHospitalizacion { get; set; }
     public bool RequiereCirugia { get; set; }
+
+    public string TipoAtencionTexto => (RequiereCirugia, RequiereHospitalizacion) switch
+    {
+        (true, true) => "Cirugía con hospitalización",
+        (true, false) => "Cirugía sin hospitalización",
+        (false, true) => "Hospitalización sin cirugía",
+        _ => "Atención clínica"
+    };
 }
 
 public sealed class IngresoHospitalizacionDto
