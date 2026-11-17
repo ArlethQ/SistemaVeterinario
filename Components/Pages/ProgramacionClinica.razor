@@ -33,18 +33,33 @@
 <table class="table"><thead><tr><th>Fecha</th><th>Profesional</th><th>Motivo</th><th>Horario</th><th></th></tr></thead><tbody>@foreach(var x in _excepciones.Where(x=>x.Estado=="A")){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td>@x.Medico</td><td>@x.Motivo</td><td>@x.Desde - @x.Hasta</td><td><button class="btn btn-sm btn-outline-danger" @onclick="()=>DesactivarExcepcion(x.Id)">Desactivar</button></td></tr>}</tbody></table>
 }else{
 <div class="card mb-3"><div class="card-body row g-2">
-<div class="col-md-3"><label>Médico</label><select class="form-select" value="@_cirugia.IdMedico" @onchange="OnMedicoCirugiaChangedAsync"><option value="0">Seleccione</option>@foreach(var x in _medicos){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+<div class="col-md-3"><label>Médico</label><select class="form-select" value="@_cirugia.IdMedico" @onchange="OnMedicoCirugiaChangedAsync"><option value="0">Seleccione</option>@foreach(var x in MedicosSoloCirugia){<option value="@x.Id">@x.Descripcion</option>}</select></div>
 @if(!ModoModal){
 <div class="col-md-3 position-relative"><label>Paciente</label><input class="form-control" autocomplete="off" placeholder="Escriba para buscar paciente..." @bind="_filtroPaciente" @bind:event="oninput" @bind:after="BuscarPacientesAutoAsync" @onfocus="() => _mostrarPacientesSugeridos = !string.IsNullOrWhiteSpace(_filtroPaciente)" @onblur="CerrarPacientesSugeridosAsync" />@if(_mostrarPacientesSugeridos && _pacientes.Count > 0 && !string.IsNullOrWhiteSpace(_filtroPaciente)){<div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index:1050;max-height:200px;overflow-y:auto;">@foreach(var x in _pacientes){<button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start" @onmousedown="() => SeleccionarPacienteCirugia(x)">@x.Descripcion</button>}</div>}<select class="form-select mt-1" @bind="_cirugia.Nhcl">@foreach(var x in _pacientes){<option value="@x.Id">@x.Descripcion</option>}</select></div>
 }
 <div class="col-md-3 position-relative"><label>Procedimiento</label><input class="form-control" autocomplete="off" placeholder="Escriba para buscar procedimiento..." @bind="_filtroProcedimiento" @bind:event="oninput" @bind:after="BuscarProcedimientosAutoAsync" @onfocus="() => _mostrarProcedimientosSugeridos = !string.IsNullOrWhiteSpace(_filtroProcedimiento)" @onblur="CerrarProcedimientosSugeridosAsync" />@if(_mostrarProcedimientosSugeridos && _procedimientos.Count > 0 && !string.IsNullOrWhiteSpace(_filtroProcedimiento)){<div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index:1050;max-height:200px;overflow-y:auto;">@foreach(var x in _procedimientos){<button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start" @onmousedown="() => SeleccionarProcedimientoCirugia(x)">@x.Descripcion</button>}</div>}<select class="form-select mt-1" @bind="_cirugia.IdProcedimiento">@foreach(var x in _procedimientos){<option value="@x.Id">@x.Descripcion</option>}</select></div>
-<div class="col-md-2"><label>Localidad</label><select class="form-select" value="@_cirugia.IdLocalidad" @onchange="OnLocalidadCirugiaChangedAsync"><option value="0">Seleccione</option>@foreach(var x in _localidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+<div class="col-md-2"><label>Localidad</label><select class="form-select" value="@_cirugia.IdLocalidad" @onchange="OnLocalidadCirugiaChangedAsync"><option value="0">Seleccione</option>@foreach(var x in LocalidadesCirugiaDisponibles){<option value="@x.Id">@x.Descripcion</option>}</select></div>
 <div class="col-md-2"><label>Fecha</label><input type="date" class="form-control" value="@_cirugia.Fecha.ToString("yyyy-MM-dd")" @onchange="OnFechaCirugiaChangedAsync" min="@DateTime.Today.ToString("yyyy-MM-dd")"/></div>
 <div class="col-md-2"><label>Hora inicio (libre)</label><select class="form-select" value="@_cirugia.HoraInicio" @onchange="OnHoraInicioCirugiaChanged" disabled="@(_slotsLibresCirugia.Count == 0)">@if(_slotsLibresCirugia.Count == 0){<option value="">Sin horas libres</option>}else{<option value="">Seleccione</option>@foreach(var s in _slotsLibresCirugia){<option value="@s.Hora">@s.Hora</option>}}</select></div>
-<div class="col-md-2"><label>Hora fin</label><select class="form-select" @bind="_cirugia.HoraFin" disabled="@(_horasFinDisponibles.Count == 0)">@if(_horasFinDisponibles.Count == 0){<option value="">--</option>}else{@foreach(var hf in _horasFinDisponibles){<option value="@hf">@hf</option>}}</select></div>
+<div class="col-md-2"><label>Hora fin / duración</label><select class="form-select" @bind="_cirugia.HoraFin" disabled="@(_horasFinDisponibles.Count == 0)">@if(_horasFinDisponibles.Count == 0){<option value="">--</option>}else{@foreach(var hf in _horasFinDisponibles){<option value="@hf.Hora">@hf.Etiqueta</option>}}</select></div>
 <div class="col-md-2 align-self-end"><SaveButton class="btn btn-primary" OnClick="GuardarCirugia" Disabled="@(_slotsLibresCirugia.Count == 0 || string.IsNullOrWhiteSpace(_cirugia.HoraInicio) || string.IsNullOrWhiteSpace(_cirugia.HoraFin))">Guardar cirugía</SaveButton></div>
-@if(_cirugia.IdMedico > 0 && _cirugia.IdLocalidad > 0 && !_cargandoSlotsCirugia && _slotsLibresCirugia.Count == 0){
-<div class="col-12"><div class="alert alert-warning py-2 mb-0 small">El médico no tiene horas libres disponibles para esta fecha y sucursal (sin horario asignado, o ya ocupado por citas, bloqueos u otra cirugía).</div></div>
+@if(_cirugia.IdMedico > 0 && _cirugia.IdLocalidad > 0 && !_cargandoSlotsCirugia){
+    var citasDia = _slotsTodosCirugia.Count(s => s.CitaExistente != null);
+    var bloqueosDia = _slotsTodosCirugia.Count(s => s.Bloqueado);
+    if(_slotsLibresCirugia.Count == 0){
+        <div class="col-12"><div class="alert alert-warning py-2 mb-0 small">El médico no tiene horas libres disponibles para esta fecha y sucursal (sin horario asignado, o ya ocupado por citas (@citasDia), bloqueos/cirugías (@bloqueosDia)). Órdenes activas del día: <strong>@_ordenesActivasMedicoHoy</strong>.</div></div>
+    } else {
+        <div class="col-12">
+            <div class="d-flex flex-wrap gap-2 align-items-center small text-muted bg-light border rounded px-2 py-1">
+                <span><strong>Agenda del día:</strong> @_slotsTodosCirugia[0].Hora – @_slotsTodosCirugia[^1].Hora</span>
+                <span class="badge text-bg-success">@_slotsLibresCirugia.Count libres</span>
+                <span class="badge text-bg-secondary">@citasDia citas</span>
+                <span class="badge text-bg-warning text-dark">@bloqueosDia bloqueos/cirugías</span>
+                <span class="badge text-bg-info text-dark">@_ordenesActivasMedicoHoy órdenes activas</span>
+                <span class="ms-auto text-muted">Si inicia al cierre del turno, puede elegir horas extra en <strong>Hora fin</strong>.</span>
+            </div>
+        </div>
+    }
 }
 </div></div>
 <table class="table"><thead><tr><th>Fecha</th><th>Médico</th><th>Paciente</th><th>Procedimiento</th><th>Horario</th><th></th></tr></thead><tbody>@foreach(var x in _cirugias.Where(x=>x.Estado=="A" && (!ModoModal || x.Nhcl == Nhcl))){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td>@x.Medico</td><td>@x.Paciente</td><td>@x.Procedimiento</td><td>@x.HoraInicio - @x.HoraFin</td><td><button class="btn btn-sm btn-outline-danger" @onclick="()=>CancelarCirugia(x.Id)">Cancelar</button></td></tr>}</tbody></table>
@@ -55,7 +70,14 @@
 [Parameter] public int Nhcl { get; set; }
 [SupplyParameterFromQuery(Name = "medico")] public int? MedicoAgenda { get; set; }
 [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
-bool _autorizado,_error,_mostrarPacientesSugeridos,_mostrarProcedimientosSugeridos,_cargandoSlotsCirugia;string _tab="horarios",_mensaje="",_filtroPaciente="",_filtroProcedimiento="";int _consultorioId;HorarioMedicoDto _horario=new();ExcepcionHorarioDto _excepcion=new();CirugiaProgramadaDto _cirugia=new();List<HorarioMedicoDto> _horarios=[];List<ExcepcionHorarioDto> _excepciones=[];List<CirugiaProgramadaDto> _cirugias=[];List<PisoClinicoDto> _pisos=[];List<ConsultorioClinicoDto> _consultorios=[];List<SelectorClinicoDto> _medicos=[],_localidades=[],_pacientes=[],_procedimientos=[];List<SlotHorarioMedicoDto> _slotsTodosCirugia=[];List<SlotHorarioMedicoDto> _slotsLibresCirugia=[];List<string> _horasFinDisponibles=[];Dictionary<int, List<int>> _localidadesAsignadas=[];readonly Dictionary<string,string> Dias=new(){{"Lunes","Monday"},{"Martes","Tuesday"},{"Miércoles","Wednesday"},{"Jueves","Thursday"},{"Viernes","Friday"},{"Sábado","Saturday"},{"Domingo","Sunday"}};
+bool _autorizado,_error,_mostrarPacientesSugeridos,_mostrarProcedimientosSugeridos,_cargandoSlotsCirugia;string _tab="horarios",_mensaje="",_filtroPaciente="",_filtroProcedimiento="";int _consultorioId,_ordenesActivasMedicoHoy;HorarioMedicoDto _horario=new();ExcepcionHorarioDto _excepcion=new();CirugiaProgramadaDto _cirugia=new();List<HorarioMedicoDto> _horarios=[];List<ExcepcionHorarioDto> _excepciones=[];List<CirugiaProgramadaDto> _cirugias=[];List<PisoClinicoDto> _pisos=[];List<ConsultorioClinicoDto> _consultorios=[];List<SelectorClinicoDto> _medicos=[],_localidades=[],_pacientes=[],_procedimientos=[];List<SlotHorarioMedicoDto> _slotsTodosCirugia=[];List<SlotHorarioMedicoDto> _slotsLibresCirugia=[];List<(string Hora, string Etiqueta, bool EsExtra)> _horasFinDisponibles=[];Dictionary<int, List<int>> _localidadesAsignadas=[];readonly Dictionary<string,string> Dias=new(){{"Lunes","Monday"},{"Martes","Tuesday"},{"Miércoles","Wednesday"},{"Jueves","Thursday"},{"Viernes","Friday"},{"Sábado","Saturday"},{"Domingo","Sunday"}};
+IEnumerable<SelectorClinicoDto> MedicosSoloCirugia => _medicos.Where(m => !EsProfesionalEnfermero(m.Id));
+IEnumerable<SelectorClinicoDto> LocalidadesCirugiaDisponibles =>
+    _cirugia.IdMedico <= 0
+        ? _localidades
+        : (_localidadesAsignadas.TryGetValue(_cirugia.IdMedico, out var ids) && ids.Count > 0
+            ? _localidades.Where(l => ids.Contains(l.Id))
+            : _localidades);
 IEnumerable<ConsultorioClinicoDto> ConsultoriosDisponibles=>_consultorios.Where(c=>_horario.IdLocalidad==0||_pisos.Any(p=>p.Id==c.IdPiso&&p.IdLocalidad==_horario.IdLocalidad));
 IEnumerable<SelectorClinicoDto> LocalidadesDisponibles =>
     _horario.IdMedico <= 0
@@ -71,7 +93,7 @@ IEnumerable<SelectorClinicoDto> LocalidadesExcepcionDisponibles =>
             ? _localidades.Where(l => ids.Contains(l.Id))
             : Enumerable.Empty<SelectorClinicoDto>());
 
-protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated){Nav.NavigateTo("/login");return;}_autorizado=true;if(ModoModal)_tab="cirugias";var m=Service.ObtenerMedicosAsync();var l=Service.ObtenerLocalidadesSelectorAsync();var p=Service.BuscarPacientesAsync("");var pr=Service.BuscarProcedimientosAsync("");var pi=Service.ObtenerPisosAsync(true);var co=Service.ObtenerConsultoriosAsync(true);var la=Service.ObtenerLocalidadesAsignadasMedicosAsync();await Task.WhenAll(m,l,p,pr,pi,co,la);_medicos=await m;_localidades=await l;_pacientes=await p;_procedimientos=await pr;_pisos=await pi;_consultorios=await co;var asignaciones=await la;_localidadesAsignadas=asignaciones.GroupBy(a=>a.IdUsuario).ToDictionary(g=>g.Key,g=>g.Select(x=>x.IdLocalidad).Distinct().ToList());if(_cirugia.IdLocalidad<=0)_cirugia.IdLocalidad=Session.Localidad>0?Session.Localidad:(_localidades.FirstOrDefault()?.Id??0);if(ModoModal&&Nhcl>0){_cirugia.Nhcl=Nhcl;if(IdOrden>0){var cab=await KardexService.ObtenerCabeceraPacienteAsync(IdOrden,Nhcl);if(cab!=null&&!string.IsNullOrWhiteSpace(cab.MedicoResponsable)){var medMatch=_medicos.FirstOrDefault(x=>x.Descripcion.Contains(cab.MedicoResponsable.Trim(),StringComparison.OrdinalIgnoreCase));if(medMatch!=null)_cirugia.IdMedico=medMatch.Id;}}}await Cargar();if(_tab=="cirugias")await CargarSlotsDisponiblesCirugiaAsync();}
+protected override async Task OnInitializedAsync(){if(!Session.IsAuthenticated){Nav.NavigateTo("/login");return;}_autorizado=true;if(ModoModal)_tab="cirugias";var m=Service.ObtenerMedicosAsync();var l=Service.ObtenerLocalidadesSelectorAsync();var p=Service.BuscarPacientesAsync("");var pr=Service.BuscarProcedimientosAsync("");var pi=Service.ObtenerPisosAsync(true);var co=Service.ObtenerConsultoriosAsync(true);var la=Service.ObtenerLocalidadesAsignadasMedicosAsync();await Task.WhenAll(m,l,p,pr,pi,co,la);_medicos=await m;_localidades=await l;_pacientes=await p;_procedimientos=await pr;_pisos=await pi;_consultorios=await co;var asignaciones=await la;_localidadesAsignadas=asignaciones.GroupBy(a=>a.IdUsuario).ToDictionary(g=>g.Key,g=>g.Select(x=>x.IdLocalidad).Distinct().ToList());if(_cirugia.IdLocalidad<=0)_cirugia.IdLocalidad=Session.Localidad>0?Session.Localidad:(_localidades.FirstOrDefault()?.Id??0);if(ModoModal&&Nhcl>0){_cirugia.Nhcl=Nhcl;if(IdOrden>0){var cab=await KardexService.ObtenerCabeceraPacienteAsync(IdOrden,Nhcl);if(cab!=null&&!string.IsNullOrWhiteSpace(cab.MedicoResponsable)){var medMatch=MedicosSoloCirugia.FirstOrDefault(x=>x.Descripcion.Contains(cab.MedicoResponsable.Trim(),StringComparison.OrdinalIgnoreCase));if(medMatch!=null)_cirugia.IdMedico=medMatch.Id;}}}AsegurarLocalidadCirugia();await Cargar();if(_tab=="cirugias")await CargarSlotsDisponiblesCirugiaAsync();}
 bool EsProfesionalEnfermero(int idMedico) =>
     _medicos.FirstOrDefault(m => m.Id == idMedico)?.Rol == "Enfermero" ||
     _medicos.FirstOrDefault(m => m.Id == idMedico)?.Descripcion.Contains("Enfermería", StringComparison.OrdinalIgnoreCase) == true;
@@ -144,7 +166,14 @@ protected override void OnParametersSet()
 }
 
 async Task Cambiar(string t){_tab=t;_mensaje="";await Cargar();if(_tab=="cirugias"){if(_cirugia.IdLocalidad<=0)_cirugia.IdLocalidad=Session.Localidad>0?Session.Localidad:(_localidades.FirstOrDefault()?.Id??0);await CargarSlotsDisponiblesCirugiaAsync();}}
-async Task OnMedicoCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdMedico=int.TryParse(e.Value?.ToString(),out var id)?id:0;await CargarSlotsDisponiblesCirugiaAsync();}
+void AsegurarLocalidadCirugia()
+{
+    var disp = LocalidadesCirugiaDisponibles.ToList();
+    if (disp.Count > 0 && !disp.Any(l => l.Id == _cirugia.IdLocalidad))
+        _cirugia.IdLocalidad = disp[0].Id;
+}
+
+async Task OnMedicoCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdMedico=int.TryParse(e.Value?.ToString(),out var id)?id:0;AsegurarLocalidadCirugia();await CargarSlotsDisponiblesCirugiaAsync();}
 async Task OnLocalidadCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdLocalidad=int.TryParse(e.Value?.ToString(),out var id)?id:0;await CargarSlotsDisponiblesCirugiaAsync();}
 async Task OnFechaCirugiaChangedAsync(ChangeEventArgs e){if(DateTime.TryParse(e.Value?.ToString(),out var f))_cirugia.Fecha=f.Date;await CargarSlotsDisponiblesCirugiaAsync();}
 void OnHoraInicioCirugiaChanged(ChangeEventArgs e){_cirugia.HoraInicio=e.Value?.ToString()??"";RecalcularHorasFinDisponibles();}
@@ -154,14 +183,24 @@ async Task CargarSlotsDisponiblesCirugiaAsync()
     _slotsTodosCirugia=[];
     _slotsLibresCirugia=[];
     _horasFinDisponibles=[];
+    _ordenesActivasMedicoHoy=0;
     _cirugia.HoraInicio="";
     _cirugia.HoraFin="";
     if(_cirugia.IdMedico<=0||_cirugia.IdLocalidad<=0)return;
     _cargandoSlotsCirugia=true;
     try
     {
-        _slotsTodosCirugia=await AdmisionService.ObtenerSlotsHorarioMedicoAsync(_cirugia.IdMedico,_cirugia.Fecha,_cirugia.IdLocalidad);
-        _slotsLibresCirugia=_slotsTodosCirugia.Where(s=>s.Disponible).ToList();
+        var slotsTask = AdmisionService.ObtenerSlotsHorarioMedicoAsync(_cirugia.IdMedico,_cirugia.Fecha,_cirugia.IdLocalidad);
+        var esperaTask = AdmisionService.ObtenerConteoMedicosEsperaAsync(_cirugia.Fecha,_cirugia.IdLocalidad);
+        await Task.WhenAll(slotsTask, esperaTask);
+        _slotsTodosCirugia = await slotsTask;
+        var conteos = await esperaTask;
+        _ordenesActivasMedicoHoy = conteos.FirstOrDefault(c => c.IdMedico == _cirugia.IdMedico)?.EnEspera ?? 0;
+        var esHoy = _cirugia.Fecha.Date == DateTime.Today;
+        var ahora = DateTime.Now.TimeOfDay;
+        _slotsLibresCirugia = _slotsTodosCirugia
+            .Where(s => s.Disponible && (!esHoy || (TimeSpan.TryParse(s.Hora, out var sh) && sh >= ahora)))
+            .ToList();
         if(_slotsLibresCirugia.Count>0)
         {
             _cirugia.HoraInicio=_slotsLibresCirugia[0].Hora;
@@ -174,6 +213,15 @@ async Task CargarSlotsDisponiblesCirugiaAsync()
     }
 }
 
+static string FormatearDuracionCirugia(TimeSpan duracion)
+{
+    var h = (int)duracion.TotalHours;
+    var m = duracion.Minutes;
+    if (h > 0 && m > 0) return $"{h} h {m} min";
+    if (h > 0) return $"{h} h";
+    return $"{m} min";
+}
+
 void RecalcularHorasFinDisponibles()
 {
     _horasFinDisponibles=[];
@@ -181,18 +229,39 @@ void RecalcularHorasFinDisponibles()
     if(string.IsNullOrWhiteSpace(_cirugia.HoraInicio)||_slotsTodosCirugia.Count==0)return;
     var idx=_slotsTodosCirugia.FindIndex(s=>s.Hora==_cirugia.HoraInicio&&s.Disponible);
     if(idx<0)return;
+    if(!TimeSpan.TryParse(_cirugia.HoraInicio,out var inicioTs))return;
     var paso=TimeSpan.FromMinutes(30);
     if(_slotsTodosCirugia.Count>=2&&TimeSpan.TryParse(_slotsTodosCirugia[0].Hora,out var t0)&&TimeSpan.TryParse(_slotsTodosCirugia[1].Hora,out var t1)&&t1>t0)
         paso=t1-t0;
+    TimeSpan? ultimaFin=null;
+    bool detenidoPorConflicto=false;
     for(int i=idx;i<_slotsTodosCirugia.Count;i++)
     {
-        if(!_slotsTodosCirugia[i].Disponible)break;
-        if(!TimeSpan.TryParse(_slotsTodosCirugia[i].Hora,out var hi))break;
-        if(i>idx&&TimeSpan.TryParse(_slotsTodosCirugia[i-1].Hora,out var prev)&&(hi-prev)!=paso)break;
+        if(!_slotsTodosCirugia[i].Disponible){detenidoPorConflicto=true;break;}
+        if(!TimeSpan.TryParse(_slotsTodosCirugia[i].Hora,out var hi)){detenidoPorConflicto=true;break;}
+        if(i>idx&&TimeSpan.TryParse(_slotsTodosCirugia[i-1].Hora,out var prev)&&(hi-prev)!=paso){break;}
         var fin=hi+paso;
-        _horasFinDisponibles.Add($"{(int)fin.TotalHours:D2}:{fin.Minutes:D2}");
+        ultimaFin=fin;
+        var textoFin=$"{(int)fin.TotalHours:D2}:{fin.Minutes:D2}";
+        _horasFinDisponibles.Add((textoFin, $"{textoFin} ({FormatearDuracionCirugia(fin - inicioTs)})", false));
     }
-    if(_horasFinDisponibles.Count>0)_cirugia.HoraFin=_horasFinDisponibles[0];
+    if(!detenidoPorConflicto && ultimaFin.HasValue)
+    {
+        var maxDia=TimeSpan.FromHours(23)+TimeSpan.FromMinutes(59);
+        var limiteExtra=ultimaFin.Value+TimeSpan.FromHours(4);
+        var siguienteSlotOcupado=_slotsTodosCirugia
+            .Where(s=>TimeSpan.TryParse(s.Hora,out var st)&&st>=ultimaFin.Value)
+            .Select(s=>TimeSpan.Parse(s.Hora))
+            .OrderBy(t=>t)
+            .FirstOrDefault();
+        for(var extraFin=ultimaFin.Value+paso; extraFin<=limiteExtra && extraFin<=maxDia; extraFin+=paso)
+        {
+            if(siguienteSlotOcupado>TimeSpan.Zero && extraFin>siguienteSlotOcupado)break;
+            var textoFin=$"{(int)extraFin.TotalHours:D2}:{extraFin.Minutes:D2}";
+            _horasFinDisponibles.Add((textoFin, $"{textoFin} ({FormatearDuracionCirugia(extraFin - inicioTs)} · hora extra)", true));
+        }
+    }
+    if(_horasFinDisponibles.Count>0)_cirugia.HoraFin=_horasFinDisponibles[0].Hora;
 }async Task Cargar(){try{if(_tab=="horarios")_horarios=await Service.ObtenerHorariosAsync();else if(_tab=="excepciones")_excepciones=await Service.ObtenerExcepcionesAsync(DateTime.Today,DateTime.Today.AddMonths(6));else _cirugias=await Service.ObtenerCirugiasAsync(DateTime.Today,DateTime.Today.AddMonths(6));}catch(Exception ex){Mensaje(false,ex.Message);}}
 void CambiarLocalidad(ChangeEventArgs e){_horario.IdLocalidad=int.TryParse(e.Value?.ToString(),out var id)?id:0;if(!EsProfesionalEnfermero(_horario.IdMedico)){_consultorioId=0;_horario.Piso=_horario.Consultorio="";}}void SeleccionarConsultorio(ChangeEventArgs e){_consultorioId=int.TryParse(e.Value?.ToString(),out var id)?id:0;var c=_consultorios.FirstOrDefault(x=>x.Id==_consultorioId);_horario.Piso=c?.Piso??"";_horario.Consultorio=c?.Nombre??"";}
 void Editar(HorarioMedicoDto x){_horario=new(){Id=x.Id,IdMedico=x.IdMedico,Dia=x.Dia,DiaIngles=x.DiaIngles,Desde=x.Desde,Hasta=x.Hasta,Intervalo=x.Intervalo,IdLocalidad=x.IdLocalidad,Piso=x.Piso,Consultorio=x.Consultorio,VigenciaDesde=x.VigenciaDesde,VigenciaHasta=x.VigenciaHasta};if(EsProfesionalEnfermero(x.IdMedico)){_consultorioId=0;_horario.Piso="General";_horario.Consultorio="Área General";}else{_consultorioId=_consultorios.FirstOrDefault(c=>c.Nombre.Equals(x.Consultorio,StringComparison.OrdinalIgnoreCase)&&c.Piso.Equals(x.Piso,StringComparison.OrdinalIgnoreCase))?.Id??0;}_mensaje="";}void CancelarHorario(){_horario=new();_consultorioId=0;_mensaje="";}
