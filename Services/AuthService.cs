@@ -33,6 +33,7 @@ public class SessionStateService
         _lastActivityUtc.HasValue &&
         DateTimeOffset.UtcNow - _lastActivityUtc.Value < SessionTimeout &&
         !_control.IsUserRevoked(IdUser, _sessionIssuedUtc);
+    public bool EsAdministrador => TipoUser == 1 || (!string.IsNullOrWhiteSpace(LoginUser) && LoginUser.Equals("admin", StringComparison.OrdinalIgnoreCase));
     public bool PuedeVerTodasLasSucursales => TipoUser is 1 or 4 or 12 || (!string.IsNullOrWhiteSpace(LoginUser) && LoginUser.Equals("admin", StringComparison.OrdinalIgnoreCase));
     public int? OrdenActiva { get; private set; }
     public int? NhclActivo { get; private set; }
@@ -84,6 +85,21 @@ public class SessionStateService
         _lastActivityUtc = DateTimeOffset.UtcNow;
         _sessionIssuedUtc = _lastActivityUtc.Value;
         _permisosCache = null;
+        await SaveAsync();
+        NotifyStateChanged();
+    }
+
+    public async Task CambiarLocalidadAsync(int localidad, string localidadDesc)
+    {
+        if (!IsAuthenticated || !EsAdministrador || localidad <= 0) return;
+
+        Localidad = localidad;
+        if (!string.IsNullOrWhiteSpace(localidadDesc))
+        {
+            localidadDesc = System.Text.RegularExpressions.Regex.Replace(localidadDesc, @"\bUSFQ\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        }
+        LocalidadDescripcion = localidadDesc;
+        Apostrofe = localidad == 2 ? "EQ" : "HV";
         await SaveAsync();
         NotifyStateChanged();
     }

@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
 @inject SessionStateService Session
+@inject IAuthService Auth
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -16,7 +17,25 @@
     </aside>
     <main class="workspace">
         <header class="workspace-header">
-            <div class="workspace-brand"><span class="mobile-mark">H</span><div><small>Hospital Veterinario</small><strong>@(Session.LocalidadDescripcion?.Replace(" USFQ", "", StringComparison.OrdinalIgnoreCase).Replace("USFQ", "", StringComparison.OrdinalIgnoreCase).Trim())</strong></div></div>
+            <div class="workspace-brand">
+                <span class="mobile-mark">H</span>
+                <div>
+                    <small>Hospital Veterinario</small>
+                    @if (Session.IsAuthenticated && Session.EsAdministrador && _localidades.Count > 1)
+                    {
+                        <select class="form-select form-select-sm fw-bold mt-1" style="min-width: 170px;" value="@Session.Localidad" @onchange="CambiarSucursalAsync" aria-label="Cambiar sucursal activa">
+                            @foreach (var loc in _localidades)
+                            {
+                                <option value="@loc.Id">@LimpiarNombreSucursal(loc.Descripcion)</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <strong>@LimpiarNombreSucursal(Session.LocalidadDescripcion)</strong>
+                    }
+                </div>
+            </div>
             <div class="session-actions"><RelojSistema /><div class="user-avatar">@Session.Iniciales</div><div class="user-copy"><strong>@Session.NombreUsuario</strong><small>@Session.LoginUser</small></div><button type="button" class="logout-button" @onclick="CerrarSesion">Salir</button></div>
         </header>
         <article class="workspace-content">@Body</article>
@@ -27,6 +46,35 @@
 
 @code {
     private DotNetObjectReference<MainLayout>? _dotNetRef;
+    private List<CatalogoItemGenericoDto> _localidades = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.IsAuthenticated && Session.EsAdministrador)
+        {
+            _localidades = await Auth.ObtenerLocalidadesUsuarioAsync();
+        }
+    }
+
+    private static string LimpiarNombreSucursal(string? nombre) =>
+        (nombre ?? string.Empty)
+            .Replace(" USFQ", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("USFQ", "", StringComparison.OrdinalIgnoreCase)
+            .Trim();
+
+    private async Task CambiarSucursalAsync(ChangeEventArgs e)
+    {
+        if (!Session.EsAdministrador) return;
+        if (!int.TryParse(e.Value?.ToString(), out int nuevaLocId) || nuevaLocId <= 0 || nuevaLocId == Session.Localidad)
+            return;
+
+        var loc = _localidades.FirstOrDefault(l => l.Id == nuevaLocId);
+        if (loc is null) return;
+
+        await Session.CambiarLocalidadAsync(loc.Id, loc.Descripcion);
+        InventarioService.InvalidarCache();
+        Nav.NavigateTo(Nav.Uri, forceLoad: true);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
