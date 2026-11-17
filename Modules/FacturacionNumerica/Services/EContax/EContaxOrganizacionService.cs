@@ -160,15 +160,12 @@ BEGIN
     VALUES ({userId}, {rol.IdRol}, 1);
 END");
 
-        var menuIds = await context.EContaxMenus
-            .Where(x => x.EstadoMenu == 1)
-            .Select(x => x.IdMenu)
-            .ToListAsync();
-        await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM [dbo].[ECONTAX_ROL_MENU] WHERE [id_rol] = {rol.IdRol}");
-        foreach (var menuId in menuIds)
-        {
-            await context.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO [dbo].[ECONTAX_ROL_MENU] ([id_rol], [id_menu]) VALUES ({rol.IdRol}, {menuId})");
-        }
+        await context.Database.ExecuteSqlInterpolatedAsync($@"
+DELETE FROM [dbo].[ECONTAX_ROL_MENU] WHERE [id_rol] = {rol.IdRol};
+INSERT INTO [dbo].[ECONTAX_ROL_MENU] ([id_rol], [id_menu])
+SELECT {rol.IdRol}, [id_menu]
+FROM [dbo].[menu]
+WHERE [estado_menu] = 1;");
 
         await SincronizarSucursalVeterinariaAsync(context, usuario, empresa, sucursal);
         await transaction.CommitAsync();
@@ -591,7 +588,7 @@ END");
         var direccion = string.IsNullOrWhiteSpace(sucursal.Direccion) ? "Por configurar" : sucursal.Direccion.Trim();
         var prefijo = string.IsNullOrWhiteSpace(sucursal.Codigo) ? sucursal.IdSucursal.ToString("000") : sucursal.Codigo.Trim();
 
-        return context.Database.ExecuteSqlInterpolatedAsync($$"""
+        return context.Database.ExecuteSqlInterpolatedAsync($"""
             DECLARE @IdLocalidad INT;
             DECLARE @IdUsuarioVeterinaria INT;
             DECLARE @Provincia INT = (SELECT TOP (1) prov_id FROM dbo.vt_provincias ORDER BY prov_id);

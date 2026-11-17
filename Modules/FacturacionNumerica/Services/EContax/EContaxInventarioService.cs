@@ -39,7 +39,7 @@ public sealed class EContaxInventarioService
         var productosQuery = context.Productos
             .AsNoTracking()
             .Where(p => p.Idempresa == userContext.IdEmpresa && p.Estado == true &&
-                        (p.Tipocompravena == null || p.Tipocompravena.ToUpper() != "SERVICIO") &&
+                        (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
                         (p.Idsucursal.HasValue && idsSucursal.Contains(p.Idsucursal.Value) ||
                          context.EContaxProductosSucursales.Any(a => a.CodigoProducto == p.Codigo &&
                              a.IdEmpresa == userContext.IdEmpresa && idsSucursal.Contains(a.IdSucursal))));
@@ -1173,9 +1173,175 @@ public sealed class EContaxInventarioService
     private async Task<Producto?> ObtenerProductoInventariableAsync(AppDbContext context, int empresa, int sucursal, int codigo)
     {
         return await context.Productos.FirstOrDefaultAsync(p => p.Codigo == codigo && p.Idempresa == empresa && p.Estado == true &&
-            (p.Tipocompravena == null || p.Tipocompravena.ToUpper() != "SERVICIO") &&
+            (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
             (p.Idsucursal == sucursal || context.EContaxProductosSucursales.Any(x =>
                 x.CodigoProducto == codigo && x.IdEmpresa == empresa && x.IdSucursal == sucursal)));
+    }
+
+    public async Task<EContaxProductosParaStockRespuestaDto> GetProductosParaStockAsync(int userId, int? sucursalId, string? filtro)
+    {
+        await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.Inventarios, EContaxAccion.Ver);
+        await using var context = await _dbFactory.CreateDbContextAsync();
+        var userContext = await _tenant.GetContextAsync(context, userId);
+        var sucursales = await _tenant.GetSucursalesEmpresaAsync(context, userContext.IdEmpresa);
+        var sucursal = ResolverSucursalUnica(userContext, sucursales, sucursalId);
+
+        var usuariosEmpresa = await context.EContaxUsuariosContexto
+            .AsNoTracking()
+            .Where(x => x.IdEmpresa == userContext.IdEmpresa && x.Estado)
+            .Select(x => x.IdUsuario)
+            .ToListAsync();
+        if (!usuariosEmpresa.Contains(userId)) usuariosEmpresa.Add(userId);
+        if (!usuariosEmpresa.Contains(userContext.IdUsuarioTitular)) usuariosEmpresa.Add(userContext.IdUsuarioTitular);
+
+        var query = context.Productos
+            .AsNoTracking()
+            .Where(p => p.Estado == true &&
+                        (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
+                        (p.Idempresa == userContext.IdEmpresa ||
+                         (p.Idempresa == null && p.Idusuario.HasValue && usuariosEmpresa.Contains(p.Idusuario.Value))));
+
+        if (!string.IsNullOrWhiteSpace(filtro))
+        {
+            var texto = filtro.Trim().ToLowerInvariant();
+            query = query.Where(p =>
+                (p.Nombre ?? string.Empty).ToLower().Contains(texto) ||
+                (p.CodigoPrincipal ?? string.Empty).ToLower().Contains(texto) ||
+                p.Codigo.ToString().Contains(texto));
+        }
+
+        var productos = await query
+            .OrderBy(p => p.Nombre)
+            .Select(p => new
+            {
+                p.Codigo,
+                p.CodigoPrincipal,
+                p.Nombre,
+                p.ValorUnitario,
+                Categoria = p.TipoProductoNavigation != null ? p.TipoProductoNavigation.Descripcion : null
+            })
+            .ToListAsync();
+
+        var codigos = productos.Select(x => x.Codigo).ToList();
+        var existencias = await context.EContaxInventarioExistencias
+            .AsNoTracking()
+            .Where(x => x.IdEmpresa == userContext.IdEmpresa && x.IdSucursal == sucursal.IdSucursal && codigos.Contains(x.CodigoProducto))
+            .ToDictionaryAsync(x => x.CodigoProducto);
+
+        return new EContaxProductosParaStockRespuestaDto
+        {
+            PuedeEditar = userContext.EsJefeEmpresa && await _seguridad.PuedeAccederRutaAsync(userId, EContaxRoutes.Inventarios, EContaxAccion.Editar),
+            IdSucursalActiva = sucursal.IdSucursal,
+            Sucursales = userContext.EsJefeEmpresa ? sucursales : sucursales.Where(s => s.IdSucursal == sucursal.IdSucursal).ToList(),
+            Productos = productos.Select(p =>
+            {
+                existencias.TryGetValue(p.Codigo, out var ex);
+                return new EContaxProductoParaStockDto
+                {
+                    CodigoProducto = p.Codigo,
+                    CodigoPrincipal = p.CodigoPrincipal,
+                    NombreProducto = p.Nombre,
+                    Categoria = string.IsNullOrWhiteSpace(p.Categoria) ? "General" : p.Categoria.Trim(),
+                    CostoReferencia = p.ValorUnitario ?? 0m,
+                    StockActual = ex?.StockActual ?? 0m,
+                    StockMinimo = ex?.StockMinimo ?? 0m,
+                    StockMaximo = ex?.StockMaximo ?? 0m,
+                    TieneExistencia = ex is not null
+                };
+            }).ToList()
+        };
+    }
+
+    public async Task<int> InicializarStockLoteAsync(int userId, List<EContaxInicializarStockItemDto> items)
+    {
+        await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.Inventarios, EContaxAccion.Editar);
+        if (items is null || items.Count == 0)
+            throw new InvalidOperationException("Seleccione al menos un producto para asignar stock.");
+
+        await using var strategyContext = await _dbFactory.CreateDbContextAsync();
+        var strategy = strategyContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var context = await _dbFactory.CreateDbContextAsync();
+            await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+            var userContext = await _tenant.GetContextAsync(context, userId);
+            ExigirAdminEmpresa(userContext);
+            var sucursales = await _tenant.GetSucursalesEmpresaAsync(context, userContext.IdEmpresa);
+            var metodo = await ObtenerMetodoAsync(context, userContext.IdEmpresa);
+
+            var usuariosEmpresa = await context.EContaxUsuariosContexto
+                .AsNoTracking()
+                .Where(x => x.IdEmpresa == userContext.IdEmpresa && x.Estado)
+                .Select(x => x.IdUsuario)
+                .ToListAsync();
+            if (!usuariosEmpresa.Contains(userId)) usuariosEmpresa.Add(userId);
+            if (!usuariosEmpresa.Contains(userContext.IdUsuarioTitular)) usuariosEmpresa.Add(userContext.IdUsuarioTitular);
+
+            int procesados = 0;
+            foreach (var item in items)
+            {
+                if (item.Cantidad < 0)
+                    throw new InvalidOperationException("La cantidad no puede ser negativa.");
+                if (item.StockMinimo is < 0 || item.StockMaximo is < 0)
+                    throw new InvalidOperationException("Los stocks mínimo y máximo no pueden ser negativos.");
+                if (item.StockMaximo is > 0 && (item.StockMinimo ?? 0) > item.StockMaximo.Value)
+                    throw new InvalidOperationException("El stock mínimo no puede ser mayor que el stock máximo.");
+
+                var sucursal = ResolverSucursalUnica(userContext, sucursales, item.IdSucursal);
+                var producto = await context.Productos.FirstOrDefaultAsync(p =>
+                    p.Codigo == item.CodigoProducto &&
+                    p.Estado == true &&
+                    (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
+                    (p.Idempresa == userContext.IdEmpresa ||
+                     (p.Idempresa == null && p.Idusuario.HasValue && usuariosEmpresa.Contains(p.Idusuario.Value))));
+
+                if (producto is null)
+                    throw new InvalidOperationException($"El producto #{item.CodigoProducto} no existe, está inactivo o es un servicio.");
+
+                if (producto.Idempresa is null)
+                    producto.Idempresa = userContext.IdEmpresa;
+                if (producto.Idsucursal is null)
+                    producto.Idsucursal = sucursal.IdSucursal;
+
+                bool yaAsignado = await context.EContaxProductosSucursales.AnyAsync(x =>
+                    x.CodigoProducto == producto.Codigo && x.IdEmpresa == userContext.IdEmpresa && x.IdSucursal == sucursal.IdSucursal);
+                if (!yaAsignado && producto.Idsucursal != sucursal.IdSucursal)
+                {
+                    context.EContaxProductosSucursales.Add(new EContaxProductoSucursal
+                    {
+                        CodigoProducto = producto.Codigo,
+                        IdEmpresa = userContext.IdEmpresa,
+                        IdSucursal = sucursal.IdSucursal
+                    });
+                }
+
+                var existencia = await ObtenerExistenciaAsync(context, userContext.IdEmpresa, sucursal.IdSucursal, producto.Codigo);
+                if (item.StockMinimo.HasValue) existencia.StockMinimo = Math.Max(0, item.StockMinimo.Value);
+                if (item.StockMaximo.HasValue) existencia.StockMaximo = Math.Max(0, item.StockMaximo.Value);
+
+                if (item.Cantidad > 0)
+                {
+                    var costo = item.CostoUnitario ?? (existencia.CostoPromedio > 0 ? existencia.CostoPromedio : (producto.ValorUnitario ?? 0m));
+                    if (costo < 0) throw new InvalidOperationException("El costo unitario no puede ser negativo.");
+                    await ValidarEntradaConLoteAsync(context, existencia, item.Cantidad, item.NumeroLote, item.FechaVencimiento);
+                    AgregarEntrada(context, existencia, item.Cantidad, costo, metodo, item.NumeroLote, item.FechaVencimiento);
+                    context.EContaxInventarioMovimientos.Add(CrearMovimiento(
+                        existencia, userId, metodo, "ENTRADA",
+                        item.Cantidad, string.IsNullOrWhiteSpace(item.Observacion) ? "Carga inicial de stock" : item.Observacion.Trim(),
+                        "INICIAL", costo, null, item.NumeroLote, item.FechaVencimiento));
+                }
+                else
+                {
+                    existencia.FechaActualizacion = DateTime.UtcNow;
+                }
+
+                procesados++;
+            }
+
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return procesados;
+        });
     }
 
     private async Task<string> ObtenerMetodoAsync(AppDbContext context, int empresa) =>

@@ -231,6 +231,10 @@
                                                     @if (_tipo == "productos")
                                                     {
                                                         <button class="btn btn-outline-info" title="Ver" @onclick="() => Ver(x)">Ver</button>
+                                                        @if (x.Tipo != "S" && x.Tipo != "SERVICIO")
+                                                        {
+                                                            <button class="btn btn-outline-success" title="Asignar stock" @onclick='() => Nav.NavigateTo($"/contabilidad/inventarios/asignar-stock?productoId={x.Id}")'>Stock</button>
+                                                        }
                                                     }
                                                     <button class="btn btn-outline-primary" title="Editar" @onclick="() => Editar(x)">Editar</button>
                                                     @if (_tipo == "productos")

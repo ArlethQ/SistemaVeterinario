@@ -34,6 +34,37 @@ public sealed class EContaxInventariosController : EContaxApiControllerBase
         }
     }
 
+    [HttpGet("productos-disponibles")]
+    public async Task<ActionResult<EContaxProductosParaStockRespuestaDto>> GetProductosParaStock(
+        [FromQuery] int userId,
+        [FromQuery] int? sucursalId = null,
+        [FromQuery] string? filtro = null)
+    {
+        try
+        {
+            return Ok(await _inventario.GetProductosParaStockAsync(userId, sucursalId, filtro));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPost("inicializar-stock")]
+    public async Task<ActionResult<int>> InicializarStock(
+        [FromQuery] int userId,
+        [FromBody] List<EContaxInicializarStockItemDto> items)
+    {
+        try
+        {
+            return Ok(await _inventario.InicializarStockLoteAsync(userId, items));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     [HttpGet("{codigoProducto:int}/kardex")]
     public async Task<ActionResult<EContaxInventarioKardexDto>> GetKardex(
         int codigoProducto,

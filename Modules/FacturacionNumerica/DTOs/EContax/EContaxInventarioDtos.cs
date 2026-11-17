@@ -195,3 +195,37 @@ public sealed class EContaxInventarioReporteDto
     public List<EContaxSucursalDto> Sucursales { get; set; } = new();
     public List<EContaxInventarioReporteMovimientoDto> Movimientos { get; set; } = new();
 }
+
+public sealed class EContaxProductoParaStockDto
+{
+    public int CodigoProducto { get; set; }
+    public string? CodigoPrincipal { get; set; }
+    public string? NombreProducto { get; set; }
+    public string? Categoria { get; set; }
+    public decimal CostoReferencia { get; set; }
+    public decimal StockActual { get; set; }
+    public decimal StockMinimo { get; set; }
+    public decimal StockMaximo { get; set; }
+    public bool TieneExistencia { get; set; }
+}
+
+public sealed class EContaxProductosParaStockRespuestaDto
+{
+    public bool PuedeEditar { get; set; }
+    public int IdSucursalActiva { get; set; }
+    public List<EContaxSucursalDto> Sucursales { get; set; } = new();
+    public List<EContaxProductoParaStockDto> Productos { get; set; } = new();
+}
+
+public sealed class EContaxInicializarStockItemDto
+{
+    public int CodigoProducto { get; set; }
+    public int IdSucursal { get; set; }
+    public decimal Cantidad { get; set; }
+    public decimal? CostoUnitario { get; set; }
+    public decimal? StockMinimo { get; set; }
+    public decimal? StockMaximo { get; set; }
+    public string? NumeroLote { get; set; }
+    public DateTime? FechaVencimiento { get; set; }
+    public string? Observacion { get; set; }
+}

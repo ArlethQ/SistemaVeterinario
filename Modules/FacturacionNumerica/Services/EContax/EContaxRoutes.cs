@@ -58,6 +58,7 @@ public static class EContaxRoutes
     public const string InventariosBodegas = "/contabilidad/inventarios/bodegas";
     public const string InventariosOperaciones = "/contabilidad/inventarios/operaciones";
     public const string InventariosReportes = "/contabilidad/inventarios/reportes";
+    public const string InventariosAsignarStock = "/contabilidad/inventarios/asignar-stock";
     public const string ConfiguracionCategorias = "/contabilidad/configuracion/categorias";
     public const string ConfiguracionPuntosEmision = "/contabilidad/configuracion/puntos-emision";
     public const string ConfiguracionTiposCliente = "/contabilidad/configuracion/tipos-cliente";
