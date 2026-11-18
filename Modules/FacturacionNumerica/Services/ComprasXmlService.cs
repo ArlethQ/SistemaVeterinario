@@ -41,6 +41,19 @@ public class ComprasXmlService
             throw new Exception("El XML está vacío.");
 
         var doc = XDocument.Parse(xmlContent);
+        XElement? autorizacionNode = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "autorizacion");
+
+        if (doc.Root?.Name.LocalName is not ("liquidacionCompra" or "factura") &&
+            !doc.Descendants().Any(x => x.Name.LocalName is "liquidacionCompra" or "factura"))
+        {
+            var comprobanteTexto = doc.Descendants()
+                .FirstOrDefault(x => x.Name.LocalName == "comprobante")
+                ?.Value;
+            if (!string.IsNullOrWhiteSpace(comprobanteTexto))
+            {
+                doc = XDocument.Parse(comprobanteTexto.Trim());
+            }
+        }
 
         XElement? liquidacionNode = doc.Root?.Name.LocalName == "liquidacionCompra"
             ? doc.Root
@@ -50,16 +63,18 @@ public class ComprasXmlService
             throw new InvalidOperationException("Este flujo requiere el XML de una factura electrónica, no una liquidación de compra.");
 
         if (liquidacionNode != null)
-            return await LeerLiquidacionCompraDesdeXmlAsync(xmlContent, doc, liquidacionNode);
+            return await LeerLiquidacionCompraDesdeXmlAsync(xmlContent, doc, liquidacionNode, autorizacionNode);
 
         XElement? facturaNode = doc.Root?.Name.LocalName == "factura"
             ? doc.Root
             : doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "factura");
 
         if (facturaNode == null)
-            throw new Exception("No se encontró el nodo <liquidacionCompra> dentro del XML. Para retenciones debes cargar el XML de una liquidación de compra.");
+            throw new Exception(permitirFactura
+                ? "No se encontró el nodo <factura> dentro del XML."
+                : "No se encontró el nodo <liquidacionCompra> dentro del XML. Para retenciones debes cargar el XML de una liquidación de compra.");
 
-        XElement? autorizacionNode = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "autorizacion");
+        autorizacionNode ??= doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "autorizacion");
         XElement? infoTributaria = facturaNode.Descendants().FirstOrDefault(x => x.Name.LocalName == "infoTributaria");
         XElement? infoFactura = facturaNode.Descendants().FirstOrDefault(x => x.Name.LocalName == "infoFactura");
         var detallesXml = facturaNode.Descendants().Where(x => x.Name.LocalName == "detalle").ToList();
@@ -499,9 +514,10 @@ public class ComprasXmlService
     private async Task<CompraXmlPreviewDto> LeerLiquidacionCompraDesdeXmlAsync(
         string xmlContent,
         XDocument doc,
-        XElement liquidacionNode)
+        XElement liquidacionNode,
+        XElement? autorizacionNode = null)
     {
-        XElement? autorizacionNode = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "autorizacion");
+        autorizacionNode ??= doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "autorizacion");
         XElement? infoTributaria = liquidacionNode.Descendants().FirstOrDefault(x => x.Name.LocalName == "infoTributaria");
         XElement? infoLiquidacion = liquidacionNode.Descendants().FirstOrDefault(x => x.Name.LocalName == "infoLiquidacionCompra");
         var detallesXml = liquidacionNode.Descendants().Where(x => x.Name.LocalName == "detalle").ToList();
