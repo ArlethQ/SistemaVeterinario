@@ -1575,7 +1575,9 @@ public sealed class EContaxInventarioService
             foreach (var linea in lineas)
             {
                 var detalleDb = detallesDb.FirstOrDefault(d => d.CodLinea == linea.CodLinea);
-                if (linea.CodigoProducto <= 0)
+                var codigoProductoDestino = linea.CodigoProducto;
+
+                if (!linea.CrearNuevoProducto && codigoProductoDestino <= 0)
                 {
                     if (detalleDb is not null)
                         detalleDb.Inventariado = true;
@@ -1583,22 +1585,49 @@ public sealed class EContaxInventarioService
                 }
 
                 if (linea.CantidadIngreso <= 0)
-                    throw new InvalidOperationException($"La cantidad a ingresar debe ser mayor a cero para el producto #{linea.CodigoProducto}.");
+                    throw new InvalidOperationException("La cantidad a ingresar debe ser mayor a cero.");
                 if (linea.CostoUnitario < 0)
                     throw new InvalidOperationException("El costo unitario no puede ser negativo.");
                 if (linea.FechaVencimiento is { } fv && fv.Date <= DateTime.UtcNow.Date)
                     throw new InvalidOperationException("La fecha de vencimiento debe ser posterior a hoy.");
 
-                var producto = await context.Productos.FirstOrDefaultAsync(p =>
-                    p.Codigo == linea.CodigoProducto &&
-                    p.Estado != false &&
-                    (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
-                    (p.Idempresa == userContext.IdEmpresa ||
-                     p.Idusuario >= 1_000_000 ||
-                     (p.Idempresa == null && p.Idusuario.HasValue && usuariosEmpresa.Contains(p.Idusuario.Value))));
+                Producto? producto;
+                if (linea.CrearNuevoProducto)
+                {
+                    if (string.IsNullOrWhiteSpace(linea.NuevoNombreProducto))
+                        throw new InvalidOperationException("Indica el nombre del nuevo producto a crear.");
 
-                if (producto is null)
-                    throw new InvalidOperationException($"El producto #{linea.CodigoProducto} no existe, está inactivo o es un servicio.");
+                    producto = new Producto
+                    {
+                        Nombre = string.Join(" ", linea.NuevoNombreProducto.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToUpperInvariant(),
+                        CodigoPrincipal = string.IsNullOrWhiteSpace(linea.NuevoCodigoPrincipal) ? null : linea.NuevoCodigoPrincipal.Trim(),
+                        ValorUnitario = linea.CostoUnitario > 0 ? linea.CostoUnitario : 0m,
+                        Tipocompravena = "B",
+                        Inventario = true,
+                        UnidadMedida = string.IsNullOrWhiteSpace(linea.NuevaUnidadMedida) ? "UNIDAD" : linea.NuevaUnidadMedida.Trim().ToUpperInvariant(),
+                        FactorConversionInventario = linea.NuevoFactorConversion > 0 ? Math.Round(linea.NuevoFactorConversion, 4) : 1m,
+                        Idempresa = userContext.IdEmpresa,
+                        Idsucursal = sucursal.IdSucursal,
+                        Idusuario = userContext.IdUsuarioTitular > 0 ? userContext.IdUsuarioTitular : userId,
+                        Estado = true
+                    };
+                    context.Productos.Add(producto);
+                    await context.SaveChangesAsync();
+                    codigoProductoDestino = producto.Codigo;
+                }
+                else
+                {
+                    producto = await context.Productos.FirstOrDefaultAsync(p =>
+                        p.Codigo == codigoProductoDestino &&
+                        p.Estado != false &&
+                        (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
+                        (p.Idempresa == userContext.IdEmpresa ||
+                         p.Idusuario >= 1_000_000 ||
+                         (p.Idempresa == null && p.Idusuario.HasValue && usuariosEmpresa.Contains(p.Idusuario.Value))));
+
+                    if (producto is null)
+                        throw new InvalidOperationException($"El producto #{codigoProductoDestino} no existe, está inactivo o es un servicio.");
+                }
 
                 if (producto.Idempresa is null)
                     producto.Idempresa = userContext.IdEmpresa;
@@ -1672,6 +1701,11 @@ public sealed class EContaxInventarioService
     {
         public int CodLinea { get; set; }
         public int CodigoProducto { get; set; }
+        public bool CrearNuevoProducto { get; set; }
+        public string? NuevoNombreProducto { get; set; }
+        public string? NuevoCodigoPrincipal { get; set; }
+        public string? NuevaUnidadMedida { get; set; }
+        public decimal NuevoFactorConversion { get; set; } = 1m;
         public decimal CantidadIngreso { get; set; }
         public decimal CostoUnitario { get; set; }
         public bool PorEnvase { get; set; }

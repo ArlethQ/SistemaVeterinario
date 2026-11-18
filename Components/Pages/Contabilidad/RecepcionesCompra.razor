@@ -264,81 +264,179 @@
                     </div>
                 }
 
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0 purchase-lines-table">
-                        <thead>
-                            <tr>
-                                <th style="min-width:210px;">Ítem en factura</th>
-                                <th style="min-width:290px;">Producto en inventario (Homologación)</th>
-                                <th style="width:140px;">Modo ingreso</th>
-                                <th style="width:110px;" class="text-end">Cantidad (+)</th>
-                                <th style="width:110px;" class="text-end">Costo unit.</th>
-                                <th style="width:130px;">Lote</th>
-                                <th style="width:140px;">Vencimiento</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var linea in lineasHomologacion)
-                            {
-                                var prodSel = productosInventario.FirstOrDefault(p => p.CodigoProducto == linea.CodigoProducto);
-                                <tr @key="linea.CodLinea">
-                                    <td>
-                                        <div class="fw-semibold small">@linea.DescripcionFactura</div>
-                                        <small class="text-muted font-monospace">@(string.IsNullOrWhiteSpace(linea.CodPrincipalFactura) ? "Sin código" : linea.CodPrincipalFactura) · Cant: @linea.CantidadFactura.ToString("0.####") · $@linea.PrecioFactura.ToString("N2")</small>
-                                    </td>
-                                    <td>
-                                        <input class="form-control form-control-sm mb-1" @bind="linea.FiltroProducto" @bind:event="oninput" placeholder="Filtrar producto por nombre o código..." disabled="@guardandoHomologacion" />
-                                        <select class="form-select form-select-sm"
-                                                value="@linea.CodigoProducto"
-                                                @onchange="e => SeleccionarProductoHomologacion(linea, e.Value)"
-                                                disabled="@guardandoHomologacion">
-                                            <option value="0">-- Omitir / No inventariar --</option>
-                                            @foreach (var p in ProductosFiltradosParaLinea(linea))
+                <div class="d-flex flex-column gap-3">
+                    @for (var idx = 0; idx < lineasHomologacion.Count; idx++)
+                    {
+                        var linea = lineasHomologacion[idx];
+                        var prodSel = !linea.CrearNuevoProducto && linea.CodigoProducto > 0
+                            ? productosInventario.FirstOrDefault(p => p.CodigoProducto == linea.CodigoProducto)
+                            : null;
+                        var factorActivo = linea.CrearNuevoProducto
+                            ? (linea.NuevoFactorConversion > 0 ? linea.NuevoFactorConversion : 1m)
+                            : (prodSel?.FactorConversion ?? 1m);
+                        var unidadActiva = linea.CrearNuevoProducto
+                            ? (string.IsNullOrWhiteSpace(linea.NuevaUnidadMedida) ? "UNIDAD" : linea.NuevaUnidadMedida)
+                            : (prodSel?.UnidadMedida ?? "UNIDAD");
+                        var ingresaStock = linea.CrearNuevoProducto || linea.CodigoProducto > 0;
+
+                        <div @key="linea.CodLinea" class="card border rounded-4 shadow-sm overflow-hidden">
+                            <div class="card-header bg-light-subtle border-bottom py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-dark-subtle text-dark border">#@(idx + 1)</span>
+                                    @if (linea.CrearNuevoProducto)
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary border"><i class="ri-add-circle-line me-1"></i>Se creará producto nuevo</span>
+                                    }
+                                    else if (linea.CodigoProducto > 0)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border"><i class="ri-link me-1"></i>Homologado a inventario</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary border"><i class="ri-forbid-line me-1"></i>Omitido (no inventariar)</span>
+                                    }
+                                </div>
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Acción para línea">
+                                    <button type="button"
+                                            class="btn @(!linea.CrearNuevoProducto && linea.CodigoProducto > 0 ? "btn-success" : "btn-outline-secondary")"
+                                            @onclick="() => CambiarModoHomologacion(linea, ModoHomologacion.Existente)"
+                                            disabled="@guardandoHomologacion">
+                                        <i class="ri-search-line me-1"></i>Elegir existente
+                                    </button>
+                                    <button type="button"
+                                            class="btn @(linea.CrearNuevoProducto ? "btn-primary" : "btn-outline-primary")"
+                                            @onclick="() => CambiarModoHomologacion(linea, ModoHomologacion.CrearNuevo)"
+                                            disabled="@guardandoHomologacion">
+                                        <i class="ri-add-line me-1"></i>Crear nuevo
+                                    </button>
+                                    <button type="button"
+                                            class="btn @(!linea.CrearNuevoProducto && linea.CodigoProducto == 0 ? "btn-secondary" : "btn-outline-secondary")"
+                                            @onclick="() => CambiarModoHomologacion(linea, ModoHomologacion.Omitir)"
+                                            disabled="@guardandoHomologacion">
+                                        Omitir
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="card-body p-3">
+                                <div class="row g-3 align-items-stretch">
+                                    <div class="col-12 col-lg-5">
+                                        <div class="h-100 p-3 rounded-3 border bg-light">
+                                            <div class="text-uppercase text-muted fw-bold mb-1" style="font-size:0.68rem;letter-spacing:.05em;">En factura del proveedor</div>
+                                            <div class="fw-bold text-dark mb-1">@linea.DescripcionFactura</div>
+                                            <div class="small text-muted font-monospace mb-2">Código XML: @(string.IsNullOrWhiteSpace(linea.CodPrincipalFactura) ? "Sin código" : linea.CodPrincipalFactura)</div>
+                                            <div class="d-flex flex-wrap gap-3 small">
+                                                <span><strong>Cant.:</strong> @linea.CantidadFactura.ToString("0.####")</span>
+                                                <span><strong>Costo:</strong> $@linea.PrecioFactura.ToString("N4")</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12 col-lg-7">
+                                        <div class="h-100 p-3 rounded-3 border bg-white">
+                                            @if (linea.CrearNuevoProducto)
                                             {
-                                                <option value="@p.CodigoProducto">@p.NombreProducto @(string.IsNullOrWhiteSpace(p.CodigoPrincipal) ? "" : $"({p.CodigoPrincipal})") · @p.UnidadMedida@(p.FactorConversion > 1 ? $"×{p.FactorConversion:G29}" : "")</option>
+                                                <div class="text-uppercase text-primary fw-bold mb-2" style="font-size:0.68rem;letter-spacing:.05em;">Nuevo producto en tu inventario</div>
+                                                <div class="row g-2">
+                                                    <div class="col-md-7">
+                                                        <label class="form-label form-label-sm mb-1">Nombre del producto <span class="text-danger">*</span></label>
+                                                        <input type="text" class="form-control form-control-sm" @bind="linea.NuevoNombreProducto" disabled="@guardandoHomologacion" />
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label form-label-sm mb-1">Código principal</label>
+                                                        <input type="text" class="form-control form-control-sm font-monospace" @bind="linea.NuevoCodigoPrincipal" placeholder="Opcional" disabled="@guardandoHomologacion" />
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label form-label-sm mb-1">Unidad de medida</label>
+                                                        <select class="form-select form-select-sm" @bind="linea.NuevaUnidadMedida" disabled="@guardandoHomologacion">
+                                                            @foreach (var u in UnidadesMedidaHomologacion)
+                                                            {
+                                                                <option value="@u">@u</option>
+                                                            }
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label form-label-sm mb-1">Factor de conversión</label>
+                                                        <input type="number" min="1" step="0.0001" class="form-control form-control-sm text-end" @bind="linea.NuevoFactorConversion" disabled="@guardandoHomologacion" />
+                                                    </div>
+                                                </div>
                                             }
-                                        </select>
-                                    </td>
-                                    <td>
-                                        @if (prodSel is not null && prodSel.FactorConversion > 1)
-                                        {
-                                            <select class="form-select form-select-sm"
-                                                    value="@(linea.PorEnvase ? "envase" : "directo")"
-                                                    @onchange='e => linea.PorEnvase = string.Equals(e.Value?.ToString(), "envase", StringComparison.Ordinal)'
-                                                    disabled="@guardandoHomologacion">
-                                                <option value="envase">Envases (×@prodSel.FactorConversion.ToString("G29"))</option>
-                                                <option value="directo">Directo (@prodSel.UnidadMedida)</option>
-                                            </select>
-                                        }
-                                        else if (prodSel is not null)
-                                        {
-                                            <span class="small text-muted">Directo (@prodSel.UnidadMedida)</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="small text-muted">Omitido</span>
-                                        }
-                                    </td>
-                                    <td>
-                                        <input type="number" min="0" step="0.0001" class="form-control form-control-sm text-end" @bind="linea.CantidadIngreso" disabled="@(guardandoHomologacion || linea.CodigoProducto <= 0)" />
-                                        @if (prodSel is not null && prodSel.FactorConversion > 1 && linea.PorEnvase && linea.CantidadIngreso > 0)
-                                        {
-                                            <small class="text-primary d-block text-end">= @((linea.CantidadIngreso * prodSel.FactorConversion).ToString("N2")) @prodSel.UnidadMedida</small>
-                                        }
-                                    </td>
-                                    <td>
-                                        <input type="number" min="0" step="0.0001" class="form-control form-control-sm text-end" @bind="linea.CostoUnitario" disabled="@(guardandoHomologacion || linea.CodigoProducto <= 0)" />
-                                    </td>
-                                    <td>
-                                        <input type="text" maxlength="80" class="form-control form-control-sm" placeholder="Opcional" @bind="linea.NumeroLote" disabled="@(guardandoHomologacion || linea.CodigoProducto <= 0)" />
-                                    </td>
-                                    <td>
-                                        <input type="date" min="@FechaMinimaLote" class="form-control form-control-sm" @bind="linea.FechaVencimiento" disabled="@(guardandoHomologacion || linea.CodigoProducto <= 0)" />
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
+                                            else if (linea.CodigoProducto > 0 || linea.ModoForzadoExistente)
+                                            {
+                                                <div class="text-uppercase text-success fw-bold mb-2" style="font-size:0.68rem;letter-spacing:.05em;">Comparar y elegir producto existente</div>
+                                                <div class="row g-2">
+                                                    <div class="col-12">
+                                                        <input class="form-control form-control-sm" @bind="linea.FiltroProducto" @bind:event="oninput" placeholder="Buscar en tu inventario por nombre o código..." disabled="@guardandoHomologacion" />
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <select class="form-select form-select-sm"
+                                                                value="@linea.CodigoProducto"
+                                                                @onchange="e => SeleccionarProductoHomologacion(linea, e.Value)"
+                                                                disabled="@guardandoHomologacion">
+                                                            <option value="0">-- Selecciona un producto de tu inventario --</option>
+                                                            @foreach (var p in ProductosFiltradosParaLinea(linea))
+                                                            {
+                                                                <option value="@p.CodigoProducto">@p.NombreProducto @(string.IsNullOrWhiteSpace(p.CodigoPrincipal) ? "" : $"({p.CodigoPrincipal})") · Stock: @p.StockActual.ToString("N2") @p.UnidadMedida@(p.FactorConversion > 1 ? $" (×{p.FactorConversion:G29})" : "")</option>
+                                                            }
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="text-muted small d-flex align-items-center h-100">
+                                                    <span><i class="ri-information-line me-1"></i>Esta línea no ingresará al inventario (útil para servicios, fletes o gastos). Usa <strong>Elegir existente</strong> o <strong>Crear nuevo</strong> si sí es mercadería.</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @if (ingresaStock)
+                                {
+                                    <div class="row g-2 mt-2 pt-2 border-top align-items-end">
+                                        <div class="col-6 col-md-3">
+                                            <label class="form-label form-label-sm mb-1">Modo ingreso</label>
+                                            @if (factorActivo > 1)
+                                            {
+                                                <select class="form-select form-select-sm"
+                                                        value="@(linea.PorEnvase ? "envase" : "directo")"
+                                                        @onchange='e => linea.PorEnvase = string.Equals(e.Value?.ToString(), "envase", StringComparison.Ordinal)'
+                                                        disabled="@guardandoHomologacion">
+                                                    <option value="envase">Envases (×@factorActivo.ToString("G29"))</option>
+                                                    <option value="directo">Directo (@unidadActiva)</option>
+                                                </select>
+                                            }
+                                            else
+                                            {
+                                                <div class="form-control form-control-sm bg-light text-muted">Directo (@unidadActiva)</div>
+                                            }
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label form-label-sm mb-1">Cantidad (+)</label>
+                                            <input type="number" min="0" step="0.0001" class="form-control form-control-sm text-end" @bind="linea.CantidadIngreso" disabled="@guardandoHomologacion" />
+                                            @if (factorActivo > 1 && linea.PorEnvase && linea.CantidadIngreso > 0)
+                                            {
+                                                <small class="text-primary d-block text-end">= @((linea.CantidadIngreso * factorActivo).ToString("N2")) @unidadActiva</small>
+                                            }
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label form-label-sm mb-1">Costo unit.</label>
+                                            <input type="number" min="0" step="0.0001" class="form-control form-control-sm text-end" @bind="linea.CostoUnitario" disabled="@guardandoHomologacion" />
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label form-label-sm mb-1">Lote</label>
+                                            <input type="text" maxlength="80" class="form-control form-control-sm" placeholder="Opcional" @bind="linea.NumeroLote" disabled="@guardandoHomologacion" />
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label form-label-sm mb-1">Vencimiento</label>
+                                            <input type="date" min="@FechaMinimaLote" class="form-control form-control-sm" @bind="linea.FechaVencimiento" disabled="@guardandoHomologacion" />
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
 
@@ -663,6 +761,11 @@
                     CantidadFactura = d.Cantidad,
                     PrecioFactura = d.PrecioUnitario,
                     CodigoProducto = match?.CodigoProducto ?? 0,
+                    ModoForzadoExistente = true,
+                    NuevoNombreProducto = d.Descripcion,
+                    NuevoCodigoPrincipal = d.CodPrincipal,
+                    NuevaUnidadMedida = "UNIDAD",
+                    NuevoFactorConversion = 1m,
                     PorEnvase = match is not null && match.FactorConversion > 1,
                     CantidadIngreso = d.Cantidad,
                     CostoUnitario = d.PrecioUnitario
@@ -705,9 +808,44 @@
         return filtrados.Take(150);
     }
 
+    private static readonly string[] UnidadesMedidaHomologacion =
+    [
+        "UNIDAD", "ML", "CC", "L", "MG", "MCG", "G", "KG", "LB", "OZ",
+        "TABLETA", "CAPSULA", "AMPOLLA", "FRASCO", "PIPETA", "SOBRE", "TUBO", "DOSIS", "UI"
+    ];
+
+    private enum ModoHomologacion { Existente, CrearNuevo, Omitir }
+
+    private void CambiarModoHomologacion(HomologacionLineaModel linea, ModoHomologacion modo)
+    {
+        switch (modo)
+        {
+            case ModoHomologacion.Existente:
+                linea.CrearNuevoProducto = false;
+                linea.ModoForzadoExistente = true;
+                break;
+            case ModoHomologacion.CrearNuevo:
+                linea.CrearNuevoProducto = true;
+                linea.ModoForzadoExistente = false;
+                if (string.IsNullOrWhiteSpace(linea.NuevoNombreProducto))
+                    linea.NuevoNombreProducto = linea.DescripcionFactura;
+                if (string.IsNullOrWhiteSpace(linea.NuevoCodigoPrincipal))
+                    linea.NuevoCodigoPrincipal = linea.CodPrincipalFactura;
+                linea.PorEnvase = linea.NuevoFactorConversion > 1;
+                break;
+            case ModoHomologacion.Omitir:
+                linea.CrearNuevoProducto = false;
+                linea.ModoForzadoExistente = false;
+                linea.CodigoProducto = 0;
+                break;
+        }
+    }
+
     private void SeleccionarProductoHomologacion(HomologacionLineaModel linea, object? value)
     {
         linea.CodigoProducto = int.TryParse(value?.ToString(), out var id) ? id : 0;
+        linea.CrearNuevoProducto = false;
+        linea.ModoForzadoExistente = true;
         var prod = productosInventario.FirstOrDefault(p => p.CodigoProducto == linea.CodigoProducto);
         linea.PorEnvase = prod is not null && prod.FactorConversion > 1;
     }
@@ -723,6 +861,11 @@
             {
                 CodLinea = l.CodLinea,
                 CodigoProducto = l.CodigoProducto,
+                CrearNuevoProducto = l.CrearNuevoProducto,
+                NuevoNombreProducto = l.NuevoNombreProducto,
+                NuevoCodigoPrincipal = l.NuevoCodigoPrincipal,
+                NuevaUnidadMedida = l.NuevaUnidadMedida,
+                NuevoFactorConversion = l.NuevoFactorConversion,
                 CantidadIngreso = l.CantidadIngreso,
                 CostoUnitario = l.CostoUnitario,
                 PorEnvase = l.PorEnvase,
@@ -730,11 +873,15 @@
                 FechaVencimiento = l.FechaVencimiento
             }).ToList();
 
+            var creoNuevos = lineasHomologacion.Any(l => l.CrearNuevoProducto);
             var ingresadas = await InventarioService.HomologarEIngresarCompraAsync(
                 usuarioId,
                 compraSeleccionadaHomologar.CodFactura,
                 sucursalHomologacionId > 0 ? sucursalHomologacionId : null,
                 payload);
+
+            if (creoNuevos)
+                productosInventario.Clear();
 
             var numDoc = compraSeleccionadaHomologar.NumeroDocumento;
             mostrarHomologacion = false;
@@ -1171,6 +1318,12 @@
         public decimal CantidadFactura { get; set; }
         public decimal PrecioFactura { get; set; }
         public int CodigoProducto { get; set; }
+        public bool ModoForzadoExistente { get; set; } = true;
+        public bool CrearNuevoProducto { get; set; }
+        public string NuevoNombreProducto { get; set; } = string.Empty;
+        public string NuevoCodigoPrincipal { get; set; } = string.Empty;
+        public string NuevaUnidadMedida { get; set; } = "UNIDAD";
+        public decimal NuevoFactorConversion { get; set; } = 1m;
         public string FiltroProducto { get; set; } = string.Empty;
         public bool PorEnvase { get; set; }
         public decimal CantidadIngreso { get; set; }
