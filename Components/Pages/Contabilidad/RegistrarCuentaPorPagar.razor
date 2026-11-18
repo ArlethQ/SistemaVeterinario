@@ -59,8 +59,7 @@
     private string observacion = "";
     private string error = "";
 
-    private bool EsEContaxContext => Navigation.ToBaseRelativePath(Navigation.Uri)
-        .StartsWith("e-contax/", StringComparison.OrdinalIgnoreCase);
+    private bool EsEContaxContext => EContaxRoutes.IsEContaxPath(Navigation, Navigation.Uri);
 
     private string RutaCuentasPorPagar(string efact, string econtax) => EsEContaxContext ? econtax : efact;
 

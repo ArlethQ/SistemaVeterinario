@@ -54,8 +54,7 @@
     private string busqueda = "";
     private string saldoFiltro = "TODOS";
 
-    private bool EsEContaxContext => Navigation.ToBaseRelativePath(Navigation.Uri)
-        .StartsWith("e-contax/", StringComparison.OrdinalIgnoreCase);
+    private bool EsEContaxContext => EContaxRoutes.IsEContaxPath(Navigation, Navigation.Uri);
 
     private string RutaCuentasPorPagar(string efact, string econtax) => EsEContaxContext ? econtax : efact;
     private IEnumerable<EstadoCuentaProveedorResumenVM> ResumenFiltrado => resumen.Where(x =>
