@@ -1,13 +1,18 @@
 @page "/contabilidad/inventarios/asignar-stock"
+@using System.Globalization
 @using System.Net.Http.Json
 @using System.Security.Claims
+@using ClosedXML.Excel
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
 @using Simetric.DTOs.EContax
 @using Simetric.Services.EContax
 @inject HttpClient Http
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavManager
+@inject IJSRuntime JS
 @attribute [AllowAnonymous]
 
 <PageTitle>Asignar stock a productos | E-Contax</PageTitle>
@@ -19,11 +24,17 @@
             <h2 class="mb-0">Asignar stock a productos</h2>
             <small class="text-muted">Solo se muestran ítems categorizados como producto (sin servicios). Seleccione los que desee y cargue su existencia inicial.</small>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
             <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="IrAInventarios">
                 <i class="bi bi-arrow-left me-1"></i>Inventario y kardex
             </button>
-            <button type="button" class="btn btn-primary btn-sm fw-bold" @onclick="GuardarSeleccionadosAsync" disabled="@(_guardando || _cargando || !_puedeEditar || SeleccionadosCount == 0)">
+            @if (_puedeEditar)
+            {
+                <button type="button" class="btn btn-outline-success btn-sm" @onclick="ExportarStockAsync" disabled="@(_guardando || _cargando || _procesandoExcel || _filas.Count == 0)">
+                    <i class="bi bi-download me-1"></i>Exportar XLSX
+                </button>
+            }
+            <button type="button" class="btn btn-primary btn-sm fw-bold" @onclick="GuardarSeleccionadosAsync" disabled="@(_guardando || _cargando || _procesandoExcel || !_puedeEditar || SeleccionadosCount == 0)">
                 <i class="bi bi-floppy-fill me-1"></i>@(_guardando ? "Guardando..." : $"Guardar stock seleccionado ({SeleccionadosCount})")
             </button>
         </div>
@@ -60,7 +71,7 @@
                 <div class="row g-2 align-items-end">
                     <div class="col-md-3">
                         <label class="form-label small fw-semibold mb-1">Sucursal</label>
-                        <select class="form-select form-select-sm" value="@_sucursalId" @onchange="CambiarSucursalAsync">
+                        <select class="form-select form-select-sm" value="@_sucursalId" @onchange="CambiarSucursalAsync" disabled="@(_guardando || _procesandoExcel)">
                             @foreach (var s in _sucursales)
                             {
                                 <option value="@s.IdSucursal">@s.Nombre</option>
@@ -88,7 +99,21 @@
                             <option value="SIN_EXISTENCIA">Sin existencia creada (@_filas.Count(f => !f.TieneExistencia))</option>
                             <option value="STOCK_CERO">Con stock en 0 (@_filas.Count(f => f.StockActual <= 0))</option>
                             <option value="CON_STOCK">Con stock &gt; 0 (@_filas.Count(f => f.StockActual > 0))</option>
+                            <option value="SELECCIONADOS">Seleccionados (@SeleccionadosCount)</option>
                         </select>
+                    </div>
+                </div>
+                <div class="row g-2 align-items-center mt-2">
+                    <div class="col-md-4">
+                        <label for="stock-xlsx" class="form-label small fw-semibold mb-1">Importar XLSX</label>
+                        <InputFile id="stock-xlsx" @key="_archivoExcelKey" class="form-control form-control-sm" accept=".xlsx"
+                                   OnChange="ImportarStockAsync" disabled="@(_guardando || _procesandoExcel)" />
+                    </div>
+                    <div class="col-md-8 small text-muted">
+                        Exporta el Excel de esta sucursal y completa «Cantidad a sumar» en las filas que quieras cargar.
+                        Usa números enteros para cantidad, mínimo y máximo. Ingresa 0 para guardar los límites sin sumar stock.
+                        Si cambias el modo a ENVASE, ingresa el costo por envase.
+                        Revisa las filas seleccionadas antes de guardar.
                     </div>
                 </div>
             </div>
@@ -164,9 +189,10 @@
                                         }
                                     </td>
                                     <td>
-                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end"
-                                               value="@fila.Cantidad"
-                                               @onchange="e => ActualizarCantidad(fila, e.Value)" />
+                                        <input type="number" min="0" step="1" inputmode="numeric"
+                                               class="form-control form-control-sm text-end @(fila.CamposInvalidos.Contains(nameof(fila.Cantidad)) ? "is-invalid" : "")"
+                                               value="@fila.Cantidad.ToString(CultureInfo.InvariantCulture)"
+                                               @onchange="e => ActualizarEntero(fila, nameof(fila.Cantidad), e.Value, v => fila.Cantidad = v)" />
                                         @if (fila.FactorConversion > 1 && fila.PorEnvase && fila.Cantidad > 0)
                                         {
                                             <small class="text-primary d-block text-end">= @((fila.Cantidad * fila.FactorConversion).ToString("N2")) @fila.UnidadMedida</small>
@@ -174,18 +200,20 @@
                                     </td>
                                     <td>
                                         <input type="number" min="0" step="0.0001" class="form-control form-control-sm text-end"
-                                               value="@fila.CostoUnitario"
+                                               value="@fila.CostoUnitario.ToString(CultureInfo.InvariantCulture)"
                                                @onchange="e => ActualizarDecimal(e.Value, v => { fila.CostoUnitario = v; fila.Seleccionado = true; })" />
                                     </td>
                                     <td>
-                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end"
-                                               value="@fila.StockMinimo"
-                                               @onchange="e => ActualizarDecimal(e.Value, v => { fila.StockMinimo = v; fila.Seleccionado = true; })" />
+                                        <input type="number" min="0" step="1" inputmode="numeric"
+                                               class="form-control form-control-sm text-end @(fila.CamposInvalidos.Contains(nameof(fila.StockMinimo)) ? "is-invalid" : "")"
+                                               value="@fila.StockMinimo.ToString(CultureInfo.InvariantCulture)"
+                                               @onchange="e => ActualizarEntero(fila, nameof(fila.StockMinimo), e.Value, v => fila.StockMinimo = v)" />
                                     </td>
                                     <td>
-                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end"
-                                               value="@fila.StockMaximo"
-                                               @onchange="e => ActualizarDecimal(e.Value, v => { fila.StockMaximo = v; fila.Seleccionado = true; })" />
+                                        <input type="number" min="0" step="1" inputmode="numeric"
+                                               class="form-control form-control-sm text-end @(fila.CamposInvalidos.Contains(nameof(fila.StockMaximo)) ? "is-invalid" : "")"
+                                               value="@fila.StockMaximo.ToString(CultureInfo.InvariantCulture)"
+                                               @onchange="e => ActualizarEntero(fila, nameof(fila.StockMaximo), e.Value, v => fila.StockMaximo = v)" />
                                     </td>
                                     <td>
                                         <input type="text" maxlength="80" class="form-control form-control-sm" placeholder="Opcional"
@@ -212,6 +240,8 @@
     private int _sucursalId;
     private bool _cargando = true;
     private bool _guardando;
+    private bool _procesandoExcel;
+    private int _archivoExcelKey;
     private bool _puedeEditar;
     private string? _error;
     private string? _mensaje;
@@ -222,6 +252,13 @@
 
     private List<EContaxSucursalDto> _sucursales = [];
     private List<FilaProductoStock> _filas = [];
+
+    private static readonly string[] EncabezadosStock =
+    [
+        "Id producto", "Código", "Producto", "Unidad de venta", "Factor de conversión",
+        "Stock actual", "Modo ingreso", "Cantidad a sumar", "Costo unitario", "Stock mínimo",
+        "Stock máximo", "Lote", "Vencimiento", "Id sucursal"
+    ];
 
     private int SeleccionadosCount => _filas.Count(f => f.Seleccionado);
 
@@ -244,6 +281,7 @@
                 "SIN_EXISTENCIA" => !f.TieneExistencia,
                 "STOCK_CERO" => f.StockActual <= 0,
                 "CON_STOCK" => f.StockActual > 0,
+                "SELECCIONADOS" => f.Seleccionado,
                 _ => true
             }));
 
@@ -311,6 +349,7 @@
                 StockMinimo = p.StockMinimo,
                 StockMaximo = p.StockMaximo,
                 CostoUnitario = p.CostoReferencia,
+                CostoReferencia = p.CostoReferencia,
                 TieneExistencia = p.TieneExistencia
             }).ToList();
         }
@@ -326,7 +365,13 @@
 
     private async Task CambiarSucursalAsync(ChangeEventArgs e)
     {
+        if (_guardando || _procesandoExcel)
+            return;
+
         _sucursalId = int.TryParse(e.Value?.ToString(), out int id) ? id : 0;
+        _mensaje = null;
+        if (_filtroExistencia == "SELECCIONADOS")
+            _filtroExistencia = "TODOS";
         await CargarProductosAsync();
     }
 
@@ -337,27 +382,225 @@
             fila.Seleccionado = marcar;
     }
 
-    private static void ActualizarCantidad(FilaProductoStock fila, object? val)
+    private static bool EsEnteroNoNegativo(decimal valor) => valor >= 0 && valor == decimal.Truncate(valor);
+
+    private static void ActualizarEntero(FilaProductoStock fila, string campo, object? valor, Action<decimal> asignar)
     {
-        if (decimal.TryParse(val?.ToString(), out decimal cant) && cant >= 0)
+        fila.Seleccionado = true;
+        if (!decimal.TryParse(valor?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var numero) ||
+            !EsEnteroNoNegativo(numero))
         {
-            fila.Cantidad = cant;
-            if (cant > 0) fila.Seleccionado = true;
+            fila.CamposInvalidos.Add(campo);
+            return;
         }
+
+        fila.CamposInvalidos.Remove(campo);
+        asignar(numero);
     }
 
     private static void ActualizarDecimal(object? val, Action<decimal> asignar)
     {
-        if (decimal.TryParse(val?.ToString(), out decimal num) && num >= 0)
+        if (decimal.TryParse(val?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var num) && num >= 0)
             asignar(num);
     }
 
+    private async Task ExportarStockAsync()
+    {
+        if (!_puedeEditar || _cargando || _guardando || _procesandoExcel || _filas.Count == 0)
+            return;
+
+        _procesandoExcel = true;
+        _error = null;
+        try
+        {
+            using var libro = new XLWorkbook();
+            var hoja = libro.Worksheets.Add("Stock");
+            for (var i = 0; i < EncabezadosStock.Length; i++)
+                hoja.Cell(1, i + 1).Value = EncabezadosStock[i];
+
+            var encabezado = hoja.Range(1, 1, 1, EncabezadosStock.Length);
+            encabezado.Style.Font.Bold = true;
+            encabezado.Style.Font.FontColor = XLColor.White;
+            encabezado.Style.Fill.BackgroundColor = XLColor.DarkBlue;
+            hoja.Column(12).Style.NumberFormat.Format = "@";
+            hoja.Column(13).Style.DateFormat.Format = "yyyy-mm-dd";
+            hoja.SheetView.FreezeRows(1);
+
+            var filaExcel = 2;
+            foreach (var producto in _filas)
+            {
+                hoja.Cell(filaExcel, 1).Value = producto.CodigoProducto;
+                hoja.Cell(filaExcel, 2).Value = producto.CodigoPrincipal ?? "";
+                hoja.Cell(filaExcel, 3).Value = producto.NombreProducto ?? "";
+                hoja.Cell(filaExcel, 4).Value = producto.UnidadMedida;
+                hoja.Cell(filaExcel, 5).Value = producto.FactorConversion;
+                hoja.Cell(filaExcel, 6).Value = producto.StockActual;
+                hoja.Cell(filaExcel, 7).Value = "DIRECTO";
+                if (EsEnteroNoNegativo(producto.StockMinimo))
+                    hoja.Cell(filaExcel, 10).Value = producto.StockMinimo;
+                if (EsEnteroNoNegativo(producto.StockMaximo))
+                    hoja.Cell(filaExcel, 11).Value = producto.StockMaximo;
+                hoja.Cell(filaExcel, 14).Value = _sucursalId;
+                filaExcel++;
+            }
+            hoja.Range(1, 1, filaExcel - 1, EncabezadosStock.Length).SetAutoFilter();
+            hoja.Columns(1, EncabezadosStock.Length).AdjustToContents(12, 45);
+
+            using var contenido = new MemoryStream();
+            libro.SaveAs(contenido);
+            contenido.Position = 0;
+            using var referencia = new DotNetStreamReference(contenido);
+            await JS.InvokeVoidAsync("numericaUi.downloadExcelFile", $"Stock_Sucursal_{_sucursalId}.xlsx", referencia);
+        }
+        catch (Exception)
+        {
+            _error = "No se pudo exportar el Excel de stock.";
+        }
+        finally
+        {
+            _procesandoExcel = false;
+        }
+    }
+
+    private async Task ImportarStockAsync(InputFileChangeEventArgs e)
+    {
+        if (!_puedeEditar || _cargando || _guardando || _procesandoExcel)
+            return;
+
+        _error = null;
+        _mensaje = null;
+        _procesandoExcel = true;
+        try
+        {
+            const long limite = 4 * 1024 * 1024;
+            if (!Path.GetExtension(e.File.Name).Equals(".xlsx", StringComparison.OrdinalIgnoreCase) || e.File.Size > limite)
+                throw new InvalidOperationException("Selecciona un archivo .xlsx de hasta 4 MB.");
+
+            using var archivo = e.File.OpenReadStream(limite);
+            using var contenido = new MemoryStream();
+            await archivo.CopyToAsync(contenido);
+            contenido.Position = 0;
+            using var libro = new XLWorkbook(contenido);
+            var hoja = libro.Worksheet(1);
+            if (EncabezadosStock.Where((titulo, i) =>
+                    !titulo.Equals(hoja.Cell(1, i + 1).GetString().Trim(), StringComparison.OrdinalIgnoreCase)).Any())
+                throw new InvalidOperationException("Usa los encabezados del Excel exportado desde Asignar stock a productos.");
+
+            var productos = _filas.ToDictionary(f => f.CodigoProducto);
+            var cambios = new List<(FilaProductoStock Producto, bool PorEnvase, decimal Cantidad,
+                decimal Costo, decimal Minimo, decimal Maximo, string Lote, DateTime? Vencimiento)>();
+            var importados = new HashSet<int>();
+            foreach (var fila in hoja.RowsUsed().Where(f => f.RowNumber() > 1 && !f.Cell(8).IsEmpty()))
+            {
+                if (!fila.Cell(14).TryGetValue<int>(out var sucursal) || sucursal != _sucursalId)
+                    throw ErrorFilaStock(fila, "la sucursal del Excel debe coincidir con la seleccionada");
+                if (!fila.Cell(1).TryGetValue<int>(out var id) || !productos.TryGetValue(id, out var producto))
+                    throw ErrorFilaStock(fila, "el producto no está disponible");
+                if (!importados.Add(id))
+                    throw ErrorFilaStock(fila, "el producto está repetido");
+
+                var modo = fila.Cell(7).GetString().Trim().ToUpperInvariant();
+                if (modo != "DIRECTO" && (modo != "ENVASE" || producto.FactorConversion <= 1))
+                    throw ErrorFilaStock(fila, "usa DIRECTO o ENVASE si el producto admite conversión");
+                if (modo == "ENVASE" &&
+                    (!fila.Cell(5).TryGetValue<decimal>(out var factor) || factor != producto.FactorConversion))
+                    throw ErrorFilaStock(fila, "el factor cambió. Exporta el Excel nuevamente");
+
+                var cantidad = LeerNumeroStock(fila, 8);
+                var costoPorDefecto = modo == "ENVASE"
+                    ? producto.CostoReferencia * producto.FactorConversion
+                    : producto.CostoReferencia;
+                var costo = LeerNumeroStock(fila, 9, costoPorDefecto, soloEnteros: false);
+                var minimo = LeerNumeroStock(fila, 10, producto.StockMinimo);
+                var maximo = LeerNumeroStock(fila, 11, producto.StockMaximo);
+                if (maximo > 0 && minimo > maximo)
+                    throw ErrorFilaStock(fila, "el stock mínimo supera al máximo");
+
+                var lote = fila.Cell(12).GetFormattedString(CultureInfo.InvariantCulture).Trim();
+                if (lote.Length > 80)
+                    throw ErrorFilaStock(fila, "el lote admite hasta 80 caracteres");
+                DateTime? vencimiento = null;
+                if (!fila.Cell(13).IsEmpty())
+                {
+                    var celda = fila.Cell(13);
+                    if (!(celda.DataType == XLDataType.DateTime && celda.TryGetValue<DateTime>(out var fecha)) &&
+                        !DateTime.TryParseExact(celda.GetString().Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out fecha))
+                        throw ErrorFilaStock(fila, "usa una fecha de Excel o el formato AAAA-MM-DD");
+                    if (fecha.Date <= DateTime.UtcNow.Date)
+                        throw ErrorFilaStock(fila, "el vencimiento debe ser posterior a hoy");
+                    vencimiento = fecha.Date;
+                }
+                if (modo == "ENVASE" && cantidad > decimal.MaxValue / producto.FactorConversion)
+                    throw ErrorFilaStock(fila, "la cantidad supera el límite al convertir los envases");
+
+                cambios.Add((producto, modo == "ENVASE", cantidad, costo, minimo, maximo, lote, vencimiento));
+            }
+
+            if (cambios.Count == 0)
+                throw new InvalidOperationException("Completa «Cantidad a sumar» en al menos una fila.");
+
+            foreach (var producto in _filas)
+                producto.Seleccionado = false;
+            foreach (var cambio in cambios)
+            {
+                cambio.Producto.CamposInvalidos.Clear();
+                cambio.Producto.PorEnvase = cambio.PorEnvase;
+                cambio.Producto.Cantidad = cambio.Cantidad;
+                cambio.Producto.CostoUnitario = cambio.Costo;
+                cambio.Producto.StockMinimo = cambio.Minimo;
+                cambio.Producto.StockMaximo = cambio.Maximo;
+                cambio.Producto.NumeroLote = cambio.Lote;
+                cambio.Producto.FechaVencimiento = cambio.Vencimiento;
+                cambio.Producto.Seleccionado = true;
+            }
+            _filtroTexto = "";
+            _filtroCategoria = "";
+            _filtroExistencia = "SELECCIONADOS";
+            _mensaje = $"Se cargaron {cambios.Count} filas del Excel. Revisa los valores y pulsa Guardar stock seleccionado.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception)
+        {
+            _error = "No se pudo leer el Excel de stock. Vuelve a descargarlo desde esta pantalla y comprueba el formato.";
+        }
+        finally
+        {
+            _archivoExcelKey++;
+            _procesandoExcel = false;
+        }
+    }
+
+    private static decimal LeerNumeroStock(IXLRow fila, int columna, decimal? valorPorDefecto = null, bool soloEnteros = true)
+    {
+        var celda = fila.Cell(columna);
+        if (celda.IsEmpty() && valorPorDefecto.HasValue)
+            return valorPorDefecto.Value;
+        if (celda.TryGetValue<decimal>(out var valor) && valor >= 0 && (!soloEnteros || EsEnteroNoNegativo(valor)))
+            return valor;
+        var tipoNumero = soloEnteros ? "número entero" : "número";
+        throw ErrorFilaStock(fila, $"«{EncabezadosStock[columna - 1]}» debe ser un {tipoNumero} mayor o igual a cero");
+    }
+
+    private static InvalidOperationException ErrorFilaStock(IXLRow fila, string mensaje) =>
+        new($"Fila {fila.RowNumber()} del Excel: {mensaje}.");
+
     private async Task GuardarSeleccionadosAsync()
     {
+        if (!_puedeEditar || _cargando || _guardando || _procesandoExcel)
+            return;
+
         var seleccionados = _filas.Where(f => f.Seleccionado).ToList();
         if (seleccionados.Count == 0)
         {
             _error = "Seleccione al menos un producto.";
+            return;
+        }
+        if (seleccionados.Any(f => f.CamposInvalidos.Count > 0))
+        {
+            _error = "Corrige los campos marcados. La cantidad y los límites de stock deben ser números enteros mayores o iguales a cero.";
             return;
         }
 
@@ -394,6 +637,8 @@
 
             var procesados = await response.Content.ReadFromJsonAsync<int>();
             _mensaje = $"Stock actualizado correctamente para {procesados} producto(s).";
+            if (_filtroExistencia == "SELECCIONADOS")
+                _filtroExistencia = "TODOS";
             await CargarProductosAsync();
         }
         catch (Exception ex)
@@ -410,6 +655,7 @@
 
     private sealed class FilaProductoStock
     {
+        public HashSet<string> CamposInvalidos { get; } = [];
         public bool Seleccionado { get; set; }
         public int CodigoProducto { get; set; }
         public string? CodigoPrincipal { get; set; }
@@ -421,6 +667,7 @@
         public decimal StockActual { get; set; }
         public decimal Cantidad { get; set; }
         public decimal CostoUnitario { get; set; }
+        public decimal CostoReferencia { get; set; }
         public decimal StockMinimo { get; set; }
         public decimal StockMaximo { get; set; }
         public string? NumeroLote { get; set; }

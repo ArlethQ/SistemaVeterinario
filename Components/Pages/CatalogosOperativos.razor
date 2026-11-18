@@ -126,12 +126,12 @@
         </div>
         @if (_tipo == "productos")
         {
-            <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
-                <div>
-                    <label for="productos-excel" class="form-label small mb-1">Importar Excel (.xlsx)</label>
-                    <InputFile id="productos-excel" class="form-control form-control-sm" accept=".xlsx"
-                               OnChange="ImportarProductosExcelAsync" disabled="@_importandoExcel" />
-                </div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                <label class="btn btn-sm btn-primary position-relative overflow-hidden @(_importandoExcel ? "disabled" : "")">
+                    <i class="bi bi-upload me-1" aria-hidden="true"></i>Importar XLSX
+                    <InputFile @key="_archivoExcelKey" class="position-absolute top-0 start-0 w-100 h-100 opacity-0"
+                               accept=".xlsx" OnChange="ImportarProductosExcelAsync" disabled="@_importandoExcel" />
+                </label>
                 <button type="button" class="btn btn-sm btn-outline-primary" @onclick="DescargarPlantillaExcelAsync">Descargar plantilla</button>
                 <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ExportarProductosExcelAsync" disabled="@_importandoExcel">Exportar Excel</button>
             </div>
@@ -453,7 +453,8 @@
     ];
     private static readonly string[] ColumnasExcel =
         ["Código", "Descripción", "Tipo (B/S)", "Precio base", "Precio 2", "Precio 3",
-         "Categoría", "Subcategoría", "Inventario (Sí/No)", "Código tarifa IVA", "Estado (A/I)"];
+         "Categoría", "Subcategoría", "Inventario (Sí/No)", "Código tarifa IVA", "Estado (A/I)",
+         "Unidad de medida", "Factor de conversión"];
     private string _tipo = "diagnosticos", _filtro = "", _mensaje = "", _seccion = "general", _ultimaRutaCargada = "";
     private string _filtroTipo = "", _filtroGrupo = "", _filtroSubgrupo = "", _filtroInventario = "", _filtroIva = "", _filtroEstado = "";
     private int _paginaActual = 1, _tamanoPagina = 20;
@@ -992,14 +993,45 @@
         _paginaActual = Math.Clamp(_paginaActual, 1, TotalPaginas);
     }
 
-    private Task DescargarPlantillaExcelAsync() => DescargarCatalogoExcelAsync("Plantilla_productos.xlsx", []);
+    private int _archivoExcelKey;
+
+    private Task DescargarPlantillaExcelAsync() =>
+        DescargarCatalogoExcelAsync("Plantilla_Productos_y_Servicios_Veterinaria.xlsx", [], incluirEjemplos: true);
 
     private Task ExportarProductosExcelAsync() => DescargarCatalogoExcelAsync("Productos_y_servicios.xlsx", _items);
 
-    private async Task DescargarCatalogoExcelAsync(string nombre, IEnumerable<CatalogoOperativoDto> productos)
+    private async Task DescargarCatalogoExcelAsync(
+        string nombre, IEnumerable<CatalogoOperativoDto> productos, bool incluirEjemplos = false)
     {
         using var libro = new XLWorkbook();
-        var hoja = libro.Worksheets.Add("Productos y servicios");
+        EscribirHojaCatalogo(libro.Worksheets.Add("Productos y servicios"), productos);
+        if (incluirEjemplos)
+        {
+            EscribirHojaCatalogo(libro.Worksheets.Add("Ejemplos"),
+            [
+                new() { Codigo = "PROD-001", Descripcion = "Jeringas desechables", Tipo = "B", Precio = 15m, UnidadMedida = "CAJA", FactorConversion = 12m },
+                new() { Codigo = "SERV-001", Descripcion = "Consulta veterinaria", Tipo = "S", Precio = 25m, Inventario = false }
+            ]);
+            var guia = libro.Worksheets.Add("Instrucciones");
+            guia.Cell(1, 1).Value = "Completa la primera hoja. La hoja Ejemplos sirve de referencia.";
+            guia.Cell(2, 1).Value = "Campos obligatorios: descripción, tipo y precio base.";
+            guia.Cell(3, 1).Value = "Tipo: B para producto y S para servicio. Inventario: Sí o No. Estado: A para activo o I para inactivo.";
+            guia.Cell(4, 1).Value = "Categoría y subcategoría: usa los nombres registrados en tu catálogo.";
+            guia.Cell(5, 1).Value = "IVA: ingresa el código de una tarifa registrada o deja el campo vacío para un ítem sin IVA.";
+            guia.Cell(6, 1).Value = "Unidad y factor son opcionales. Ejemplo: CAJA y 12 para una caja de 12 unidades.";
+            guia.Row(1).Style.Font.Bold = true;
+            guia.Column(1).AdjustToContents();
+        }
+
+        using var contenido = new MemoryStream();
+        libro.SaveAs(contenido);
+        contenido.Position = 0;
+        using var referencia = new DotNetStreamReference(contenido);
+        await JS.InvokeVoidAsync("numericaUi.downloadExcelFile", nombre, referencia);
+    }
+
+    private static void EscribirHojaCatalogo(IXLWorksheet hoja, IEnumerable<CatalogoOperativoDto> productos)
+    {
         for (int i = 0; i < ColumnasExcel.Length; i++)
             hoja.Cell(1, i + 1).Value = ColumnasExcel[i];
 
@@ -1017,19 +1049,20 @@
             hoja.Cell(fila, 9).Value = item.Inventario ? "Sí" : "No";
             hoja.Cell(fila, 10).Value = item.PorcentajeImpuesto;
             hoja.Cell(fila, 11).Value = item.Estado;
+            hoja.Cell(fila, 12).Value = item.UnidadMedida;
+            hoja.Cell(fila, 13).Value = item.FactorConversion;
             fila++;
         }
 
-        hoja.Row(1).Style.Font.Bold = true;
+        var encabezado = hoja.Range(1, 1, 1, ColumnasExcel.Length);
+        encabezado.Style.Font.Bold = true;
+        encabezado.Style.Font.FontColor = XLColor.White;
+        encabezado.Style.Fill.BackgroundColor = XLColor.DarkBlue;
+        hoja.Columns(1, ColumnasExcel.Length).AdjustToContents(12, 45);
         hoja.Column(1).Style.NumberFormat.Format = "@";
         hoja.Column(2).Width = 35;
         hoja.Column(10).Style.NumberFormat.Format = "@";
         hoja.SheetView.FreezeRows(1);
-        using var contenido = new MemoryStream();
-        libro.SaveAs(contenido);
-        contenido.Position = 0;
-        using var referencia = new DotNetStreamReference(contenido);
-        await JS.InvokeVoidAsync("numericaUi.downloadExcelFile", nombre, referencia);
     }
 
     private async Task ImportarProductosExcelAsync(InputFileChangeEventArgs args)
@@ -1051,7 +1084,9 @@
             contenido.Position = 0;
             using var libro = new XLWorkbook(contenido);
             var hoja = libro.Worksheet(1);
-            if (ColumnasExcel.Where((titulo, i) => !titulo.Equals(hoja.Cell(1, i + 1).GetString().Trim(), StringComparison.OrdinalIgnoreCase)).Any())
+            var formatoAnterior = hoja.Cell(1, 12).IsEmpty() && hoja.Cell(1, 13).IsEmpty();
+            var columnas = formatoAnterior ? ColumnasExcel.Take(11) : ColumnasExcel;
+            if (columnas.Where((titulo, i) => !titulo.Equals(hoja.Cell(1, i + 1).GetString().Trim(), StringComparison.OrdinalIgnoreCase)).Any())
                 throw new InvalidOperationException("Usa la plantilla de Productos y servicios.");
 
             var productos = await EFactCatalog.ObtenerProductosAsync();
@@ -1060,7 +1095,7 @@
             var tarifas = await EFactCatalog.ObtenerTarifasIvaAsync();
             foreach (var fila in hoja.RowsUsed().Skip(1))
             {
-                var valores = ColumnasExcel.Select((_, i) => fila.Cell(i + 1).Value
+                var valores = ColumnasExcel.Select((_, i) => formatoAnterior && i >= 11 ? "" : fila.Cell(i + 1).Value
                     .ToString(System.Globalization.CultureInfo.InvariantCulture).Trim()).ToArray();
                 if (valores.All(string.IsNullOrWhiteSpace)) continue;
 
@@ -1093,6 +1128,7 @@
         }
         finally
         {
+            _archivoExcelKey++;
             _importandoExcel = false;
         }
 
@@ -1122,6 +1158,12 @@
         if (valores[9].Length > 0 && !tarifas.Any(t => t.Codigo == valores[9]))
             throw new InvalidOperationException("El código de tarifa IVA no existe.");
 
+        var factor = 1m;
+        if (tipo == "B" && valores[12].Length > 0 &&
+            (!decimal.TryParse(valores[12].Replace(',', '.'), System.Globalization.NumberStyles.AllowDecimalPoint,
+                System.Globalization.CultureInfo.InvariantCulture, out factor) || factor <= 0 || decimal.Round(factor, 4) != factor))
+            throw new InvalidOperationException("Usa un factor de conversión mayor que cero y de hasta cuatro decimales.");
+
         return new CatalogoOperativoDto
         {
             Codigo = valores[0], Descripcion = valores[1], Tipo = tipo,
@@ -1129,6 +1171,8 @@
             Precio2 = LeerPrecioExcel(valores[4]), Precio3 = LeerPrecioExcel(valores[5]),
             IdGrupo = grupo?.Id, IdSubgrupo = subgrupo?.Id,
             Inventario = tipo == "B" && inventario != "NO",
+            UnidadMedida = tipo == "B" && valores[11].Length > 0 ? valores[11] : "UNIDAD",
+            FactorConversion = factor,
             CodigoImpuesto = valores[9].Length > 0 ? "2" : "",
             PorcentajeImpuesto = valores[9],
             Estado = estado == "I" ? "I" : "A"

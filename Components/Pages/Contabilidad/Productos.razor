@@ -944,7 +944,7 @@
             <div class="products-modal-header products-modal-header-success">
                 <div>
                     <span class="modal-kicker">Carga masiva</span>
-                    <h3 id="importacionProductosTitulo">Importar productos desde Excel</h3>
+                    <h3 id="importacionProductosTitulo">Importar productos y servicios desde Excel</h3>
                     <p>Descarga el modelo, edítalo en Excel y vuelve a cargarlo en formato Excel.</p>
                 </div>
                 <button type="button" class="modal-close" @onclick="CerrarImportacion" aria-label="Cerrar modal">
@@ -958,11 +958,11 @@
                         <span>1</span>
                         <div>
                             <strong>Descarga el modelo</strong>
-                            <p>Incluye ejemplos y las columnas requeridas para evitar errores.</p>
+                            <p>Completa la hoja Productos y consulta la hoja Ejemplos como referencia.</p>
                         </div>
                         <button type="button" class="secondary-btn" @onclick="DescargarModeloImportacionAsync">
                             <i class="bi bi-download"></i>
-                            Descargar modelo
+                            Descargar plantilla
                         </button>
                     </article>
 
@@ -974,7 +974,7 @@
                         </div>
                         <label class="import-file-button">
                             <i class="bi bi-upload"></i>
-                            Seleccionar archivo
+                            Importar Excel
                             <InputFile accept=".xlsx,.csv" OnChange="ImportarProductosAsync" />
                         </label>
                     </article>
@@ -982,7 +982,7 @@
 
                 <div class="import-guide">
                     <strong>Columnas del modelo</strong>
-                    <p><b>Obligatorias:</b> Código, Nombre, Tipo y PrecioBase. <b>Opcionales:</b> Precio2, Precio3, Categoría, Subcategoría, AplicaIVA, TarifaIVA y Observación.</p>
+                    <p><b>Obligatorias:</b> Código, Nombre, Tipo y PrecioBase. <b>Opcionales:</b> Precio2, Precio3, Categoría, Subcategoría, AplicaIVA, TarifaIVA, Observación, UnidadMedida y FactorConversionInventario.</p>
                 </div>
 
                 @if (!string.IsNullOrWhiteSpace(mensajeImportacion))
@@ -2004,15 +2004,19 @@
         erroresImportacion = 0;
     }
 
+    private const string EncabezadosCatalogo =
+        "Codigo;Nombre;Tipo;PrecioBase;Precio2;Precio3;Categoria;Subcategoria;AplicaIVA;TarifaIVA;Observacion;UnidadMedida;FactorConversionInventario";
+    private const int ColumnasCatalogoAnterior = 11;
+
     private async Task DescargarModeloImportacionAsync()
     {
-        const string contenido =
-            "Codigo;Nombre;Tipo;PrecioBase;Precio2;Precio3;Categoria;Subcategoria;AplicaIVA;TarifaIVA;Observacion\r\n" +
-            "PROD-001;Producto de ejemplo;PRODUCTO;10.50;;;Tecnologia;;SI;15;Descripcion opcional\r\n" +
-            "SERV-001;Servicio de ejemplo;SERVICIO;25.00;;;;;NO;;Descripcion opcional";
-
-        await DescargarExcelAsync("Modelo_importacion_productos.xlsx",
-            contenido.Split("\r\n").Select(SepararCsv));
+        var encabezados = SepararCsv(EncabezadosCatalogo);
+        await DescargarExcelAsync("Plantilla_Productos_y_Servicios_Contabilidad.xlsx", [encabezados],
+        [
+            encabezados,
+            SepararCsv("PROD-001;Jeringa desechable;PRODUCTO;10.50;;;;;NO;;;CAJA;12"),
+            SepararCsv("SERV-001;Consulta veterinaria;SERVICIO;25.00;;;;;NO;;;UNIDAD;1")
+        ]);
     }
 
     private async Task ExportarProductosExcelAsync()
@@ -2027,7 +2031,7 @@
 
         var filas = new List<List<string>>
         {
-            SepararCsv("Codigo;Nombre;Tipo;PrecioBase;Precio2;Precio3;Categoria;Subcategoria;AplicaIVA;TarifaIVA;Observacion")
+            SepararCsv(EncabezadosCatalogo)
         };
 
         foreach (var p in OrdenarProductosClasificados(productosExportar))
@@ -2054,36 +2058,50 @@
 
             var observacion = p.Observacion ?? string.Empty;
 
-            filas.Add([codigo, nombre, tipo, precioBase, precio2, precio3, cat, subcat, aplicaIva, tarifaIva ?? string.Empty, observacion]);
+            filas.Add([codigo, nombre, tipo, precioBase, precio2, precio3, cat, subcat, aplicaIva,
+                tarifaIva ?? string.Empty, observacion, p.UnidadMedida ?? string.Empty,
+                p.FactorConversionInventario.ToString(CultureInfo.InvariantCulture)]);
         }
 
         await DescargarExcelAsync($"Productos_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx", filas);
     }
 
-    private async Task DescargarExcelAsync(string nombre, IEnumerable<List<string>> filas)
+    private async Task DescargarExcelAsync(string nombre, IEnumerable<List<string>> filas, IEnumerable<List<string>>? ejemplos = null)
     {
         using var libro = new XLWorkbook();
-        var hoja = libro.Worksheets.Add("Productos");
-        int fila = 1;
-        foreach (var campos in filas)
-        {
-            for (int i = 0; i < campos.Count; i++)
-            {
-                var celda = hoja.Cell(fila, i + 1);
-                if (fila > 1 && (i is 3 or 4 or 5) && decimal.TryParse(campos[i], NumberStyles.Number, CultureInfo.InvariantCulture, out var precio))
-                    celda.Value = precio;
-                else
-                    celda.Value = campos[i];
-            }
-            fila++;
-        }
-        hoja.Row(1).Style.Font.Bold = true;
+        EscribirHojaCatalogo(libro.Worksheets.Add("Productos"), filas);
+        if (ejemplos is not null)
+            EscribirHojaCatalogo(libro.Worksheets.Add("Ejemplos"), ejemplos);
 
         using var contenido = new MemoryStream();
         libro.SaveAs(contenido);
         contenido.Position = 0;
         using var referencia = new DotNetStreamReference(contenido);
         await JS.InvokeVoidAsync("numericaUi.downloadExcelFile", nombre, referencia);
+    }
+
+    private static void EscribirHojaCatalogo(IXLWorksheet hoja, IEnumerable<List<string>> filas)
+    {
+        hoja.Column(1).Style.NumberFormat.Format = "@";
+        int fila = 1;
+        foreach (var campos in filas)
+        {
+            for (int i = 0; i < campos.Count; i++)
+            {
+                var celda = hoja.Cell(fila, i + 1);
+                if (fila > 1 && (i is 3 or 4 or 5 or 12) && decimal.TryParse(campos[i], NumberStyles.Number, CultureInfo.InvariantCulture, out var numero))
+                    celda.Value = numero;
+                else
+                    celda.Value = campos[i];
+            }
+            fila++;
+        }
+        var encabezado = hoja.Range(1, 1, 1, 13);
+        encabezado.Style.Font.Bold = true;
+        encabezado.Style.Font.FontColor = XLColor.White;
+        encabezado.Style.Fill.BackgroundColor = XLColor.DarkBlue;
+        hoja.Columns(1, 13).AdjustToContents(12, 45);
+        hoja.SheetView.FreezeRows(1);
     }
 
 
@@ -2132,7 +2150,9 @@
                 contenido.Position = 0;
                 using var libro = new XLWorkbook(contenido);
                 var hoja = libro.Worksheet(1);
-                var encabezados = SepararCsv("Codigo;Nombre;Tipo;PrecioBase;Precio2;Precio3;Categoria;Subcategoria;AplicaIVA;TarifaIVA;Observacion");
+                var encabezados = SepararCsv(EncabezadosCatalogo);
+                if (hoja.Cell(1, 12).IsEmpty() && hoja.Cell(1, 13).IsEmpty())
+                    encabezados = encabezados.Take(ColumnasCatalogoAnterior).ToList();
                 if (encabezados.Where((titulo, i) => !titulo.Equals(hoja.Cell(1, i + 1).GetString().Trim(), StringComparison.OrdinalIgnoreCase)).Any())
                     throw new InvalidOperationException("Usa las columnas del modelo de importación.");
 
@@ -2266,6 +2286,14 @@
                 var categoria = Campo(campos, 6);
                 var subcategoria = Campo(campos, 7);
 
+                var factorTexto = Campo(campos, 12);
+                var factor = 1m;
+                if (factorTexto.Length > 0 && (!TryParseDecimal(factorTexto, out factor) || factor <= 0))
+                {
+                    errores.Add($"Fila {fila}: el factor de conversión debe ser mayor que cero.");
+                    continue;
+                }
+
                 var categoriaId = string.IsNullOrWhiteSpace(categoria)
                     ? (int?)null
                     : tiposProducto.FirstOrDefault(x => string.Equals(x.Descripcion, categoria, StringComparison.OrdinalIgnoreCase))?.Idtipoproducto;
@@ -2307,6 +2335,8 @@
                     CodigoPrincipal = codigo,
                     Nombre = nombre,
                     TipoCompravena = tipo,
+                    UnidadMedida = Campo(campos, 11),
+                    FactorConversionInventario = factor,
                     ValorUnitario = precioBase,
                     Precio2 = ParseDecimalOpcional(Campo(campos, 4)),
                     Precio3 = ParseDecimalOpcional(Campo(campos, 5)),
