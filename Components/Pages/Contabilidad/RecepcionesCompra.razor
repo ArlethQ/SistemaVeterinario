@@ -7,11 +7,13 @@
 @using Microsoft.JSInterop
 @using Simetric.DTOs.EContax
 @using Simetric.Services
+@using Simetric.Services.EContax
 @inject HttpClient Http
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
 @inject ISimpleExcelExportService ExcelExportService
+@inject EContaxInventarioService InventarioService
 
 <PageTitle>Recepciones de compra | E-Contax</PageTitle>
 <link rel="stylesheet" href="/_content/Simetric/css/econtax-compras.css?v=20261023-compras-buttons" />
@@ -99,63 +101,252 @@
         </div>
     </div>
 
-    <div class="card shadow-sm purchase-table-card">
-        <div class="purchase-table-heading"><div><span>TRAZABILIDAD DE ENTRADAS</span><h2>Recepciones registradas</h2></div><span class="purchase-count">@recepciones.Count registro@(recepciones.Count == 1 ? string.Empty : "s")</span></div>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0 purchase-data-table">
-                <thead>
-                    <tr><th>Recepción</th><th>Orden</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th class="text-end">Cantidad</th><th class="text-end">Acciones</th></tr>
-                </thead>
-                <tbody>
-                    @if (cargando)
-                    {
-                        <tr><td colspan="7"><div class="purchase-table-state" aria-live="polite"><i class="ri-loader-4-line"></i><span>Cargando recepciones...</span></div></td></tr>
-                    }
-                    else if (recepciones.Count == 0)
-                    {
-                        <tr><td colspan="7"><div class="purchase-table-state is-empty" aria-live="polite"><i class="ri-inbox-line"></i><span>No hay recepciones para los filtros seleccionados.</span></div></td></tr>
-                    }
-                    else
-                    {
-                        @foreach (var recepcion in RecepcionesPagina)
-                        {
-                            <tr @key="recepcion.IdRecepcion">
-                                <td><strong>@recepcion.NumeroRecepcion</strong><small class="d-block text-muted">@recepcion.Lineas línea(s)</small></td>
-                                <td>@recepcion.NumeroOrden</td>
-                                <td>@recepcion.NombreProveedor</td>
-                                <td>@recepcion.FechaRecepcion.ToString("dd/MM/yyyy")</td>
-                                <td><span class="badge @ClaseEstado(recepcion.Estado)">@TextoEstado(recepcion.Estado)</span></td>
-                                <td class="text-end">@recepcion.TotalRecibido.ToString("0.####")</td>
-                                <td class="text-end text-nowrap"><div class="purchase-table-actions">
-                                    <button class="purchase-table-btn is-primary" type="button" @onclick="() => EditarAsync(recepcion.IdRecepcion)"><i class="ri-eye-line"></i><span>Ver / editar</span></button>
-                                    @if (recepcion.Estado == "BORRADOR")
-                                    {
-                                        <button class="purchase-table-btn is-success" type="button" @onclick="() => ConfirmarAsync(recepcion.IdRecepcion)"><i class="ri-checkbox-circle-line"></i><span>Confirmar</span></button>
-                                    }
-                                    @if (recepcion.Estado is "BORRADOR" or "RECIBIDA_PARCIAL" or "RECIBIDA_COMPLETA")
-                                    {
-                                        <button class="purchase-table-btn is-danger" type="button" @onclick="() => AnularAsync(recepcion.IdRecepcion)"><i class="ri-close-circle-line"></i><span>Anular</span></button>
-                                    }
-                                </div></td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
+    <div class="row g-3 align-items-start">
+        <div class="col-12 col-xl-6">
+            <div class="card shadow-sm purchase-table-card h-100">
+                <div class="purchase-table-heading"><div><span>TRAZABILIDAD DE ENTRADAS</span><h2>Recepciones registradas</h2></div><span class="purchase-count">@recepciones.Count registro@(recepciones.Count == 1 ? string.Empty : "s")</span></div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 purchase-data-table">
+                        <thead>
+                            <tr><th>Recepción</th><th>Orden / Proveedor</th><th>Fecha</th><th>Estado</th><th class="text-end">Cant.</th><th class="text-end">Acciones</th></tr>
+                        </thead>
+                        <tbody>
+                            @if (cargando)
+                            {
+                                <tr><td colspan="6"><div class="purchase-table-state" aria-live="polite"><i class="ri-loader-4-line"></i><span>Cargando recepciones...</span></div></td></tr>
+                            }
+                            else if (recepciones.Count == 0)
+                            {
+                                <tr><td colspan="6"><div class="purchase-table-state is-empty" aria-live="polite"><i class="ri-inbox-line"></i><span>No hay recepciones para los filtros seleccionados.</span></div></td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var recepcion in RecepcionesPagina)
+                                {
+                                    <tr @key="recepcion.IdRecepcion">
+                                        <td><strong>@recepcion.NumeroRecepcion</strong><small class="d-block text-muted">@recepcion.Lineas línea(s)</small></td>
+                                        <td><strong>@recepcion.NumeroOrden</strong><small class="d-block text-muted">@recepcion.NombreProveedor</small></td>
+                                        <td>@recepcion.FechaRecepcion.ToString("dd/MM/yyyy")</td>
+                                        <td><span class="badge @ClaseEstado(recepcion.Estado)">@TextoEstado(recepcion.Estado)</span></td>
+                                        <td class="text-end">@recepcion.TotalRecibido.ToString("0.####")</td>
+                                        <td class="text-end text-nowrap"><div class="purchase-table-actions">
+                                            <button class="purchase-table-btn is-primary" type="button" @onclick="() => EditarAsync(recepcion.IdRecepcion)"><i class="ri-eye-line"></i><span>Ver / editar</span></button>
+                                            @if (recepcion.Estado == "BORRADOR")
+                                            {
+                                                <button class="purchase-table-btn is-success" type="button" @onclick="() => ConfirmarAsync(recepcion.IdRecepcion)"><i class="ri-checkbox-circle-line"></i><span>Confirmar</span></button>
+                                            }
+                                            @if (recepcion.Estado is "BORRADOR" or "RECIBIDA_PARCIAL" or "RECIBIDA_COMPLETA")
+                                            {
+                                                <button class="purchase-table-btn is-danger" type="button" @onclick="() => AnularAsync(recepcion.IdRecepcion)"><i class="ri-close-circle-line"></i><span>Anular</span></button>
+                                            }
+                                        </div></td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (!cargando && recepciones.Count > 0)
+                {
+                    <div class="purchase-pagination" aria-label="Paginación de recepciones">
+                        <span>Mostrando @PrimerRegistroPagina–@UltimoRegistroPagina de @recepciones.Count</span>
+                        <div class="purchase-pagination-actions">
+                            <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(-1)" disabled="@(PaginaActualSegura == 1)"><i class="ri-arrow-left-s-line"></i><span>Anterior</span></button>
+                            <strong>Página @PaginaActualSegura de @TotalPaginas</strong>
+                            <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(1)" disabled="@(PaginaActualSegura == TotalPaginas)"><span>Siguiente</span><i class="ri-arrow-right-s-line"></i></button>
+                        </div>
+                    </div>
+                }
+            </div>
         </div>
-        @if (!cargando && recepciones.Count > 0)
-        {
-            <div class="purchase-pagination" aria-label="Paginación de recepciones">
-                <span>Mostrando @PrimerRegistroPagina–@UltimoRegistroPagina de @recepciones.Count</span>
-                <div class="purchase-pagination-actions">
-                    <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(-1)" disabled="@(PaginaActualSegura == 1)"><i class="ri-arrow-left-s-line"></i><span>Anterior</span></button>
-                    <strong>Página @PaginaActualSegura de @TotalPaginas</strong>
-                    <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(1)" disabled="@(PaginaActualSegura == TotalPaginas)"><span>Siguiente</span><i class="ri-arrow-right-s-line"></i></button>
+
+        <div class="col-12 col-xl-6">
+            <div class="card shadow-sm purchase-table-card h-100">
+                <div class="purchase-table-heading">
+                    <div>
+                        <span>COMPRAS REGISTRADAS · PENDIENTES DE INGRESO</span>
+                        <h2>Facturas por homologar</h2>
+                    </div>
+                    <span class="purchase-count">@ComprasPendientesFiltradas.Count() pendiente@(ComprasPendientesFiltradas.Count() == 1 ? string.Empty : "s")</span>
+                </div>
+                <div class="px-3 pt-2 pb-2 border-bottom bg-light-subtle">
+                    <input class="form-control form-control-sm" @bind="filtroComprasPendientes" @bind:event="oninput" placeholder="Buscar factura, proveedor o RUC..." />
+                </div>
+                @if (!string.IsNullOrWhiteSpace(mensajeHomologacion))
+                {
+                    <div class="alert alert-success m-3 mb-0 py-2" role="alert">@mensajeHomologacion</div>
+                }
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 purchase-data-table">
+                        <thead>
+                            <tr><th>Factura</th><th>Proveedor</th><th class="text-end">Ítems / Total</th><th class="text-end">Acción</th></tr>
+                        </thead>
+                        <tbody>
+                            @if (cargandoComprasPendientes)
+                            {
+                                <tr><td colspan="4"><div class="purchase-table-state"><i class="ri-loader-4-line"></i><span>Cargando compras pendientes...</span></div></td></tr>
+                            }
+                            else if (!ComprasPendientesFiltradas.Any())
+                            {
+                                <tr><td colspan="4"><div class="purchase-table-state is-empty"><i class="ri-checkbox-circle-line"></i><span>No hay compras registradas pendientes de ingreso.</span></div></td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var compra in ComprasPendientesFiltradas)
+                                {
+                                    <tr @key="compra.CodFactura">
+                                        <td>
+                                            <strong class="font-monospace">@compra.NumeroDocumento</strong>
+                                            <small class="d-block text-muted">@(compra.FechaEmision?.ToString("dd/MM/yyyy") ?? "—")</small>
+                                        </td>
+                                        <td>
+                                            <div>@compra.Proveedor</div>
+                                            <small class="text-muted font-monospace">@compra.RucProveedor</small>
+                                        </td>
+                                        <td class="text-end">
+                                            <strong>$@compra.ValorTotal.ToString("N2")</strong>
+                                            <small class="d-block text-muted">@compra.Detalles.Count ítem(s)</small>
+                                        </td>
+                                        <td class="text-end text-nowrap">
+                                            <button class="purchase-table-btn is-primary" type="button" @onclick="() => AbrirHomologacionAsync(compra)">
+                                                <i class="ri-links-line"></i><span>Homologar e ingresar</span>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
                 </div>
             </div>
-        }
+        </div>
     </div>
 </div>
+
+@if (mostrarHomologacion && compraSeleccionadaHomologar is not null)
+{
+    <div class="reception-modal-backdrop" @onclick="CerrarHomologacion">
+        <section class="reception-modal purchase-modal" role="dialog" aria-modal="true" aria-labelledby="homologacion-modal-title" @onclick:stopPropagation="true">
+            <header class="purchase-modal-header">
+                <div>
+                    <span class="purchase-eyebrow">HOMOLOGACIÓN DE COMPRA A INVENTARIO</span>
+                    <h2 id="homologacion-modal-title">Factura @compraSeleccionadaHomologar.NumeroDocumento</h2>
+                    <p>@compraSeleccionadaHomologar.Proveedor (@compraSeleccionadaHomologar.RucProveedor) · Total $@compraSeleccionadaHomologar.ValorTotal.ToString("N2")</p>
+                </div>
+                <button type="button" class="purchase-modal-close" aria-label="Cerrar" @onclick="CerrarHomologacion"><i class="ri-close-line"></i></button>
+            </header>
+
+            <div class="purchase-modal-body p-4 overflow-auto">
+                @if (!string.IsNullOrWhiteSpace(errorHomologacion))
+                {
+                    <div class="alert alert-danger" role="alert">@errorHomologacion</div>
+                }
+
+                @if (sucursalesHomologacion.Count > 1)
+                {
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold">Sucursal destino de inventario</label>
+                            <select class="form-select form-select-sm" @bind="sucursalHomologacionId" disabled="@guardandoHomologacion">
+                                @foreach (var suc in sucursalesHomologacion)
+                                {
+                                    <option value="@suc.IdSucursal">@suc.Nombre</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                }
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0 purchase-lines-table">
+                        <thead>
+                            <tr>
+                                <th style="min-width:210px;">Ítem en factura</th>
+                                <th style="min-width:290px;">Producto en inventario (Homologación)</th>
+                                <th style="width:140px;">Modo ingreso</th>
+                                <th style="width:110px;" class="text-end">Cantidad (+)</th>
+                                <th style="width:110px;" class="text-end">Costo unit.</th>
+                                <th style="width:130px;">Lote</th>
+                                <th style="width:140px;">Vencimiento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var linea in lineasHomologacion)
+                            {
+                                var prodSel = productosInventario.FirstOrDefault(p => p.CodigoProducto == linea.CodigoProducto);
+                                <tr @key="linea.CodLinea">
+                                    <td>
+                                        <div class="fw-semibold small">@linea.DescripcionFactura</div>
+                                        <small class="text-muted font-monospace">@(string.IsNullOrWhiteSpace(linea.CodPrincipalFactura) ? "Sin código" : linea.CodPrincipalFactura) · Cant: @linea.CantidadFactura.ToString("0.####") · $@linea.PrecioFactura.ToString("N2")</small>
+                                    </td>
+                                    <td>
+                                        <input class="form-control form-control-sm mb-1" @bind="linea.FiltroProducto" @bind:event="oninput" placeholder="Filtrar producto por nombre o código..." disabled="@guardandoHomologacion" />
+                                        <select class="form-select form-select-sm"
+                                                value="@linea.CodigoProducto"
+                                                @onchange="e => SeleccionarProductoHomologacion(linea, e.Value)"
+                                                disabled="@guardandoHomologacion">
+                                            <option value="0">-- Omitir / No inventariar --</option>
+                                            @foreach (var p in ProductosFiltradosParaLinea(linea))
+                                            {
+                                                <option value="@p.CodigoProducto">@p.NombreProducto @(string.IsNullOrWhiteSpace(p.CodigoPrincipal) ? "" : $"({p.CodigoPrincipal})") · @p.UnidadMedida@(p.FactorConversion > 1 ? $"×{p.FactorConversion:G29}" : "")</option>
+                                            }
+                                        </select>
+                                    </td>
+                                    <td>
+                                        @if (prodSel is not null && prodSel.FactorConversion > 1)
+                                        {
+                                            <select class="form-select form-select-sm"
+                                                    value="@(linea.PorEnvase ? "envase" : "directo")"
+                                                    @onchange='e => linea.PorEnvase = string.Equals(e.Value?.ToString(), "envase", StringComparison.Ordinal)'
+                                                    disabled="@guardandoHomologacion">
+                                                <option value="envase">Envases (×@prodSel.FactorConversion.ToString("G29"))</option>
+                                                <option value="directo">Directo (@prodSel.UnidadMedida)</option>
+                                            </select>
+                                        }
+                                        else if (prodSel is not null)
+                                        {
+                                            <span class="small text-muted">Directo (@prodSel.UnidadMedida)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="small text-muted">Omitido</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0" step="0.0001" class="form-control form-control-sm text-end" @bind="linea.CantidadIngreso" disabled="@(guardandoHomologacion || linea.CodigoProducto <= 0)" />
+                                        @if (prodSel is not null && prodSel.FactorConversion > 1 && linea.PorEnvase && linea.CantidadIngreso > 0)
+                                        {
+                                            <small class="text-primary d-block text-end">= @((linea.CantidadIngreso * prodSel.FactorConversion).ToString("N2")) @prodSel.UnidadMedida</small>
+                                        }
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0" step="0.0001" class="form-control form-control-sm text-end" @bind="linea.CostoUnitario" disabled="@(guardandoHomologacion || linea.CodigoProducto <= 0)" />
+                                    </td>
+                                    <td>
+                                        <input type="text" maxlength="80" class="form-control form-control-sm" placeholder="Opcional" @bind="linea.NumeroLote" disabled="@(guardandoHomologacion || linea.CodigoProducto <= 0)" />
+                                    </td>
+                                    <td>
+                                        <input type="date" min="@FechaMinimaLote" class="form-control form-control-sm" @bind="linea.FechaVencimiento" disabled="@(guardandoHomologacion || linea.CodigoProducto <= 0)" />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <footer class="purchase-modal-footer">
+                <span><i class="ri-information-line"></i>Los ítems homologados sumarán stock al kardex; los omitidos se marcarán como revisados sin ingreso físico.</span>
+                <div>
+                    <button type="button" class="purchase-secondary-btn" @onclick="CerrarHomologacion" disabled="@guardandoHomologacion">Cancelar</button>
+                    <button type="button" class="purchase-primary-btn" @onclick="ConfirmarHomologacionAsync" disabled="@guardandoHomologacion">
+                        <i class="ri-check-double-line"></i><span>@(guardandoHomologacion ? "Ingresando..." : "Confirmar ingreso a inventario")</span>
+                    </button>
+                </div>
+            </footer>
+        </section>
+    </div>
+}
 
 @if (mostrarEditor)
 {
@@ -318,6 +509,18 @@
     private const string Borrador = "BORRADOR";
     private readonly List<EContaxRecepcionCompraListaDto> recepciones = new();
     private readonly List<EContaxRecepcionOrdenDto> ordenesDisponibles = new();
+    private readonly List<EContaxInventarioService.CompraPendienteRecepcionDto> comprasPendientes = new();
+    private List<EContaxProductoParaStockDto> productosInventario = new();
+    private List<EContaxSucursalDto> sucursalesHomologacion = new();
+    private string filtroComprasPendientes = string.Empty;
+    private bool cargandoComprasPendientes;
+    private bool mostrarHomologacion;
+    private bool guardandoHomologacion;
+    private string? errorHomologacion;
+    private string? mensajeHomologacion;
+    private int sucursalHomologacionId;
+    private EContaxInventarioService.CompraPendienteRecepcionDto? compraSeleccionadaHomologar;
+    private List<HomologacionLineaModel> lineasHomologacion = new();
     private string filtro = string.Empty;
     private string estadoFiltro = string.Empty;
     private DateTime? fechaDesde;
@@ -383,9 +586,11 @@
         }
 
         cargando = true;
+        cargandoComprasPendientes = true;
         error = null;
         paginaActual = 1;
         recepciones.Clear();
+        comprasPendientes.Clear();
         try
         {
             var url = $"{ApiUrl}?userId={usuarioId}&search={Uri.EscapeDataString(filtro)}&estado={Uri.EscapeDataString(estadoFiltro)}" +
@@ -393,6 +598,9 @@
             var resultado = await Http.GetFromJsonAsync<List<EContaxRecepcionCompraListaDto>>(url) ?? new();
             recepciones.Clear();
             recepciones.AddRange(resultado);
+
+            var pendientes = await InventarioService.ListarComprasPendientesRecepcionAsync(usuarioId);
+            comprasPendientes.AddRange(pendientes);
         }
         catch (Exception ex)
         {
@@ -401,6 +609,144 @@
         finally
         {
             cargando = false;
+            cargandoComprasPendientes = false;
+        }
+    }
+
+    private IEnumerable<EContaxInventarioService.CompraPendienteRecepcionDto> ComprasPendientesFiltradas =>
+        comprasPendientes.Where(c =>
+            string.IsNullOrWhiteSpace(filtroComprasPendientes) ||
+            c.NumeroDocumento.Contains(filtroComprasPendientes.Trim(), StringComparison.OrdinalIgnoreCase) ||
+            c.Proveedor.Contains(filtroComprasPendientes.Trim(), StringComparison.OrdinalIgnoreCase) ||
+            c.RucProveedor.Contains(filtroComprasPendientes.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private async Task AbrirHomologacionAsync(EContaxInventarioService.CompraPendienteRecepcionDto compra)
+    {
+        errorHomologacion = null;
+        mensajeHomologacion = null;
+        compraSeleccionadaHomologar = compra;
+        mostrarHomologacion = true;
+
+        try
+        {
+            if (productosInventario.Count == 0)
+            {
+                var resp = await InventarioService.GetProductosParaStockAsync(usuarioId, null, null);
+                productosInventario = resp.Productos;
+                sucursalesHomologacion = resp.Sucursales;
+                sucursalHomologacionId = resp.IdSucursalActiva;
+            }
+
+            lineasHomologacion = compra.Detalles.Select(d =>
+            {
+                var match = productosInventario.FirstOrDefault(p =>
+                    d.CodProductoActual > 0 && p.CodigoProducto == d.CodProductoActual)
+                    ?? productosInventario.FirstOrDefault(p =>
+                        !string.IsNullOrWhiteSpace(d.CodPrincipal) &&
+                        string.Equals(p.CodigoPrincipal, d.CodPrincipal, StringComparison.OrdinalIgnoreCase))
+                    ?? productosInventario.FirstOrDefault(p =>
+                        !string.IsNullOrWhiteSpace(d.Descripcion) &&
+                        string.Equals(p.NombreProducto?.Trim(), d.Descripcion.Trim(), StringComparison.OrdinalIgnoreCase));
+
+                return new HomologacionLineaModel
+                {
+                    CodLinea = d.CodLinea,
+                    CodPrincipalFactura = d.CodPrincipal,
+                    DescripcionFactura = d.Descripcion,
+                    CantidadFactura = d.Cantidad,
+                    PrecioFactura = d.PrecioUnitario,
+                    CodigoProducto = match?.CodigoProducto ?? 0,
+                    PorEnvase = match is not null && match.FactorConversion > 1,
+                    CantidadIngreso = d.Cantidad,
+                    CostoUnitario = d.PrecioUnitario
+                };
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorHomologacion = ex.GetBaseException().Message;
+        }
+    }
+
+    private void CerrarHomologacion()
+    {
+        if (guardandoHomologacion) return;
+        mostrarHomologacion = false;
+        compraSeleccionadaHomologar = null;
+        lineasHomologacion.Clear();
+        errorHomologacion = null;
+    }
+
+    private IEnumerable<EContaxProductoParaStockDto> ProductosFiltradosParaLinea(HomologacionLineaModel linea)
+    {
+        if (string.IsNullOrWhiteSpace(linea.FiltroProducto))
+            return productosInventario.Take(150);
+
+        var texto = linea.FiltroProducto.Trim();
+        var filtrados = productosInventario.Where(p =>
+            (p.NombreProducto?.Contains(texto, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (p.CodigoPrincipal?.Contains(texto, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            p.CodigoProducto.ToString().Contains(texto));
+
+        if (linea.CodigoProducto > 0 && !filtrados.Any(p => p.CodigoProducto == linea.CodigoProducto))
+        {
+            var actual = productosInventario.FirstOrDefault(p => p.CodigoProducto == linea.CodigoProducto);
+            if (actual is not null)
+                return filtrados.Prepend(actual).Take(150);
+        }
+
+        return filtrados.Take(150);
+    }
+
+    private void SeleccionarProductoHomologacion(HomologacionLineaModel linea, object? value)
+    {
+        linea.CodigoProducto = int.TryParse(value?.ToString(), out var id) ? id : 0;
+        var prod = productosInventario.FirstOrDefault(p => p.CodigoProducto == linea.CodigoProducto);
+        linea.PorEnvase = prod is not null && prod.FactorConversion > 1;
+    }
+
+    private async Task ConfirmarHomologacionAsync()
+    {
+        if (compraSeleccionadaHomologar is null) return;
+        guardandoHomologacion = true;
+        errorHomologacion = null;
+        try
+        {
+            var payload = lineasHomologacion.Select(l => new EContaxInventarioService.HomologacionCompraLineaDto
+            {
+                CodLinea = l.CodLinea,
+                CodigoProducto = l.CodigoProducto,
+                CantidadIngreso = l.CantidadIngreso,
+                CostoUnitario = l.CostoUnitario,
+                PorEnvase = l.PorEnvase,
+                NumeroLote = l.NumeroLote,
+                FechaVencimiento = l.FechaVencimiento
+            }).ToList();
+
+            var ingresadas = await InventarioService.HomologarEIngresarCompraAsync(
+                usuarioId,
+                compraSeleccionadaHomologar.CodFactura,
+                sucursalHomologacionId > 0 ? sucursalHomologacionId : null,
+                payload);
+
+            var numDoc = compraSeleccionadaHomologar.NumeroDocumento;
+            mostrarHomologacion = false;
+            compraSeleccionadaHomologar = null;
+            lineasHomologacion.Clear();
+
+            mensajeHomologacion = ingresadas > 0
+                ? $"Factura {numDoc} homologada: se ingresaron {ingresadas} línea(s) al inventario."
+                : $"Factura {numDoc} marcada como revisada sin ingreso de stock.";
+
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            errorHomologacion = ex.GetBaseException().Message;
+        }
+        finally
+        {
+            guardandoHomologacion = false;
         }
     }
 
@@ -806,6 +1152,22 @@
         public decimal? CostoUnitario { get; set; }
         public string? Observacion { get; set; }
         public bool Verificado { get; set; }
+        public string? NumeroLote { get; set; }
+        public DateTime? FechaVencimiento { get; set; }
+    }
+
+    private sealed class HomologacionLineaModel
+    {
+        public int CodLinea { get; set; }
+        public string CodPrincipalFactura { get; set; } = string.Empty;
+        public string DescripcionFactura { get; set; } = string.Empty;
+        public decimal CantidadFactura { get; set; }
+        public decimal PrecioFactura { get; set; }
+        public int CodigoProducto { get; set; }
+        public string FiltroProducto { get; set; } = string.Empty;
+        public bool PorEnvase { get; set; }
+        public decimal CantidadIngreso { get; set; }
+        public decimal CostoUnitario { get; set; }
         public string? NumeroLote { get; set; }
         public DateTime? FechaVencimiento { get; set; }
     }

@@ -1428,4 +1428,245 @@ public sealed class EContaxInventarioService
         var sucursal = sucursales.FirstOrDefault(x => x.IdSucursal == (sucursalId ?? userContext.IdSucursal));
         return sucursal ?? throw new InvalidOperationException("La sucursal seleccionada no es válida.");
     }
+
+    public async Task<List<CompraPendienteRecepcionDto>> ListarComprasPendientesRecepcionAsync(int userId)
+    {
+        await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.ComprasRecepciones, EContaxAccion.Ver);
+        await using var context = await _dbFactory.CreateDbContextAsync();
+
+        var cabeceras = await (
+            from c in context.ComprasFacturas.AsNoTracking()
+            join cl in context.Clientes.AsNoTracking() on c.CodClientes equals cl.Codcliente into cls
+            from cl in cls.DefaultIfEmpty()
+            where c.Usuario == userId &&
+                  c.Estado == true &&
+                  c.CodDocumento == "01" &&
+                  (c.TipoDocumento == "COM" || c.TipoDocumento == "COMPRA") &&
+                  c.Inventario != true
+            orderby c.FechaRegistro descending, c.CodFactura descending
+            select new
+            {
+                c.CodFactura,
+                c.Serie,
+                c.NumFactura,
+                c.FchAutorizacion,
+                c.ValorTotal,
+                Proveedor = cl == null
+                    ? "Proveedor sin nombre"
+                    : (cl.Nombrerazonsocial ?? cl.Nombrecomercial ?? ((cl.Nombres ?? "") + " " + (cl.Apellidos ?? "")).Trim()),
+                RucProveedor = cl == null ? "" : (cl.Numeroidentificacion ?? "")
+            }).ToListAsync();
+
+        if (cabeceras.Count == 0)
+            return [];
+
+        var ids = cabeceras.Select(x => x.CodFactura).ToList();
+        var detalles = await context.ComprasDetalleFac.AsNoTracking()
+            .Where(d => ids.Contains(d.CodFactura))
+            .OrderBy(d => d.CodLinea)
+            .Select(d => new
+            {
+                d.CodFactura,
+                d.CodLinea,
+                d.CodPrincipal,
+                d.DescripProducto,
+                d.CantProducto,
+                d.PrecioProducto,
+                d.ValorTotal,
+                d.CodProducto
+            })
+            .ToListAsync();
+
+        var detallesPorFactura = detalles.GroupBy(d => d.CodFactura).ToDictionary(g => g.Key, g => g.ToList());
+
+        return cabeceras.Select(c =>
+        {
+            var serie = c.Serie ?? "";
+            var numeroDoc = serie.Length == 6
+                ? $"{serie[..3]}-{serie[3..]}-{c.NumFactura}"
+                : $"{serie}-{c.NumFactura}".Trim('-');
+            var lines = detallesPorFactura.TryGetValue(c.CodFactura, out var list)
+                ? list.Select(d => new CompraPendienteDetalleDto
+                {
+                    CodLinea = d.CodLinea,
+                    CodPrincipal = d.CodPrincipal ?? "",
+                    Descripcion = d.DescripProducto ?? "Item",
+                    Cantidad = d.CantProducto ?? 0m,
+                    PrecioUnitario = d.PrecioProducto ?? 0m,
+                    ValorTotal = d.ValorTotal ?? 0m,
+                    CodProductoActual = d.CodProducto
+                }).ToList()
+                : [];
+
+            return new CompraPendienteRecepcionDto
+            {
+                CodFactura = c.CodFactura,
+                NumeroDocumento = numeroDoc,
+                Proveedor = c.Proveedor,
+                RucProveedor = c.RucProveedor,
+                FechaEmision = c.FchAutorizacion,
+                ValorTotal = c.ValorTotal ?? 0m,
+                Detalles = lines
+            };
+        }).ToList();
+    }
+
+    public async Task<int> HomologarEIngresarCompraAsync(
+        int userId,
+        int codFactura,
+        int? sucursalId,
+        IReadOnlyCollection<HomologacionCompraLineaDto> lineas)
+    {
+        await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.ComprasRecepciones, EContaxAccion.Crear);
+
+        var ingresadas = 0;
+        await using var strategyContext = await _dbFactory.CreateDbContextAsync();
+        var strategy = strategyContext.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            ingresadas = 0;
+            await using var context = await _dbFactory.CreateDbContextAsync();
+            await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
+            var userContext = await _tenant.GetContextAsync(context, userId);
+            var sucursales = await _tenant.GetSucursalesEmpresaAsync(context, userContext.IdEmpresa);
+            var sucursal = ResolverSucursalUnica(userContext, sucursales, sucursalId);
+
+            var compra = await context.ComprasFacturas.FirstOrDefaultAsync(x =>
+                x.CodFactura == codFactura &&
+                x.Usuario == userId &&
+                x.Estado == true &&
+                x.CodDocumento == "01" &&
+                (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA"));
+
+            if (compra is null)
+                throw new InvalidOperationException("No se encontró la compra registrada.");
+            if (compra.Inventario == true)
+                throw new InvalidOperationException("Esta compra ya fue ingresada a recepción/inventario.");
+
+            var detallesDb = await context.ComprasDetalleFac
+                .Where(x => x.CodFactura == codFactura)
+                .ToListAsync();
+
+            var usuariosEmpresa = await context.EContaxUsuariosContexto
+                .AsNoTracking()
+                .Where(x => x.IdEmpresa == userContext.IdEmpresa && x.Estado)
+                .Select(x => x.IdUsuario)
+                .ToListAsync();
+            if (!usuariosEmpresa.Contains(userId)) usuariosEmpresa.Add(userId);
+            if (!usuariosEmpresa.Contains(userContext.IdUsuarioTitular)) usuariosEmpresa.Add(userContext.IdUsuarioTitular);
+
+            var metodo = await ObtenerMetodoAsync(context, userContext.IdEmpresa);
+            var serie = compra.Serie ?? "";
+            var numeroDoc = serie.Length == 6
+                ? $"{serie[..3]}-{serie[3..]}-{compra.NumFactura}"
+                : $"{serie}-{compra.NumFactura}".Trim('-');
+            var referencia = $"COMPRA:{compra.CodFactura}";
+
+            foreach (var linea in lineas)
+            {
+                var detalleDb = detallesDb.FirstOrDefault(d => d.CodLinea == linea.CodLinea);
+                if (linea.CodigoProducto <= 0)
+                {
+                    if (detalleDb is not null)
+                        detalleDb.Inventariado = true;
+                    continue;
+                }
+
+                if (linea.CantidadIngreso <= 0)
+                    throw new InvalidOperationException($"La cantidad a ingresar debe ser mayor a cero para el producto #{linea.CodigoProducto}.");
+                if (linea.CostoUnitario < 0)
+                    throw new InvalidOperationException("El costo unitario no puede ser negativo.");
+                if (linea.FechaVencimiento is { } fv && fv.Date <= DateTime.UtcNow.Date)
+                    throw new InvalidOperationException("La fecha de vencimiento debe ser posterior a hoy.");
+
+                var producto = await context.Productos.FirstOrDefaultAsync(p =>
+                    p.Codigo == linea.CodigoProducto &&
+                    p.Estado != false &&
+                    (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
+                    (p.Idempresa == userContext.IdEmpresa ||
+                     p.Idusuario >= 1_000_000 ||
+                     (p.Idempresa == null && p.Idusuario.HasValue && usuariosEmpresa.Contains(p.Idusuario.Value))));
+
+                if (producto is null)
+                    throw new InvalidOperationException($"El producto #{linea.CodigoProducto} no existe, está inactivo o es un servicio.");
+
+                if (producto.Idempresa is null)
+                    producto.Idempresa = userContext.IdEmpresa;
+                if (producto.Idsucursal is null)
+                    producto.Idsucursal = sucursal.IdSucursal;
+
+                bool yaAsignado = await context.EContaxProductosSucursales.AnyAsync(x =>
+                    x.CodigoProducto == producto.Codigo && x.IdEmpresa == userContext.IdEmpresa && x.IdSucursal == sucursal.IdSucursal);
+                if (!yaAsignado && (producto.Idempresa != userContext.IdEmpresa || producto.Idsucursal != sucursal.IdSucursal))
+                {
+                    context.EContaxProductosSucursales.Add(new EContaxProductoSucursal
+                    {
+                        CodigoProducto = producto.Codigo,
+                        IdEmpresa = userContext.IdEmpresa,
+                        IdSucursal = sucursal.IdSucursal
+                    });
+                }
+
+                var existencia = await ObtenerExistenciaAsync(context, userContext.IdEmpresa, sucursal.IdSucursal, producto.Codigo);
+                var factor = ObtenerFactorConversion(producto.FactorConversionInventario);
+                var cantidadBase = linea.PorEnvase ? linea.CantidadIngreso * factor : linea.CantidadIngreso;
+                var costoBase = linea.PorEnvase && factor > 0 ? linea.CostoUnitario / factor : linea.CostoUnitario;
+
+                await ValidarEntradaConLoteAsync(context, existencia, cantidadBase, linea.NumeroLote, linea.FechaVencimiento);
+                AgregarEntrada(context, existencia, cantidadBase, costoBase, metodo, linea.NumeroLote, linea.FechaVencimiento);
+                context.EContaxInventarioMovimientos.Add(CrearMovimiento(
+                    existencia, userId, metodo, "ENTRADA",
+                    cantidadBase, $"Recepción de compra {numeroDoc}", "RECEPCION",
+                    costoBase, referencia, linea.NumeroLote, linea.FechaVencimiento));
+
+                if (detalleDb is not null)
+                {
+                    detalleDb.CodProducto = producto.Codigo;
+                    detalleDb.Inventariado = true;
+                }
+
+                ingresadas++;
+            }
+
+            compra.Inventario = true;
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        });
+
+        return ingresadas;
+    }
+
+    public sealed class CompraPendienteRecepcionDto
+    {
+        public int CodFactura { get; set; }
+        public string NumeroDocumento { get; set; } = "";
+        public string Proveedor { get; set; } = "";
+        public string RucProveedor { get; set; } = "";
+        public DateTime? FechaEmision { get; set; }
+        public decimal ValorTotal { get; set; }
+        public List<CompraPendienteDetalleDto> Detalles { get; set; } = [];
+    }
+
+    public sealed class CompraPendienteDetalleDto
+    {
+        public int CodLinea { get; set; }
+        public string CodPrincipal { get; set; } = "";
+        public string Descripcion { get; set; } = "";
+        public decimal Cantidad { get; set; }
+        public decimal PrecioUnitario { get; set; }
+        public decimal ValorTotal { get; set; }
+        public int CodProductoActual { get; set; }
+    }
+
+    public sealed class HomologacionCompraLineaDto
+    {
+        public int CodLinea { get; set; }
+        public int CodigoProducto { get; set; }
+        public decimal CantidadIngreso { get; set; }
+        public decimal CostoUnitario { get; set; }
+        public bool PorEnvase { get; set; }
+        public string? NumeroLote { get; set; }
+        public DateTime? FechaVencimiento { get; set; }
+    }
 }
