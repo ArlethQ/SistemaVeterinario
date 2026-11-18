@@ -1,0 +1,108 @@
+@page "/contabilidad/activos-fijos/registro"
+@attribute [Authorize]
+@inherits ActivosFijosPage
+
+<PageTitle>Registro de activos | E-Contax</PageTitle>
+
+<div class="container-fluid py-3">
+    <h4>Registro de activos fijos</h4>
+    <AfMensajes Error="@Error" Aviso="@Aviso" />
+    @if (CargandoPantalla || Permisos.HasFlag(EContaxAccion.Crear))
+    {
+        <EditForm Model="modelo" OnValidSubmit="Guardar" class="card card-body mb-3">
+            <ValidationSummary />
+            <fieldset disabled="@Ocupado" class="row g-3">
+                <label class="col-md-3">Código o placa<InputText class="form-control" maxlength="40" @bind-Value="modelo.Codigo" /></label>
+                <label class="col-md-5">Nombre del bien<InputText class="form-control" maxlength="180" @bind-Value="modelo.Nombre" /></label>
+                <label class="col-md-4">Categoría
+                    <InputSelect class="form-select" @bind-Value="modelo.IdCategoria">
+                        <option value="0">Selecciona una categoría</option>
+                        @foreach (var categoria in categorias)
+                        {
+                            <option value="@categoria.Id">@categoria.Nombre</option>
+                        }
+                    </InputSelect>
+                </label>
+                <label class="col-md-3">Puesta en servicio<InputDate class="form-control" @bind-Value="modelo.PuestaEnServicio" /></label>
+                <label class="col-md-3">Fecha de alta o corte inicial<InputDate class="form-control" @bind-Value="alta" /></label>
+                <label class="col-md-2">Costo<InputNumber class="form-control" step="0.01" @bind-Value="costo" /></label>
+                <label class="col-md-2">Valor residual<InputNumber class="form-control" step="0.01" @bind-Value="modelo.ValorResidual" /></label>
+                <label class="col-md-2">Depreciación inicial<InputNumber class="form-control" step="0.01" @bind-Value="acumulada" /></label>
+                <label class="col-md-4">Ubicación<InputText class="form-control" maxlength="120" @bind-Value="ubicacion" /></label>
+                <label class="col-md-4">Responsable<InputText class="form-control" maxlength="120" @bind-Value="responsable" /></label>
+                <label class="col-md-4">Referencia de compra o asiento<InputText class="form-control" maxlength="160" @bind-Value="modelo.Referencia" /></label>
+                <label class="col-12"><InputCheckbox class="form-check-input me-2" @bind-Value="saldoInicial" />Cargar un saldo inicial al cierre del mes</label>
+                <div class="col-12 text-muted small">El alta registra el bien en el módulo. El costo y los saldos iniciales se concilian con Contabilidad.</div>
+                <div class="col-12"><button class="btn btn-primary" disabled="@(categorias.Count == 0)">Registrar activo</button></div>
+            </fieldset>
+        </EditForm>
+    }
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Placa</th><th>Activo</th><th>Ubicación</th><th>Responsable</th><th class="text-end">Valor en libros</th><th>Estado</th></tr></thead>
+            <tbody>
+                @foreach (var saldo in activos)
+                {
+                    <tr><td>@saldo.Activo.Codigo</td>
+                        <td><button class="btn btn-link p-0 text-start" disabled="@Ocupado" @onclick="() => VerFicha(saldo)">@saldo.Activo.Nombre</button></td>
+                        <td>@saldo.Ubicacion</td><td>@saldo.Responsable</td><td class="text-end">@saldo.ValorLibros.ToString("N2")</td>
+                        <td>@(saldo.Baja ? "Baja" : "Activo")</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (ficha is not null)
+    {
+        <section class="card card-body">
+            <h5>@ficha.Activo.Codigo — @ficha.Activo.Nombre</h5>
+            <dl class="row mb-2">
+                <dt class="col-sm-4">Categoría</dt><dd class="col-sm-8">@(categorias.Find(x => x.Id == ficha.Activo.IdCategoria)?.Nombre)</dd>
+                <dt class="col-sm-4">Puesta en servicio</dt><dd class="col-sm-8">@ficha.Activo.PuestaEnServicio.ToString("dd/MM/yyyy")</dd>
+                <dt class="col-sm-4">Vida útil</dt><dd class="col-sm-8">@ficha.Activo.VidaUtilMeses meses</dd>
+                <dt class="col-sm-4">Valor residual</dt><dd class="col-sm-8">@ficha.Activo.ValorResidual.ToString("N2")</dd>
+                <dt class="col-sm-4">Referencia</dt><dd class="col-sm-8">@ficha.Activo.Referencia</dd>
+            </dl>
+            <h6>Historial</h6>
+            <AfHistorial Filas="historial" />
+        </section>
+    }
+</div>
+
+@code {
+    protected override string Ruta => EContaxRoutes.AfActivos;
+    private EContaxAfActivo modelo = Nuevo();
+    private DateTime alta = EContaxActivosFijosService.Hoy;
+    private decimal costo, acumulada;
+    private bool saldoInicial;
+    private string ubicacion = "", responsable = "";
+    private List<EContaxAfCategoria> categorias = [];
+    private List<EContaxAfSaldo> activos = [];
+    private List<EContaxAfMovimiento> historial = [];
+    private EContaxAfSaldo? ficha;
+
+    private static EContaxAfActivo Nuevo() => new() { PuestaEnServicio = EContaxActivosFijosService.Hoy };
+
+    protected override async Task CargarAsync()
+    {
+        categorias = await Servicio.CategoriasAsync(Usuario, Ruta);
+        activos = await Servicio.ConsultarSaldosAsync(Usuario, EContaxActivosFijosService.Hoy, Ruta);
+        ficha = null;
+    }
+
+    private Task Guardar() => EjecutarAsync(async () =>
+    {
+        await Servicio.CrearActivoAsync(Usuario, modelo, alta, costo, acumulada, saldoInicial, ubicacion, responsable);
+        modelo = Nuevo();
+        alta = EContaxActivosFijosService.Hoy;
+        costo = acumulada = 0;
+        saldoInicial = false;
+        ubicacion = responsable = "";
+        await CargarAsync();
+    }, "Activo registrado.");
+
+    private Task VerFicha(EContaxAfSaldo saldo) => EjecutarAsync(async () =>
+    {
+        historial = await Servicio.HistorialAsync(Usuario, EContaxActivosFijosService.Hoy, Ruta, saldo.Activo.Id);
+        ficha = saldo;
+    });
+}

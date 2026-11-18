@@ -1,0 +1,147 @@
+@page "/contabilidad/activos-fijos/intangibles/amortizacion"
+@attribute [Authorize]
+@inherits IntangiblesPage
+
+<PageTitle>Amortización mensual | E-Contax</PageTitle>
+
+<div class="container-fluid py-3">
+    <h4>Amortización mensual</h4>
+    <AfMensajes Error="@Error" Aviso="@Aviso" />
+    @if (!Ocupado && Permisos.HasFlag(EContaxAccion.Ver) && !Permisos.HasFlag(EContaxAccion.Crear))
+    {
+        <p class="text-muted">Para simular un lote, solicita el permiso Crear en Amortización mensual.</p>
+    }
+    @if (CargandoPantalla || Permisos.HasFlag(EContaxAccion.Crear))
+    {
+        <div class="card card-body mb-3">
+            @if (CargandoPantalla || periodo.HasValue)
+            {
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span>Siguiente período: @(periodo?.ToString("MM/yyyy") ?? "Cargando…")</span>
+                    <button class="btn btn-primary" disabled="@(!PuedeSimular)" @onclick="Simular">Simular</button>
+                </div>
+            }
+            else if (!Ocupado && string.IsNullOrEmpty(Error))
+            {
+                <p class="mb-0">Registra un intangible amortizable para iniciar el cálculo mensual.</p>
+            }
+        </div>
+    }
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Lote</th><th>Período</th><th>Estado</th><th>Activos</th><th class="text-end">Total</th><th>Asientos</th><th>Acciones</th></tr></thead>
+            <tbody>
+                @foreach (var fila in lotes)
+                {
+                    var lote = fila.Lote;
+                    <tr>
+                        <td>@lote.Id</td><td>@lote.Periodo.ToString("MM/yyyy")</td><td>@lote.Estado</td><td>@fila.Activos</td>
+                        <td class="text-end">@fila.Total.ToString("N2")</td>
+                        <td>@lote.IdAsiento @if (lote.IdAsientoReverso.HasValue) { <span> / Reverso @lote.IdAsientoReverso</span> }</td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-1">
+                                <button class="btn btn-sm btn-outline-secondary" disabled="@Ocupado" @onclick="() => Ver(lote.Id)">Detalle</button>
+                                @if (lote.Estado == "SIMULADO" && Permisos.HasFlag(EContaxAccion.Editar))
+                                {
+                                    <button class="btn btn-sm btn-outline-primary" disabled="@Ocupado" @onclick="() => Aprobar(lote.Id)">Aprobar</button>
+                                }
+                                @if (lote.Estado == "APROBADO" && Permisos.HasFlag(EContaxAccion.Editar))
+                                {
+                                    <button class="btn btn-sm btn-primary" disabled="@Ocupado" @onclick="() => Contabilizar(lote.Id)">Contabilizar</button>
+                                }
+                                @if ((lote.Estado is "SIMULADO" or "APROBADO") && Permisos.HasFlag(EContaxAccion.Eliminar))
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" disabled="@Ocupado" @onclick="() => Descartar(lote.Id)">Descartar</button>
+                                }
+                                @if (lote.Estado == "CONTABILIZADO" && lote.Id == UltimoContabilizado && Permisos.HasFlag(EContaxAccion.Eliminar))
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" disabled="@Ocupado" @onclick="() => SolicitarReverso(lote.Id)">Revertir</button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (reverso is int idReverso)
+    {
+        <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2" role="group">
+            <span>Revertir el lote @idReverso reabre el período en Intangibles.</span>
+            <button class="btn btn-sm btn-danger" disabled="@Ocupado" @onclick="() => Reversar(idReverso)">Confirmar reverso</button>
+            <button class="btn btn-sm btn-secondary" disabled="@Ocupado" @onclick="CancelarReverso">Cancelar</button>
+        </div>
+    }
+    @if (seleccion is int id)
+    {
+        <section class="card card-body">
+            <h5>Detalle del lote @id</h5>
+            @if (detalle.Count == 0)
+            {
+                <p class="mb-0">No hay importes para amortizar en este período.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead><tr><th>Código</th><th>Activo</th><th class="text-end">Amortización</th></tr></thead>
+                        <tbody>
+                            @foreach (var fila in detalle)
+                            {
+                                <tr><td>@fila.Codigo</td><td>@fila.Nombre</td><td class="text-end">@fila.Importe.ToString("N2")</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    protected override string Ruta => EContaxRoutes.AmDepreciacion;
+    private DateTime? periodo;
+    private List<EContaxAfLoteResumen> lotes = [];
+    private List<EContaxAfDetalleResumen> detalle = [];
+    private int? seleccion, reverso;
+    private int? UltimoContabilizado => lotes.Find(x => x.Lote.Estado == "CONTABILIZADO")?.Lote.Id;
+    private bool PuedeSimular => !Ocupado && periodo <= EContaxActivosFijosService.Hoy
+        && !lotes.Any(x => x.Lote.Estado is "SIMULADO" or "APROBADO");
+
+    protected override async Task CargarAsync()
+    {
+        lotes = await Servicio.LotesAsync(Usuario);
+        periodo = await Servicio.SiguientePeriodoAsync(Usuario);
+    }
+
+    private Task Simular() => EjecutarAsync(async () =>
+    {
+        if (periodo is not DateTime fecha) return;
+        await Servicio.SimularAsync(Usuario, fecha);
+        await CargarAsync();
+        var lote = lotes.First(x => x.Lote.Estado == "SIMULADO").Lote;
+        detalle = await Servicio.DetallesAsync(Usuario, lote.Id);
+        seleccion = lote.Id;
+    }, "Simulación guardada.");
+
+    private Task Ver(int id) => EjecutarAsync(async () =>
+    {
+        detalle = await Servicio.DetallesAsync(Usuario, id);
+        seleccion = id;
+    });
+
+    private Task Aprobar(int id) => Operar(id, Servicio.AprobarAsync, "Lote aprobado.");
+    private Task Contabilizar(int id) => Operar(id, Servicio.ContabilizarAsync, "Período contabilizado.");
+    private Task Descartar(int id) => Operar(id, Servicio.DescartarAsync, "Lote descartado.");
+    private Task Reversar(int id) => Operar(id, Servicio.ReversarAsync, "Período revertido.");
+
+    private Task Operar(int id, Func<int, int, Task> operacion, string aviso) => EjecutarAsync(async () =>
+    {
+        await operacion(Usuario, id);
+        reverso = null;
+        await CargarAsync();
+    }, aviso);
+
+    private void SolicitarReverso(int id) => reverso = id;
+    private void CancelarReverso() => reverso = null;
+}

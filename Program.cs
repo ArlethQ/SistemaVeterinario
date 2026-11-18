@@ -1,4 +1,4 @@
-﻿using HosvetKardex.Web.Components;
+using HosvetKardex.Web.Components;
 using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Services;
 using Microsoft.AspNetCore.Components;
@@ -170,6 +170,12 @@ builder.Services.AddHttpClient<CedulaLookupService>(client =>
     // ComisionesService es utilizado por la emision de facturas. No se habilitan
     // los portales comerciales de aliados ni el back-office de Numerica.
 builder.Services.AddScoped<ComisionesService>();
+builder.Services.AddScoped<EContaxErpSchemaService>();
+builder.Services.AddScoped<EContaxContabilidadService>();
+builder.Services.AddScoped<EContaxBancoService>();
+builder.Services.AddScoped<EContaxAnticipoService>();
+builder.Services.AddScoped<EContaxActivosFijosService>();
+builder.Services.AddScoped<EContaxAmortizacionService>();
 builder.Services.AddScoped<EContaxTenantService>();
 builder.Services.AddScoped<EContaxSeguridadService>();
 builder.Services.AddScoped<EContaxInventarioService>();

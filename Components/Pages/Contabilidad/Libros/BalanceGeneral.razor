@@ -1,0 +1,113 @@
+@page "/contabilidad/libros/balance-general"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Simetric.Services
+@using Simetric.Services.EContax
+@attribute [Authorize]
+@inject EContaxContabilidadService ContabilidadService
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Balance General | E-Contax ERP</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="mb-0 fw-bold"><i class="bi bi-bar-chart me-2 text-primary"></i>Balance General (Estado de Situación Financiera)</h4>
+            <small class="text-muted">Activos, Pasivos y Patrimonio al corte seleccionado.</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <input type="date" class="form-control form-control-sm" @bind="fechaCorte" />
+            <button class="btn btn-primary btn-sm" @onclick="CargarAsync">Consultar</button>
+            <button class="btn btn-outline-success btn-sm" @onclick="ExportarExcelAsync"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+        </div>
+    </div>
+
+    @if (data is not null)
+    {
+        <div class="row g-3 mb-3">
+            <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><small class="text-muted">Total Activos</small><h4 class="mb-0 text-primary fw-bold">$@data.TotalActivos.ToString("N2")</h4></div></div></div>
+            <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><small class="text-muted">Total Pasivos</small><h4 class="mb-0 text-danger fw-bold">$@data.TotalPasivos.ToString("N2")</h4></div></div></div>
+            <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><small class="text-muted">Total Patrimonio + Resultado</small><h4 class="mb-0 text-success fw-bold">$@data.TotalPatrimonio.ToString("N2")</h4></div></div></div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white fw-bold text-primary">ACTIVOS</div>
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            @foreach (var r in data.Activos)
+                            {
+                                <tr><td><code>@r.Codigo</code></td><td>@r.Nombre</td><td class="text-end fw-semibold">$@r.Saldo.ToString("N2")</td></tr>
+                            }
+                        </tbody>
+                        <tfoot class="table-light fw-bold">
+                            <tr><td colspan="2">TOTAL ACTIVOS</td><td class="text-end">$@data.TotalActivos.ToString("N2")</td></tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-white fw-bold text-danger">PASIVOS</div>
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            @foreach (var r in data.Pasivos)
+                            {
+                                <tr><td><code>@r.Codigo</code></td><td>@r.Nombre</td><td class="text-end fw-semibold">$@r.Saldo.ToString("N2")</td></tr>
+                            }
+                        </tbody>
+                        <tfoot class="table-light fw-bold">
+                            <tr><td colspan="2">TOTAL PASIVOS</td><td class="text-end">$@data.TotalPasivos.ToString("N2")</td></tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white fw-bold text-success">PATRIMONIO</div>
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            @foreach (var r in data.Patrimonio)
+                            {
+                                <tr><td><code>@r.Codigo</code></td><td>@r.Nombre</td><td class="text-end fw-semibold">$@r.Saldo.ToString("N2")</td></tr>
+                            }
+                            <tr><td><code>RES</code></td><td>Resultado del Ejercicio</td><td class="text-end fw-semibold">$@data.ResultadoEjercicio.ToString("N2")</td></tr>
+                        </tbody>
+                        <tfoot class="table-light fw-bold">
+                            <tr><td colspan="2">TOTAL PASIVO + PATRIMONIO</td><td class="text-end">$@((data.TotalPasivos + data.TotalPatrimonio).ToString("N2"))</td></tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private int currentUserId;
+    private DateTime fechaCorte = DateTime.Today;
+    private EContaxContabilidadService.BalanceGeneralResultDto? data;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0) { Navigation.NavigateTo("/login", true); return; }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync() => data = await ContabilidadService.ObtenerBalanceGeneralAsync(currentUserId, fechaCorte);
+
+    private async Task ExportarExcelAsync()
+    {
+        if (data is null) return;
+        var filas = data.Activos.Concat(data.Pasivos).Concat(data.Patrimonio)
+            .Select(r => new Dictionary<string, object?> { ["Tipo"] = r.TipoCuenta, ["Codigo"] = r.Codigo, ["Cuenta"] = r.Nombre, ["Saldo"] = r.Saldo })
+            .ToList();
+        filas.Add(new Dictionary<string, object?> { ["Tipo"] = "PATRIMONIO", ["Codigo"] = "RES", ["Cuenta"] = "Resultado del Ejercicio", ["Saldo"] = data.ResultadoEjercicio });
+        using var ms = new MemoryStream();
+        await MiniExcelLibs.MiniExcel.SaveAsAsync(ms, filas);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"BalanceGeneral_{fechaCorte:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(ms.ToArray()));
+    }
+}

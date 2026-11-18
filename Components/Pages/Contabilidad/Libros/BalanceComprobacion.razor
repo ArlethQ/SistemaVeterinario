@@ -1,0 +1,117 @@
+@page "/contabilidad/libros/balance-comprobacion"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Simetric.Services
+@using Simetric.Services.EContax
+@attribute [Authorize]
+@inject EContaxContabilidadService ContabilidadService
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Balance de Comprobación | E-Contax ERP</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="mb-0 fw-bold"><i class="bi bi-layout-split me-2 text-primary"></i>Balance de Comprobación de Sumas y Saldos</h4>
+            <small class="text-muted">Verificación de partida doble: sumas Debe/Haber y saldos Deudor/Acreedor.</small>
+        </div>
+        <button class="btn btn-outline-success btn-sm" @onclick="ExportarExcelAsync"><i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel</button>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2 row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label form-label-sm">Desde</label>
+                <input type="date" class="form-control form-control-sm" @bind="desde" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label form-label-sm">Hasta</label>
+                <input type="date" class="form-control form-control-sm" @bind="hasta" />
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary btn-sm" @onclick="CargarAsync">Generar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Código</th>
+                        <th>Cuenta</th>
+                        <th>Tipo</th>
+                        <th class="text-end">Suma Debe</th>
+                        <th class="text-end">Suma Haber</th>
+                        <th class="text-end">Saldo Deudor</th>
+                        <th class="text-end">Saldo Acreedor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in rows)
+                    {
+                        <tr>
+                            <td><code>@r.Codigo</code></td>
+                            <td>@r.Nombre</td>
+                            <td><span class="badge bg-light text-dark border">@r.TipoCuenta</span></td>
+                            <td class="text-end">$@r.SumasDebe.ToString("N2")</td>
+                            <td class="text-end">$@r.SumasHaber.ToString("N2")</td>
+                            <td class="text-end">$@r.SaldoDeudor.ToString("N2")</td>
+                            <td class="text-end">$@r.SaldoAcreedor.ToString("N2")</td>
+                        </tr>
+                    }
+                    @if (!rows.Any())
+                    {
+                        <tr><td colspan="7" class="text-center text-muted py-3">Sin movimientos en el período.</td></tr>
+                    }
+                </tbody>
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td colspan="3" class="text-end">TOTALES:</td>
+                        <td class="text-end">$@rows.Sum(x => x.SumasDebe).ToString("N2")</td>
+                        <td class="text-end">$@rows.Sum(x => x.SumasHaber).ToString("N2")</td>
+                        <td class="text-end text-primary">$@rows.Sum(x => x.SaldoDeudor).ToString("N2")</td>
+                        <td class="text-end text-primary">$@rows.Sum(x => x.SaldoAcreedor).ToString("N2")</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int currentUserId;
+    private DateTime desde = new DateTime(DateTime.Today.Year, 1, 1);
+    private DateTime hasta = DateTime.Today;
+    private List<EContaxContabilidadService.BalanceComprobacionRowDto> rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0) { Navigation.NavigateTo("/login", true); return; }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync() => rows = await ContabilidadService.ObtenerBalanceComprobacionAsync(currentUserId, desde, hasta);
+
+    private async Task ExportarExcelAsync()
+    {
+        var filas = rows.Select(r => new Dictionary<string, object?>
+        {
+            ["Codigo"] = r.Codigo,
+            ["Cuenta"] = r.Nombre,
+            ["Tipo"] = r.TipoCuenta,
+            ["SumaDebe"] = r.SumasDebe,
+            ["SumaHaber"] = r.SumasHaber,
+            ["SaldoDeudor"] = r.SaldoDeudor,
+            ["SaldoAcreedor"] = r.SaldoAcreedor
+        }).ToList();
+        using var ms = new MemoryStream();
+        await MiniExcelLibs.MiniExcel.SaveAsAsync(ms, filas);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"BalanceComprobacion_{hasta:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(ms.ToArray()));
+    }
+}

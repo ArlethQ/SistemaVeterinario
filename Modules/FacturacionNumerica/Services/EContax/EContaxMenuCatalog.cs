@@ -16,6 +16,28 @@ public static class EContaxMenuCatalog
 {
     public static IReadOnlyList<EContaxMenuDefinition> Todos { get; } =
     [
+        new("anticipos", "Anticipos", EContaxRoutes.Anticipos, "ri-exchange-dollar-line", 5),
+        new("bancos", "Bancos y Conciliación", EContaxRoutes.Bancos, "ri-bank-line", 6),
+        new("contabilidad", "Contabilidad", null, "ri-book-open-line", 8),
+        new("contabilidad-plan", "Plan de Cuentas", EContaxRoutes.ContabilidadPlanCuentas, "ri-node-tree", 1, "contabilidad"),
+        new("contabilidad-asientos", "Asientos Contables", EContaxRoutes.ContabilidadAsientos, "ri-file-edit-line", 2, "contabilidad"),
+        new("contabilidad-diario", "Libro Diario", EContaxRoutes.ContabilidadLibroDiario, "ri-book-2-line", 3, "contabilidad"),
+        new("contabilidad-mayor", "Libro Mayor", EContaxRoutes.ContabilidadLibroMayor, "ri-book-mark-line", 4, "contabilidad"),
+        new("contabilidad-bal-comp", "Balance Comprobación", EContaxRoutes.ContabilidadBalanceComprobacion, "ri-scales-line", 5, "contabilidad"),
+        new("contabilidad-bal-gen", "Balance General", EContaxRoutes.ContabilidadBalanceGeneral, "ri-bar-chart-box-line", 6, "contabilidad"),
+        new("contabilidad-resultados", "Estado de Resultados", EContaxRoutes.ContabilidadEstadoResultados, "ri-line-chart-line", 7, "contabilidad"),
+        new("contabilidad-flujo", "Flujo de Efectivo", EContaxRoutes.ContabilidadFlujoEfectivo, "ri-funds-line", 8, "contabilidad"),
+        new("activos-fijos", "Activos Fijos", null, "ri-building-line", 9),
+        new("af-registro", "Registro de activos", EContaxRoutes.AfActivos, "ri-file-list-3-line", 1, "activos-fijos"),
+        new("af-categorias", "Categorías", EContaxRoutes.AfCategorias, "ri-file-list-3-line", 2, "activos-fijos"),
+        new("af-movimientos", "Movimientos", EContaxRoutes.AfMovimientos, "ri-file-list-3-line", 3, "activos-fijos"),
+        new("af-depreciacion", "Depreciación mensual", EContaxRoutes.AfDepreciacion, "ri-file-list-3-line", 4, "activos-fijos"),
+        new("af-reportes", "Reportes de activos", EContaxRoutes.AfReportes, "ri-file-list-3-line", 5, "activos-fijos"),
+        new("am-registro", "Registro de intangibles", EContaxRoutes.AmActivos, "ri-file-list-3-line", 6, "activos-fijos"),
+        new("am-categorias", "Categorías de intangibles", EContaxRoutes.AmCategorias, "ri-price-tag-3-line", 7, "activos-fijos"),
+        new("am-movimientos", "Movimientos de intangibles", EContaxRoutes.AmMovimientos, "ri-arrow-left-right-line", 8, "activos-fijos"),
+        new("am-lotes", "Amortización mensual", EContaxRoutes.AmDepreciacion, "ri-calendar-check-line", 9, "activos-fijos"),
+        new("am-reportes", "Reportes de intangibles", EContaxRoutes.AmReportes, "ri-file-chart-line", 10, "activos-fijos"),
         new("inicio", "Inicio", EContaxRoutes.Dashboard, "ri-home-4-line", 1),
         new("clientes", "Clientes / Proveedores", EContaxRoutes.Clientes, "ri-group-line", 2),
         new("facturas", "Facturas", null, "ri-file-text-line", 4),
@@ -140,7 +162,12 @@ BEGIN
     INSERT INTO [dbo].[ECONTAX_ROL_MENU] ([id_rol], [id_menu])
     SELECT r.[id_rol], m.[id_menu]
     FROM [dbo].[rol] r
-    INNER JOIN [dbo].[menu] m ON m.[url_menu] = {EContaxRoutes.InventariosBodegas}
+    INNER JOIN [dbo].[menu] m ON m.[url_menu] IN (
+        {EContaxRoutes.InventariosBodegas},
+        {EContaxRoutes.AfActivos}, {EContaxRoutes.AfCategorias}, {EContaxRoutes.AfMovimientos},
+        {EContaxRoutes.AfDepreciacion}, {EContaxRoutes.AfReportes},
+        {EContaxRoutes.AmActivos}, {EContaxRoutes.AmCategorias}, {EContaxRoutes.AmMovimientos},
+        {EContaxRoutes.AmDepreciacion}, {EContaxRoutes.AmReportes})
     WHERE r.[nombre_rol] = {EContaxTenantService.RolJefeEmpresa}
       AND ISNULL(r.[estado_rol], 0) = 1
       AND NOT EXISTS (

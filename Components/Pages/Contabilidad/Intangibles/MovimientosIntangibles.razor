@@ -1,0 +1,107 @@
+@page "/contabilidad/activos-fijos/intangibles/movimientos"
+@attribute [Authorize]
+@inherits IntangiblesPage
+
+<PageTitle>Movimientos de intangibles | E-Contax</PageTitle>
+
+<div class="container-fluid py-3">
+    <h4>Movimientos de intangibles</h4>
+    <AfMensajes Error="@Error" Aviso="@Aviso" />
+    @if (!Ocupado && Permisos.HasFlag(EContaxAccion.Ver) && !Permisos.HasFlag(EContaxAccion.Crear))
+    {
+        <p class="text-muted">Para registrar un movimiento, solicita el permiso Crear en Movimientos de intangibles.</p>
+    }
+    <label class="d-block mb-3">Activo
+        <select class="form-select" value="@activo" @onchange="CambiarActivo" disabled="@Ocupado">
+            <option value="0">Selecciona un intangible</option>
+            @foreach (var saldo in activos)
+            {
+                <option value="@saldo.Activo.Id">@saldo.Activo.Codigo — @saldo.Activo.Nombre @(saldo.Baja ? "(Baja)" : "")</option>
+            }
+        </select>
+    </label>
+    @if (CargandoPantalla || Permisos.HasFlag(EContaxAccion.Crear))
+    {
+        <EditForm Model="modelo" OnValidSubmit="Guardar" class="card card-body mb-3">
+            <ValidationSummary />
+            @if (!Ocupado && !ActivoDisponible)
+            {
+                <p class="text-muted mb-2">Selecciona un registro activo para ingresar un movimiento.</p>
+            }
+            <fieldset disabled="@(Ocupado || !ActivoDisponible)" class="row g-3">
+                <label class="col-md-4">Fecha<InputDate class="form-control" @bind-Value="modelo.Fecha" /></label>
+                <label class="col-md-4">Tipo
+                    <InputSelect class="form-select" @bind-Value="modelo.Tipo">
+                        <option value="TRASLADO">Traslado</option>
+                        <option value="AJUSTE">Ajuste de costo</option>
+                        <option value="BAJA">Baja</option>
+                    </InputSelect>
+                </label>
+                @if (modelo.Tipo == "TRASLADO")
+                {
+                    <label class="col-md-6">Nueva ubicación<InputText class="form-control" maxlength="120" @bind-Value="modelo.Ubicacion" /></label>
+                    <label class="col-md-6">Nuevo responsable<InputText class="form-control" maxlength="120" @bind-Value="modelo.Responsable" /></label>
+                }
+                @if (modelo.Tipo == "AJUSTE")
+                {
+                    <label class="col-md-4">Aumento o disminución<InputNumber class="form-control" step="0.01" @bind-Value="modelo.CambioCosto" /></label>
+                }
+                <label class="col-12">Motivo o referencia contable<InputText class="form-control" maxlength="250" @bind-Value="modelo.Motivo" /></label>
+                @if (modelo.Tipo is "AJUSTE" or "BAJA")
+                {
+                    <div class="col-12 small text-muted">Registra el asiento correspondiente en Contabilidad y agrega su referencia aquí.</div>
+                }
+                @if (modelo.Tipo == "BAJA")
+                {
+                    <label class="col-12"><InputCheckbox class="form-check-input me-2" @bind-Value="confirmarBaja" />Confirmo el retiro del intangible.</label>
+                }
+                <div class="col-12"><button class="btn btn-primary" disabled="@(modelo.Tipo == "BAJA" && !confirmarBaja)">Registrar movimiento</button></div>
+            </fieldset>
+        </EditForm>
+    }
+    @if (activo > 0)
+    {
+        <AmHistorial Filas="historial" />
+    }
+</div>
+
+@code {
+    protected override string Ruta => EContaxRoutes.AmMovimientos;
+    private int activo;
+    private bool ActivoDisponible => activos.Any(x => x.Activo.Id == activo && !x.Baja);
+    private bool confirmarBaja;
+    private EContaxAfMovimiento modelo = Nuevo();
+    private List<EContaxAfSaldo> activos = [];
+    private List<EContaxAfMovimiento> historial = [];
+
+    private static EContaxAfMovimiento Nuevo() => new() { Fecha = EContaxActivosFijosService.Hoy, Tipo = "TRASLADO" };
+
+    protected override async Task CargarAsync()
+    {
+        activos = await Servicio.ConsultarSaldosAsync(Usuario, EContaxActivosFijosService.Hoy, Ruta);
+        historial = activo == 0 ? [] : await Servicio.HistorialAsync(Usuario, EContaxActivosFijosService.Hoy, Ruta, activo);
+    }
+
+    private Task CambiarActivo(ChangeEventArgs args) => EjecutarAsync(async () =>
+    {
+        activo = int.TryParse(args.Value?.ToString(), out var id) ? id : 0;
+        Restablecer();
+        await CargarAsync();
+    });
+
+    private void Restablecer()
+    {
+        modelo = Nuevo();
+        confirmarBaja = false;
+    }
+
+    private Task Guardar() => EjecutarAsync(async () =>
+    {
+        if (modelo.Tipo == "BAJA" && !confirmarBaja)
+            throw new InvalidOperationException("Confirma la baja del intangible.");
+        await Servicio.RegistrarMovimientoAsync(Usuario, activo, modelo.Fecha, modelo.Tipo,
+            modelo.CambioCosto, modelo.Ubicacion, modelo.Responsable, modelo.Motivo);
+        Restablecer();
+        await CargarAsync();
+    }, "Movimiento registrado.");
+}

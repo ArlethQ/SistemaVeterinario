@@ -1,0 +1,114 @@
+@page "/contabilidad/activos-fijos/intangibles/categorias"
+@attribute [Authorize]
+@inherits IntangiblesPage
+
+<PageTitle>Categorías de intangibles | E-Contax</PageTitle>
+
+<div class="container-fluid py-3">
+    <h4>Categorías de intangibles</h4>
+    <AfMensajes Error="@Error" Aviso="@Aviso" />
+    @if (!Ocupado && Permisos.HasFlag(EContaxAccion.Ver) && !Permisos.HasFlag(EContaxAccion.Crear))
+    {
+        <p class="text-muted">Tu perfil puede consultar categorías. Para crear una, solicita el permiso Crear en Categorías de intangibles.</p>
+    }
+    @if (CargandoPantalla || modelo.Id != 0 || Permisos.HasFlag(EContaxAccion.Crear))
+    {
+        <EditForm Model="modelo" OnValidSubmit="Guardar" class="card card-body mb-3">
+            <ValidationSummary />
+            <fieldset disabled="@Ocupado" class="row g-3">
+                <label class="col-md-6">Nombre<InputText class="form-control" maxlength="120" @bind-Value="modelo.Nombre" /></label>
+                <label class="col-md-6">Vida útil en meses<InputNumber class="form-control" min="1" max="1200" @bind-Value="modelo.VidaUtilMeses" /></label>
+                <div class="col-12 text-muted small">Se aplica línea recta mensual para intangibles de vida útil definida.</div>
+                <label class="col-md-4">Cuenta de activo
+                    <InputSelect class="form-select" @bind-Value="modelo.IdCuentaActivo">
+                        <option value="0">Selecciona una cuenta</option>
+                        @foreach (var cuenta in cuentas.Where(x => x.TipoCuenta == "ACTIVO"))
+                        {
+                            <option value="@cuenta.IdCuenta">@cuenta.Codigo — @cuenta.Nombre</option>
+                        }
+                    </InputSelect>
+                </label>
+                @if (modelo.VidaUtilMeses > 0)
+                {
+                    <label class="col-md-4">Cuenta de amortización acumulada
+                        <InputSelect class="form-select" @bind-Value="modelo.IdCuentaAcumulada">
+                            <option value="0">Selecciona una cuenta</option>
+                            @foreach (var cuenta in cuentas.Where(x => x.TipoCuenta == "ACTIVO"))
+                            {
+                                <option value="@cuenta.IdCuenta">@cuenta.Codigo — @cuenta.Nombre</option>
+                            }
+                        </InputSelect>
+                    </label>
+                    <label class="col-md-4">Cuenta de gasto o costo
+                        <InputSelect class="form-select" @bind-Value="modelo.IdCuentaGasto">
+                            <option value="0">Selecciona una cuenta</option>
+                            @foreach (var cuenta in cuentas.Where(x => x.TipoCuenta is "GASTO" or "COSTO"))
+                            {
+                                <option value="@cuenta.IdCuenta">@cuenta.Codigo — @cuenta.Nombre</option>
+                            }
+                        </InputSelect>
+                    </label>
+                }
+                <div class="col-12 d-flex gap-2">
+                    <button class="btn btn-primary">@(modelo.Id == 0 ? "Crear categoría" : "Guardar cambios")</button>
+                    @if (modelo.Id != 0)
+                    {
+                        <button type="button" class="btn btn-outline-secondary" @onclick="Cancelar">Cancelar</button>
+                    }
+                </div>
+            </fieldset>
+        </EditForm>
+    }
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Categoría</th><th>Vida útil</th><th>Activo</th><th>Acumulada</th><th>Gasto o costo</th>
+                @if (Permisos.HasFlag(EContaxAccion.Editar)) { <th>Acciones</th> }</tr></thead>
+            <tbody>
+                @foreach (var categoria in categorias)
+                {
+                    <tr><td>@categoria.Nombre</td><td>@categoria.VidaUtilMeses meses</td><td>@Cuenta(categoria.IdCuentaActivo)</td>
+                        <td>@Cuenta(categoria.IdCuentaAcumulada)</td><td>@Cuenta(categoria.IdCuentaGasto)</td>
+                        @if (Permisos.HasFlag(EContaxAccion.Editar))
+                        {
+                            <td><button class="btn btn-sm btn-outline-secondary" disabled="@Ocupado" @onclick="() => Editar(categoria)">Editar</button></td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    protected override string Ruta => EContaxRoutes.AmCategorias;
+    private EContaxAfCategoria modelo = new() { VidaUtilMeses = 1 };
+    private List<EContaxAfCategoria> categorias = [];
+    private List<EContaxCuentaContable> cuentas = [];
+
+    protected override async Task CargarAsync()
+    {
+        categorias = await Servicio.CategoriasAsync(Usuario, Ruta);
+        cuentas = await Servicio.CuentasAsync(Usuario);
+    }
+
+    private string Cuenta(int id) => id == 0 ? "—" : cuentas.Find(x => x.IdCuenta == id)?.Codigo ?? $"Cuenta {id}";
+
+    private void Editar(EContaxAfCategoria categoria) => modelo = new()
+    {
+        Id = categoria.Id,
+        Nombre = categoria.Nombre,
+        VidaUtilMeses = categoria.VidaUtilMeses,
+        IdCuentaActivo = categoria.IdCuentaActivo,
+        IdCuentaGasto = categoria.IdCuentaGasto,
+        IdCuentaAcumulada = categoria.IdCuentaAcumulada
+    };
+
+    private void Cancelar() => modelo = new() { VidaUtilMeses = 1 };
+
+    private Task Guardar() => EjecutarAsync(async () =>
+    {
+        await Servicio.GuardarCategoriaAsync(Usuario, modelo);
+        Cancelar();
+        await CargarAsync();
+    }, "Categoría guardada.");
+}

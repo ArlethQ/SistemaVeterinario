@@ -1,0 +1,256 @@
+@page "/contabilidad/libros/plan-cuentas"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Simetric.Models.EContax
+@using Simetric.Services
+@using Simetric.Services.EContax
+@attribute [Authorize]
+@inject EContaxContabilidadService ContabilidadService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject SweetAlertService AlertService
+
+<PageTitle>Plan de Cuentas | E-Contax ERP</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="mb-0 fw-bold"><i class="bi bi-diagram-3 me-2 text-primary"></i>Plan de Cuentas Contable</h4>
+            <small class="text-muted">Catálogo jerárquico basado en PLAN DE CUENTAS NUMEROS (@cuentas.Count cuentas) y mapeo automático.</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <ul class="nav nav-pills">
+                <li class="nav-item"><button class="nav-link @(tab == "plan" ? "active" : "")" @onclick='() => tab = "plan"'>Cuentas</button></li>
+                <li class="nav-item"><button class="nav-link @(tab == "mapeo" ? "active" : "")" @onclick='() => tab = "mapeo"'>Mapeo Automático</button></li>
+            </ul>
+            <label class="btn btn-outline-success btn-sm mb-0" style="cursor:pointer">
+                <i class="bi bi-file-earmark-excel me-1"></i>Importar Excel
+                <InputFile OnChange="ImportarExcelAsync" accept=".xlsx" class="d-none" />
+            </label>
+        </div>
+    </div>
+
+    @if (tab == "plan")
+    {
+        <div class="row g-3">
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-semibold">@(edit.IdCuenta == 0 ? "Nueva Cuenta Contable" : $"Editar {edit.Codigo}")</div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm">Código</label>
+                            <input class="form-control form-control-sm" @bind="edit.Codigo" disabled="@(edit.IdCuenta > 0)" placeholder="Ej. 1.1.1.3.3" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm">Nombre de Cuenta</label>
+                            <input class="form-control form-control-sm" @bind="edit.Nombre" placeholder="Nombre de la cuenta" />
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Tipo</label>
+                                <select class="form-select form-select-sm" @bind="edit.TipoCuenta">
+                                    <option value="ACTIVO">ACTIVO</option>
+                                    <option value="PASIVO">PASIVO</option>
+                                    <option value="PATRIMONIO">PATRIMONIO</option>
+                                    <option value="INGRESO">INGRESO</option>
+                                    <option value="GASTO">GASTO</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Naturaleza</label>
+                                <select class="form-select form-select-sm" @bind="edit.Naturaleza">
+                                    <option value="DEUDORA">DEUDORA</option>
+                                    <option value="ACREEDORA">ACREEDORA</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm">Flujo de Efectivo</label>
+                            <select class="form-select form-select-sm" @bind="edit.ClasificacionFlujo">
+                                <option value="OPERACION">OPERACION</option>
+                                <option value="INVERSION">INVERSION</option>
+                                <option value="FINANCIAMIENTO">FINANCIAMIENTO</option>
+                                <option value="EFECTIVO">EFECTIVO</option>
+                            </select>
+                        </div>
+                        <div class="form-check form-check-sm mb-1">
+                            <input class="form-check-input" type="checkbox" @bind="edit.EsMovimiento" id="chkMov" />
+                            <label class="form-check-label" for="chkMov">Cuenta de movimiento (recibe asientos)</label>
+                        </div>
+                        <div class="form-check form-check-sm mb-3">
+                            <input class="form-check-input" type="checkbox" @bind="edit.Activa" id="chkAct" />
+                            <label class="form-check-label" for="chkAct">Activa</label>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary btn-sm" @onclick="GuardarCuentaAsync">Guardar</button>
+                            @if (edit.IdCuenta > 0)
+                            {
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="NuevaCuenta">Cancelar</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
+                        <input class="form-control form-control-sm w-50" @bind="filtro" @bind:event="oninput" placeholder="Buscar por código o nombre..." />
+                        <div class="form-check form-check-sm mb-0">
+                            <input class="form-check-input" type="checkbox" @bind="soloMovimiento" id="chkSoloMov" />
+                            <label class="form-check-label" for="chkSoloMov">Solo movimiento</label>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 620px;">
+                        <table class="table table-hover table-sm mb-0 align-middle">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Cuenta</th>
+                                    <th>Tipo</th>
+                                    <th>Mov.</th>
+                                    <th>Estado</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var c in Filtradas)
+                                {
+                                    <tr class="@(c.EsMovimiento ? "" : "table-light fw-semibold")">
+                                        <td><code>@c.Codigo</code></td>
+                                        <td style="padding-left:@((c.Nivel - 1) * 14)px">@c.Nombre</td>
+                                        <td><span class="badge bg-light text-dark border">@c.TipoCuenta</span></td>
+                                        <td>@(c.EsMovimiento ? "Sí" : "Grupo")</td>
+                                        <td><span class="badge @(c.Activa ? "bg-success" : "bg-secondary")">@(c.Activa ? "Activa" : "Inactiva")</span></td>
+                                        <td class="text-end">
+                                            <button class="btn btn-outline-primary btn-sm" @onclick="() => EditarCuenta(c)">Editar</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-semibold">Cuentas Contables Automáticas para Documentos ERP</div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Concepto</th>
+                            <th>Clave</th>
+                            <th>Cuenta Contable Asignada</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var cfg in configs)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@cfg.Descripcion</td>
+                                <td><code>@cfg.Clave</code></td>
+                                <td>
+                                    <select class="form-select form-select-sm" @bind="cfg.CodigoCuenta">
+                                        @foreach (var c in cuentas.Where(x => x.EsMovimiento))
+                                        {
+                                            <option value="@c.Codigo">@c.Codigo - @c.Nombre</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-primary btn-sm" @onclick="() => GuardarConfigAsync(cfg)">Guardar</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private int currentUserId;
+    private string tab = "plan";
+    private List<EContaxCuentaContable> cuentas = new();
+    private List<EContaxConfigCuentaContable> configs = new();
+    private EContaxCuentaContable edit = new() { Activa = true, EsMovimiento = true, TipoCuenta = "ACTIVO", Naturaleza = "DEUDORA", ClasificacionFlujo = "OPERACION" };
+    private string filtro = "";
+    private bool soloMovimiento;
+
+    private IEnumerable<EContaxCuentaContable> Filtradas => cuentas.Where(c =>
+        (!soloMovimiento || c.EsMovimiento) &&
+        (string.IsNullOrWhiteSpace(filtro) ||
+         c.Codigo.Contains(filtro.Trim(), StringComparison.OrdinalIgnoreCase) ||
+         c.Nombre.Contains(filtro.Trim(), StringComparison.OrdinalIgnoreCase)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0) { Navigation.NavigateTo("/login", true); return; }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        cuentas = await ContabilidadService.ListarPlanCuentasAsync(currentUserId);
+        configs = await ContabilidadService.ListarConfigCuentasAsync(currentUserId);
+    }
+
+    private void NuevaCuenta() => edit = new() { Activa = true, EsMovimiento = true, TipoCuenta = "ACTIVO", Naturaleza = "DEUDORA", ClasificacionFlujo = "OPERACION" };
+
+    private void EditarCuenta(EContaxCuentaContable c)
+    {
+        edit = new EContaxCuentaContable
+        {
+            IdCuenta = c.IdCuenta, Codigo = c.Codigo, Nombre = c.Nombre, CodigoPadre = c.CodigoPadre,
+            Nivel = c.Nivel, TipoCuenta = c.TipoCuenta, Naturaleza = c.Naturaleza,
+            EsMovimiento = c.EsMovimiento, AceptaAuxiliar = c.AceptaAuxiliar,
+            ClasificacionFlujo = c.ClasificacionFlujo, Activa = c.Activa
+        };
+    }
+
+    private async Task GuardarCuentaAsync()
+    {
+        try
+        {
+            await ContabilidadService.GuardarCuentaAsync(currentUserId, edit);
+            NuevaCuenta();
+            await AlertService.ShowSuccessAsync("Cuenta contable guardada.");
+            await CargarAsync();
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+
+    private async Task ImportarExcelAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            await using var stream = e.File.OpenReadStream(10 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Position = 0;
+            var (ins, upd) = await ContabilidadService.ImportarPlanCuentasExcelAsync(currentUserId, ms);
+            await AlertService.ShowSuccessAsync($"Importación completada: {ins} nuevas, {upd} actualizadas.");
+            await CargarAsync();
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+
+    private async Task GuardarConfigAsync(EContaxConfigCuentaContable cfg)
+    {
+        try
+        {
+            await ContabilidadService.GuardarConfigCuentaAsync(currentUserId, cfg.Clave, cfg.CodigoCuenta);
+            await AlertService.ShowSuccessAsync($"Configuración {cfg.Clave} actualizada.");
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+}

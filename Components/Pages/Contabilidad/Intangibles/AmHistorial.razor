@@ -1,0 +1,32 @@
+@inherits ComponentBase
+<div class="table-responsive">
+    <table class="table table-sm align-middle">
+        <thead><tr><th>Fecha</th><th>Movimiento</th><th>Ubicación</th><th>Responsable</th>
+            <th class="text-end">Cambio de costo</th><th class="text-end">Cambio de amortización</th><th>Motivo</th></tr></thead>
+        <tbody>
+            @foreach (var fila in Filas)
+            {
+                <tr><td>@fila.Fecha.ToString("dd/MM/yyyy")</td><td>@NombreTipo(fila.Tipo)</td>
+                    <td>@fila.Ubicacion</td><td>@fila.Responsable</td>
+                    <td class="text-end">@fila.CambioCosto.ToString("N2")</td>
+                    <td class="text-end">@fila.CambioDepreciacion.ToString("N2")</td><td>@fila.Motivo</td></tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<EContaxAfMovimiento> Filas { get; set; } = [];
+
+    private static string NombreTipo(string tipo) => tipo switch
+    {
+        "ALTA" => "Alta",
+        "SALDO_INICIAL" => "Saldo inicial",
+        "TRASLADO" => "Traslado",
+        "AJUSTE" => "Ajuste",
+        "BAJA" => "Baja",
+        "AMORTIZACION" => "Amortización",
+        "REVERSO_AM" => "Reverso de amortización",
+        _ => tipo
+    };
+}

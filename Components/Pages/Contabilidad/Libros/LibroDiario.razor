@@ -1,0 +1,122 @@
+@page "/contabilidad/libros/libro-diario"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Simetric.Models.EContax
+@using Simetric.Services
+@using Simetric.Services.EContax
+@attribute [Authorize]
+@inject EContaxContabilidadService ContabilidadService
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Libro Diario | E-Contax ERP</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>Libro Diario General</h4>
+            <small class="text-muted">Registro cronológico de asientos contables con sus partidas Debe y Haber.</small>
+        </div>
+        <button class="btn btn-outline-success btn-sm" @onclick="ExportarExcelAsync"><i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel</button>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2 row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label form-label-sm">Desde</label>
+                <input type="date" class="form-control form-control-sm" @bind="desde" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label form-label-sm">Hasta</label>
+                <input type="date" class="form-control form-control-sm" @bind="hasta" />
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary btn-sm" @onclick="CargarAsync">Consultar</button>
+            </div>
+            <div class="col-md-4 text-end">
+                <span class="me-3">Total Debe: <strong>$@asientos.Sum(x => x.TotalDebe).ToString("N2")</strong></span>
+                <span>Total Haber: <strong>$@asientos.Sum(x => x.TotalHaber).ToString("N2")</strong></span>
+            </div>
+        </div>
+    </div>
+
+    @foreach (var a in asientos)
+    {
+        <div class="card shadow-sm border-0 mb-2">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <div>
+                    <strong class="text-primary">@a.NumeroAsiento</strong>
+                    <span class="mx-2">|</span>
+                    <span>@a.Fecha.ToString("dd/MM/yyyy")</span>
+                    <span class="mx-2">|</span>
+                    <span class="badge bg-light text-dark border">@a.ModuloOrigen</span>
+                    <span class="ms-2 text-muted">@a.Glosa</span>
+                </div>
+                <span class="badge @(a.Estado == "REVERSADO" ? "bg-warning text-dark" : "bg-success")">@a.Estado</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>Código</th><th>Cuenta</th><th>Detalle</th><th class="text-end">Debe</th><th class="text-end">Haber</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var d in a.Detalles.OrderBy(x => x.Linea))
+                        {
+                            <tr>
+                                <td><code>@d.CodigoCuenta</code></td>
+                                <td>@d.NombreCuenta</td>
+                                <td>@d.Detalle</td>
+                                <td class="text-end">@(d.Debe > 0 ? $"${d.Debe:N2}" : "")</td>
+                                <td class="text-end">@(d.Haber > 0 ? $"${d.Haber:N2}" : "")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    @if (!asientos.Any())
+    {
+        <div class="alert alert-light border text-center">No hay asientos contables en el rango seleccionado.</div>
+    }
+</div>
+
+@code {
+    private int currentUserId;
+    private DateTime desde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime hasta = DateTime.Today;
+    private List<EContaxAsientoContable> asientos = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0) { Navigation.NavigateTo("/login", true); return; }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        asientos = await ContabilidadService.ListarAsientosAsync(currentUserId, desde, hasta);
+    }
+
+    private async Task ExportarExcelAsync()
+    {
+        var filas = asientos.SelectMany(a => a.Detalles.OrderBy(d => d.Linea).Select(d => new Dictionary<string, object?>
+        {
+            ["Fecha"] = a.Fecha.ToString("yyyy-MM-dd"),
+            ["Asiento"] = a.NumeroAsiento,
+            ["Modulo"] = a.ModuloOrigen,
+            ["Glosa"] = a.Glosa,
+            ["Codigo"] = d.CodigoCuenta,
+            ["Cuenta"] = d.NombreCuenta,
+            ["Detalle"] = d.Detalle,
+            ["Debe"] = d.Debe,
+            ["Haber"] = d.Haber
+        })).ToList();
+        using var ms = new MemoryStream();
+        await MiniExcelLibs.MiniExcel.SaveAsAsync(ms, filas);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"LibroDiario_{desde:yyyyMMdd}_{hasta:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(ms.ToArray()));
+    }
+}

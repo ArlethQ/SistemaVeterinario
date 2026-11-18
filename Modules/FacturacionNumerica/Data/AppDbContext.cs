@@ -12,6 +12,15 @@ namespace Simetric.Data
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
         public int? CatalogoEmisorId { get; set; }
+        public DbSet<EContaxCuentaContable> EContaxCuentasContables { get; set; }
+        public DbSet<EContaxConfigCuentaContable> EContaxConfigCuentasContables { get; set; }
+        public DbSet<EContaxAsientoContable> EContaxAsientosContables { get; set; }
+        public DbSet<EContaxAsientoDetalle> EContaxAsientosDetalles { get; set; }
+        public DbSet<EContaxCuentaBancaria> EContaxCuentasBancarias { get; set; }
+        public DbSet<EContaxMovimientoBanco> EContaxMovimientosBancos { get; set; }
+        public DbSet<EContaxConciliacionBancaria> EContaxConciliacionesBancarias { get; set; }
+        public DbSet<EContaxAnticipo> EContaxAnticipos { get; set; }
+        public DbSet<EContaxAnticipoAplicacion> EContaxAnticiposAplicaciones { get; set; }
         public DbSet<ClienteCorreo> ClientesCorreos { get; set; }
         public DbSet<Auditoria> Auditorias { get; set; }
         public DbSet<BlacklistIp> BlacklistIps { get; set; }
@@ -226,6 +235,70 @@ namespace Simetric.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            Simetric.Services.EContax.EContaxActivosFijosService.ConfigurarEntidades(modelBuilder);
+
+            modelBuilder.Entity<EContaxCuentaContable>(entity =>
+            {
+                entity.ToTable("ECONTAX_CUENTA_CONTABLE", "dbo");
+                entity.HasKey(x => x.IdCuenta);
+                entity.HasIndex(x => new { x.IdEmpresa, x.Codigo }).IsUnique();
+            });
+
+            modelBuilder.Entity<EContaxConfigCuentaContable>(entity =>
+            {
+                entity.ToTable("ECONTAX_CONFIG_CUENTA_CONTABLE", "dbo");
+                entity.HasKey(x => x.IdConfig);
+                entity.HasIndex(x => new { x.IdEmpresa, x.Clave }).IsUnique();
+            });
+
+            modelBuilder.Entity<EContaxAsientoContable>(entity =>
+            {
+                entity.ToTable("ECONTAX_ASIENTO_CONTABLE", "dbo");
+                entity.HasKey(x => x.IdAsiento);
+                entity.HasIndex(x => new { x.IdEmpresa, x.NumeroAsiento }).IsUnique();
+                entity.HasMany(x => x.Detalles)
+                    .WithOne()
+                    .HasForeignKey(x => x.IdAsiento)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<EContaxAsientoDetalle>(entity =>
+            {
+                entity.ToTable("ECONTAX_ASIENTO_DETALLE", "dbo");
+                entity.HasKey(x => x.IdDetalle);
+            });
+
+            modelBuilder.Entity<EContaxCuentaBancaria>(entity =>
+            {
+                entity.ToTable("ECONTAX_CUENTA_BANCO", "dbo");
+                entity.HasKey(x => x.IdCuentaBanco);
+            });
+
+            modelBuilder.Entity<EContaxMovimientoBanco>(entity =>
+            {
+                entity.ToTable("ECONTAX_MOVIMIENTO_BANCO", "dbo");
+                entity.HasKey(x => x.IdMovimientoBanco);
+            });
+
+            modelBuilder.Entity<EContaxConciliacionBancaria>(entity =>
+            {
+                entity.ToTable("ECONTAX_CONCILIACION_BANCARIA", "dbo");
+                entity.HasKey(x => x.IdConciliacion);
+            });
+
+            modelBuilder.Entity<EContaxAnticipo>(entity =>
+            {
+                entity.ToTable("ECONTAX_ANTICIPO", "dbo");
+                entity.HasKey(x => x.IdAnticipo);
+                entity.HasIndex(x => new { x.IdEmpresa, x.NumeroAnticipo }).IsUnique();
+            });
+
+            modelBuilder.Entity<EContaxAnticipoAplicacion>(entity =>
+            {
+                entity.ToTable("ECONTAX_ANTICIPO_APLICACION", "dbo");
+                entity.HasKey(x => x.IdAplicacion);
+            });
+
             modelBuilder.Entity<Cotizacion>()
                 .HasMany(x => x.Detalles)
                 .WithOne(x => x.Cotizacion)

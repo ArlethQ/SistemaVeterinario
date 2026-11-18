@@ -1,0 +1,270 @@
+@page "/contabilidad/anticipos"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Simetric.Models.EContax
+@using Simetric.Services
+@using Simetric.Services.EContax
+@attribute [Authorize]
+@inject EContaxAnticipoService AnticipoService
+@inject EContaxBancoService BancoService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject SweetAlertService AlertService
+
+<PageTitle>Anticipos Compras y Ventas | E-Contax ERP</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="mb-0 fw-bold"><i class="bi bi-cash-coin me-2 text-primary"></i>Anticipos de Compras y Ventas</h4>
+            <small class="text-muted">Registro, aplicación a facturas/CxC/CxP y contabilización automática.</small>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-sm @(filtroTipo == "" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarFiltroAsync("")'>Todos</button>
+            <button class="btn btn-sm @(filtroTipo == "CLIENTE" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarFiltroAsync("CLIENTE")'>Clientes (Ventas)</button>
+            <button class="btn btn-sm @(filtroTipo == "PROVEEDOR" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarFiltroAsync("PROVEEDOR")'>Proveedores (Compras)</button>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-semibold">Registrar Nuevo Anticipo</div>
+                <div class="card-body">
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label form-label-sm">Tipo</label>
+                            <select class="form-select form-select-sm" @bind="nuevo.Tipo">
+                                <option value="CLIENTE">Anticipo de Cliente</option>
+                                <option value="PROVEEDOR">Anticipo a Proveedor</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label form-label-sm">Fecha</label>
+                            <input type="date" class="form-control form-control-sm" @bind="nuevo.Fecha" />
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">RUC / Cédula</label>
+                        <input class="form-control form-control-sm" @bind="nuevo.IdentificacionTercero" placeholder="Identificación" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">Razón Social / Nombre</label>
+                        <input class="form-control form-control-sm" @bind="nuevo.NombreTercero" placeholder="Nombre completo" />
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label form-label-sm">Monto ($)</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" @bind="nuevo.MontoTotal" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label form-label-sm">Forma de Pago</label>
+                            <select class="form-select form-select-sm" @bind="nuevo.FormaPago">
+                                <option value="TRANSFERENCIA">Transferencia</option>
+                                <option value="EFECTIVO">Efectivo / Caja</option>
+                                <option value="CHEQUE">Cheque</option>
+                                <option value="TARJETA">Tarjeta</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">Cuenta Bancaria (Opcional)</label>
+                        <select class="form-select form-select-sm" @bind="nuevo.IdCuentaBanco">
+                            <option value="">Caja General / Sin banco</option>
+                            @foreach (var b in cuentasBancarias)
+                            {
+                                <option value="@b.IdCuentaBanco">@b.Banco - @b.NumeroCuenta</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">Referencia</label>
+                        <input class="form-control form-control-sm" @bind="nuevo.ReferenciaPago" placeholder="Nro. transferencia / comprobante" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label form-label-sm">Observación</label>
+                        <input class="form-control form-control-sm" @bind="nuevo.Observacion" />
+                    </div>
+                    <button class="btn btn-primary btn-sm w-100" @onclick="RegistrarAsync">Registrar Anticipo y Contabilizar</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white fw-semibold">Anticipos Registrados</div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Número</th>
+                                <th>Tipo</th>
+                                <th>Fecha</th>
+                                <th>Tercero</th>
+                                <th class="text-end">Total</th>
+                                <th class="text-end">Disponible</th>
+                                <th>Estado</th>
+                                <th class="text-end">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var a in anticipos)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@a.NumeroAnticipo</td>
+                                    <td><span class="badge @(a.Tipo == "CLIENTE" ? "bg-info-subtle text-info" : "bg-warning-subtle text-warning")">@a.Tipo</span></td>
+                                    <td>@a.Fecha.ToString("dd/MM/yyyy")</td>
+                                    <td>
+                                        <div>@a.NombreTercero</div>
+                                        <small class="text-muted">@a.IdentificacionTercero</small>
+                                    </td>
+                                    <td class="text-end">$@a.MontoTotal.ToString("N2")</td>
+                                    <td class="text-end fw-bold">$@a.SaldoDisponible.ToString("N2")</td>
+                                    <td><span class="badge @(a.Estado == "ACTIVO" ? "bg-success" : a.Estado == "PARCIAL" ? "bg-primary" : a.Estado == "APLICADO" ? "bg-secondary" : "bg-danger")">@a.Estado</span></td>
+                                    <td class="text-end">
+                                        @if (a.SaldoDisponible > 0 && a.Estado != "ANULADO")
+                                        {
+                                            <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => AbrirAplicacion(a)">Aplicar</button>
+                                        }
+                                        @if (a.SaldoDisponible == a.MontoTotal && a.Estado != "ANULADO")
+                                        {
+                                            <button class="btn btn-outline-danger btn-sm" @onclick="() => AnularAsync(a.IdAnticipo)">Anular</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                            @if (!anticipos.Any())
+                            {
+                                <tr><td colspan="8" class="text-center text-muted py-3">No existen anticipos registrados.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @if (anticipoAplicar is not null)
+            {
+                <div class="card shadow-sm border-primary">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <span>Aplicar Anticipo @anticipoAplicar.NumeroAnticipo (Disponible: $@anticipoAplicar.SaldoDisponible.ToString("N2"))</span>
+                        <button class="btn btn-sm btn-light" @onclick="() => anticipoAplicar = null">Cerrar</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="form-label form-label-sm">Documento Destino</label>
+                                <select class="form-select form-select-sm" @bind="aplTipoDoc">
+                                    @if (anticipoAplicar.Tipo == "CLIENTE")
+                                    {
+                                        <option value="FACTURA_VENTA">Factura de Venta</option>
+                                        <option value="CUENTA_COBRAR">Cuenta por Cobrar</option>
+                                    }
+                                    else
+                                    {
+                                        <option value="FACTURA_COMPRA">Factura de Compra</option>
+                                        <option value="CUENTA_PAGAR">Cuenta por Pagar</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label form-label-sm">Nro. Documento</label>
+                                <input class="form-control form-control-sm" @bind="aplReferencia" placeholder="001-001-000000123" />
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label form-label-sm">Fecha</label>
+                                <input type="date" class="form-control form-control-sm" @bind="aplFecha" />
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label form-label-sm">Monto ($)</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" @bind="aplMonto" />
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button class="btn btn-success btn-sm w-100" @onclick="ConfirmarAplicacionAsync">Confirmar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private int currentUserId;
+    private string filtroTipo = "";
+    private List<EContaxAnticipo> anticipos = new();
+    private List<EContaxCuentaBancaria> cuentasBancarias = new();
+    private EContaxAnticipo nuevo = new() { Tipo = "CLIENTE", Fecha = DateTime.Today, FormaPago = "TRANSFERENCIA" };
+
+    private EContaxAnticipo? anticipoAplicar;
+    private string aplTipoDoc = "FACTURA_VENTA";
+    private string aplReferencia = "";
+    private DateTime aplFecha = DateTime.Today;
+    private decimal aplMonto;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0) { Navigation.NavigateTo("/login", true); return; }
+
+        cuentasBancarias = await BancoService.ListarCuentasAsync(currentUserId);
+        await CargarAsync();
+    }
+
+    private async Task CambiarFiltroAsync(string tipo)
+    {
+        filtroTipo = tipo;
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        anticipos = await AnticipoService.ListarAnticiposAsync(currentUserId, string.IsNullOrEmpty(filtroTipo) ? null : filtroTipo);
+    }
+
+    private async Task RegistrarAsync()
+    {
+        try
+        {
+            await AnticipoService.RegistrarAnticipoAsync(currentUserId, nuevo);
+            nuevo = new() { Tipo = nuevo.Tipo, Fecha = DateTime.Today, FormaPago = "TRANSFERENCIA" };
+            await AlertService.ShowSuccessAsync("Anticipo registrado y contabilizado.");
+            await CargarAsync();
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+
+    private void AbrirAplicacion(EContaxAnticipo ant)
+    {
+        anticipoAplicar = ant;
+        aplTipoDoc = ant.Tipo == "CLIENTE" ? "FACTURA_VENTA" : "FACTURA_COMPRA";
+        aplMonto = ant.SaldoDisponible;
+        aplReferencia = "";
+        aplFecha = DateTime.Today;
+    }
+
+    private async Task ConfirmarAplicacionAsync()
+    {
+        if (anticipoAplicar is null) return;
+        try
+        {
+            await AnticipoService.AplicarAnticipoAsync(currentUserId, anticipoAplicar.IdAnticipo, aplTipoDoc, aplReferencia, aplFecha, aplMonto);
+            anticipoAplicar = null;
+            await AlertService.ShowSuccessAsync("Anticipo aplicado y contabilizado.");
+            await CargarAsync();
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+
+    private async Task AnularAsync(int idAnticipo)
+    {
+        try
+        {
+            await AnticipoService.AnularAnticipoAsync(currentUserId, idAnticipo);
+            await AlertService.ShowSuccessAsync("Anticipo anulado y asiento reversado.");
+            await CargarAsync();
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+}

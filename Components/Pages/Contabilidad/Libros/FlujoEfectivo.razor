@@ -1,0 +1,89 @@
+@page "/contabilidad/libros/flujo-efectivo"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Simetric.Services
+@using Simetric.Services.EContax
+@attribute [Authorize]
+@inject EContaxContabilidadService ContabilidadService
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Flujo de Efectivo | E-Contax ERP</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="mb-0 fw-bold"><i class="bi bi-cash-stack me-2 text-primary"></i>Estado de Flujo de Efectivo</h4>
+            <small class="text-muted">Actividades de Operación, Inversión y Financiamiento.</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <input type="date" class="form-control form-control-sm" @bind="desde" />
+            <input type="date" class="form-control form-control-sm" @bind="hasta" />
+            <button class="btn btn-primary btn-sm" @onclick="CargarAsync">Consultar</button>
+            <button class="btn btn-outline-success btn-sm" @onclick="ExportarExcelAsync"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+        </div>
+    </div>
+
+    @if (data is not null)
+    {
+        <div class="row g-3 mb-3">
+            <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body"><small class="text-muted">Efectivo Inicial</small><h5 class="mb-0 fw-bold">$@data.EfectivoInicial.ToString("N2")</h5></div></div></div>
+            <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body"><small class="text-muted">Flujo Operación</small><h5 class="mb-0 fw-bold">$@data.FlujoNetoOperacion.ToString("N2")</h5></div></div></div>
+            <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body"><small class="text-muted">Variación Neta</small><h5 class="mb-0 @(data.VariacionNeta >= 0 ? "text-success" : "text-danger") fw-bold">$@data.VariacionNeta.ToString("N2")</h5></div></div></div>
+            <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body"><small class="text-muted">Efectivo Final</small><h5 class="mb-0 text-primary fw-bold">$@data.EfectivoFinal.ToString("N2")</h5></div></div></div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <table class="table table-sm mb-0">
+                <thead class="table-light"><tr><th>Actividad</th><th>Concepto</th><th class="text-end">Flujo Neto</th></tr></thead>
+                <tbody>
+                    @foreach (var item in data.Operacion.Concat(data.Inversion).Concat(data.Financiamiento))
+                    {
+                        <tr>
+                            <td><span class="badge bg-light text-dark border">@item.Categoria</span></td>
+                            <td>@item.Concepto</td>
+                            <td class="text-end @(item.Monto >= 0 ? "text-success" : "text-danger") fw-semibold">$@item.Monto.ToString("N2")</td>
+                        </tr>
+                    }
+                    @if (!data.Operacion.Any() && !data.Inversion.Any() && !data.Financiamiento.Any())
+                    {
+                        <tr><td colspan="3" class="text-center text-muted py-3">Sin movimientos de efectivo en el período.</td></tr>
+                    }
+                </tbody>
+                <tfoot class="table-light fw-bold">
+                    <tr><td colspan="2" class="text-end">EFECTIVO AL FINAL DEL PERÍODO:</td><td class="text-end text-primary">$@data.EfectivoFinal.ToString("N2")</td></tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private int currentUserId;
+    private DateTime desde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime hasta = DateTime.Today;
+    private EContaxContabilidadService.FlujoEfectivoResultDto? data;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0) { Navigation.NavigateTo("/login", true); return; }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync() => data = await ContabilidadService.ObtenerFlujoEfectivoAsync(currentUserId, desde, hasta);
+
+    private async Task ExportarExcelAsync()
+    {
+        if (data is null) return;
+        var filas = data.Operacion.Concat(data.Inversion).Concat(data.Financiamiento)
+            .Select(r => new Dictionary<string, object?> { ["Actividad"] = r.Categoria, ["Concepto"] = r.Concepto, ["Flujo"] = r.Monto })
+            .ToList();
+        filas.Add(new Dictionary<string, object?> { ["Actividad"] = "RESUMEN", ["Concepto"] = "Efectivo Final", ["Flujo"] = data.EfectivoFinal });
+        using var ms = new MemoryStream();
+        await MiniExcelLibs.MiniExcel.SaveAsAsync(ms, filas);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"FlujoEfectivo_{desde:yyyyMMdd}_{hasta:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(ms.ToArray()));
+    }
+}

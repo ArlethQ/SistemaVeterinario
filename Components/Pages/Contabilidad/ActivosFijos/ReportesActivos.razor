@@ -1,0 +1,70 @@
+@page "/contabilidad/activos-fijos/reportes"
+@attribute [Authorize]
+@inherits ActivosFijosPage
+
+<PageTitle>Reportes de activos | E-Contax</PageTitle>
+
+<div class="container-fluid py-3">
+    <h4>Reporte de activos fijos</h4>
+    <AfMensajes Error="@Error" Aviso="@Aviso" />
+    <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
+        <label>Fecha de corte<InputDate class="form-control" @bind-Value="corte" disabled="@Ocupado" /></label>
+        <button class="btn btn-primary" disabled="@Ocupado" @onclick="Consultar">Consultar</button>
+    </div>
+    @if (consultado is DateTime fecha)
+    {
+        <h5>Saldos al @fecha.ToString("dd/MM/yyyy")</h5>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Placa</th><th>Activo</th><th>Ubicación</th><th>Estado</th>
+                    <th class="text-end">Costo</th><th class="text-end">Depreciación acumulada</th><th class="text-end">Valor en libros</th></tr></thead>
+                <tbody>
+                    @foreach (var saldo in saldos)
+                    {
+                        <tr>
+                            <td>@saldo.Activo.Codigo</td>
+                            <td><button class="btn btn-link p-0 text-start" disabled="@Ocupado" @onclick="() => VerHistorial(saldo)">@saldo.Activo.Nombre</button></td>
+                            <td>@saldo.Ubicacion</td><td>@(saldo.Baja ? "Baja" : "Activo")</td>
+                            <td class="text-end">@saldo.Costo.ToString("N2")</td><td class="text-end">@saldo.Depreciacion.ToString("N2")</td>
+                            <td class="text-end">@saldo.ValorLibros.ToString("N2")</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot><tr class="fw-bold"><td colspan="4">Total</td>
+                    <td class="text-end">@saldos.Sum(x => x.Costo).ToString("N2")</td>
+                    <td class="text-end">@saldos.Sum(x => x.Depreciacion).ToString("N2")</td>
+                    <td class="text-end">@saldos.Sum(x => x.ValorLibros).ToString("N2")</td></tr></tfoot>
+            </table>
+        </div>
+        @if (seleccion is not null)
+        {
+            <h5>Movimientos de @seleccion.Activo.Codigo</h5>
+            <AfHistorial Filas="historial" />
+        }
+    }
+</div>
+
+@code {
+    protected override string Ruta => EContaxRoutes.AfReportes;
+    private DateTime corte = EContaxActivosFijosService.Hoy;
+    private DateTime? consultado;
+    private List<EContaxAfSaldo> saldos = [];
+    private List<EContaxAfMovimiento> historial = [];
+    private EContaxAfSaldo? seleccion;
+
+    protected override async Task CargarAsync()
+    {
+        saldos = await Servicio.ConsultarSaldosAsync(Usuario, corte, Ruta);
+        consultado = corte;
+        seleccion = null;
+    }
+
+    private Task Consultar() => EjecutarAsync(CargarAsync);
+
+    private Task VerHistorial(EContaxAfSaldo saldo) => EjecutarAsync(async () =>
+    {
+        if (consultado is not DateTime fecha) return;
+        historial = await Servicio.HistorialAsync(Usuario, fecha, Ruta, saldo.Activo.Id);
+        seleccion = saldo;
+    });
+}

@@ -1,0 +1,140 @@
+@page "/contabilidad/libros/libro-mayor"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Simetric.Models.EContax
+@using Simetric.Services
+@using Simetric.Services.EContax
+@attribute [Authorize]
+@inject EContaxContabilidadService ContabilidadService
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Libro Mayor | E-Contax ERP</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="mb-0 fw-bold"><i class="bi bi-bookmark me-2 text-primary"></i>Libro Mayor por Cuenta</h4>
+            <small class="text-muted">Saldo inicial, movimientos detallados y saldo acumulado por cuenta contable.</small>
+        </div>
+        @if (resultado is not null)
+        {
+            <button class="btn btn-outline-success btn-sm" @onclick="ExportarExcelAsync"><i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel</button>
+        }
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2 row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label form-label-sm">Cuenta Contable</label>
+                <select class="form-select form-select-sm" @bind="idCuentaSeleccionada">
+                    @foreach (var c in cuentas)
+                    {
+                        <option value="@c.IdCuenta">@c.Codigo - @c.Nombre</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label form-label-sm">Desde</label>
+                <input type="date" class="form-control form-control-sm" @bind="desde" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label form-label-sm">Hasta</label>
+                <input type="date" class="form-control form-control-sm" @bind="hasta" />
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary btn-sm" @onclick="ConsultarAsync">Consultar Mayor</button>
+            </div>
+        </div>
+    </div>
+
+    @if (resultado is not null)
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <div><strong>@resultado.Cuenta.Codigo - @resultado.Cuenta.Nombre</strong> (@resultado.Cuenta.Naturaleza)</div>
+                <div>Saldo Inicial: <strong>$@resultado.SaldoInicial.ToString("N2")</strong> | Saldo Final: <strong class="text-primary">$@resultado.SaldoFinal.ToString("N2")</strong></div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr><th>Fecha</th><th>Asiento</th><th>Glosa / Detalle</th><th class="text-end">Debe</th><th class="text-end">Haber</th><th class="text-end">Saldo</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in resultado.Movimientos)
+                        {
+                            <tr>
+                                <td>@m.Fecha.ToString("dd/MM/yyyy")</td>
+                                <td><code>@m.NumeroAsiento</code></td>
+                                <td>@(string.IsNullOrWhiteSpace(m.Detalle) ? m.Glosa : $"{m.Glosa} - {m.Detalle}")</td>
+                                <td class="text-end">$@m.Debe.ToString("N2")</td>
+                                <td class="text-end">$@m.Haber.ToString("N2")</td>
+                                <td class="text-end fw-semibold">$@m.SaldoAcumulado.ToString("N2")</td>
+                            </tr>
+                        }
+                        @if (!resultado.Movimientos.Any())
+                        {
+                            <tr><td colspan="6" class="text-center text-muted py-3">Sin movimientos en el período.</td></tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light fw-bold">
+                        <tr>
+                            <td colspan="3" class="text-end">Totales del período:</td>
+                            <td class="text-end">$@resultado.TotalDebe.ToString("N2")</td>
+                            <td class="text-end">$@resultado.TotalHaber.ToString("N2")</td>
+                            <td class="text-end text-primary">$@resultado.SaldoFinal.ToString("N2")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private int currentUserId;
+    private List<EContaxCuentaContable> cuentas = new();
+    private int idCuentaSeleccionada;
+    private DateTime desde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime hasta = DateTime.Today;
+    private EContaxContabilidadService.LibroMayorResultDto? resultado;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0) { Navigation.NavigateTo("/login", true); return; }
+
+        cuentas = await ContabilidadService.ListarPlanCuentasAsync(currentUserId, soloMovimiento: true);
+        if (cuentas.Any())
+        {
+            idCuentaSeleccionada = cuentas[0].IdCuenta;
+            await ConsultarAsync();
+        }
+    }
+
+    private async Task ConsultarAsync()
+    {
+        if (idCuentaSeleccionada <= 0) return;
+        resultado = await ContabilidadService.ObtenerLibroMayorAsync(currentUserId, idCuentaSeleccionada, desde, hasta);
+    }
+
+    private async Task ExportarExcelAsync()
+    {
+        if (resultado is null) return;
+        var filas = resultado.Movimientos.Select(m => new Dictionary<string, object?>
+        {
+            ["Fecha"] = m.Fecha.ToString("yyyy-MM-dd"),
+            ["Asiento"] = m.NumeroAsiento,
+            ["Glosa"] = m.Glosa,
+            ["Detalle"] = m.Detalle,
+            ["Debe"] = m.Debe,
+            ["Haber"] = m.Haber,
+            ["Saldo"] = m.SaldoAcumulado
+        }).ToList();
+        using var ms = new MemoryStream();
+        await MiniExcelLibs.MiniExcel.SaveAsAsync(ms, filas);
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"LibroMayor_{resultado.Cuenta.Codigo}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(ms.ToArray()));
+    }
+}

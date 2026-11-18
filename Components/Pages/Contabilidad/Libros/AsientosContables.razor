@@ -1,0 +1,340 @@
+@page "/contabilidad/libros/asientos"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Simetric.Models.EContax
+@using Simetric.Services
+@using Simetric.Services.EContax
+@attribute [Authorize]
+@inject EContaxContabilidadService ContabilidadService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject SweetAlertService AlertService
+
+<PageTitle>Asientos Contables | E-Contax ERP</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="mb-0 fw-bold"><i class="bi bi-pencil-square me-2 text-primary"></i>Gestión de Asientos Contables</h4>
+            <small class="text-muted">Crear, actualizar y reversar asientos contables manuales o generados automáticamente.</small>
+        </div>
+        <button class="btn btn-primary btn-sm" @onclick="NuevoAsiento"><i class="bi bi-plus-lg me-1"></i>Nuevo Asiento</button>
+    </div>
+
+    @if (mostrandoEditor)
+    {
+        <div class="card shadow-sm border-primary mb-3">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <span>@(editor.IdAsiento == 0 ? "Crear Nuevo Asiento Contable" : $"Editar Asiento {editor.NumeroAsiento}")</span>
+                <button class="btn btn-sm btn-light" @onclick="() => mostrandoEditor = false">Cerrar</button>
+            </div>
+            <div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-2">
+                        <label class="form-label form-label-sm">Fecha</label>
+                        <input type="date" class="form-control form-control-sm" @bind="editor.Fecha" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label form-label-sm">Tipo</label>
+                        <select class="form-select form-select-sm" @bind="editor.TipoAsiento">
+                            <option value="DIARIO">DIARIO</option>
+                            <option value="INGRESO">INGRESO</option>
+                            <option value="EGRESO">EGRESO</option>
+                            <option value="AJUSTE">AJUSTE</option>
+                            <option value="APERTURA">APERTURA</option>
+                            <option value="CIERRE">CIERRE</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label form-label-sm">Referencia</label>
+                        <input class="form-control form-control-sm" @bind="editor.ReferenciaDocumento" placeholder="Doc. respaldo" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label form-label-sm">Glosa / Concepto</label>
+                        <input class="form-control form-control-sm" @bind="editor.Glosa" placeholder="Descripción del asiento" />
+                    </div>
+                </div>
+
+                <div class="table-responsive mb-2">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:38%">Cuenta Contable</th>
+                                <th style="width:30%">Detalle Línea</th>
+                                <th style="width:13%" class="text-end">Debe ($)</th>
+                                <th style="width:13%" class="text-end">Haber ($)</th>
+                                <th style="width:6%"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in editor.Detalles)
+                            {
+                                <tr>
+                                    <td>
+                                        <select class="form-select form-select-sm" @bind="d.CodigoCuenta">
+                                            <option value="">-- Seleccione cuenta --</option>
+                                            @foreach (var c in cuentasMovimiento)
+                                            {
+                                                <option value="@c.Codigo">@c.Codigo - @c.Nombre</option>
+                                            }
+                                        </select>
+                                    </td>
+                                    <td><input class="form-control form-control-sm" @bind="d.Detalle" /></td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm text-end" @bind="d.Debe" /></td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm text-end" @bind="d.Haber" /></td>
+                                    <td class="text-center">
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => QuitarLinea(d)">×</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="2" class="text-end">
+                                    Totales:
+                                    @{
+                                        var totD = editor.Detalles.Sum(x => x.Debe);
+                                        var totH = editor.Detalles.Sum(x => x.Haber);
+                                        var dif = totD - totH;
+                                    }
+                                    @if (dif != 0)
+                                    {
+                                        <span class="badge bg-danger ms-2">Diferencia: $@Math.Abs(dif).ToString("N2")</span>
+                                    }
+                                    else if (totD > 0)
+                                    {
+                                        <span class="badge bg-success ms-2">Cuadrado</span>
+                                    }
+                                </td>
+                                <td class="text-end">$@totD.ToString("N2")</td>
+                                <td class="text-end">$@totH.ToString("N2")</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="AgregarLinea">+ Agregar Línea</button>
+                    <button class="btn btn-success btn-sm" @onclick="GuardarAsientoAsync">Guardar Asiento</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label form-label-sm">Desde</label>
+                    <input type="date" class="form-control form-control-sm" @bind="filtroDesde" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label form-label-sm">Hasta</label>
+                    <input type="date" class="form-control form-control-sm" @bind="filtroHasta" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label form-label-sm">Módulo</label>
+                    <select class="form-select form-select-sm" @bind="filtroModulo">
+                        <option value="">Todos</option>
+                        <option value="MANUAL">Manual</option>
+                        <option value="FACTURACION">Facturación</option>
+                        <option value="NOTA_CREDITO">Nota Crédito</option>
+                        <option value="NOTA_DEBITO">Nota Débito</option>
+                        <option value="COMPRA">Compra</option>
+                        <option value="LIQUIDACION_COMPRA">Liquidación Compra</option>
+                        <option value="RETENCION">Retención</option>
+                        <option value="COBRO">Cobro</option>
+                        <option value="PAGO">Pago</option>
+                        <option value="ANTICIPO">Anticipo</option>
+                        <option value="BANCO">Banco</option>
+                        <option value="NOMINA">Nómina</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label form-label-sm">Estado</label>
+                    <select class="form-select form-select-sm" @bind="filtroEstado">
+                        <option value="">Todos</option>
+                        <option value="CONTABILIZADO">Contabilizado</option>
+                        <option value="REVERSADO">Reversado</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm">Buscar</label>
+                    <input class="form-control form-control-sm" @bind="filtroTexto" placeholder="Nro. asiento, glosa, ref..." />
+                </div>
+                <div class="col-md-1">
+                    <button class="btn btn-primary btn-sm w-100" @onclick="CargarAsync">Filtrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nro. Asiento</th>
+                        <th>Fecha</th>
+                        <th>Módulo</th>
+                        <th>Referencia</th>
+                        <th>Glosa</th>
+                        <th class="text-end">Debe</th>
+                        <th class="text-end">Haber</th>
+                        <th>Estado</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var a in asientos)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@a.NumeroAsiento</td>
+                            <td>@a.Fecha.ToString("dd/MM/yyyy")</td>
+                            <td><span class="badge bg-light text-dark border">@a.ModuloOrigen</span></td>
+                            <td>@a.ReferenciaDocumento</td>
+                            <td>@a.Glosa</td>
+                            <td class="text-end">$@a.TotalDebe.ToString("N2")</td>
+                            <td class="text-end">$@a.TotalHaber.ToString("N2")</td>
+                            <td><span class="badge @(a.Estado == "CONTABILIZADO" ? "bg-success" : a.Estado == "REVERSADO" ? "bg-warning text-dark" : "bg-secondary")">@a.Estado</span></td>
+                            <td class="text-end text-nowrap">
+                                <button class="btn btn-outline-secondary btn-sm me-1" @onclick="() => ToggleDetalle(a.IdAsiento)">Ver</button>
+                                @if (a.Estado != "REVERSADO" && a.Estado != "ANULADO")
+                                {
+                                    <button class="btn btn-outline-primary btn-sm me-1" @onclick="() => EditarAsiento(a)">Editar</button>
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => ReversarAsync(a.IdAsiento)">Reversar</button>
+                                }
+                            </td>
+                        </tr>
+                        @if (detalleExpandidoId == a.IdAsiento)
+                        {
+                            <tr>
+                                <td colspan="9" class="bg-light p-2">
+                                    <table class="table table-sm table-bordered mb-0 bg-white">
+                                        <thead><tr><th>Código</th><th>Cuenta</th><th>Detalle</th><th class="text-end">Debe</th><th class="text-end">Haber</th></tr></thead>
+                                        <tbody>
+                                            @foreach (var d in a.Detalles.OrderBy(x => x.Linea))
+                                            {
+                                                <tr>
+                                                    <td><code>@d.CodigoCuenta</code></td>
+                                                    <td>@d.NombreCuenta</td>
+                                                    <td>@d.Detalle</td>
+                                                    <td class="text-end">$@d.Debe.ToString("N2")</td>
+                                                    <td class="text-end">$@d.Haber.ToString("N2")</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (!asientos.Any())
+                    {
+                        <tr><td colspan="9" class="text-center text-muted py-3">No se encontraron asientos en el período.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int currentUserId;
+    private List<EContaxAsientoContable> asientos = new();
+    private List<EContaxCuentaContable> cuentasMovimiento = new();
+
+    private DateTime filtroDesde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime filtroHasta = DateTime.Today;
+    private string filtroModulo = "";
+    private string filtroEstado = "";
+    private string filtroTexto = "";
+    private int? detalleExpandidoId;
+
+    private bool mostrandoEditor;
+    private EContaxAsientoContable editor = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0) { Navigation.NavigateTo("/login", true); return; }
+
+        cuentasMovimiento = await ContabilidadService.ListarPlanCuentasAsync(currentUserId, soloMovimiento: true, soloActivas: true);
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        asientos = await ContabilidadService.ListarAsientosAsync(currentUserId, filtroDesde, filtroHasta, filtroModulo, filtroEstado, filtroTexto);
+    }
+
+    private void ToggleDetalle(int id) => detalleExpandidoId = detalleExpandidoId == id ? null : id;
+
+    private void NuevoAsiento()
+    {
+        editor = new EContaxAsientoContable
+        {
+            Fecha = DateTime.Today,
+            TipoAsiento = "DIARIO",
+            Estado = "CONTABILIZADO",
+            Detalles = new() { new(), new() }
+        };
+        mostrandoEditor = true;
+    }
+
+    private void EditarAsiento(EContaxAsientoContable a)
+    {
+        editor = new EContaxAsientoContable
+        {
+            IdAsiento = a.IdAsiento,
+            NumeroAsiento = a.NumeroAsiento,
+            Fecha = a.Fecha,
+            TipoAsiento = a.TipoAsiento,
+            ReferenciaDocumento = a.ReferenciaDocumento,
+            Glosa = a.Glosa,
+            Estado = a.Estado,
+            Detalles = a.Detalles.Select(d => new EContaxAsientoDetalle
+            {
+                IdCuenta = d.IdCuenta,
+                CodigoCuenta = d.CodigoCuenta,
+                NombreCuenta = d.NombreCuenta,
+                Detalle = d.Detalle,
+                Debe = d.Debe,
+                Haber = d.Haber
+            }).ToList()
+        };
+        mostrandoEditor = true;
+    }
+
+    private void AgregarLinea() => editor.Detalles.Add(new EContaxAsientoDetalle());
+    private void QuitarLinea(EContaxAsientoDetalle d) { if (editor.Detalles.Count > 2) editor.Detalles.Remove(d); }
+
+    private async Task GuardarAsientoAsync()
+    {
+        try
+        {
+            foreach (var d in editor.Detalles) d.IdCuenta = 0; // Resolver por CodigoCuenta
+            if (editor.IdAsiento == 0)
+                await ContabilidadService.CrearAsientoAsync(currentUserId, editor);
+            else
+                await ContabilidadService.ActualizarAsientoAsync(currentUserId, editor);
+
+            mostrandoEditor = false;
+            await AlertService.ShowSuccessAsync("Asiento contable guardado.");
+            await CargarAsync();
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+
+    private async Task ReversarAsync(int idAsiento)
+    {
+        try
+        {
+            await ContabilidadService.ReversarAsientoAsync(currentUserId, idAsiento, "Reverso solicitado desde gestión contable");
+            await AlertService.ShowSuccessAsync("Asiento reversado correctamente.");
+            await CargarAsync();
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+}

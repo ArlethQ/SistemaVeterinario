@@ -1,0 +1,468 @@
+@page "/contabilidad/bancos"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Simetric.Models.EContax
+@using Simetric.Services
+@using Simetric.Services.EContax
+@attribute [Authorize]
+@inject EContaxBancoService BancoService
+@inject EContaxContabilidadService ContabilidadService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject SweetAlertService AlertService
+
+<PageTitle>Bancos y Conciliación | E-Contax ERP</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="mb-0 fw-bold"><i class="bi bi-bank me-2 text-primary"></i>Bancos y Conciliación Bancaria</h4>
+            <small class="text-muted">Gestión de cuentas bancarias, movimientos con contabilización automática y conciliación.</small>
+        </div>
+        <ul class="nav nav-pills">
+            <li class="nav-item">
+                <button class="nav-link @(tab == "cuentas" ? "active" : "")" @onclick='() => tab = "cuentas"'>Cuentas Bancarias</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(tab == "movimientos" ? "active" : "")" @onclick='() => tab = "movimientos"'>Movimientos</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(tab == "conciliacion" ? "active" : "")" @onclick='() => tab = "conciliacion"'>Conciliación</button>
+            </li>
+        </ul>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="alert alert-info">Cargando módulo de bancos...</div>
+    }
+    else if (tab == "cuentas")
+    {
+        <div class="row g-3">
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-semibold">@(editCuenta.IdCuentaBanco == 0 ? "Nueva Cuenta Bancaria" : "Editar Cuenta Bancaria")</div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm">Banco</label>
+                            <input class="form-control form-control-sm" @bind="editCuenta.Banco" placeholder="Ej. Banco Pichincha" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm">Número de Cuenta</label>
+                            <input class="form-control form-control-sm" @bind="editCuenta.NumeroCuenta" placeholder="Ej. 2100123456" />
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Tipo</label>
+                                <select class="form-select form-select-sm" @bind="editCuenta.TipoCuenta">
+                                    <option value="CORRIENTE">Corriente</option>
+                                    <option value="AHORROS">Ahorros</option>
+                                    <option value="CAJA_CHICA">Caja Chica</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Cuenta Contable</label>
+                                <select class="form-select form-select-sm" @bind="editCuenta.CodigoCuentaContable">
+                                    @foreach (var c in cuentasContablesBanco)
+                                    {
+                                        <option value="@c.Codigo">@c.Codigo - @c.Nombre</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        @if (editCuenta.IdCuentaBanco == 0)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label form-label-sm">Saldo Inicial ($)</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" @bind="editCuenta.SaldoInicial" />
+                            </div>
+                        }
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary btn-sm" @onclick="GuardarCuentaAsync">Guardar Cuenta</button>
+                            @if (editCuenta.IdCuentaBanco > 0)
+                            {
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => editCuenta = new EContaxCuentaBancaria()">Cancelar</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-semibold">Cuentas Registradas</div>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Banco</th>
+                                    <th>Nro. Cuenta</th>
+                                    <th>Tipo</th>
+                                    <th>Cta. Contable</th>
+                                    <th class="text-end">Saldo Actual</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var b in cuentasBancarias)
+                                {
+                                    <tr>
+                                        <td class="fw-semibold">@b.Banco</td>
+                                        <td>@b.NumeroCuenta</td>
+                                        <td><span class="badge bg-light text-dark border">@b.TipoCuenta</span></td>
+                                        <td><code>@b.CodigoCuentaContable</code></td>
+                                        <td class="text-end fw-bold @(b.SaldoActual >= 0 ? "text-success" : "text-danger")">$@b.SaldoActual.ToString("N2")</td>
+                                        <td class="text-end">
+                                            <button class="btn btn-outline-primary btn-sm" @onclick="() => editCuenta = new EContaxCuentaBancaria { IdCuentaBanco = b.IdCuentaBanco, Banco = b.Banco, NumeroCuenta = b.NumeroCuenta, TipoCuenta = b.TipoCuenta, CodigoCuentaContable = b.CodigoCuentaContable, Activa = b.Activa }">Editar</button>
+                                        </td>
+                                    </tr>
+                                }
+                                @if (!cuentasBancarias.Any())
+                                {
+                                    <tr><td colspan="6" class="text-center text-muted py-3">No hay cuentas bancarias registradas.</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (tab == "movimientos")
+    {
+        <div class="row g-3">
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-semibold">Registrar Movimiento Bancario</div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm">Cuenta Bancaria</label>
+                            <select class="form-select form-select-sm" @bind="movCuentaId">
+                                @foreach (var b in cuentasBancarias)
+                                {
+                                    <option value="@b.IdCuentaBanco">@b.Banco - @b.NumeroCuenta ($@b.SaldoActual.ToString("N2"))</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Fecha</label>
+                                <input type="date" class="form-control form-control-sm" @bind="movFecha" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Tipo</label>
+                                <select class="form-select form-select-sm" @bind="movTipo">
+                                    <option value="DEPOSITO">Depósito (+)</option>
+                                    <option value="NOTA_CREDITO_BANCARIA">Nota Crédito (+)</option>
+                                    <option value="EGRESO">Egreso / Cheque (-)</option>
+                                    <option value="NOTA_DEBITO_BANCARIA">Nota Débito (-)</option>
+                                    <option value="COMISION">Comisión Bancaria (-)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Monto ($)</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" @bind="movMonto" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Referencia</label>
+                                <input class="form-control form-control-sm" @bind="movRef" placeholder="Comp./Cheque" />
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm">Beneficiario / Depositante</label>
+                            <input class="form-control form-control-sm" @bind="movBenef" />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm">Cuenta Contrapartida</label>
+                            <select class="form-select form-select-sm" @bind="movContrapartida">
+                                <option value="">Automática según tipo</option>
+                                @foreach (var c in todasCuentasMov)
+                                {
+                                    <option value="@c.Codigo">@c.Codigo - @c.Nombre</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label form-label-sm">Concepto</label>
+                            <input class="form-control form-control-sm" @bind="movConcepto" placeholder="Descripción del movimiento" />
+                        </div>
+                        <button class="btn btn-primary btn-sm w-100" @onclick="RegistrarMovimientoAsync">Registrar y Contabilizar</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+                        <span>Historial de Movimientos</span>
+                        <select class="form-select form-select-sm w-auto" @bind="filtroCuentaMov" @bind:after="CargarMovimientosAsync">
+                            <option value="0">Todas las cuentas</option>
+                            @foreach (var b in cuentasBancarias)
+                            {
+                                <option value="@b.IdCuentaBanco">@b.Banco - @b.NumeroCuenta</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Tipo</th>
+                                    <th>Referencia</th>
+                                    <th>Concepto</th>
+                                    <th class="text-end">Monto</th>
+                                    <th class="text-center">Conciliado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var m in movimientos)
+                                {
+                                    var esIng = m.Tipo is "DEPOSITO" or "NOTA_CREDITO_BANCARIA";
+                                    <tr>
+                                        <td>@m.Fecha.ToString("dd/MM/yyyy")</td>
+                                        <td><span class="badge @(esIng ? "bg-success-subtle text-success" : "bg-danger-subtle text-danger")">@m.Tipo</span></td>
+                                        <td>@m.NumeroReferencia</td>
+                                        <td>@m.Concepto</td>
+                                        <td class="text-end fw-semibold @(esIng ? "text-success" : "text-danger")">@(esIng ? "+" : "-")$@m.Monto.ToString("N2")</td>
+                                        <td class="text-center">
+                                            <span class="badge @(m.Conciliado ? "bg-primary" : "bg-secondary")">@(m.Conciliado ? "Sí" : "Pend.")</span>
+                                        </td>
+                                    </tr>
+                                }
+                                @if (!movimientos.Any())
+                                {
+                                    <tr><td colspan="6" class="text-center text-muted py-3">Sin movimientos registrados.</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-header bg-white fw-semibold">Nueva Conciliación Bancaria</div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm">Cuenta Bancaria</label>
+                            <select class="form-select form-select-sm" @bind="concCuentaId" @bind:after="CargarConciliacionDataAsync">
+                                @foreach (var b in cuentasBancarias)
+                                {
+                                    <option value="@b.IdCuentaBanco">@b.Banco - @b.NumeroCuenta (Libro: $@b.SaldoActual.ToString("N2"))</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Período</label>
+                                <input class="form-control form-control-sm" @bind="concPeriodo" placeholder="2026-11" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Fecha Corte</label>
+                                <input type="date" class="form-control form-control-sm" @bind="concFechaCorte" />
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm">Saldo Extracto Bancario ($)</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" @bind="concSaldoBanco" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label form-label-sm">Observación</label>
+                            <input class="form-control form-control-sm" @bind="concObs" />
+                        </div>
+                        <button class="btn btn-primary btn-sm w-100" @onclick="CrearConciliacionAsync">Iniciar Conciliación</button>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-semibold">Conciliaciones Guardadas</div>
+                    <div class="list-group list-group-flush">
+                        @foreach (var c in conciliaciones)
+                        {
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-semibold">@c.Periodo (@c.FechaCorte.ToString("dd/MM/yyyy"))</div>
+                                    <small class="text-muted">Libro: $@c.SaldoLibro.ToString("N2") | Banco: $@c.SaldoBanco.ToString("N2") | Dif: $@c.Diferencia.ToString("N2")</small>
+                                </div>
+                                <div>
+                                    @if (c.Estado == "BORRADOR")
+                                    {
+                                        <button class="btn btn-success btn-sm" @onclick="() => CerrarConciliacionAsync(c.IdConciliacion)">Cerrar</button>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success">Cerrada</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-semibold">Partidas para Conciliar</div>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Conciliar</th>
+                                    <th>Fecha</th>
+                                    <th>Tipo</th>
+                                    <th>Referencia</th>
+                                    <th>Concepto</th>
+                                    <th class="text-end">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var m in movimientosConciliacion)
+                                {
+                                    var esIng = m.Tipo is "DEPOSITO" or "NOTA_CREDITO_BANCARIA";
+                                    <tr>
+                                        <td>
+                                            <input type="checkbox" class="form-check-input" checked="@m.Conciliado" @onchange="() => ToggleConciliarAsync(m.IdMovimientoBanco)" />
+                                        </td>
+                                        <td>@m.Fecha.ToString("dd/MM/yyyy")</td>
+                                        <td>@m.Tipo</td>
+                                        <td>@m.NumeroReferencia</td>
+                                        <td>@m.Concepto</td>
+                                        <td class="text-end @(esIng ? "text-success" : "text-danger")">@(esIng ? "+" : "-")$@m.Monto.ToString("N2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private int currentUserId;
+    private bool cargando = true;
+    private string tab = "cuentas";
+
+    private List<EContaxCuentaBancaria> cuentasBancarias = new();
+    private List<EContaxCuentaContable> cuentasContablesBanco = new();
+    private List<EContaxCuentaContable> todasCuentasMov = new();
+    private List<EContaxMovimientoBanco> movimientos = new();
+    private List<EContaxMovimientoBanco> movimientosConciliacion = new();
+    private List<EContaxConciliacionBancaria> conciliaciones = new();
+
+    private EContaxCuentaBancaria editCuenta = new();
+    private int movCuentaId;
+    private DateTime movFecha = DateTime.Today;
+    private string movTipo = "DEPOSITO";
+    private decimal movMonto;
+    private string movRef = "";
+    private string movBenef = "";
+    private string movContrapartida = "";
+    private string movConcepto = "";
+    private int filtroCuentaMov;
+
+    private int concCuentaId;
+    private string concPeriodo = DateTime.Today.ToString("yyyy-MM");
+    private DateTime concFechaCorte = DateTime.Today;
+    private decimal concSaldoBanco;
+    private string concObs = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0) { Navigation.NavigateTo("/login", true); return; }
+
+        await CargarTodoAsync();
+    }
+
+    private async Task CargarTodoAsync()
+    {
+        cargando = true;
+        try
+        {
+            cuentasBancarias = await BancoService.ListarCuentasAsync(currentUserId);
+            todasCuentasMov = await ContabilidadService.ListarPlanCuentasAsync(currentUserId, soloMovimiento: true, soloActivas: true);
+            cuentasContablesBanco = todasCuentasMov.Where(x => x.Codigo.StartsWith("1.1.1")).ToList();
+            if (!cuentasContablesBanco.Any()) cuentasContablesBanco = todasCuentasMov.Take(20).ToList();
+
+            if (cuentasBancarias.Any())
+            {
+                if (movCuentaId == 0) movCuentaId = cuentasBancarias[0].IdCuentaBanco;
+                if (concCuentaId == 0) concCuentaId = cuentasBancarias[0].IdCuentaBanco;
+            }
+            await CargarMovimientosAsync();
+            await CargarConciliacionDataAsync();
+        }
+        finally { cargando = false; }
+    }
+
+    private async Task CargarMovimientosAsync()
+    {
+        movimientos = await BancoService.ListarMovimientosAsync(currentUserId, filtroCuentaMov > 0 ? filtroCuentaMov : null);
+    }
+
+    private async Task CargarConciliacionDataAsync()
+    {
+        if (concCuentaId > 0)
+        {
+            movimientosConciliacion = await BancoService.ListarMovimientosAsync(currentUserId, concCuentaId);
+            conciliaciones = await BancoService.ListarConciliacionesAsync(currentUserId, concCuentaId);
+        }
+    }
+
+    private async Task GuardarCuentaAsync()
+    {
+        try
+        {
+            await BancoService.GuardarCuentaAsync(currentUserId, editCuenta);
+            editCuenta = new();
+            await AlertService.ShowSuccessAsync("Cuenta bancaria guardada.");
+            await CargarTodoAsync();
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+
+    private async Task RegistrarMovimientoAsync()
+    {
+        try
+        {
+            await BancoService.RegistrarMovimientoAsync(currentUserId, movCuentaId, movFecha, movTipo, movMonto, movConcepto, movRef, movBenef, movContrapartida);
+            movMonto = 0; movRef = ""; movBenef = ""; movConcepto = "";
+            await AlertService.ShowSuccessAsync("Movimiento bancario registrado y contabilizado.");
+            await CargarTodoAsync();
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+
+    private async Task CrearConciliacionAsync()
+    {
+        try
+        {
+            await BancoService.CrearConciliacionAsync(currentUserId, concCuentaId, concPeriodo, concFechaCorte, concSaldoBanco, concObs);
+            await AlertService.ShowSuccessAsync("Conciliación iniciada.");
+            await CargarConciliacionDataAsync();
+        }
+        catch (Exception ex) { await AlertService.ShowErrorAsync(ex.Message); }
+    }
+
+    private async Task ToggleConciliarAsync(int idMov)
+    {
+        var ultima = conciliaciones.FirstOrDefault(x => x.Estado == "BORRADOR")?.IdConciliacion;
+        await BancoService.ToggleConciliarMovimientoAsync(currentUserId, idMov, ultima);
+        await CargarConciliacionDataAsync();
+    }
+
+    private async Task CerrarConciliacionAsync(int idConc)
+    {
+        await BancoService.CerrarConciliacionAsync(currentUserId, idConc);
+        await AlertService.ShowSuccessAsync("Conciliación cerrada.");
+        await CargarConciliacionDataAsync();
+    }
+}
