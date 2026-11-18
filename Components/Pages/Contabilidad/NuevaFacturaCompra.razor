@@ -10,6 +10,7 @@
 @attribute [AllowAnonymous]
 @inject FacturaCompraManualService FacturaCompraService
 @inject ComprasXmlService ComprasXmlService
+@inject CedulaLookupService CedulaLookup
 @inject LiquidacionCompraService LiquidacionCompraService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Navigation
@@ -65,6 +66,17 @@
                 <i class="bi bi-search n-input-icon"></i>
                 <input type="text" class="n-input n-input-with-icon" value="@proveedorBusqueda" @oninput="BuscarProveedorAsync" placeholder="Buscar por identificación o razón social" autocomplete="off" />
             </div>
+            @if (EsRucCompleto(proveedorBusqueda.Trim()))
+            {
+                <button type="button" class="btn btn-sm btn-outline-primary mt-2"
+                        disabled="@(consultandoRuc || guardando)" @onclick="ConsultarProveedorSriAsync">
+                    @(consultandoRuc ? "Consultando SRI…" : "Consultar RUC en el SRI")
+                </button>
+            }
+            @if (!string.IsNullOrEmpty(mensajeSri))
+            {
+                <small class="d-block mt-2" role="status">@mensajeSri</small>
+            }
             @if (sugerencias.Any())
             {
                 <ul class="n-suggestions">
@@ -214,6 +226,7 @@
 
     private async Task BuscarProveedorAsync(ChangeEventArgs e)
     {
+        mensajeSri = null;
         proveedorBusqueda = e.Value?.ToString() ?? "";
         error = "";
         try
@@ -227,8 +240,65 @@
         }
     }
 
+    private bool consultandoRuc;
+    private string? mensajeSri;
+
+    private static bool EsRucCompleto(string valor) =>
+        valor.Length == 13 && valor.All(c => c is >= '0' and <= '9');
+
+    private async Task ConsultarProveedorSriAsync()
+    {
+        var ruc = proveedorBusqueda.Trim();
+        if (currentUserId <= 0 || consultandoRuc || guardando || !EsRucCompleto(ruc))
+            return;
+
+        var modeloConsultado = model;
+        var identificacionOriginal = model.RucProveedor;
+        var proveedorOriginal = model.Proveedor;
+        consultandoRuc = true;
+        mensajeSri = null;
+        try
+        {
+            var datos = await CedulaLookup.ConsultarAsync(ruc);
+            if (model != modeloConsultado || model.RucProveedor != identificacionOriginal ||
+                model.Proveedor != proveedorOriginal || proveedorBusqueda.Trim() != ruc || guardando)
+                return;
+
+            if (!datos.Success || !datos.Found || string.IsNullOrWhiteSpace(datos.RazonSocial))
+            {
+                mensajeSri = datos.Mensaje ?? "El SRI no devolvió datos para este RUC.";
+                return;
+            }
+
+            if (model.RucProveedor != ruc)
+            {
+                model.CodCliente = null;
+                model.Telefono = model.Correo = model.Nombres = model.Apellidos = "";
+            }
+
+            model.RucProveedor = ruc;
+            model.TipoIdentificacion = "04";
+            model.Proveedor = datos.RazonSocial;
+            model.NombreComercial = datos.NombreComercial ?? datos.RazonSocial;
+            model.ObligadoContabilidad = datos.ObligadoLlevarContabilidad ?? "NO";
+            model.Direccion = datos.DireccionMatriz ?? datos.DireccionEstablecimiento ?? "";
+            sugerencias.Clear();
+            mensajeSri = "Datos del proveedor cargados desde el SRI.";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            if (proveedorBusqueda.Trim() == ruc)
+                mensajeSri = "No se pudo consultar el SRI. Puedes completar los datos manualmente.";
+        }
+        finally
+        {
+            consultandoRuc = false;
+        }
+    }
+
     private void SeleccionarProveedor(LiquidacionProveedorLookupDto proveedor)
     {
+        mensajeSri = null;
         model.CodCliente = proveedor.CodCliente;
         model.RucProveedor = proveedor.Identificacion;
         model.Proveedor = proveedor.RazonSocial;

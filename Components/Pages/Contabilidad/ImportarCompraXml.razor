@@ -10,6 +10,7 @@
 @inject Simetric.Services.ComprobanteRetencionGenerator XmlGenerator
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ComprasXmlService ComprasXmlService
+@inject CedulaLookupService CedulaLookup
 @inject FacturacionService FacturacionService
 @inject EContaxFacturacionService EContaxFacturacionService
 @inject InitialSequencePromptService InitialSequencePromptService
@@ -411,6 +412,18 @@
                                                 <i class="bi @(campoProveedorActivo == "ruc" && sugerenciasProveedorBusqueda.Any() ? "bi-chevron-up" : "bi-chevron-down")"></i>
                                             </button>
                                         </div>
+
+                                        @if (EsRucProveedorCompleto(preview.RucProveedor) && !CamposFormularioBloqueados)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-primary mt-2"
+                                                    disabled="@consultandoRucSri" @onclick="ConsultarProveedorSriAsync">
+                                                @(consultandoRucSri ? "Consultando SRI…" : "Consultar RUC en el SRI")
+                                            </button>
+                                        }
+                                        @if (!string.IsNullOrEmpty(mensajeRucSri))
+                                        {
+                                            <small class="d-block mt-2" role="status">@mensajeRucSri</small>
+                                        }
 
                                         @if (campoProveedorActivo == "ruc" && sugerenciasProveedorBusqueda.Any())
                                         {
@@ -2473,11 +2486,63 @@
         mostrarModalProveedorNuevo = false;
     }
 
+    private bool consultandoRucSri;
+    private string? mensajeRucSri;
+
+    private static bool EsRucProveedorCompleto(string? valor) =>
+        valor?.Trim() is { Length: 13 } ruc && ruc.All(c => c is >= '0' and <= '9');
+
+    private async Task ConsultarProveedorSriAsync()
+    {
+        var compra = preview;
+        var ruc = compra?.RucProveedor?.Trim() ?? "";
+        if (compra is null || consultandoRucSri || CamposFormularioBloqueados ||
+            usuarioActual is not > 0 || !EsRucProveedorCompleto(ruc))
+            return;
+
+        var razonOriginal = compra.RazonSocialProveedor;
+        var proveedorOriginal = compra.CodProveedor;
+        campoProveedorActivo = string.Empty;
+        consultandoRucSri = true;
+        mensajeRucSri = null;
+        try
+        {
+            var datos = await CedulaLookup.ConsultarAsync(ruc);
+            if (disposed || preview != compra || compra.RucProveedor?.Trim() != ruc ||
+                compra.RazonSocialProveedor != razonOriginal || compra.CodProveedor != proveedorOriginal ||
+                CamposFormularioBloqueados)
+                return;
+
+            if (!datos.Success || !datos.Found || string.IsNullOrWhiteSpace(datos.RazonSocial))
+            {
+                mensajeRucSri = datos.Mensaje ?? "El SRI no devolvió datos para este RUC.";
+                return;
+            }
+
+            compra.RucProveedor = ruc;
+            compra.RazonSocialProveedor = datos.RazonSocial;
+            compra.DireccionProveedor = datos.DireccionMatriz ?? datos.DireccionEstablecimiento ?? "";
+            compra.ObligadoContabilidad = datos.ObligadoLlevarContabilidad ?? "NO";
+            sugerenciasProveedorBusqueda.Clear();
+            mensajeRucSri = "Datos del proveedor cargados desde el SRI.";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            if (!disposed && preview == compra && compra.RucProveedor?.Trim() == ruc)
+                mensajeRucSri = "No se pudo consultar el SRI. Puedes completar los datos manualmente.";
+        }
+        finally
+        {
+            consultandoRucSri = false;
+        }
+    }
+
     private async Task OnRucProveedorInput(ChangeEventArgs e)
     {
         if (preview == null)
             return;
 
+        mensajeRucSri = null;
         preview.RucProveedor = e.Value?.ToString() ?? string.Empty;
         preview.CodProveedor = null;
         campoProveedorActivo = "ruc";
@@ -2560,6 +2625,7 @@
         if (preview == null)
             return;
 
+        mensajeRucSri = null;
         preview.CodProveedor = proveedor.CodCliente;
         preview.RucProveedor = proveedor.Identificacion;
         preview.RazonSocialProveedor = proveedor.RazonSocial;
