@@ -614,7 +614,7 @@
                             var activa = _pestanaModuloActiva == tab.Id;
                             <button type="button"
                                     disabled="@bloqueada"
-                                    title="@(bloqueada ? "Módulo bloqueado según los switches de Cirugía / Hospitalización" : tab.Titulo)"
+                                    title="@(bloqueada ? MotivoBloqueoPestana(tab.Id) : tab.Titulo)"
                                     class="hosp-sidebar-item @(activa ? "active" : "") @(bloqueada ? "locked" : "")"
                                     @onclick="() => CambiarPestanaModalAsync(tab.Id)">
                                 <i class="bi @(bloqueada ? "bi-lock" : tab.Icono) hosp-sidebar-icon"></i>
@@ -845,12 +845,15 @@
                 case "preanestesia":
                     <PreAnestesia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                   IdOrden="@_ordenModal.OrdenAtencionId"
-                                  Nhcl="@_ordenModal.Nhcl" />
+                                  Nhcl="@_ordenModal.Nhcl"
+                                  OnGuardado="RefrescarEstadoBloqueosModalAsync" />
                     break;
                 case "pausaseguridad":
                     <PausaSeguridad @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                     IdOrden="@_ordenModal.OrdenAtencionId"
-                                    Nhcl="@_ordenModal.Nhcl" />
+                                    Nhcl="@_ordenModal.Nhcl"
+                                    ModoModal="true"
+                                    OnGuardado="RefrescarEstadoBloqueosModalAsync" />
                     break;
                 case "anestesia":
                     <HojaAnestesia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
@@ -1284,6 +1287,8 @@
 
     private bool _tieneDatosCirugia;
     private bool _tieneDatosHospitalizacion;
+    private bool _tienePreanestesia;
+    private bool _tienePausaSeguridad;
     private bool _guardandoChecksModal;
     private bool _confirmarDesactivarCirugia;
     private bool _sidebarModalAbierta = true;
@@ -1296,6 +1301,15 @@
     private bool EstaPestanaBloqueada(string id) =>
         (_ordenModal is not null && PestanasCirugia.Contains(id) && !_ordenModal.RequiereCirugia)
         || (_ordenModal is not null && PestanasHospitalizacion.Contains(id) && !_ordenModal.RequiereHospitalizacion);
+
+    private string MotivoBloqueoPestana(string id)
+    {
+        if (_ordenModal is not null && PestanasCirugia.Contains(id) && !_ordenModal.RequiereCirugia)
+            return "Módulo bloqueado: active Requiere Cirugía";
+        if (_ordenModal is not null && PestanasHospitalizacion.Contains(id) && !_ordenModal.RequiereHospitalizacion)
+            return "Módulo bloqueado: active Requiere Hospitalización";
+        return "Módulo bloqueado";
+    }
 
     private IEnumerable<OrdenHospitalizacionColaDto> PendientesIngreso =>
         _ordenes.Where(x => !x.YaIngresado);
@@ -1462,9 +1476,15 @@
     private async Task RefrescarEstadoBloqueosModalAsync()
     {
         if (_ordenModal is null) return;
-        var estado = await HospService.VerificarDatosModulosOrdenAsync(_ordenModal.OrdenAtencionId, _ordenModal.Nhcl);
+        var estadoTask = HospService.VerificarDatosModulosOrdenAsync(_ordenModal.OrdenAtencionId, _ordenModal.Nhcl);
+        var flujoTask = HospService.ObtenerEstadoFlujoCirugiaAsync(_ordenModal.OrdenAtencionId);
+        await Task.WhenAll(estadoTask, flujoTask);
+        var estado = await estadoTask;
+        var flujo = await flujoTask;
         _tieneDatosCirugia = estado.TieneDatosCirugia;
         _tieneDatosHospitalizacion = estado.TieneDatosHospitalizacion;
+        _tienePreanestesia = flujo.TienePreanestesia;
+        _tienePausaSeguridad = flujo.TienePausaSeguridad;
     }
 
     private async Task OnSelectModuloModalChangedAsync(ChangeEventArgs e)

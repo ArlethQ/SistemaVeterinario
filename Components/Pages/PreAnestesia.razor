@@ -356,6 +356,7 @@ else
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
+    [Parameter] public EventCallback OnGuardado { get; set; }
 
     private int ordenInput;
     private int nhclInput;
@@ -494,6 +495,8 @@ else
         mensajeAlerta = ok
             ? $"Evaluación Pre-Anestésica (ASA {preDto.Riesgo}) guardada exitosamente."
             : "Ocurrió un error al guardar la Evaluación Pre-Anestésica.";
+        if (ok && OnGuardado.HasDelegate)
+            await OnGuardado.InvokeAsync();
     }
 
     private async Task OnFiltroProdKeyDown(KeyboardEventArgs e)

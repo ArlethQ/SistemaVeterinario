@@ -46,6 +46,7 @@ public interface IHospitalizacionService
     Task<IngresoHospitalizacionDto> ObtenerIngresoHospitalizacionAsync(int idOrden, int nhcl);
     Task GuardarIngresoHospitalizacionAsync(IngresoHospitalizacionDto dto, int idUsuario);
     Task<(bool TieneDatosCirugia, bool TieneDatosHospitalizacion)> VerificarDatosModulosOrdenAsync(int idOrden, int nhcl);
+    Task<(bool TienePreanestesia, bool TienePausaSeguridad)> ObtenerEstadoFlujoCirugiaAsync(int idOrden);
     Task<bool> ActualizarIndicacionesModalAsync(int idOrden, int nhcl, bool requiereCirugia, bool requiereHospitalizacion, int idUsuario);
     Task<bool> OrdenRequiereCirugiaAsync(int idOrden);
 }
@@ -1419,6 +1420,7 @@ public class HospitalizacionService : IHospitalizacionService
                     (OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL AND EXISTS (
                         SELECT 1 FROM qvt_calendario_cirugias WHERE nhcl = @Nhcl AND estado = 'A' AND fechacirugia >= CAST(GETDATE() AS date)))
                     OR EXISTS (SELECT 1 FROM qvt_preanestesia WHERE orden = @IdOrden)
+                    OR EXISTS (SELECT 1 FROM qvt_verificacion WHERE fichamedr = @IdOrden)
                     OR EXISTS (SELECT 1 FROM qvt_RegistroAnestesia WHERE idOrden = @IdOrden)
                     OR EXISTS (SELECT 1 FROM qvt_Protocolo WHERE idOrden = @IdOrden)
                     OR EXISTS (SELECT 1 FROM qvt_observaciones_recuperacion WHERE idOrden = @IdOrden AND estado = 'A')
@@ -1441,6 +1443,16 @@ public class HospitalizacionService : IHospitalizacionService
 
         var res = await _db.QueryFirstOrDefaultAsync<(bool TieneCirugia, bool TieneHospitalizacion)>(sql, new { IdOrden = idOrden, Nhcl = nhcl });
         return (res.TieneCirugia, res.TieneHospitalizacion);
+    }
+
+    public async Task<(bool TienePreanestesia, bool TienePausaSeguridad)> ObtenerEstadoFlujoCirugiaAsync(int idOrden)
+    {
+        if (idOrden <= 0) return (false, false);
+        const string sql = @"
+            SELECT
+                CAST(CASE WHEN EXISTS (SELECT 1 FROM qvt_preanestesia WHERE orden = @IdOrden) THEN 1 ELSE 0 END AS BIT) AS TienePreanestesia,
+                CAST(CASE WHEN EXISTS (SELECT 1 FROM qvt_verificacion WHERE fichamedr = @IdOrden) THEN 1 ELSE 0 END AS BIT) AS TienePausaSeguridad;";
+        return await _db.QueryFirstOrDefaultAsync<(bool TienePreanestesia, bool TienePausaSeguridad)>(sql, new { IdOrden = idOrden });
     }
 
     public async Task<bool> ActualizarIndicacionesModalAsync(int idOrden, int nhcl, bool requiereCirugia, bool requiereHospitalizacion, int idUsuario)
