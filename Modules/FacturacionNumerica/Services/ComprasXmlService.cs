@@ -937,7 +937,7 @@ public class ComprasXmlService
                 .FirstOrDefaultAsync(x =>
                     x.CodFactura == preview.CodFacturaExistente.Value &&
                     x.Usuario == preview.Usuario &&
-                    (x.CodDocumento == "03" || (x.CodDocumento == "01" && x.TipoDocumento == "COMPRA")) &&
+                    (x.CodDocumento == "03" || (x.CodDocumento == "01" && (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA"))) &&
                     x.Estado == true);
 
             if (compraExistente == null)
@@ -2328,7 +2328,7 @@ public class ComprasXmlService
     {
         var compra = await _context.ComprasFacturas.AsNoTracking().FirstOrDefaultAsync(x =>
             x.CodFactura == codFactura && x.Usuario == idUsuario && x.Estado == true &&
-            x.CodDocumento == "01" && x.TipoDocumento == "COMPRA");
+            x.CodDocumento == "01" && (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA"));
 
         return compra is null ? null : await MapearCompraFacturaAPreviewAsync(compra);
     }

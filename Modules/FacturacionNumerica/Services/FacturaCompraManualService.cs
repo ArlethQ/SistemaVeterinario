@@ -72,7 +72,7 @@ public sealed class FacturaCompraManualService
         var serie = "MANUAL";
         var numero = DateTime.Now.ToString("yyyyMMddHHmmssfff");
         var duplicada = await context.ComprasFacturas.AnyAsync(x =>
-            x.Usuario == idUsuario && x.CodDocumento == "01" && x.TipoDocumento == "COMPRA" &&
+            x.Usuario == idUsuario && x.CodDocumento == "01" && (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA") &&
             x.Serie == serie && x.NumFactura == numero && x.CodClientes == cliente.Codcliente && x.Estado == true);
         if (duplicada)
             throw new InvalidOperationException("La factura de compra ya está registrada para este proveedor.");
@@ -101,7 +101,7 @@ public sealed class FacturaCompraManualService
             TipoPago = string.IsNullOrWhiteSpace(modelo.FormaPago) ? "20" : modelo.FormaPago,
             TiempoCredito = esCredito ? Math.Max(modelo.PlazoCredito, 1) : 0,
             Estado = true,
-            TipoDocumento = "COMPRA",
+            TipoDocumento = "COM",
             EstadoEnvioSRI = "NO APLICA",
             FechaRegistro = DateTime.Now,
             ValorApagar = esCredito ? total : 0m,
@@ -199,7 +199,7 @@ public sealed class FacturaCompraManualService
             x.CodFactura == idFactura &&
             x.Usuario == idUsuario &&
             x.CodDocumento == "01" &&
-            x.TipoDocumento == "COMPRA" &&
+            (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA") &&
             x.CodClave != null && x.CodClave.StartsWith("MANUAL-COMPRA-") &&
             x.Estado == true);
         if (compra == null)
@@ -223,7 +223,7 @@ public sealed class FacturaCompraManualService
         var comprasQuery = context.ComprasFacturas.AsNoTracking()
             .Where(x => x.Usuario == idUsuario &&
                 x.CodDocumento == "01" &&
-                x.TipoDocumento == "COMPRA" &&
+                (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA") &&
                 x.CodClave != null && x.CodClave.StartsWith("MANUAL-COMPRA-"));
         if (!incluirAnuladas)
             comprasQuery = comprasQuery.Where(x => x.Estado == true);
@@ -301,7 +301,7 @@ public sealed class FacturaCompraManualService
         var duplicada = await context.ComprasFacturas.AnyAsync(x =>
             x.Usuario == idUsuario &&
             x.CodDocumento == "01" &&
-            x.TipoDocumento == "COMPRA" &&
+            (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA") &&
             x.Serie == serieDigitos &&
             x.NumFactura == numeroNormalizado &&
             x.CodClientes == cliente.Codcliente &&
@@ -352,7 +352,7 @@ public sealed class FacturaCompraManualService
             TipoPago = string.IsNullOrWhiteSpace(modelo.FormaPago) ? "20" : modelo.FormaPago,
             TiempoCredito = esCredito ? Math.Max(modelo.PlazoCredito, 1) : 0,
             Estado = true,
-            TipoDocumento = "COMPRA",
+            TipoDocumento = "COM",
             EstadoEnvioSRI = string.IsNullOrWhiteSpace(modelo.ClaveAcceso) ? "NO APLICA" : "RECIBIDO",
             FechaRegistro = DateTime.Now,
             ValorApagar = esCredito ? total : 0m,
@@ -466,7 +466,7 @@ public sealed class FacturaCompraManualService
             .Where(x =>
                 x.Usuario == idUsuario &&
                 x.CodDocumento == "01" &&
-                x.TipoDocumento == "COMPRA" &&
+                (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA") &&
                 x.Serie == serieDigitos &&
                 x.NumFactura == numeroNormalizado &&
                 x.Estado == true)
@@ -490,7 +490,7 @@ public sealed class FacturaCompraManualService
         var comprasQuery = context.ComprasFacturas.AsNoTracking()
             .Where(x => x.Usuario == idUsuario &&
                 x.CodDocumento == "01" &&
-                x.TipoDocumento == "COMPRA");
+                (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA"));
         if (!incluirAnuladas)
             comprasQuery = comprasQuery.Where(x => x.Estado == true);
 
@@ -617,7 +617,7 @@ public sealed class FacturaCompraManualService
             x.CodFactura == idFactura &&
             x.Usuario == idUsuario &&
             x.CodDocumento == "01" &&
-            x.TipoDocumento == "COMPRA" &&
+            (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA") &&
             x.Estado == true);
         if (compra == null)
             return false;

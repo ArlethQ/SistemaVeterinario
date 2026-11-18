@@ -49,7 +49,7 @@ public sealed class CuentasPagarService
             await using var context = await _dbFactory.CreateDbContextAsync();
             var compras = await context.ComprasFacturas
                 .Where(x => importes.Keys.Contains(x.CodFactura) && x.Estado == true &&
-                    ((x.CodDocumento == "03" && x.TipoDocumento == "LIQ") || (x.CodDocumento == "01" && x.TipoDocumento == "COMPRA")) &&
+                    ((x.CodDocumento == "03" && x.TipoDocumento == "LIQ") || (x.CodDocumento == "01" && (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA"))) &&
                     (x.TipoPago == "19" || (x.TiempoCredito ?? 0) > 0) &&
                     (codEmisor.HasValue ? x.CodEmisor == codEmisor.Value : x.Usuario == idUsuario))
                 .ToListAsync();
@@ -224,7 +224,7 @@ public sealed class CuentasPagarService
         var comprasQuery = context.ComprasFacturas
             .AsNoTracking()
             .Where(x => x.Estado == true &&
-                ((x.CodDocumento == "03" && x.TipoDocumento == "LIQ") || (x.CodDocumento == "01" && x.TipoDocumento == "COMPRA")) &&
+                ((x.CodDocumento == "03" && x.TipoDocumento == "LIQ") || (x.CodDocumento == "01" && (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA"))) &&
                 (x.TipoPago == "19" || (x.TiempoCredito ?? 0) > 0));
 
         comprasQuery = codEmisor.HasValue
