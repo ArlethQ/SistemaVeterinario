@@ -244,7 +244,7 @@
                             @if (TieneAlguno("facturacion/proformas", "facturacion/nueva", "facturas"))
                             {
                                 <details class="submenu-group" open>
-                                    <summary><span>Ventas y Comprobantes</span><i>⌄</i></summary>
+                                    <summary><span>Facturas</span><i>⌄</i></summary>
                                     <div class="submenu">
                                         @if (TienePermiso("facturacion/proformas"))
                                         {
@@ -252,79 +252,76 @@
                                         }
                                         @if (TienePermiso("facturacion/nueva"))
                                         {
-                                            <NavLink href="facturacion/nueva">Nueva factura electrónica</NavLink>
+                                            <NavLink href="facturacion/nueva">Nueva Factura</NavLink>
                                         }
                                         @if (TienePermiso("facturas"))
                                         {
-                                            <NavLink href="facturas">Facturas emitidas</NavLink>
+                                            <NavLink href="facturas">Mis Facturas</NavLink>
                                         }
                                     </div>
                                 </details>
                             }
 
-                            @if (TieneAlguno("facturacion/nota-credito", "facturacion/notas-credito-generadas", "facturacion/nota-debito", "facturacion/notas-debito-generadas", "facturacion/guia-remision", "facturacion/guias-remision-generadas"))
+                            @if (TieneAlguno("facturacion/guia-remision", "compras/nueva-liquidacion", "facturacion/nota-credito", "facturacion/nota-debito"))
                             {
                                 <details class="submenu-group">
-                                    <summary><span>Notas y Guías</span><i>⌄</i></summary>
+                                    <summary><span>Emisión de otros Documentos</span><i>⌄</i></summary>
                                     <div class="submenu">
+                                        @if (TienePermiso("facturacion/guia-remision"))
+                                        {
+                                            <NavLink href="facturacion/guia-remision">Guía de Remisión</NavLink>
+                                        }
+                                        @if (TienePermiso("compras/nueva-liquidacion"))
+                                        {
+                                            <NavLink href="compras/nueva-liquidacion">Liquidación de Compra</NavLink>
+                                        }
                                         @if (TienePermiso("facturacion/nota-credito"))
                                         {
-                                            <NavLink href="facturacion/nota-credito">Nota de crédito</NavLink>
-                                        }
-                                        @if (TienePermiso("facturacion/notas-credito-generadas"))
-                                        {
-                                            <NavLink href="facturacion/notas-credito-generadas">Notas de crédito emitidas</NavLink>
+                                            <NavLink href="facturacion/nota-credito">Nota de Crédito</NavLink>
                                         }
                                         @if (TienePermiso("facturacion/nota-debito"))
                                         {
-                                            <NavLink href="facturacion/nota-debito">Nota de débito</NavLink>
-                                        }
-                                        @if (TienePermiso("facturacion/notas-debito-generadas"))
-                                        {
-                                            <NavLink href="facturacion/notas-debito-generadas">Notas de débito emitidas</NavLink>
-                                        }
-                                        @if (TienePermiso("facturacion/guia-remision"))
-                                        {
-                                            <NavLink href="facturacion/guia-remision">Guía de remisión</NavLink>
-                                        }
-                                        @if (TienePermiso("facturacion/guias-remision-generadas"))
-                                        {
-                                            <NavLink href="facturacion/guias-remision-generadas">Guías emitidas</NavLink>
+                                            <NavLink href="facturacion/nota-debito">Nota de Débito</NavLink>
                                         }
                                     </div>
                                 </details>
                             }
 
-                            @if (TieneAlguno("compras/importar-xml", "facturacion/retenciones-generadas"))
+                            @if (TieneAlguno("facturacion/notas-credito-generadas", "facturacion/retenciones-generadas", "facturacion/guias-remision-generadas", "compras/liquidaciones-generadas", "facturacion/notas-debito-generadas"))
+                            {
+                                <details class="submenu-group">
+                                    <summary><span>Documentos Generados</span><i>⌄</i></summary>
+                                    <div class="submenu">
+                                        @if (TienePermiso("facturacion/notas-credito-generadas"))
+                                        {
+                                            <NavLink href="facturacion/notas-credito-generadas">Mis Notas de Crédito</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/retenciones-generadas"))
+                                        {
+                                            <NavLink href="facturacion/retenciones-generadas">Mis Retenciones</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/guias-remision-generadas"))
+                                        {
+                                            <NavLink href="facturacion/guias-remision-generadas">Mis Guías de Remisión</NavLink>
+                                        }
+                                        @if (TienePermiso("compras/liquidaciones-generadas"))
+                                        {
+                                            <NavLink href="compras/liquidaciones-generadas">Mis Liquidaciones Compras</NavLink>
+                                        }
+                                        @if (TienePermiso("facturacion/notas-debito-generadas"))
+                                        {
+                                            <NavLink href="facturacion/notas-debito-generadas">Mis Notas de Débito</NavLink>
+                                        }
+                                    </div>
+                                </details>
+                            }
+
+                            @if (TienePermiso("compras/importar-xml"))
                             {
                                 <details class="submenu-group">
                                     <summary><span>Retención de compras</span><i>⌄</i></summary>
                                     <div class="submenu">
-                                        @if (TienePermiso("compras/importar-xml"))
-                                        {
-                                            <NavLink href="compras/importar-xml">Retención de compra</NavLink>
-                                        }
-                                        @if (TienePermiso("facturacion/retenciones-generadas"))
-                                        {
-                                            <NavLink href="facturacion/retenciones-generadas">Retenciones</NavLink>
-                                        }
-                                    </div>
-                                </details>
-                            }
-
-                            @if (TieneAlguno("compras/nueva-liquidacion", "compras/liquidaciones-generadas"))
-                            {
-                                <details class="submenu-group">
-                                    <summary><span>Liquidación de compras</span><i>⌄</i></summary>
-                                    <div class="submenu">
-                                        @if (TienePermiso("compras/nueva-liquidacion"))
-                                        {
-                                            <NavLink href="compras/nueva-liquidacion">Liquidación de compra</NavLink>
-                                        }
-                                        @if (TienePermiso("compras/liquidaciones-generadas"))
-                                        {
-                                            <NavLink href="compras/liquidaciones-generadas">Liquidaciones emitidas</NavLink>
-                                        }
+                                        <NavLink href="compras/importar-xml">Retención de compra</NavLink>
                                     </div>
                                 </details>
                             }
@@ -332,19 +329,19 @@
                             @if (TieneAlguno("facturacion/configuracion/emisor", "facturacion/configuracion/firma", "facturacion/configuracion/caja", "contabilidad/compra-documentos"))
                             {
                                 <details class="submenu-group">
-                                    <summary><span>Configuración SRI</span><i>⌄</i></summary>
+                                    <summary><span>Configuración</span><i>⌄</i></summary>
                                     <div class="submenu">
                                         @if (TienePermiso("facturacion/configuracion/emisor"))
                                         {
-                                            <NavLink href="facturacion/configuracion/emisor">Configurar emisor</NavLink>
+                                            <NavLink href="facturacion/configuracion/emisor">Emisor</NavLink>
                                         }
                                         @if (TienePermiso("facturacion/configuracion/firma"))
                                         {
-                                            <NavLink href="facturacion/configuracion/firma">Firma electrónica</NavLink>
+                                            <NavLink href="facturacion/configuracion/firma">Firma</NavLink>
                                         }
                                         @if (TienePermiso("facturacion/configuracion/caja"))
                                         {
-                                            <NavLink href="facturacion/configuracion/caja">Caja y secuenciales</NavLink>
+                                            <NavLink href="facturacion/configuracion/caja">Cajas y secuencias</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/compra-documentos"))
                                         {
@@ -362,22 +359,22 @@
                     <details>
                         <summary><MenuIcon Name="billing" /><span>Contabilidad</span><i>⌄</i></summary>
                         <div class="submenu">
-                            @if (TieneAlguno("contabilidad/cuentas-por-cobrar", "contabilidad/cuentas-por-pagar", "contabilidad/cuentas-por-pagar/registrar", "contabilidad/cuentas-por-pagar/estado-cuenta", "contabilidad/clientes", "contabilidad/proveedores"))
+                            @if (TieneAlguno("contabilidad/cuentas-por-cobrar", "contabilidad/cuentas-por-pagar", "contabilidad/cuentas-por-pagar/registrar", "contabilidad/cuentas-por-pagar/estado-cuenta", "contabilidad/clientes"))
                             {
                                 <details class="submenu-group" open>
-                                    <summary><span>Cartera y Terceros</span><i>⌄</i></summary>
+                                    <summary><span>Abonos</span><i>⌄</i></summary>
                                     <div class="submenu">
                                         @if (TienePermiso("contabilidad/cuentas-por-cobrar"))
                                         {
-                                            <NavLink href="contabilidad/cuentas-por-cobrar">Cuentas por cobrar y abonos</NavLink>
+                                            <NavLink href="contabilidad/cuentas-por-cobrar">Cuentas Por Cobrar</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/cuentas-por-cobrar"))
                                         {
-                                            <NavLink href="contabilidad/cuentas-por-pagar">Cuentas por pagar</NavLink>
+                                            <NavLink href="contabilidad/cuentas-por-pagar">Cuentas Por Pagar</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/cuentas-por-pagar/registrar") || TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/cuentas-por-cobrar"))
                                         {
-                                            <NavLink href="contabilidad/cuentas-por-pagar/registrar">Registrar cuenta por pagar</NavLink>
+                                            <NavLink href="contabilidad/cuentas-por-pagar/registrar">Registrar pago</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/cuentas-por-pagar/estado-cuenta") || TienePermiso("contabilidad/cuentas-por-pagar") || TienePermiso("contabilidad/proveedores"))
                                         {
@@ -385,7 +382,7 @@
                                         }
                                         @if (TienePermiso("contabilidad/clientes"))
                                         {
-                                            <NavLink href="contabilidad/clientes">Clientes contables</NavLink>
+                                            <NavLink href="contabilidad/clientes">Clientes / Terceros</NavLink>
                                         }
                                     </div>
                                 </details>
@@ -406,11 +403,11 @@
                                         }
                                         @if (TienePermiso("contabilidad/compras/nueva-factura"))
                                         {
-                                            <NavLink href="contabilidad/compras/nueva-factura">Registrar factura de compra</NavLink>
+                                            <NavLink href="contabilidad/compras/nueva-factura">Registrar la compra</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/compras/recepciones"))
                                         {
-                                            <NavLink href="contabilidad/compras/recepciones">Recepciones de compra</NavLink>
+                                            <NavLink href="contabilidad/compras/recepciones">Recepción de compra</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/mis-compras"))
                                         {
@@ -422,19 +419,19 @@
                                         }
                                         @if (TienePermiso("contabilidad/compras/importar-xml"))
                                         {
-                                            <NavLink href="contabilidad/compras/importar-xml">Generar retención</NavLink>
+                                            <NavLink href="contabilidad/compras/importar-xml">Retenciones de compra</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/facturacion/retenciones-generadas"))
                                         {
-                                            <NavLink href="contabilidad/facturacion/retenciones-generadas">Retenciones emitidas</NavLink>
+                                            <NavLink href="contabilidad/facturacion/retenciones-generadas">Mis Retenciones</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/compras/nueva-liquidacion"))
                                         {
-                                            <NavLink href="contabilidad/compras/nueva-liquidacion">Nueva liquidación de compra</NavLink>
+                                            <NavLink href="contabilidad/compras/nueva-liquidacion">Liquidación de Compra</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/compras/liquidaciones-generadas"))
                                         {
-                                            <NavLink href="contabilidad/compras/liquidaciones-generadas">Liquidaciones emitidas</NavLink>
+                                            <NavLink href="contabilidad/compras/liquidaciones-generadas">Mis Liquidaciones Compras</NavLink>
                                         }
                                     </div>
                                 </details>
@@ -443,11 +440,11 @@
                             @if (TieneAlguno("contabilidad/inventarios", "contabilidad/inventarios/asignar-stock", "contabilidad/inventarios/bodegas", "contabilidad/inventarios/operaciones", "contabilidad/inventarios/reportes"))
                             {
                                 <details class="submenu-group">
-                                    <summary><span>Inventario y Kardex</span><i>⌄</i></summary>
+                                    <summary><span>Inventarios</span><i>⌄</i></summary>
                                     <div class="submenu">
                                         @if (TienePermiso("contabilidad/inventarios"))
                                         {
-                                            <NavLink href="contabilidad/inventarios">Inventario y kardex</NavLink>
+                                            <NavLink href="contabilidad/inventarios">Inventarios / Kardex</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/inventarios/asignar-stock") || TienePermiso("contabilidad/inventarios"))
                                         {
@@ -469,14 +466,14 @@
                                 </details>
                             }
 
-                            @if (TieneAlguno("contabilidad/reportes/documentos", "contabilidad/parametrizacion", "contabilidad/configuracion/general", "contabilidad/organizacion"))
+                            @if (TieneAlguno("contabilidad/reportes/documentos", "contabilidad/parametrizacion", "contabilidad/configuracion/general", "contabilidad/organizacion", "contabilidad/administracion/usuarios", "contabilidad/administracion/roles"))
                             {
                                 <details class="submenu-group">
-                                    <summary><span>Reportes y Configuración</span><i>⌄</i></summary>
+                                    <summary><span>Administración</span><i>⌄</i></summary>
                                     <div class="submenu">
                                         @if (TienePermiso("contabilidad/reportes/documentos"))
                                         {
-                                            <NavLink href="contabilidad/reportes/documentos">Reportes contables</NavLink>
+                                            <NavLink href="contabilidad/reportes/documentos">Reporte documentos</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/parametrizacion"))
                                         {
@@ -488,20 +485,11 @@
                                         }
                                         @if (TienePermiso("contabilidad/organizacion") || TienePermiso("contabilidad/configuracion/general"))
                                         {
-                                            <NavLink href="contabilidad/organizacion">Organización contable</NavLink>
+                                            <NavLink href="contabilidad/organizacion">Sucursales y roles</NavLink>
                                         }
-                                    </div>
-                                </details>
-                            }
-
-                            @if (TieneAlguno("contabilidad/administracion/usuarios", "contabilidad/administracion/roles"))
-                            {
-                                <details class="submenu-group">
-                                    <summary><span>Seguridad Contable</span><i>⌄</i></summary>
-                                    <div class="submenu">
                                         @if (TienePermiso("contabilidad/administracion/usuarios"))
                                         {
-                                            <NavLink href="contabilidad/administracion/usuarios">Usuarios contables</NavLink>
+                                            <NavLink href="contabilidad/administracion/usuarios">Usuarios</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/administracion/roles"))
                                         {
