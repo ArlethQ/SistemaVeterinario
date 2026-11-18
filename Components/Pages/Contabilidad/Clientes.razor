@@ -2,7 +2,6 @@
 
 @using System.Net.Http.Json
 @using Simetric.DTOs.EContax
-@inject Simetric.Services.EContax.EContaxCatalogService CatalogoProveedor
 @using System.Text
 @inject HttpClient Http
 @using Microsoft.AspNetCore.Authorization
@@ -111,8 +110,8 @@
         <div class="quick-action-search">
             <i class="bi bi-search"></i>
             <input placeholder="Buscar por nombre, identificación o correo..."
-                   value="@filtro"
-                   @oninput="OnFiltroChanged" />
+                   @bind:get="filtro"
+                   @bind:set="OnFiltroChanged" @bind:event="oninput" />
         </div>
 
         <button type="button" class="filter-toggle-btn @(mostrarPanelFiltros ? "active" : "")" @onclick="AlternarPanelFiltros">
@@ -149,8 +148,8 @@
                 </span>
                 <input class="search-input"
                        placeholder="Buscar por nombre o identificación"
-                       value="@filtro"
-                       @oninput="OnFiltroChanged" />
+                       @bind:get="filtro"
+                       @bind:set="OnFiltroChanged" @bind:event="oninput" />
             </div>
 
             <div class="toolbar-secondary-actions">
@@ -506,7 +505,7 @@
                 <SaveForm Model="@model" OnValidSubmit="Guardar">
                     <DataAnnotationsValidator />
 
-                    <div @key="formKey">
+                    <div>
                             <details class="form-accordion" open>
                             <summary class="form-section-heading">
                                 <span>1</span>
@@ -547,10 +546,22 @@
                             <div class="row mb-2">
                                 <div class="col">
                                     <label class="form-label small fw-bold">Número Identificación *</label>
-                                     <input class="form-control form-control-sm"
-                                            value="@model.Numeroidentificacion"
-                                            @oninput="OnNumeroIdentificacionChangedAsync"
-                                            @onblur="OnNumeroIdentificacionBlurAsync" />
+                                     @if (EsModoProveedores)
+                                     {
+                                         <input class="form-control form-control-sm"
+                                                @bind:get="model.Numeroidentificacion"
+                                                @bind:set="CambiarIdentificacionProveedor"
+                                                onkeydown="if (event.key === 'Enter' &amp;&amp; !event.isComposing) { event.preventDefault(); if (!event.repeat) { this.dispatchEvent(new Event('change', { bubbles: true })); this.nextElementSibling.click(); } }"
+                                                aria-label="Número de identificación. Presiona Enter para consultar." />
+                                         <button type="button" hidden @onclick="() => ConsultarCedulaSiAplicaAsync()"></button>
+                                     }
+                                     else
+                                     {
+                                         <input class="form-control form-control-sm"
+                                                @bind:get="model.Numeroidentificacion"
+                                                @bind:set="OnNumeroIdentificacionChangedAsync" @bind:event="oninput"
+                                                @onblur="OnNumeroIdentificacionBlurAsync" />
+                                     }
                                      <ValidationMessage For="@(() => model.Numeroidentificacion)" class="text-danger small" />
                                      @if (consultandoCedula)
                                      {
@@ -612,31 +623,20 @@
                             @if (EsModoProveedores)
                             {
                                 <details class="form-accordion client-provider-accordion" open>
-                                <summary class="form-section-heading">
-                                    <span>2</span>
-                                    <strong>Proveedor</strong>
-                                    <i class="bi bi-chevron-down"></i>
-                                </summary>
-                                <div class="form-accordion-body">
-                                    <div class="client-provider-toggle-grid client-provider-toggle-grid-single">
-                                        <label class="client-provider-toggle-card">
-                                            <input type="checkbox"
-                                                   class="client-provider-switch-input"
-                                                   checked="@model.EsProveedor"
-                                                   @onchange="OnEsProveedorChanged" />
-                                            <span class="client-provider-switch"></span>
-                                            <span>
-                                                <strong>Es proveedor</strong>
-                                                <small>Tambien se registra para compras, retenciones y liquidaciones.</small>
-                                            </span>
+                                    <summary class="form-section-heading">
+                                        <span>2</span>
+                                        <strong>Productos que vende el proveedor</strong>
+                                        <i class="bi bi-chevron-down"></i>
+                                    </summary>
+                                    <div class="form-accordion-body">
+                                        <label class="form-label small d-block">
+                                            Observaciones (opcional)
+                                            <textarea class="form-control form-control-sm w-100" rows="3"
+                                                      placeholder="Describe los productos que ofrece"
+                                                      @bind="model.Observaciones"></textarea>
                                         </label>
                                     </div>
-                                </div>
                                 </details>
-                                @if (model.EsProveedor && model.ProductosProveedor is not null)
-                                {
-                                    <HosvetKardex.Web.Components.Pages.Contabilidad.ProductosDelProveedor @key="model" Items="model.ProductosProveedor" UsuarioId="usuarioLogueadoId" Deshabilitado="guardandoCliente" />
-                                }
                             }
 
                             <details class="form-accordion">
@@ -874,12 +874,15 @@
                                         </div>
                                     </div>
 
-                                    <div class="row g-3 align-items-start client-credit-grid">
-                                        <div class="col-12 client-credit-notes">
-                                            <label class="form-label small">Observaciones (opcional)</label>
-                                            <InputTextArea class="form-control form-control-sm w-100" rows="2" @bind-Value="model.Observaciones" />
+                                    @if (!EsModoProveedores)
+                                    {
+                                        <div class="row g-3 align-items-start client-credit-grid">
+                                            <div class="col-12 client-credit-notes">
+                                                <label class="form-label small">Observaciones (opcional)</label>
+                                                <InputTextArea class="form-control form-control-sm w-100" rows="2" @bind-Value="model.Observaciones" />
+                                            </div>
                                         </div>
-                                    </div>
+                                    }
                                 </div>
                             </details>
 
@@ -922,7 +925,7 @@
                                 <SaveForm Model="@model" OnValidSubmit="Guardar" OnInvalidSubmit="OnFormularioClienteInvalido">
                                     <DataAnnotationsValidator />
 
-                                    <div @key="formKey">
+                                    <div>
                                             <details class="form-accordion" open>
                                             <summary class="form-section-heading">
                                                 <span>1</span>
@@ -963,10 +966,22 @@
                                             <div class="row mb-2">
                                                 <div class="col">
                                                     <label class="form-label small fw-bold">Número Identificación *</label>
-                                                     <input class="form-control form-control-sm"
-                                                            value="@model.Numeroidentificacion"
-                                                            @oninput="OnNumeroIdentificacionChangedAsync"
-                                                            @onblur="OnNumeroIdentificacionBlurAsync" />
+                                                     @if (EsModoProveedores)
+                                                     {
+                                                         <input class="form-control form-control-sm"
+                                                                @bind:get="model.Numeroidentificacion"
+                                                                @bind:set="CambiarIdentificacionProveedor"
+                                                                onkeydown="if (event.key === 'Enter' &amp;&amp; !event.isComposing) { event.preventDefault(); if (!event.repeat) { this.dispatchEvent(new Event('change', { bubbles: true })); this.nextElementSibling.click(); } }"
+                                                                aria-label="Número de identificación. Presiona Enter para consultar." />
+                                                         <button type="button" hidden @onclick="() => ConsultarCedulaSiAplicaAsync()"></button>
+                                                     }
+                                                     else
+                                                     {
+                                                         <input class="form-control form-control-sm"
+                                                                @bind:get="model.Numeroidentificacion"
+                                                                @bind:set="OnNumeroIdentificacionChangedAsync" @bind:event="oninput"
+                                                                @onblur="OnNumeroIdentificacionBlurAsync" />
+                                                     }
                                                      <ValidationMessage For="@(() => model.Numeroidentificacion)" class="text-danger small" />
                                                      @if (consultandoCedula)
                                                      {
@@ -1028,31 +1043,20 @@
                                             @if (EsModoProveedores)
                                             {
                                                 <details class="form-accordion client-provider-accordion" open>
-                                                <summary class="form-section-heading">
-                                                    <span>2</span>
-                                                    <strong>Proveedor</strong>
-                                                    <i class="bi bi-chevron-down"></i>
-                                                </summary>
-                                                <div class="form-accordion-body">
-                                                    <div class="client-provider-toggle-grid client-provider-toggle-grid-single">
-                                                        <label class="client-provider-toggle-card">
-                                                            <input type="checkbox"
-                                                                   class="client-provider-switch-input"
-                                                                   checked="@model.EsProveedor"
-                                                                   @onchange="OnEsProveedorChanged" />
-                                                            <span class="client-provider-switch"></span>
-                                                            <span>
-                                                                <strong>Es proveedor</strong>
-                                                                <small>Tambien se registra para compras, retenciones y liquidaciones.</small>
-                                                            </span>
+                                                    <summary class="form-section-heading">
+                                                        <span>2</span>
+                                                        <strong>Productos que vende el proveedor</strong>
+                                                        <i class="bi bi-chevron-down"></i>
+                                                    </summary>
+                                                    <div class="form-accordion-body">
+                                                        <label class="form-label small d-block">
+                                                            Observaciones (opcional)
+                                                            <textarea class="form-control form-control-sm w-100" rows="3"
+                                                                      placeholder="Describe los productos que ofrece"
+                                                                      @bind="model.Observaciones"></textarea>
                                                         </label>
                                                     </div>
-                                                </div>
                                                 </details>
-                                                @if (model.EsProveedor && model.ProductosProveedor is not null)
-                                                {
-                                                    <HosvetKardex.Web.Components.Pages.Contabilidad.ProductosDelProveedor @key="model" Items="model.ProductosProveedor" UsuarioId="usuarioLogueadoId" Deshabilitado="guardandoCliente" />
-                                                }
                                             }
 
                                             <details class="form-accordion">
@@ -1290,12 +1294,15 @@
                                                         </div>
                                                     </div>
 
-                                                    <div class="row g-3 align-items-start client-credit-grid">
-                                                        <div class="col-12 client-credit-notes">
-                                                            <label class="form-label small">Observaciones (opcional)</label>
-                                                            <InputTextArea class="form-control form-control-sm w-100" rows="2" @bind-Value="model.Observaciones" />
+                                                    @if (!EsModoProveedores)
+                                                    {
+                                                        <div class="row g-3 align-items-start client-credit-grid">
+                                                            <div class="col-12 client-credit-notes">
+                                                                <label class="form-label small">Observaciones (opcional)</label>
+                                                                <InputTextArea class="form-control form-control-sm w-100" rows="2" @bind-Value="model.Observaciones" />
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    }
                                                 </div>
                                             </details>
 
@@ -1630,7 +1637,6 @@
         public bool EsCliente { get; set; } = true;
 
         public bool EsProveedor { get; set; }
-        public List<EContaxProductoOfrecidoDto>? ProductosProveedor { get; set; }
 
         public string? CuentaContableProveedor { get; set; } = "21311 - Proveedores";
 
@@ -1905,19 +1911,6 @@
             model.EsCliente = true;
     }
 
-    private void OnEsProveedorChanged(ChangeEventArgs e)
-    {
-        model.EsProveedor = e.Value is bool value ? value : string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
-        if (model.EsProveedor)
-        {
-            AsegurarDatosProveedorPorDefecto(model);
-        }
-        else
-        {
-            model.RegistraInformacionBancariaProveedor = false;
-        }
-    }
-
     private void OnRegistraInformacionBancariaProveedorChanged(ChangeEventArgs e)
     {
         model.RegistraInformacionBancariaProveedor = e.Value is bool value ? value : string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
@@ -1959,7 +1952,6 @@
         public int? IdProvincia { get; set; }
     }
 
-    private Guid formKey = Guid.NewGuid();
     private List<ClienteDto> clientes = new();
     private bool cargando = true;
     private string? mensaje;
@@ -2494,9 +2486,9 @@
         mostrarDropdownTipo = false;
     }
 
-    private void OnFiltroChanged(ChangeEventArgs e)
+    private void OnFiltroChanged(string valor)
     {
-        filtro = e.Value?.ToString() ?? string.Empty;
+        filtro = valor;
         paginaActual = 1;
     }
 
@@ -3511,7 +3503,6 @@
         ultimaCedulaConsultada = null;
         mostrarConfirmacion = false;
         clienteAEliminar = null;
-        formKey = Guid.NewGuid();
         StateHasChanged();
     }
 
@@ -3556,7 +3547,6 @@
         estadoAux = model.Estado ?? true;
         ActualizarTipoClienteForm();
         PrepararTipoContactoTelefonico();
-        formKey = Guid.NewGuid();
 
         if (model.Pais.HasValue)
             await CargarProvincias(model.Pais.Value);
@@ -3615,7 +3605,6 @@
             consultaCedulaEsError = false;
             ultimaCedulaConsultada = null;
             mensaje = "Cliente demo cargado en el formulario.";
-            formKey = Guid.NewGuid();
             mostrarModalFormularioCliente = true;
             StateHasChanged();
             return;
@@ -3692,18 +3681,6 @@
                 NumeroCuentaProveedor = item.NumeroCuentaProveedor
             };
 
-            if (EsModoProveedores)
-            {
-                var productos = await CatalogoProveedor.ObtenerProductosDelProveedorAsync(usuarioLogueadoId, item.Codcliente, CancellationToken.None);
-                model.ProductosProveedor = productos.Select(p => new EContaxProductoOfrecidoDto
-                {
-                    ProductoId = p.ProductoId,
-                    Nombre = p.Nombre,
-                    CodigoProveedor = p.Codigo,
-                    PrecioCompra = p.PrecioCompra
-                }).ToList();
-            }
-
             await PrepararLookupsUbicacionFormularioAsync();
             ActualizarTipoClienteForm();
             PrepararTipoContactoTelefonico();
@@ -3713,7 +3690,6 @@
             consultaCedulaEsError = false;
             ultimaCedulaConsultada = null;
             editando = true;
-            formKey = Guid.NewGuid();
             mensaje = "Cliente cargado para edición.";
             mostrarModalFormularioCliente = true;
             StateHasChanged();
@@ -3736,23 +3712,12 @@
         if (string.IsNullOrWhiteSpace(model.CuentaContableProveedor))
             return "La cuenta contable del proveedor es obligatoria.";
 
-        var productos = (model.ProductosProveedor ?? [])
-            .Where(p => p.ProductoId != 0 || p.PrecioCompra != 0 || !string.IsNullOrWhiteSpace(p.CodigoProveedor)).ToList();
-        if (productos.Any(p => p.ProductoId <= 0))
-            return "Seleccione el producto en cada fila que tenga código o precio.";
-        if (productos.Select(p => p.ProductoId).Distinct().Count() != productos.Count)
-            return "El mismo producto no puede repetirse para este proveedor.";
-        if (productos.Any(p => p.PrecioCompra < 0 || p.PrecioCompra > 99999999999999.9999m ||
-            decimal.Round(p.PrecioCompra, 4) != p.PrecioCompra))
-            return "Ingrese precios válidos, con hasta cuatro decimales.";
-
         return null;
     }
 
     private static void AsegurarDatosProveedorPorDefecto(ClienteUpsertDto model)
     {
         model.EsCliente = true;
-        model.ProductosProveedor ??= [];
         model.CuentaContableProveedor = string.IsNullOrWhiteSpace(model.CuentaContableProveedor)
             ? "21311 - Proveedores"
             : model.CuentaContableProveedor.Trim();
@@ -3828,6 +3793,12 @@
             .ToList();
         model.Oblgconta = model.Oblgconta?.Trim().ToUpperInvariant();
         model.Observaciones = model.Observaciones?.Trim();
+
+        if (EsModoProveedores)
+        {
+            model.EsProveedor = true;
+            AsegurarDatosProveedorPorDefecto(model);
+        }
 
         var errorProveedor = ValidarDatosProveedorFormulario();
         if (!string.IsNullOrWhiteSpace(errorProveedor))
@@ -4031,13 +4002,24 @@
         if (!DebeMostrarObligadoContabilidad)
             model.Oblgconta = "NO";
 
-        if (EsTipoIdentificacionConsultaExternaSeleccionado)
+        if (!EsModoProveedores && EsTipoIdentificacionConsultaExternaSeleccionado)
             await ConsultarCedulaSiAplicaAsync();
     }
 
-    private async Task OnNumeroIdentificacionChangedAsync(ChangeEventArgs args)
+    private void CambiarIdentificacionProveedor(string valor)
     {
-        model.Numeroidentificacion = NormalizarNumeroIdentificacionEntrada(args.Value?.ToString());
+        var identificacion = NormalizarNumeroIdentificacionEntrada(valor);
+        if (model.Numeroidentificacion == identificacion)
+            return;
+
+        model.Numeroidentificacion = identificacion;
+        mensajeConsultaCedula = null;
+        consultaCedulaEsError = false;
+    }
+
+    private async Task OnNumeroIdentificacionChangedAsync(string numeroIdentificacion)
+    {
+        model.Numeroidentificacion = NormalizarNumeroIdentificacionEntrada(numeroIdentificacion);
 
         consultaCedulaCts?.Cancel();
         consultaCedulaCts?.Dispose();
