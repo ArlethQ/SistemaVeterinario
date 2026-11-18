@@ -2059,6 +2059,25 @@
 
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        if (query.TryGetValue("compra", out var compraValor) && int.TryParse(compraValor, out var compraId) &&
+            compraId > 0 && usuarioActual is > 0)
+        {
+            var factura = await ComprasXmlService.ObtenerPreviewFacturaCompraAsync(compraId, usuarioActual.Value);
+            if (factura is not null && !factura.TieneRetencionGenerada)
+            {
+                await AplicarPreviewRetencionAsync(factura, "Factura de compra cargada. Completa los valores de retención.");
+            }
+            else
+            {
+                await InicializarPreviewVacioAsync(true);
+                mensaje = "La factura de compra no está disponible o ya tiene una retención.";
+                esError = true;
+            }
+
+            _ = CargarDatosRetencionEnSegundoPlanoAsync(cargarLiquidaciones: true, cargarCatalogos: true);
+            return;
+        }
+
         var vieneDeLiquidacionGuardada = query.TryGetValue("liquidacionGuardada", out var liquidacionGuardadaVal) &&
             string.Equals(liquidacionGuardadaVal.ToString(), "1", StringComparison.OrdinalIgnoreCase);
 

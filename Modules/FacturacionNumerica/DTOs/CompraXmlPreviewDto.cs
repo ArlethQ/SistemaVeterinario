@@ -2,6 +2,7 @@
 
 public class CompraXmlPreviewDto
 {
+    public string CodDocumentoSustento { get; set; } = "03";
     public string XmlOriginal { get; set; } = "";
     public int? Usuario { get; set; }
 

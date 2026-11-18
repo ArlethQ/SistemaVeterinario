@@ -3,6 +3,13 @@ namespace Simetric.ViewModels;
 public sealed class FacturaCompraManualVM
 {
     public int? CodCliente { get; set; }
+    public string Serie { get; set; } = "";
+    public string NumeroFactura { get; set; } = "";
+    public string NumeroAutorizacion { get; set; } = "";
+    public string ClaveAcceso { get; set; } = "";
+    public int? CodEmisor { get; set; }
+    public int? IdEmpresa { get; set; }
+    public int? IdSucursal { get; set; }
     public string RucProveedor { get; set; } = "";
     public string Proveedor { get; set; } = "";
     public string TipoIdentificacion { get; set; } = "04";
@@ -44,6 +51,10 @@ public sealed class CompraManualVM
 {
     public int IdFactura { get; init; }
     public string NumeroDocumento { get; init; } = "";
+    public string Serie { get; init; } = "";
+    public string NumeroFactura { get; init; } = "";
+    public string NumeroAutorizacion { get; init; } = "";
+    public string ClaveAcceso { get; init; } = "";
     public string Proveedor { get; init; } = "";
     public string IdentificacionProveedor { get; init; } = "";
     public DateTime? FechaEmision { get; init; }
@@ -51,10 +62,15 @@ public sealed class CompraManualVM
     public string FormaPago { get; init; } = "";
     public string EstadoPago { get; init; } = "";
     public string Estado { get; init; } = "ACTIVA";
+    public string Origen { get; init; } = "MANUAL";
     public string Observacion { get; init; } = "";
+    public decimal Subtotal { get; init; }
+    public decimal Iva { get; init; }
     public decimal Total { get; init; }
     public decimal TotalPagado { get; set; }
     public decimal SaldoPendiente { get; set; }
+    public bool TieneRetencion { get; set; }
+    public string NumeroRetencion { get; set; } = "";
     public List<CompraManualDetalleVM> Detalles { get; set; } = new();
 }
 

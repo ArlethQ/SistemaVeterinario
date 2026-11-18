@@ -1,0 +1,531 @@
+@page "/contabilidad/compras"
+@page "/contabilidad/compras/descargar-sri"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Simetric.DTOs
+@using Simetric.Services
+@using Simetric.Services.EContax
+@using Simetric.ViewModels
+@attribute [Authorize]
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavManager
+@inject FacturaCompraManualService FacturaCompraService
+@inject ComprasXmlService ComprasXmlService
+@inject EContaxFacturacionService EContaxFacturacionService
+@inject ISimpleExcelExportService ExcelExportService
+@inject SweetAlertService AlertService
+@inject IJSRuntime JS
+
+<PageTitle>Compras | E-Contax</PageTitle>
+<link rel="stylesheet" href="/_content/Simetric/css/econtax-compras.css?v=20261023-compras-buttons" />
+
+<div class="container-fluid py-3 purchase-flow-shell">
+    <header class="purchase-hero">
+        <div class="purchase-hero-copy">
+            <div class="purchase-hero-icon"><i class="bi bi-bag-check"></i></div>
+            <div>
+                <span class="purchase-eyebrow">ABASTECIMIENTO Y CONTABILIDAD · E-CONTAX</span>
+                <h1>Facturas de compra y retenciones</h1>
+                <p>Registra facturas de compra, importa XML de proveedores y emite sus comprobantes de retención en E-Contax.</p>
+            </div>
+        </div>
+        <div class="purchase-hero-actions flex-wrap">
+            <label class="purchase-secondary-btn mb-0" style="cursor: pointer;">
+                <i class="bi bi-cloud-upload"></i>
+                <span>@(importandoXml ? "Importando..." : "Importar XML")</span>
+                <InputFile multiple accept=".xml,text/xml,application/xml" OnChange="ImportarXmlAsync" disabled="@(cargando || importandoXml)" style="display:none;" />
+            </label>
+            <button class="purchase-secondary-btn" type="button" @onclick="() => NavManager.NavigateTo(EContaxRoutes.ComprasImportarXml)">
+                <i class="bi bi-receipt"></i><span>Nueva retención</span>
+            </button>
+            <button class="purchase-primary-btn" type="button" @onclick='() => NavManager.NavigateTo(EContaxRoutes.CuentasPorPagarNuevaFactura)'>
+                <i class="bi bi-plus-lg"></i><span>Nueva factura de compra</span>
+            </button>
+        </div>
+    </header>
+
+    <nav class="purchase-flow-steps" aria-label="Accesos rápidos de compras E-Contax">
+        <button type="button" class="purchase-flow-step is-done" @onclick='() => NavManager.NavigateTo(EContaxRoutes.Proveedores)'><span>1</span><strong>Proveedores</strong></button>
+        <i class="bi bi-arrow-right"></i>
+        <button type="button" class="purchase-flow-step is-done" @onclick='() => NavManager.NavigateTo(EContaxRoutes.ComprasOrdenes)'><span>2</span><strong>Órdenes</strong></button>
+        <i class="bi bi-arrow-right"></i>
+        <button type="button" class="purchase-flow-step is-active" aria-current="step"><span>3</span><strong>Facturas y retenciones</strong></button>
+        <i class="bi bi-arrow-right"></i>
+        <button type="button" class="purchase-flow-step is-done" @onclick='() => NavManager.NavigateTo(EContaxRoutes.CuentasPorPagar)'><span>4</span><strong>Cuentas por pagar</strong></button>
+    </nav>
+
+    @if (sinCaja)
+    {
+        <div class="alert alert-warning border-0 rounded-3 d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0" role="alert">
+            <div>
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Punto de emisión no configurado.</strong> @mensajeSinCaja Configura uno para emitir retenciones electrónicas.
+            </div>
+            <a class="btn btn-sm btn-outline-dark" href="@EContaxRoutes.ConfiguracionPuntosEmision">Configurar punto de emisión</a>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(mensaje))
+    {
+        <div class="alert @(mensajeEsError ? "alert-danger" : "alert-success") border-0 rounded-3 mb-0" role="alert">
+            @mensaje
+        </div>
+    }
+
+    <section class="purchase-kpis" aria-label="Resumen de compras E-Contax">
+        <article class="purchase-kpi">
+            <i class="bi bi-file-earmark-text"></i>
+            <div><span>Compras activas</span><strong>@ComprasActivas.Count</strong><small>@compras.Count total registradas</small></div>
+        </article>
+        <article class="purchase-kpi purchase-kpi-total">
+            <i class="bi bi-coin"></i>
+            <div><span>Total comprado</span><strong>@ComprasActivas.Sum(x => x.Total).ToString("C2")</strong><small>Facturas activas</small></div>
+        </article>
+        <article class="purchase-kpi purchase-kpi-warning">
+            <i class="bi bi-clock"></i>
+            <div><span>Pendientes de retención</span><strong>@ComprasActivas.Count(x => !x.TieneRetencion)</strong><small>Listas para retener</small></div>
+        </article>
+        <article class="purchase-kpi purchase-kpi-success">
+            <i class="bi bi-shield-check"></i>
+            <div><span>Con retención</span><strong>@ComprasActivas.Count(x => x.TieneRetencion)</strong><small>Comprobantes emitidos</small></div>
+        </article>
+    </section>
+
+    <div class="card shadow-sm mb-2 purchase-filter-card">
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4 col-lg-4">
+                    <label class="form-label">Buscar</label>
+                    <input class="form-control" @bind="filtro" @bind:event="oninput" placeholder="Proveedor, RUC, serie, número o autorización..." />
+                </div>
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label">Retención</label>
+                    <select class="form-select" @bind="filtroRetencion">
+                        <option value="TODAS">Todas</option>
+                        <option value="PENDIENTE">Pendientes</option>
+                        <option value="RETENIDA">Con retención</option>
+                    </select>
+                </div>
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label">Estado</label>
+                    <select class="form-select" @bind="filtroEstado">
+                        <option value="ACTIVA">Activas</option>
+                        <option value="ANULADA">Anuladas</option>
+                        <option value="TODAS">Todas</option>
+                    </select>
+                </div>
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label">Desde</label>
+                    <input class="form-control" type="date" @bind="fechaDesde" />
+                </div>
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label">Hasta</label>
+                    <input class="form-control" type="date" @bind="fechaHasta" />
+                </div>
+            </div>
+            <div class="d-flex flex-wrap justify-content-end gap-2 mt-2">
+                <button class="purchase-secondary-btn" type="button" @onclick="CargarAsync" disabled="@cargando">
+                    <i class="bi bi-arrow-clockwise"></i><span>Actualizar</span>
+                </button>
+                <button class="purchase-primary-btn" type="button" @onclick="ExportarExcelAsync" disabled="@(cargando || !ComprasFiltradas.Any())">
+                    <i class="bi bi-file-earmark-excel"></i><span>Exportar Excel</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm purchase-table-card">
+        <div class="purchase-table-heading">
+            <div><span>COMPRAS REGISTRADAS · E-CONTAX</span><h2>Facturas de compra</h2></div>
+            <span class="purchase-count">@ComprasFiltradas.Count registro@(ComprasFiltradas.Count == 1 ? string.Empty : "s")</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 purchase-data-table">
+                <thead>
+                    <tr>
+                        <th>Comprobante</th>
+                        <th>Proveedor</th>
+                        <th>Emisión</th>
+                        <th>Origen</th>
+                        <th>Pago</th>
+                        <th>Retención</th>
+                        <th class="text-end">Subtotal</th>
+                        <th class="text-end">IVA</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (cargando)
+                    {
+                        <tr><td colspan="10"><div class="purchase-table-state" aria-live="polite"><i class="bi bi-arrow-repeat"></i><span>Cargando facturas de compra...</span></div></td></tr>
+                    }
+                    else if (!ComprasFiltradas.Any())
+                    {
+                        <tr><td colspan="10"><div class="purchase-table-state is-empty" aria-live="polite"><i class="bi bi-inbox"></i><span>No hay facturas de compra con los filtros seleccionados.</span></div></td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in ComprasFiltradas)
+                        {
+                            <tr @key="item.IdFactura">
+                                <td>
+                                    <strong>@item.NumeroDocumento</strong>
+                                    @if (!string.IsNullOrWhiteSpace(item.NumeroAutorizacion))
+                                    {
+                                        <small class="d-block text-muted text-truncate" style="max-width: 190px;" title="@item.NumeroAutorizacion">Aut: @item.NumeroAutorizacion</small>
+                                    }
+                                    else
+                                    {
+                                        <small class="d-block text-muted">#@item.IdFactura</small>
+                                    }
+                                </td>
+                                <td>
+                                    <strong>@item.Proveedor</strong>
+                                    <small class="d-block text-muted">@item.IdentificacionProveedor</small>
+                                </td>
+                                <td>@(item.FechaEmision?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                <td>
+                                    <span class="badge @(item.Origen == "XML" ? "text-bg-info" : "text-bg-secondary")">@item.Origen</span>
+                                </td>
+                                <td>
+                                    <span class="badge @(item.Estado == "ANULADA" ? "text-bg-danger" : item.EstadoPago == "PAGADO" ? "text-bg-success" : "text-bg-warning")">
+                                        @(item.Estado == "ANULADA" ? "ANULADA" : (string.IsNullOrWhiteSpace(item.EstadoPago) ? "ACTIVA" : item.EstadoPago))
+                                    </span>
+                                </td>
+                                <td>
+                                    @if (item.TieneRetencion)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-success" @onclick="IrARetencionesGeneradas">
+                                            <i class="bi bi-check-circle me-1"></i>@(string.IsNullOrWhiteSpace(item.NumeroRetencion) ? "Ver retención" : $"Ret. {item.NumeroRetencion}")
+                                        </button>
+                                    }
+                                    else if (item.Estado == "ACTIVA")
+                                    {
+                                        <button type="button"
+                                                class="btn btn-sm btn-primary"
+                                                disabled="@sinCaja"
+                                                title="@(sinCaja ? mensajeSinCaja : "Emitir retención para esta factura")"
+                                                @onclick="() => AbrirRetencionIntegrada(item.IdFactura)">
+                                            <i class="bi bi-receipt-cutoff me-1"></i>Emitir retención
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">No disponible</span>
+                                    }
+                                </td>
+                                <td class="text-end">$@item.Subtotal.ToString("N2")</td>
+                                <td class="text-end">$@item.Iva.ToString("N2")</td>
+                                <td class="text-end fw-semibold">$@item.Total.ToString("N2")</td>
+                                <td class="text-end text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => VerDetalleAsync(item.IdFactura)">
+                                        <i class="bi bi-eye me-1"></i>Detalle
+                                    </button>
+                                    @if (item.Estado == "ACTIVA" && !item.TieneRetencion)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-danger ms-1" @onclick="() => AnularAsync(item)">
+                                            <i class="bi bi-x-circle me-1"></i>Anular
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                            @if (detalleAbiertoId == item.IdFactura)
+                            {
+                                <tr>
+                                    <td colspan="10" class="bg-light">
+                                        @if (cargandoDetalle)
+                                        {
+                                            <div class="py-3 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Cargando detalle...</div>
+                                        }
+                                        else if (compraDetalle is not null)
+                                        {
+                                            <div class="py-2">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <strong>Detalle de @compraDetalle.NumeroDocumento</strong>
+                                                    <button type="button" class="btn btn-sm btn-link" @onclick="CerrarDetalle">Cerrar</button>
+                                                </div>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm mb-0">
+                                                        <thead><tr><th>Código</th><th>Concepto</th><th>Detalle</th><th class="text-end">Cant.</th><th class="text-end">Precio</th><th class="text-end">Base</th><th class="text-end">IVA</th><th class="text-end">Total</th></tr></thead>
+                                                        <tbody>
+                                                            @foreach (var det in compraDetalle.Detalles)
+                                                            {
+                                                                <tr>
+                                                                    <td>@det.Codigo</td>
+                                                                    <td>@det.Descripcion</td>
+                                                                    <td>@det.Detalle</td>
+                                                                    <td class="text-end">@det.Cantidad.ToString("N2")</td>
+                                                                    <td class="text-end">$@det.PrecioUnitario.ToString("N2")</td>
+                                                                    <td class="text-end">$@det.Base.ToString("N2")</td>
+                                                                    <td class="text-end">$@det.Iva.ToString("N2")</td>
+                                                                    <td class="text-end">$@det.Total.ToString("N2")</td>
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    private int currentUserId;
+    private int? idEmpresa;
+    private int? idSucursal;
+    private bool cargando = true;
+    private bool importandoXml;
+    private bool cargandoDetalle;
+    private bool sinCaja;
+    private string? mensajeSinCaja;
+    private string? mensaje;
+    private bool mensajeEsError;
+
+    private string filtro = "";
+    private string filtroRetencion = "TODAS";
+    private string filtroEstado = "ACTIVA";
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+
+    private List<CompraManualVM> compras = new();
+    private int? detalleAbiertoId;
+    private CompraManualVM? compraDetalle;
+
+    private List<CompraManualVM> ComprasActivas => compras.Where(x => x.Estado == "ACTIVA").ToList();
+
+    private List<CompraManualVM> ComprasFiltradas => compras.Where(x =>
+        (filtroEstado == "TODAS" || x.Estado == filtroEstado) &&
+        (filtroRetencion == "TODAS" ||
+         (filtroRetencion == "PENDIENTE" && !x.TieneRetencion) ||
+         (filtroRetencion == "RETENIDA" && x.TieneRetencion)) &&
+        (!fechaDesde.HasValue || (x.FechaEmision.HasValue && x.FechaEmision.Value.Date >= fechaDesde.Value.Date)) &&
+        (!fechaHasta.HasValue || (x.FechaEmision.HasValue && x.FechaEmision.Value.Date <= fechaHasta.Value.Date)) &&
+        (string.IsNullOrWhiteSpace(filtro) ||
+         x.Proveedor.Contains(filtro, StringComparison.OrdinalIgnoreCase) ||
+         x.IdentificacionProveedor.Contains(filtro, StringComparison.OrdinalIgnoreCase) ||
+         x.NumeroDocumento.Contains(filtro, StringComparison.OrdinalIgnoreCase) ||
+         x.NumeroAutorizacion.Contains(filtro, StringComparison.OrdinalIgnoreCase)))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var id) ? id : 0;
+        if (currentUserId <= 0)
+        {
+            NavManager.NavigateTo("/login", true);
+            return;
+        }
+
+        var caja = await EContaxFacturacionService.GetCajaUsuarioAsync(currentUserId);
+        sinCaja = caja is null;
+        mensajeSinCaja = "La sucursal no tiene un punto de emisión configurado.";
+        idEmpresa = caja?.IdEmpresa;
+        idSucursal = caja?.IdSucursal;
+
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        cargando = true;
+        try
+        {
+            compras = await FacturaCompraService.ListarComprasEContaxAsync(currentUserId, incluirAnuladas: true);
+        }
+        catch (Exception ex)
+        {
+            mensaje = $"No se pudieron cargar las compras: {ex.Message}";
+            mensajeEsError = true;
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task ImportarXmlAsync(InputFileChangeEventArgs e)
+    {
+        importandoXml = true;
+        mensaje = null;
+        mensajeEsError = false;
+        var importadas = 0;
+        var duplicadas = 0;
+        var errores = new List<string>();
+
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(50))
+            {
+                try
+                {
+                    if (file.Size > 10 * 1024 * 1024)
+                    {
+                        errores.Add($"{file.Name}: supera 10 MB.");
+                        continue;
+                    }
+
+                    using var stream = file.OpenReadStream(10 * 1024 * 1024);
+                    using var reader = new StreamReader(stream);
+                    var xml = await reader.ReadToEndAsync();
+                    var preview = await ComprasXmlService.LeerCompraDesdeXmlAsync(xml, permitirFactura: true);
+                    if (preview.CodDocumentoSustento != "01")
+                    {
+                        errores.Add($"{file.Name}: no es una factura electrónica (01).");
+                        continue;
+                    }
+
+                    var (_, duplicada) = await FacturaCompraService.ImportarFacturaXmlEContaxAsync(
+                        currentUserId,
+                        preview,
+                        idEmpresa,
+                        idSucursal);
+                    if (duplicada)
+                    {
+                        duplicadas++;
+                    }
+                    else
+                    {
+                        importadas++;
+                    }
+                }
+                catch (Exception exFile)
+                {
+                    errores.Add($"{file.Name}: {exFile.Message}");
+                }
+            }
+
+            await CargarAsync();
+            var detalleErr = errores.Count > 0 ? $" Errores: {string.Join(" | ", errores.Take(3))}" : string.Empty;
+            mensaje = $"Importación XML: {importadas} factura(s) registrada(s), {duplicadas} duplicada(s) omitida(s).{detalleErr}";
+            mensajeEsError = importadas == 0 && errores.Count > 0;
+
+        }
+        catch (InvalidOperationException ex)
+        {
+            mensaje = ex.Message;
+            mensajeEsError = true;
+        }
+
+        finally
+        {
+            importandoXml = false;
+        }
+    }
+
+    private void AbrirRetencionIntegrada(int codFactura)
+    {
+        if (sinCaja)
+        {
+            mensaje = mensajeSinCaja ?? "La sucursal no tiene un punto de emisión configurado.";
+            mensajeEsError = true;
+            return;
+        }
+
+        NavManager.NavigateTo($"{EContaxRoutes.ComprasImportarXml}?compra={codFactura}");
+    }
+
+    private void IrARetencionesGeneradas()
+        => NavManager.NavigateTo(EContaxRoutes.FacturacionRetencionesGeneradas);
+
+    private async Task VerDetalleAsync(int codFactura)
+    {
+        if (detalleAbiertoId == codFactura)
+        {
+            CerrarDetalle();
+            return;
+        }
+
+        detalleAbiertoId = codFactura;
+        compraDetalle = null;
+        cargandoDetalle = true;
+        try
+        {
+            compraDetalle = await FacturaCompraService.ObtenerCompraEContaxAsync(currentUserId, codFactura);
+        }
+        catch (Exception ex)
+        {
+            mensaje = $"No se pudo cargar el detalle: {ex.Message}";
+            mensajeEsError = true;
+        }
+        finally
+        {
+            cargandoDetalle = false;
+        }
+    }
+
+    private void CerrarDetalle()
+    {
+        detalleAbiertoId = null;
+        compraDetalle = null;
+    }
+
+    private async Task AnularAsync(CompraManualVM item)
+    {
+        if (!await AlertService.ConfirmAsync(
+            $"¿Deseas anular la factura de compra {item.NumeroDocumento}?",
+            "Anular factura de compra",
+            "Sí, anular"))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!await FacturaCompraService.AnularCompraEContaxAsync(currentUserId, item.IdFactura))
+            {
+                await AlertService.ShowErrorAsync("La factura ya no está activa.");
+                return;
+            }
+            await AlertService.ShowSuccessAsync("Factura de compra anulada.");
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            await AlertService.ShowErrorAsync(ex.Message);
+        }
+    }
+
+    private async Task ExportarExcelAsync()
+    {
+        try
+        {
+            var headers = new[] { "Comprobante", "Autorización", "Proveedor", "RUC", "Emisión", "Origen", "Estado", "Retención", "Subtotal", "IVA", "Total" };
+            var rows = ComprasFiltradas.Select(x => (IReadOnlyList<string>)new[]
+            {
+                x.NumeroDocumento,
+                x.NumeroAutorizacion,
+                x.Proveedor,
+                x.IdentificacionProveedor,
+                x.FechaEmision?.ToString("dd/MM/yyyy") ?? "",
+                x.Origen,
+                x.Estado,
+                x.TieneRetencion ? (string.IsNullOrWhiteSpace(x.NumeroRetencion) ? "Emitida" : x.NumeroRetencion) : "Pendiente",
+                x.Subtotal.ToString("0.00"),
+                x.Iva.ToString("0.00"),
+                x.Total.ToString("0.00")
+            }).ToList();
+
+            var file = ExcelExportService.Create($"econtax-compras-{DateTime.Today:yyyyMMdd}.xlsx", new ExcelSheetData("Compras", headers, rows));
+            await using var stream = new MemoryStream(file.Content);
+            using var reference = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("numericaUi.downloadExcelFile", file.FileName, reference);
+        }
+        catch (Exception ex)
+        {
+            mensaje = $"No se pudo exportar a Excel: {ex.Message}";
+            mensajeEsError = true;
+        }
+    }
+}

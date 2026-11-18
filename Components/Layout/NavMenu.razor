@@ -387,38 +387,54 @@
                                         {
                                             <NavLink href="contabilidad/clientes">Clientes contables</NavLink>
                                         }
-                                        @if (TienePermiso("contabilidad/proveedores"))
-                                        {
-                                            <NavLink href="contabilidad/proveedores">Proveedores</NavLink>
-                                        }
                                     </div>
                                 </details>
                             }
 
-                            @if (TieneAlguno("contabilidad/mis-compras", "contabilidad/compras/nueva-factura", "contabilidad/compras/importar-xml", "contabilidad/compras/ordenes", "contabilidad/compras/recepciones"))
+                            @if (TieneAlguno("contabilidad/proveedores", "contabilidad/mis-compras", "contabilidad/compras/nueva-factura", "contabilidad/compras/importar-xml", "contabilidad/compras/ordenes", "contabilidad/compras/recepciones", "contabilidad/facturacion/retenciones-generadas", "contabilidad/compras/nueva-liquidacion", "contabilidad/compras/liquidaciones-generadas", "contabilidad/compras/descargar-sri"))
                             {
                                 <details class="submenu-group">
                                     <summary><span>Compras</span><i>⌄</i></summary>
                                     <div class="submenu">
-                                        @if (TienePermiso("contabilidad/mis-compras") || TienePermiso("contabilidad/compras/importar-xml"))
+                                        @if (TienePermiso("contabilidad/proveedores"))
                                         {
-                                            <NavLink href="contabilidad/mis-compras">Mis compras</NavLink>
-                                        }
-                                        @if (TienePermiso("contabilidad/compras/nueva-factura") || TienePermiso("contabilidad/compras/importar-xml"))
-                                        {
-                                            <NavLink href="contabilidad/compras/nueva-factura">Nueva factura de compra</NavLink>
-                                        }
-                                        @if (TienePermiso("contabilidad/compras/importar-xml"))
-                                        {
-                                            <NavLink href="contabilidad/compras/importar-xml">Importar compras</NavLink>
+                                            <NavLink href="contabilidad/proveedores">Proveedores</NavLink>
                                         }
                                         @if (TienePermiso("contabilidad/compras/ordenes"))
                                         {
                                             <NavLink href="contabilidad/compras/ordenes">Órdenes de compra</NavLink>
                                         }
+                                        @if (TienePermiso("contabilidad/compras/nueva-factura"))
+                                        {
+                                            <NavLink href="contabilidad/compras/nueva-factura">Registrar factura de compra</NavLink>
+                                        }
                                         @if (TienePermiso("contabilidad/compras/recepciones"))
                                         {
                                             <NavLink href="contabilidad/compras/recepciones">Recepciones de compra</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/mis-compras"))
+                                        {
+                                            <NavLink href="contabilidad/mis-compras">Mis compras</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/compras/descargar-sri"))
+                                        {
+                                            <NavLink href="contabilidad/compras/descargar-sri">Descargar compras SRI</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/compras/importar-xml"))
+                                        {
+                                            <NavLink href="contabilidad/compras/importar-xml">Generar retención</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/facturacion/retenciones-generadas"))
+                                        {
+                                            <NavLink href="contabilidad/facturacion/retenciones-generadas">Retenciones emitidas</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/compras/nueva-liquidacion"))
+                                        {
+                                            <NavLink href="contabilidad/compras/nueva-liquidacion">Nueva liquidación de compra</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/compras/liquidaciones-generadas"))
+                                        {
+                                            <NavLink href="contabilidad/compras/liquidaciones-generadas">Liquidaciones emitidas</NavLink>
                                         }
                                     </div>
                                 </details>
@@ -694,6 +710,10 @@
         "contabilidad/compras/importar-xml",
         "contabilidad/compras/ordenes",
         "contabilidad/compras/recepciones",
+        "contabilidad/compras/descargar-sri",
+        "contabilidad/facturacion/retenciones-generadas",
+        "contabilidad/compras/nueva-liquidacion",
+        "contabilidad/compras/liquidaciones-generadas",
         "contabilidad/inventarios",
         "contabilidad/inventarios/asignar-stock",
         "contabilidad/inventarios/bodegas",

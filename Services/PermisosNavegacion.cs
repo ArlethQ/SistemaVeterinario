@@ -19,6 +19,12 @@ public sealed class PermisosNavegacion(int rol, IEnumerable<MenuItemModel> menus
             or "administracion/catalogos-operativos" or "administracion/localidades" or "facturacion/productos")
             return false;
 
+        if (clave == "contabilidad/compras")
+            return _rutas.Contains("contabilidad/mis-compras") ||
+                _rutas.Contains("contabilidad/compras/nueva-factura") ||
+                _rutas.Contains("contabilidad/compras/importar-xml") ||
+                _rutas.Contains("contabilidad/facturacion/retenciones-generadas");
+
         return clave == "dashboard" || _rutas.Contains(clave);
     }
 

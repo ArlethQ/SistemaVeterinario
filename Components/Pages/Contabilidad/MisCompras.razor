@@ -10,21 +10,30 @@
 @inject NavigationManager Navigation
 @inject SweetAlertService AlertService
 
-<PageTitle>Mis compras | Numerica e-fact</PageTitle>
+<PageTitle>Mis compras | E-Contax</PageTitle>
+<link rel="stylesheet" href="/_content/Simetric/css/econtax-compras.css?v=20261023-compras-buttons" />
 
-<div class="container-fluid py-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-            <span class="text-muted text-uppercase small fw-semibold">Compras internas</span>
-            <h1 class="h3 mb-1">Mis compras</h1>
-            <p class="text-muted mb-0">Consulta las facturas de compra registradas manualmente y anula las que no correspondan.</p>
+<div class="container-fluid py-3 purchase-flow-shell">
+    <header class="purchase-hero">
+        <div class="purchase-hero-copy">
+            <div class="purchase-hero-icon" aria-hidden="true"><i class="ri-shopping-bag-3-line"></i></div>
+            <div>
+                <h1>Mis compras</h1>
+                <p>Consulta las facturas registradas, revisa sus saldos y abre el detalle de cada compra.</p>
+            </div>
         </div>
-        <div class="d-flex flex-wrap gap-2">
-            <a class="btn btn-primary" href="@RutaCuentasPorPagar("/compras/nueva-factura", EContaxRoutes.CuentasPorPagarNuevaFactura)"><i class="bi bi-plus-circle me-1"></i>Nueva factura</a>
-            <a class="btn btn-outline-primary" href="@RutaCuentasPorPagar("/cuentas-por-pagar", EContaxRoutes.CuentasPorPagar)"><i class="bi bi-wallet2 me-1"></i>Cuentas por pagar</a>
-            <button class="btn btn-outline-secondary" @onclick="CargarAsync" disabled="@cargando"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
+        <div class="purchase-hero-actions flex-wrap">
+            @if (Permisos.Permite(EContaxRoutes.CuentasPorPagarNuevaFactura))
+            {
+                <a class="purchase-primary-btn" href="@EContaxRoutes.CuentasPorPagarNuevaFactura"><i class="bi bi-plus-circle"></i>Nueva factura</a>
+            }
+            @if (Permisos.Permite(EContaxRoutes.CuentasPorPagar))
+            {
+                <a class="purchase-secondary-btn" href="@EContaxRoutes.CuentasPorPagar"><i class="bi bi-wallet2"></i>Cuentas por pagar</a>
+            }
+            <button type="button" class="purchase-secondary-btn" @onclick="CargarAsync" disabled="@cargando"><i class="bi bi-arrow-clockwise"></i>Actualizar</button>
         </div>
-    </div>
+    </header>
 
     @if (!string.IsNullOrWhiteSpace(error))
     {
@@ -102,6 +111,8 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+
     private List<CompraManualVM> compras = new();
     private CompraManualVM? seleccionada;
     private int? seleccionadoId;
@@ -112,10 +123,6 @@
     private string busqueda = "";
     private string filtroEstado = "TODAS";
     private string error = "";
-
-    private bool EsEContaxContext => EContaxRoutes.IsEContaxPath(Navigation, Navigation.Uri);
-
-    private string RutaCuentasPorPagar(string efact, string econtax) => EsEContaxContext ? econtax : efact;
 
     private IEnumerable<CompraManualVM> ComprasFiltradas => compras.Where(x =>
         (filtroEstado == "TODAS" || x.Estado == filtroEstado) &&

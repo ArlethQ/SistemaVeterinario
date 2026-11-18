@@ -502,6 +502,7 @@ public class AuthService : IAuthService
                 (1049, 'Tipos de cliente', 10, 'contabilidad/configuracion/tipos-cliente'),
                 (1050, 'Usuarios de la empresa', 10, 'contabilidad/usuarios'),
                 (1051, 'Asignar stock a productos', 10, 'contabilidad/inventarios/asignar-stock'),
+                (1052, 'Descargar compras SRI', 10, 'contabilidad/compras/descargar-sri'),
                 (1015, 'Reportes clínicos', 10, 'reportes/clinicos'),
                 (1101, 'Catálogos clínicos', 11, 'administracion/catalogos'),
                 (1102, 'Diagnósticos y laboratorio', 11, 'administracion/catalogos-operativos'),

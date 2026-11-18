@@ -23,6 +23,7 @@ public static class EContaxRoutes
     public const string Cotizaciones = "/contabilidad/cotizaciones";
     public const string Contribuyentes = "/contabilidad/contribuyentes";
     public const string Compras = "/contabilidad/compras";
+    public const string ComprasDescargarSri = "/contabilidad/compras/descargar-sri";
     public const string Declaraciones = "/contabilidad/declaraciones";
     public const string ComprasImportarXml = "/contabilidad/compras/importar-xml";
     public const string ComprasOrdenes = "/contabilidad/compras/ordenes";

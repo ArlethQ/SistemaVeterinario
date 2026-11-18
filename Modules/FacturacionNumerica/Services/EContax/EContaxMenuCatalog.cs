@@ -27,7 +27,7 @@ public static class EContaxMenuCatalog
         new("registrar-compra", "Registrar la compra", EContaxRoutes.CuentasPorPagarNuevaFactura, "ri-file-add-line", 3, "compras"),
         new("recepciones-compra", "Recepción de compra", EContaxRoutes.ComprasRecepciones, "ri-inbox-archive-line", 4, "compras"),
         new("compras-mis-compras", "Mis compras", EContaxRoutes.CuentasPorPagarMisCompras, "ri-shopping-bag-3-line", 5, "compras"),
-        new("compras-descargar-sri", "Descargar compras SRI", EContaxRoutes.Compras, "ri-cloud-download-line", 6, "compras"),
+        new("compras-descargar-sri", "Descargar compras SRI", EContaxRoutes.ComprasDescargarSri, "ri-cloud-download-line", 6, "compras"),
         new("otros-documentos", "Emision de otros Documentos", null, "ri-file-copy-2-line", 4),
         new("guia-remision", "Guia de Remisión", EContaxRoutes.FacturacionGuiaRemision, "ri-truck-line", 1, "otros-documentos"),
         new("liquidacion-compra", "Liquidación de Compra", EContaxRoutes.ComprasNuevaLiquidacion, "ri-file-add-line", 2, "otros-documentos"),

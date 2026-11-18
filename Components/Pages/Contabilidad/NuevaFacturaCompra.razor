@@ -16,7 +16,7 @@
 @inject SweetAlertService AlertService
 
 <link rel="stylesheet" href="/_content/Simetric/css/nueva-factura-shared.css?v=20261023-invoice-parity" />
-<PageTitle>Nueva factura de compra | Numerica e-fact</PageTitle>
+<PageTitle>Nueva factura de compra | E-Contax</PageTitle>
 
 <div class="container-fluid py-3 px-3 px-md-4 bg-light-modern docs-unified-page">
     @if (!string.IsNullOrWhiteSpace(error))
@@ -29,7 +29,7 @@
             <div class="docs-form-hero-copy invoice-heading-card">
                 <div class="invoice-heading-head">
                     <span class="invoice-heading-icon"><i class="bi bi-bag-check"></i></span>
-                    <span class="docs-form-kicker">Compras internas</span>
+                    <span class="docs-form-kicker">Compras · E-Contax</span>
                 </div>
                 <h2 class="docs-form-title">Nueva factura de compra</h2>
                 <p class="docs-form-text">Registra el documento del proveedor con el mismo flujo de detalle, impuestos y pago de una factura.</p>
@@ -48,8 +48,8 @@
                 {
                     <span class="n-xml-loaded-badge"><i class="bi bi-check-circle me-1"></i>XML cargado</span>
                 }
-                <a class="n-btn n-btn-secondary" href="@RutaCuentasPorPagar("/mis-compras", EContaxRoutes.CuentasPorPagarMisCompras)"><i class="bi bi-bag-check me-2"></i>Mis compras</a>
-                <a class="n-btn n-btn-secondary" href="@RutaCuentasPorPagar("/cuentas-por-pagar", EContaxRoutes.CuentasPorPagar)"><i class="bi bi-wallet2 me-2"></i>Cuentas por pagar</a>
+                <a class="n-btn n-btn-secondary" href="@EContaxRoutes.CuentasPorPagarMisCompras"><i class="bi bi-bag-check me-2"></i>Mis compras</a>
+                <a class="n-btn n-btn-secondary" href="@EContaxRoutes.CuentasPorPagar"><i class="bi bi-wallet2 me-2"></i>Cuentas por pagar</a>
                 <button type="button" class="n-btn n-btn-secondary" @onclick="LimpiarFormulario"><i class="bi bi-arrow-clockwise me-2"></i>Limpiar pantalla</button>
             </div>
         </div>
@@ -181,7 +181,7 @@
             {
                 <div class="alert alert-warning border-0 rounded-3 mt-4 mb-0"><i class="bi bi-wallet2 me-2"></i>Esta factura se agregará a cuentas por pagar con vencimiento a @Math.Max(model.PlazoCredito, 1) días.</div>
             }
-            <div class="n-detail-actions-row"><a class="n-btn-link" href="@RutaCuentasPorPagar("/cuentas-por-pagar", EContaxRoutes.CuentasPorPagar)">Cancelar / volver</a><button type="button" class="n-btn-primary" @onclick="GuardarAsync" disabled="@guardando"><i class="bi bi-check2-circle fs-5 me-2"></i>@(guardando ? "Guardando..." : "Guardar factura de compra")</button></div>
+            <div class="n-detail-actions-row"><a class="n-btn-link" href="@EContaxRoutes.CuentasPorPagar">Cancelar / volver</a><button type="button" class="n-btn-primary" @onclick="GuardarAsync" disabled="@guardando"><i class="bi bi-check2-circle fs-5 me-2"></i>@(guardando ? "Guardando..." : "Guardar factura de compra")</button></div>
         </div>
     </div>
 </div>
@@ -196,10 +196,6 @@
     private bool creditoSeleccionado;
     private bool xmlCargado;
     private string error = "";
-
-    private bool EsEContaxContext => EContaxRoutes.IsEContaxPath(Navigation, Navigation.Uri);
-
-    private string RutaCuentasPorPagar(string efact, string econtax) => EsEContaxContext ? econtax : efact;
 
     protected override async Task OnInitializedAsync()
     {
@@ -348,7 +344,7 @@
         {
             var id = await FacturaCompraService.GuardarAsync(currentUserId, model);
             await AlertService.ShowSuccessAsync($"Factura de compra guardada. Código interno: {id}");
-            Navigation.NavigateTo(RutaCuentasPorPagar("/cuentas-por-pagar", EContaxRoutes.CuentasPorPagar));
+            Navigation.NavigateTo(EContaxRoutes.CuentasPorPagar);
         }
         catch (InvalidOperationException ex) { await AlertService.ShowErrorAsync(ex.Message); }
         catch (Exception ex) { error = $"No se pudo guardar la factura: {ex.Message}"; }

@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Simetric.Data;
 using Simetric.DTOs;
 using Simetric.Models;
@@ -158,6 +158,7 @@ public class ComprasXmlService
 
         var dto = new CompraXmlPreviewDto
         {
+            CodDocumentoSustento = codigoDocumento,
             XmlOriginal = xmlContent,
             ClaveAcceso = claveAcceso,
             Estab = estab,
@@ -919,7 +920,8 @@ public class ComprasXmlService
             compraExistente = await _context.ComprasFacturas
                 .FirstOrDefaultAsync(x =>
                     x.CodFactura == preview.CodFacturaExistente.Value &&
-                    x.CodDocumento == "03" &&
+                    x.Usuario == preview.Usuario &&
+                    (x.CodDocumento == "03" || (x.CodDocumento == "01" && x.TipoDocumento == "COMPRA")) &&
                     x.Estado == true);
 
             if (compraExistente == null)
@@ -1314,7 +1316,7 @@ public class ComprasXmlService
                     NumRetencion = numeroRetencionGenerado,
                     Fecha = fechaRetencion,
                     PeriodoFiscal = fechaRetencion.ToString("MM/yyyy"),
-                    TipoDocumento = "03",
+                    TipoDocumento = compraExistente?.CodDocumento == "01" ? "01" : "03",
                     TipoIdentificacion = preview.TipoIdentificacionComprador,
                     IdCliente = preview.RucProveedor,
                     Clave = string.IsNullOrWhiteSpace(preview.ClaveAccesoRetencion)
@@ -2303,6 +2305,20 @@ public class ComprasXmlService
         if (compra == null)
             return null;
 
+        return await MapearCompraFacturaAPreviewAsync(compra);
+    }
+
+    public async Task<CompraXmlPreviewDto?> ObtenerPreviewFacturaCompraAsync(int codFactura, int idUsuario)
+    {
+        var compra = await _context.ComprasFacturas.AsNoTracking().FirstOrDefaultAsync(x =>
+            x.CodFactura == codFactura && x.Usuario == idUsuario && x.Estado == true &&
+            x.CodDocumento == "01" && x.TipoDocumento == "COMPRA");
+
+        return compra is null ? null : await MapearCompraFacturaAPreviewAsync(compra);
+    }
+
+    private async Task<CompraXmlPreviewDto> MapearCompraFacturaAPreviewAsync(ComprasFactura compra)
+    {
         var proveedor = compra.CodClientes.HasValue
             ? await _context.Clientes.AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Codcliente == compra.CodClientes.Value)
@@ -2330,6 +2346,7 @@ public class ComprasXmlService
 
         var preview = new CompraXmlPreviewDto
         {
+            CodDocumentoSustento = compra.CodDocumento == "01" ? "01" : "03",
             XmlOriginal = "",
             Usuario = compra.Usuario,
             ClaveAcceso = compra.CodClave ?? "",

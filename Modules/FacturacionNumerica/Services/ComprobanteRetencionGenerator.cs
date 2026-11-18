@@ -157,7 +157,7 @@ public class ComprobanteRetencionGenerator
     private static string ResolverCodigoDocumentoSustento(CompraXmlPreviewDto preview)
     {
         var clave = NormalizarSoloDigitos(preview.ClaveAcceso, string.Empty);
-        return clave.Length == 49 ? clave.Substring(8, 2) : "03";
+        return preview.CodDocumentoSustento == "01" ? "01" : clave.Length == 49 ? clave.Substring(8, 2) : "03";
     }
 
     private static string NormalizarNumeroDocumentoSustento(CompraXmlPreviewDto preview)
