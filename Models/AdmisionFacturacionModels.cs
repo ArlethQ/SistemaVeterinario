@@ -305,12 +305,15 @@ public class ItemFacturableProformaDto
 public class OrdenProformaResumenDto
 {
     public int IdOrden { get; set; }
+    public bool RequiereHospitalizacion { get; set; }
+    public bool RequiereCirugia { get; set; }
     public int Nhcl { get; set; }
     public int IdCliente { get; set; }
     public string ClienteNombre { get; set; } = string.Empty;
     public string ClienteCedula { get; set; } = string.Empty;
     public string ClienteEmail { get; set; } = string.Empty;
     public string ClienteTelefono { get; set; } = string.Empty;
+    public string ClienteDireccion { get; set; } = string.Empty;
     public string MascotaNombre { get; set; } = string.Empty;
     public string Especie { get; set; } = string.Empty;
     public string MedicoTratante { get; set; } = string.Empty;
@@ -320,6 +323,8 @@ public class OrdenProformaResumenDto
     public string NumeroFacturaBc { get; set; } = string.Empty;
     public string IdFacturaBc { get; set; } = string.Empty;
     public List<ItemFacturableProformaDto> Items { get; set; } = new();
+    public decimal ConsumoHospitalizacion { get; set; }
+    public decimal ConsumoCirugia { get; set; }
 
     public decimal TotalHospitalizacion => Items.Where(i => i.Seleccionado && i.OrigenModulo == "HOSPITALIZACION").Sum(i => i.Subtotal);
     public decimal TotalQuirofano => Items.Where(i => i.Seleccionado && i.OrigenModulo == "QUIROFANO").Sum(i => i.Subtotal);

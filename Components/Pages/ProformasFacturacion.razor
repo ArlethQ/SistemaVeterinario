@@ -80,8 +80,13 @@
                     <div class="card-body">
                         <div class="input-group input-group-sm mb-2">
                             <input type="text" class="form-control" placeholder="Buscar orden, NHCL, paciente..."
-                                   @bind="_filtroOrden" @bind:event="oninput" @onkeyup="CargarProformasAsync" />
+                                   aria-label="Buscar órdenes de prefacturación" @bind="_filtroOrden" @bind:event="oninput" />
+                            <button type="button" class="btn btn-outline-primary" @onclick="CargarProformasAsync" disabled="@(_buscandoProformas || _cargandoProforma || _guardandoCargo)">Buscar</button>
                         </div>
+                        @if (!_cargandoInicial && _ordenesProforma.Count == 0)
+                        {
+                            <p class="small text-muted mb-0">No hay órdenes con anamnesis finalizada e indicación de hospitalización o cirugía.</p>
+                        }
 
                         <div class="list-group" style="max-height: 480px; overflow-y: auto;">
                             @foreach (var op in _ordenesProforma)
@@ -89,7 +94,7 @@
                                 bool activa = _proformaActual?.IdOrden == op.IdOrden;
                                 <button type="button"
                                         class="list-group-item list-group-item-action @(activa ? "active" : "")"
-                                        @onclick="() => SeleccionarOrdenProforma(op)">
+                                        disabled="@(_buscandoProformas || _cargandoProforma || _guardandoCargo)" @onclick="() => SeleccionarOrdenProforma(op.IdOrden)">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <strong>Orden #@op.IdOrden — @op.MascotaNombre</strong>
                                         <span class="badge @(op.FacturadoBc == "S" ? "bg-success" : "bg-warning text-dark")">
@@ -101,7 +106,6 @@
                                     </div>
                                     <div class="d-flex justify-content-between align-items-center mt-1 small">
                                         <span>NHCL #@op.Nhcl | @op.EtapaActual</span>
-                                        <span class="fw-bold">$@op.TotalGeneral.ToString("N2")</span>
                                     </div>
                                 </button>
                             }
@@ -118,20 +122,20 @@
                     <div class="row g-2 mb-3">
                         <div class="col-md-3">
                             <div class="p-2 rounded bg-white shadow-sm border-start border-4 border-info">
-                                <div class="small text-muted">Hospitalización / Kardex</div>
-                                <div class="fs-5 fw-bold text-dark">$@_proformaActual.TotalHospitalizacion.ToString("N2")</div>
+                                <div class="small text-muted">Consumo de hospitalización</div>
+                                <div class="fs-5 fw-bold text-dark">$@_proformaActual.ConsumoHospitalizacion.ToString("N2")</div>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="p-2 rounded bg-white shadow-sm border-start border-4 border-danger">
-                                <div class="small text-muted">Quirófano / Anestesia</div>
-                                <div class="fs-5 fw-bold text-dark">$@_proformaActual.TotalQuirofano.ToString("N2")</div>
+                                <div class="small text-muted">Consumo de cirugía</div>
+                                <div class="fs-5 fw-bold text-dark">$@_proformaActual.ConsumoCirugia.ToString("N2")</div>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="p-2 rounded bg-white shadow-sm border-start border-4 border-primary">
-                                <div class="small text-muted">Laboratorio / Imagen</div>
-                                <div class="fs-5 fw-bold text-dark">$@((_proformaActual.TotalLaboratorio + _proformaActual.TotalImagen).ToString("N2"))</div>
+                                <div class="small text-muted">Consumo total registrado</div>
+                                <div class="fs-5 fw-bold text-dark">$@((_proformaActual.ConsumoHospitalizacion + _proformaActual.ConsumoCirugia).ToString("N2"))</div>
                             </div>
                         </div>
                         <div class="col-md-3">
@@ -155,12 +159,22 @@
                                 <button class="btn btn-outline-success btn-sm" @onclick="ExportarProformaExcelAsync">
                                     <i class="bi bi-file-earmark-excel-fill me-1"></i>Excel
                                 </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_cargandoProforma || _guardandoCargo)"
+                                        @onclick="() => SeleccionarOrdenProforma(_proformaActual.IdOrden)">
+                                    Actualizar consumos
+                                </button>
+                                @if (Permisos.Permite("facturacion/nueva"))
+                                {
+                                    <a class="btn btn-outline-primary btn-sm" href="@($"/facturacion/nueva?ordenId={_proformaActual.IdOrden}")">
+                                        Abrir factura electrónica
+                                    </a>
+                                }
                                 <button class="btn btn-outline-primary btn-sm"
                                         disabled="@(_sincronizandoCliente || _estadoIntegracion?.EsquemaDisponible != true)"
                                         @onclick="PrepararPropietarioAsync">
                                     <i class="bi bi-person-check-fill me-1"></i>Preparar propietario
                                 </button>
-                                <SaveButton class="btn btn-primary btn-sm fw-bold" OnClick="EmitirProformaAsync">
+                                <SaveButton class="btn btn-primary btn-sm fw-bold" Disabled="@_guardandoCargo" OnClick="EmitirProformaAsync">
                                     <i class="bi bi-check-circle-fill me-1"></i>Emitir proforma
                                 </SaveButton>
                             </div>
@@ -168,7 +182,7 @@
 
                         <div class="card-body">
                             <!-- Agregar ítem o insumo adicional -->
-                            <div class="row g-2 align-items-end mb-3 p-2 rounded bg-light border">
+                            <fieldset class="row g-2 align-items-end mb-3 p-2 rounded bg-light border" disabled="@_guardandoCargo">
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold mb-0">Módulo</label>
                                     <select class="form-select form-select-sm" @bind="_nuevoCargo.OrigenModulo">
@@ -183,15 +197,27 @@
                                     <input type="text" class="form-control form-control-sm" placeholder="SER-001" @bind="_nuevoCargo.CodigoItemBc" />
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label small fw-bold mb-0">Descripción Servicio / Insumo</label>
-                                    <input type="text" class="form-control form-control-sm" list="listaEFactProforma" placeholder="Seleccione o escriba..."
-                                           @bind="_nuevoCargo.DescripcionItem" @bind:after="OnDescripcionProformaChanged" />
-                                    <datalist id="listaEFactProforma">
-                                        @foreach (var p in _catalogoEFact)
+                                    <label class="form-label small fw-bold mb-0" for="proforma-catalogo">Descripción Servicio / Insumo</label>
+                                    <div class="proforma-catalogo" @onkeydown="CerrarSugerenciasCatalogo">
+                                        <input id="proforma-catalogo" type="text" class="form-control form-control-sm"
+                                               placeholder="Buscar por nombre o código" autocomplete="off"
+                                               @bind="_nuevoCargo.DescripcionItem" @bind:event="oninput" @bind:after="BuscarEnCatalogoProforma" />
+                                        @if (_sugerenciasCatalogo.Count > 0)
                                         {
-                                            <option value="@p.Descripcion">@p.Codigo — $@p.Precio?.ToString("F2")</option>
+                                            <ul class="proforma-catalogo-resultados" aria-label="Coincidencias de servicios e insumos">
+                                                @foreach (var item in _sugerenciasCatalogo)
+                                                {
+                                                    <li>
+                                                        <button type="button" class="proforma-catalogo-opcion" @onclick="() => SeleccionarItemCatalogo(item)">
+                                                            <span class="fw-semibold">@item.Descripcion</span>
+                                                            <small class="text-muted">@item.Codigo</small>
+                                                            <span class="proforma-catalogo-precio">@((item.Precio ?? 0).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("es-EC")))</span>
+                                                        </button>
+                                                    </li>
+                                                }
+                                            </ul>
                                         }
-                                    </datalist>
+                                    </div>
                                 </div>
                                 <div class="col-md-1">
                                     <label class="form-label small fw-bold mb-0">Cant.</label>
@@ -202,11 +228,11 @@
                                     <input type="number" step="0.01" class="form-control form-control-sm" @bind="_nuevoCargo.PrecioUnitario" />
                                 </div>
                                 <div class="col-md-1">
-                                    <SaveButton class="btn btn-sm btn-dark w-100" title="Añadir cargo mediante E-FACT" OnClick="AgregarCargoManualAsync">
+                                    <SaveButton class="btn btn-sm btn-dark w-100" title="Agregar cargo a la orden" aria-label="Agregar cargo a la orden" OnClick="AgregarCargoManualAsync">
                                         <i class="bi bi-plus-lg"></i>
                                     </SaveButton>
                                 </div>
-                            </div>
+                            </fieldset>
 
                             <div class="table-responsive">
                                 <table class="table table-sm table-hover align-middle mb-0 small">
@@ -222,6 +248,10 @@
                                         </tr>
                                     </thead>
                                     <tbody>
+                                        @if (_proformaActual.Items.Count == 0)
+                                        {
+                                            <tr><td colspan="7" class="text-center text-muted py-3">Aún no hay consumos registrados para esta orden.</td></tr>
+                                        }
                                         @foreach (var item in _proformaActual.Items)
                                         {
                                             <tr class="@(!item.Seleccionado ? "text-muted text-decoration-line-through" : "")">
@@ -338,11 +368,14 @@
 </div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     private int? OrdenIdQuery { get; set; }
 
     private string _pestanaActiva = "PROFORMAS";
     private string _filtroOrden = string.Empty;
     private bool _cargandoInicial = true;
+    private bool _cargandoProforma;
+    private bool _buscandoProformas;
     private string _mensajeNotificacion = string.Empty;
     private bool _notificacionError;
     private bool _sincronizandoCliente;
@@ -383,47 +416,90 @@
 
         _usuarios = await tUsr;
         _bitacora = await tBit;
-        await PrepararPropietarioAsync(false);
         _cargandoInicial = false;
     }
 
     private async Task CargarProformasAsync()
     {
+        if (_buscandoProformas || _cargandoProforma) return;
+        _buscandoProformas = true;
         try
         {
-            _ordenesProforma = await AdmisionService.BuscarOrdenesParaProformaAsync(DateTime.Today.AddDays(-7), DateTime.Today, _filtroOrden);
-
-            if (OrdenIdQuery.HasValue && OrdenIdQuery.Value > 0)
-            {
-                _proformaActual = _ordenesProforma.FirstOrDefault(o => o.IdOrden == OrdenIdQuery.Value)
-                                  ?? await AdmisionService.ObtenerDetalleProformaOrdenAsync(OrdenIdQuery.Value);
-            }
-            else if (_ordenesProforma.Count > 0 && _proformaActual == null)
-            {
-                _proformaActual = _ordenesProforma[0];
-            }
+            var idSolicitado = OrdenIdQuery;
+            OrdenIdQuery = null;
+            _ordenesProforma = await AdmisionService.BuscarOrdenesParaProformaAsync(DateTime.Today.AddDays(-7), DateTime.Today,
+                idSolicitado?.ToString() ?? _filtroOrden);
+            var idActivo = idSolicitado ?? _ordenesProforma.FirstOrDefault()?.IdOrden;
+            if (idActivo.HasValue)
+                await SeleccionarOrdenProforma(idActivo.Value);
+            else
+                _proformaActual = null;
         }
         catch (Exception ex)
         {
             _notificacionError = true;
             _mensajeNotificacion = $"Error al cargar proformas: {ex.Message}";
         }
-    }
-
-    private async Task SeleccionarOrdenProforma(OrdenProformaResumenDto orden)
-    {
-        _proformaActual = orden;
-        await PrepararPropietarioAsync(false);
-    }
-
-    private void OnDescripcionProformaChanged()
-    {
-        var match = _catalogoEFact.FirstOrDefault(x => string.Equals(x.Descripcion, _nuevoCargo.DescripcionItem, StringComparison.OrdinalIgnoreCase));
-        if (match != null)
+        finally
         {
-            if (!string.IsNullOrWhiteSpace(match.Codigo)) _nuevoCargo.CodigoItemBc = match.Codigo;
-            if (match.Precio.HasValue) _nuevoCargo.PrecioUnitario = match.Precio.Value;
+            _buscandoProformas = false;
         }
+    }
+
+    private async Task SeleccionarOrdenProforma(int idOrden)
+    {
+        if (_cargandoProforma || _guardandoCargo) return;
+
+        _cargandoProforma = true;
+        _mensajeNotificacion = string.Empty;
+        _proformaActual = null;
+        try
+        {
+            _proformaActual = await AdmisionService.ObtenerDetalleProformaOrdenAsync(idOrden);
+            if (_proformaActual is null)
+            {
+                _notificacionError = true;
+                _mensajeNotificacion = "Esta orden todavía no está habilitada para prefacturación.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _notificacionError = true;
+            _mensajeNotificacion = $"No se pudieron cargar los consumos: {ex.Message}";
+        }
+        finally
+        {
+            _cargandoProforma = false;
+        }
+    }
+
+    private bool _guardandoCargo;
+    private List<CatalogoOperativoDto> _sugerenciasCatalogo = new();
+
+    private void BuscarEnCatalogoProforma()
+    {
+        var filtro = _nuevoCargo.DescripcionItem?.Trim() ?? string.Empty;
+        _sugerenciasCatalogo = filtro.Length == 0
+            ? new()
+            : _catalogoEFact
+                .Where(item => item.Descripcion?.Contains(filtro, StringComparison.OrdinalIgnoreCase) == true ||
+                               item.Codigo?.Contains(filtro, StringComparison.OrdinalIgnoreCase) == true)
+                .Take(10)
+                .ToList();
+    }
+
+    private void SeleccionarItemCatalogo(CatalogoOperativoDto item)
+    {
+        _nuevoCargo.DescripcionItem = item.Descripcion ?? string.Empty;
+        _nuevoCargo.CodigoItemBc = item.Codigo ?? string.Empty;
+        _nuevoCargo.PrecioUnitario = item.Precio ?? 0;
+        _sugerenciasCatalogo.Clear();
+    }
+
+    private void CerrarSugerenciasCatalogo(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            _sugerenciasCatalogo.Clear();
     }
 
     private async Task AgregarCargoManualAsync()
@@ -435,32 +511,46 @@
             return;
         }
 
-        _nuevoCargo.IdOrden = _proformaActual.IdOrden;
-        bool guardado = await AdmisionService.AgregarCargoProformaManualAsync(_nuevoCargo, SessionState.IdUser);
-        if (!guardado)
+        _guardandoCargo = true;
+        try
         {
-            _notificacionError = true;
-            _mensajeNotificacion = "No se registró el cargo: falta configurar el endpoint de proformas de E-FACT.";
-            return;
-        }
+            var proforma = _proformaActual;
+            _nuevoCargo.IdOrden = proforma.IdOrden;
+            var resultado = await AdmisionService.AgregarCargoProformaManualAsync(_nuevoCargo);
+            _notificacionError = resultado.Cargo is null;
+            _mensajeNotificacion = resultado.Mensaje;
+            if (resultado.Cargo is not { } cargo)
+                return;
 
-        _notificacionError = false;
-        _mensajeNotificacion = "Cargo registrado correctamente.";
-        _nuevoCargo = new ItemFacturableProformaDto { OrigenModulo = "HOSPITALIZACION", Cantidad = 1 };
-        _proformaActual = await AdmisionService.ObtenerDetalleProformaOrdenAsync(_proformaActual.IdOrden);
+            proforma.Items.Add(cargo);
+            proforma.ConsumoHospitalizacion = proforma.TotalHospitalizacion;
+            proforma.ConsumoCirugia = proforma.TotalQuirofano;
+            _nuevoCargo = new ItemFacturableProformaDto { OrigenModulo = cargo.OrigenModulo, Cantidad = 1 };
+            _sugerenciasCatalogo.Clear();
+        }
+        finally
+        {
+            _guardandoCargo = false;
+        }
     }
 
     private async Task EmitirProformaAsync()
     {
-        if (_proformaActual == null) return;
+        if (_guardandoCargo || _proformaActual is not { } proforma) return;
         await PrepararPropietarioAsync(false);
         int idUser = SessionState.UsuarioActual?.IdUsuario ?? 1;
-        var res = await AdmisionService.EmitirProformaAsync(_proformaActual.IdOrden, _proformaActual.Items, idUser);
+        var res = await AdmisionService.EmitirProformaAsync(proforma.IdOrden, proforma.Items, idUser);
         _notificacionError = !res.Exito;
         if (res.Exito)
         {
-            _proformaActual.FacturadoBc = "S";
-            _proformaActual.NumeroFacturaBc = res.NumeroProforma;
+            proforma.FacturadoBc = "S";
+            proforma.NumeroFacturaBc = res.NumeroProforma;
+            var resumen = _ordenesProforma.FirstOrDefault(o => o.IdOrden == proforma.IdOrden);
+            if (resumen is not null)
+            {
+                resumen.FacturadoBc = "S";
+                resumen.NumeroFacturaBc = res.NumeroProforma;
+            }
         }
         _mensajeNotificacion = res.Mensaje;
     }

@@ -59,7 +59,8 @@ public interface IAdmisionFacturacionService
     // 4. Facturación consolidada / proformas
     Task<List<OrdenProformaResumenDto>> BuscarOrdenesParaProformaAsync(DateTime desde, DateTime hasta, string filtro = "");
     Task<OrdenProformaResumenDto?> ObtenerDetalleProformaOrdenAsync(int idOrden);
-    Task<bool> AgregarCargoProformaManualAsync(ItemFacturableProformaDto cargo, int idUsuario);
+    Task<List<OrdenProformaResumenDto>> BuscarOrdenesParaFacturaAsync(string filtro, int? idOrden = null);
+    Task<(ItemFacturableProformaDto? Cargo, string Mensaje)> AgregarCargoProformaManualAsync(ItemFacturableProformaDto cargo);
     Task<(bool Exito, string NumeroProforma, string Mensaje)> EmitirProformaAsync(int idOrden, List<ItemFacturableProformaDto> itemsSeleccionados, int idUsuario);
 
     // 5. Usuarios y Bitácora (vt_usuarios, vt_vitacora)
@@ -2327,35 +2328,35 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     // 4. FACTURACIÓN CONSOLIDADA / PROFORMAS
     // =========================================================================
 
-    public async Task<List<OrdenProformaResumenDto>> BuscarOrdenesParaProformaAsync(DateTime desde, DateTime hasta, string filtro = "")
+    public Task<List<OrdenProformaResumenDto>> BuscarOrdenesParaProformaAsync(DateTime desde, DateTime hasta, string filtro = "") =>
+        ConsultarOrdenesCerradasAsync(filtro, soloProcesos: true,
+            desde: string.IsNullOrWhiteSpace(filtro) ? desde.Date : null,
+            hasta: hasta.Date.AddDays(1));
+
+    public Task<List<OrdenProformaResumenDto>> BuscarOrdenesParaFacturaAsync(string filtro, int? idOrden = null) =>
+        ConsultarOrdenesCerradasAsync(filtro, soloProcesos: false, idOrden: idOrden);
+
+    private async Task<List<OrdenProformaResumenDto>> ConsultarOrdenesCerradasAsync(
+        string filtro, bool soloProcesos, int? idOrden = null, DateTime? desde = null, DateTime? hasta = null)
     {
-        var ordenes = await ObtenerOrdenesDelDiaAsync(hasta, filtro);
-        var resultado = new List<OrdenProformaResumenDto>();
+        if (_session.IdUser <= 0)
+            return [];
 
-        foreach (var o in ordenes)
-        {
-            var detalle = await ObtenerDetalleProformaOrdenAsync(o.IdOrden);
-            if (detalle != null)
-                resultado.Add(detalle);
-        }
-
-        return resultado;
-    }
-
-    public async Task<OrdenProformaResumenDto?> ObtenerDetalleProformaOrdenAsync(int idOrden)
-    {
         var cols = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
         string colFactura = cols.Contains("ordenaten_factura") ? "RTRIM(ISNULL(o.ordenaten_factura, 'N'))" : "'N'";
         string colNumFac = cols.Contains("ordenaten_numfacBC") ? "RTRIM(ISNULL(o.ordenaten_numfacBC, ''))" : "''";
         string sqlOrden = $@"
-            SELECT TOP 1
+            SELECT TOP (30)
                 o.ordenAten_id AS IdOrden,
+                CAST(ISNULL(f.med_requiereHospitalizacion, 0) AS bit) AS RequiereHospitalizacion,
+                CAST(CASE WHEN f.med_pregunta = 'S' THEN 1 ELSE 0 END AS bit) AS RequiereCirugia,
                 o.ordenAten_nhcl AS Nhcl,
                 o.ordenAten_idcliente AS IdCliente,
                 RTRIM(ISNULL(c.pa_apellidos, '')) + ' ' + RTRIM(ISNULL(c.pa_nombres, '')) AS ClienteNombre,
                 RTRIM(ISNULL(c.pa_cedula, '')) AS ClienteCedula,
                 RTRIM(ISNULL(c.pa_email, '')) AS ClienteEmail,
                 RTRIM(ISNULL(c.pa_movil, ISNULL(c.pa_telefono, ''))) AS ClienteTelefono,
+                RTRIM(ISNULL(c.pa_direccion, '')) AS ClienteDireccion,
                 RTRIM(ISNULL(p.mas_nombre, '')) AS MascotaNombre,
                 RTRIM(ISNULL(e.especie_descripcion, '')) AS Especie,
                 RTRIM(ISNULL(u.user_nombre, '')) AS MedicoTratante,
@@ -2368,53 +2369,169 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LEFT JOIN vt_clientes c ON c.pa_codigo = o.ordenAten_idcliente
             LEFT JOIN vt_especie e ON e.especie_id = p.mas_especie
             LEFT JOIN vt_usuarios u ON u.user_numero = o.ordenAten_idMedico
-            WHERE o.ordenAten_id = @IdOrden;";
+            OUTER APPLY (
+                SELECT TOP (1) f.med_requiereHospitalizacion, f.med_pregunta
+                FROM vt_fichamedica f
+                WHERE f.med_orden = o.ordenAten_id AND f.med_nhcl = o.ordenAten_nhcl
+                ORDER BY f.sec DESC
+            ) f
+            WHERE o.ordenAten_estado = 'T' AND {AlcanceOrden}
+              AND (@SoloProcesos = 0 OR f.med_requiereHospitalizacion = 1 OR f.med_pregunta = 'S')
+              AND (@IdOrden IS NULL OR o.ordenAten_id = @IdOrden)
+              AND (@Desde IS NULL OR o.ordenAten_fecha >= @Desde)
+              AND (@Hasta IS NULL OR o.ordenAten_fecha < @Hasta)
+              AND (@Filtro = '' OR (@Numero IS NOT NULL AND (o.ordenAten_id = @Numero OR o.ordenAten_nhcl = @Numero))
+                   OR (@SoloProcesos = 0 AND (
+                       (@Numero IS NOT NULL AND (CHARINDEX(@Filtro, CONVERT(varchar(20), o.ordenAten_id)) > 0
+                                                 OR CHARINDEX(@Filtro, CONVERT(varchar(20), o.ordenAten_nhcl)) > 0))
+                       OR CHARINDEX(@Filtro, c.pa_cedula) > 0))
+                   OR p.mas_nombre LIKE '%' + @Filtro + '%' OR c.pa_cedula = @Filtro
+                   OR CONCAT(RTRIM(c.pa_apellidos), ' ', RTRIM(c.pa_nombres)) LIKE '%' + @Filtro + '%'
+                   OR CONCAT(RTRIM(c.pa_nombres), ' ', RTRIM(c.pa_apellidos)) LIKE '%' + @Filtro + '%')
+            ORDER BY CASE WHEN @SoloProcesos = 0 AND o.ordenAten_id = @Numero THEN 0 ELSE 1 END,
+                     o.ordenAten_fechaProcesado DESC, o.ordenAten_id DESC;";
 
-        var orden = await _db.QueryFirstOrDefaultAsync<OrdenProformaResumenDto>(sqlOrden, new { IdOrden = idOrden });
+        var texto = filtro.Trim().TrimStart('#').Trim();
+        return (await _db.QueryAsync<OrdenProformaResumenDto>(sqlOrden, new
+        {
+            IdOrden = idOrden,
+            SoloProcesos = soloProcesos,
+            Desde = desde,
+            Hasta = hasta,
+            Filtro = texto,
+            Numero = int.TryParse(texto, out var numero) ? (int?)numero : null,
+            Rol = _session.TipoUser,
+            LocalidadSesion = ResolverLocalidadActiva(),
+            UsuarioSesion = _session.IdUser,
+            VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser)
+        })).ToList();
+    }
+
+    public async Task<OrdenProformaResumenDto?> ObtenerDetalleProformaOrdenAsync(int idOrden)
+    {
+        var orden = (await ConsultarOrdenesCerradasAsync("", soloProcesos: true, idOrden: idOrden)).SingleOrDefault();
         if (orden is null)
             return null;
 
-        var items = new List<ItemFacturableProformaDto>();
+        const string sqlConsumos = """
+            SELECT id AS IdRegistro, ordenId AS IdOrden, 'HOSPITALIZACION' AS OrigenModulo,
+                   RTRIM(ISNULL(CONVERT(varchar(50), codigoprod), '')) AS CodigoItemBc, RTRIM(ISNULL(proddescripcion, '')) AS DescripcionItem,
+                   ISNULL(cantprod, 0) AS Cantidad, ISNULL(precioprod, 0) AS PrecioUnitario, ISNULL(fecha, GETDATE()) AS FechaCargo
+            FROM hvt_cabMonitoreoMedBC
+            WHERE ordenId = @IdOrden AND modulo = 'Monitoreo' AND ISNULL(estado, 'A') = 'A'
+              AND ISNULL(cantprod, 0) > 0
+            UNION ALL
+            SELECT id, ordenId,
+                   CASE WHEN modulo = 'EnfermeriaIng' OR
+                             (modulo = 'EnCirugia' AND @RequiereCirugia = 0 AND @RequiereHospitalizacion = 1)
+                        THEN 'HOSPITALIZACION' ELSE 'QUIROFANO' END,
+                   RTRIM(ISNULL(CONVERT(varchar(50), codigoprod), '')), RTRIM(ISNULL(proddescripcion, '')),
+                   ISNULL(cantprod, 0), ISNULL(precioprod, 0), ISNULL(fecha, GETDATE())
+            FROM qvt_productosUtilizados
+            WHERE ordenId = @IdOrden AND modulo IN ('EnfermeriaIng', 'EnCirugia', 'PreAnestesia')
+              AND ISNULL(estado, 'Vigente') IN ('Vigente', 'A') AND ISNULL(cantprod, 0) > 0;
+            """;
 
-        try
+        var items = (await _db.QueryAsync<ItemFacturableProformaDto>(sqlConsumos,
+            new { IdOrden = idOrden, orden.RequiereCirugia, orden.RequiereHospitalizacion })).ToList();
+        var cargosHospital = await ObtenerCargosHistoricosAsync(idOrden, "HOSPITALIZACION", "vt_facturasBChospi");
+        var cargosCirugia = await ObtenerCargosHistoricosAsync(idOrden, "QUIROFANO", "vt_facturasBCquirofano");
+        foreach (var cargos in new[] { cargosHospital, cargosCirugia })
         {
-            // Intentar cargar cargos reales desde vt_facturasBC / vt_facturasBChospi / qvt_productosUtilizados
-            const string sqlItems = @"
-                SELECT
-                    fac_id AS IdRegistro,
-                    fac_idorden AS IdOrden,
-                    'HOSPITALIZACION' AS OrigenModulo,
-                    ISNULL(fac_itemBC, 'SER-HOSP-01') AS CodigoItemBc,
-                    ISNULL(fac_descripcion, 'Cargo Hospitalario') AS DescripcionItem,
-                    CAST(ISNULL(fac_cantidad, 1) AS DECIMAL(18,2)) AS Cantidad,
-                    CAST(ISNULL(fac_precio, 15.00) AS DECIMAL(18,2)) AS PrecioUnitario,
-                    ISNULL(fac_fecha, GETDATE()) AS FechaCargo
-                FROM vt_facturasBChospi
-                WHERE fac_idorden = @IdOrden;";
-
-            var dbItems = (await _db.QueryAsync<ItemFacturableProformaDto>(sqlItems, new { IdOrden = idOrden })).ToList();
-            if (dbItems.Count > 0) items.AddRange(dbItems);
+            if (cargos.Count > 0 && !items.Any(item => item.OrigenModulo == cargos[0].OrigenModulo))
+                items.AddRange(cargos);
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "No se pudieron obtener cargos de vt_facturasBChospi para la orden {IdOrden}", idOrden);
-            // Cargos omitidos
 
-        }
+        items.AddRange(await _db.QueryAsync<ItemFacturableProformaDto>("""
+            IF OBJECT_ID(N'dbo.vt_proformaCargosManuales', N'U') IS NOT NULL
+                SELECT IdRegistro, IdOrden, OrigenModulo, CodigoItemBc, DescripcionItem,
+                       Cantidad, PrecioUnitario, FechaCargo
+                FROM dbo.vt_proformaCargosManuales
+                WHERE IdOrden = @IdOrden
+                ORDER BY IdRegistro;
+            """, new { IdOrden = idOrden }));
 
         orden.Items = items;
+        orden.ConsumoHospitalizacion = orden.TotalHospitalizacion;
+        orden.ConsumoCirugia = orden.TotalQuirofano;
         return orden;
     }
 
-    public Task<bool> AgregarCargoProformaManualAsync(ItemFacturableProformaDto cargo, int idUsuario)
+    private async Task<List<ItemFacturableProformaDto>> ObtenerCargosHistoricosAsync(int idOrden, string modulo, string tabla)
     {
-        _logger.LogWarning("No se agregó el cargo manual porque esa operación todavía no tiene persistencia configurada.");
-        return Task.FromResult(false);
+        var columnas = await ObtenerColumnasTablaAsync(tabla);
+        if (!new[] { "fac_id", "fac_idorden", "fac_itemBC", "fac_descripcion", "fac_cantidad", "fac_precio", "fac_fecha" }.All(columnas.Contains))
+            return [];
+
+        return (await _db.QueryAsync<ItemFacturableProformaDto>($"""
+            SELECT fac_id AS IdRegistro, fac_idorden AS IdOrden, @Modulo AS OrigenModulo,
+                   ISNULL(fac_itemBC, '') AS CodigoItemBc, ISNULL(fac_descripcion, '') AS DescripcionItem,
+                   ISNULL(fac_cantidad, 0) AS Cantidad, ISNULL(fac_precio, 0) AS PrecioUnitario,
+                   ISNULL(fac_fecha, GETDATE()) AS FechaCargo
+            FROM {tabla} WHERE fac_idorden = @IdOrden AND ISNULL(fac_cantidad, 0) > 0;
+            """, new { IdOrden = idOrden, Modulo = modulo })).ToList();
+    }
+
+    public async Task<(ItemFacturableProformaDto? Cargo, string Mensaje)> AgregarCargoProformaManualAsync(ItemFacturableProformaDto cargo)
+    {
+        var descripcion = cargo.DescripcionItem.Trim();
+        var codigo = cargo.CodigoItemBc.Trim();
+        if (descripcion.Length is 0 or > 1000 || codigo.Length > 50)
+            return (null, "Ingrese una descripción de hasta 1000 caracteres y un código de hasta 50.");
+
+        if (cargo.Cantidad <= 0 || cargo.PrecioUnitario < 0 ||
+            cargo.Cantidad >= 100_000_000_000_000m || cargo.PrecioUnitario >= 100_000_000_000_000m ||
+            decimal.Round(cargo.Cantidad, 4) != cargo.Cantidad || decimal.Round(cargo.PrecioUnitario, 4) != cargo.PrecioUnitario)
+            return (null, "Ingrese una cantidad mayor a cero y un precio no negativo, con hasta cuatro decimales.");
+
+        if (cargo.OrigenModulo is not ("HOSPITALIZACION" or "QUIROFANO" or "LABORATORIO" or "IMAGEN"))
+            return (null, "Seleccione un módulo válido para el cargo.");
+
+        try
+        {
+            var orden = (await ConsultarOrdenesCerradasAsync("", soloProcesos: true, idOrden: cargo.IdOrden)).SingleOrDefault();
+            if (orden is null)
+                return (null, "La orden ya no está disponible para prefacturación.");
+
+            var registrado = await _db.QueryFirstOrDefaultAsync<ItemFacturableProformaDto>($"""
+                INSERT INTO dbo.vt_proformaCargosManuales
+                    (IdOrden, OrigenModulo, CodigoItemBc, DescripcionItem, Cantidad, PrecioUnitario, IdUsuario)
+                OUTPUT inserted.IdRegistro, inserted.IdOrden, inserted.OrigenModulo, inserted.CodigoItemBc,
+                       inserted.DescripcionItem, inserted.Cantidad, inserted.PrecioUnitario, inserted.FechaCargo
+                SELECT o.ordenAten_id, @OrigenModulo, @Codigo, @Descripcion, @Cantidad, @PrecioUnitario, @UsuarioSesion
+                FROM vt_ordenAtencion o
+                WHERE o.ordenAten_id = @IdOrden AND o.ordenAten_estado = 'T' AND {AlcanceOrden};
+                """, new
+            {
+                cargo.IdOrden,
+                cargo.OrigenModulo,
+                Codigo = codigo,
+                Descripcion = descripcion,
+                cargo.Cantidad,
+                cargo.PrecioUnitario,
+                Rol = _session.TipoUser,
+                LocalidadSesion = ResolverLocalidadActiva(),
+                UsuarioSesion = _session.IdUser,
+                VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser)
+            });
+
+            return registrado is null
+                ? (null, "La orden ya no está disponible para prefacturación.")
+                : (registrado, "Cargo registrado correctamente.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "No se pudo registrar el cargo manual de la orden {IdOrden}.", cargo.IdOrden);
+            return (null, "No se pudo guardar el cargo en la base veterinaria. Actualice los consumos antes de reintentar.");
+        }
     }
 
     public async Task<(bool Exito, string NumeroProforma, string Mensaje)> EmitirProformaAsync(
         int idOrden, List<ItemFacturableProformaDto> itemsSeleccionados, int idUsuario)
     {
+        if ((await ConsultarOrdenesCerradasAsync("", soloProcesos: true, idOrden: idOrden)).Count == 0)
+            return (false, string.Empty, "La orden debe tener la anamnesis finalizada y una indicación de hospitalización o cirugía.");
+
         string numeroGenerado = $"PROF-{DateTime.Now:yyyyMMdd}-{idOrden}";
 
         try

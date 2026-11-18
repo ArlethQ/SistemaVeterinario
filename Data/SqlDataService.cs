@@ -56,6 +56,22 @@ public class SqlDataService : ISqlDataService
             {
                 using var cmd = connection.CreateCommand();
                 cmd.CommandText = @"
+                    IF OBJECT_ID(N'dbo.vt_proformaCargosManuales', N'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.vt_proformaCargosManuales (
+                            IdRegistro int IDENTITY(1,1) PRIMARY KEY,
+                            IdOrden int NOT NULL,
+                            OrigenModulo varchar(20) NOT NULL,
+                            CodigoItemBc nvarchar(50) NOT NULL,
+                            DescripcionItem nvarchar(1000) NOT NULL,
+                            Cantidad decimal(18,4) NOT NULL CHECK (Cantidad > 0),
+                            PrecioUnitario decimal(18,4) NOT NULL CHECK (PrecioUnitario >= 0),
+                            IdUsuario int NOT NULL,
+                            FechaCargo datetime2 NOT NULL DEFAULT (SYSDATETIME())
+                        );
+                        CREATE INDEX IX_vt_proformaCargosManuales_Orden
+                            ON dbo.vt_proformaCargosManuales (IdOrden, IdRegistro);
+                    END;
                     IF EXISTS (
                         SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_NAME = 'qvt_productosUtilizados' 

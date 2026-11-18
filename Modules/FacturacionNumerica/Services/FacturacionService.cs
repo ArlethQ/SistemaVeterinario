@@ -199,6 +199,7 @@ namespace Simetric.Services
 
         private sealed class FacturaCorreoMetadata
         {
+            public int? IdOrdenVeterinaria { get; set; }
             public List<string> Destinatarios { get; set; } = new();
             public List<string> CopiasOcultas { get; set; } = new();
             public bool CorreoEnviado { get; set; }
@@ -1119,7 +1120,8 @@ namespace Simetric.Services
             Cliente clienteData,
             List<Detallefactura> detalles,
             List<FacturaCorreoDestinoDto>? correosFactura = null,
-            string? requestId = null)
+            string? requestId = null,
+            int? idOrdenVeterinaria = null)
         {
             UltimoErrorGuardarFactura = null;
             var normalizedRequestId = string.IsNullOrWhiteSpace(requestId) ? null : requestId.Trim();
@@ -1441,6 +1443,7 @@ namespace Simetric.Services
                         factura.Correoad = SerializarCorreosFactura(destinatariosFactura);
                         factura.Detalleextra = EscribirFacturaCorreoMetadata(new FacturaCorreoMetadata
                         {
+                            IdOrdenVeterinaria = idOrdenVeterinaria,
                             Destinatarios = destinatariosFactura,
                             CorreoEnviado = false,
                             FechaEnvioCorreo = null,
@@ -3849,6 +3852,8 @@ IF @resultado < 0
             factura.Ambiente = int.TryParse(ambiente, out var ambienteNumerico) ? ambienteNumerico : 2;
 
             var infoAdicional = new List<XElement>();
+            if (LeerFacturaCorreoMetadata(factura.Detalleextra).IdOrdenVeterinaria is int idOrdenVeterinaria)
+                AgregarCampoAdicional(infoAdicional, "Orden veterinaria", idOrdenVeterinaria.ToString(CultureInfo.InvariantCulture));
             AgregarCampoAdicional(infoAdicional, "Cliente de la compra", clienteCompra);
             AgregarCampoAdicional(infoAdicional, "EmailCliente", receptor?.Correo);
             AgregarCampoAdicional(infoAdicional, "TelefonoCliente", receptor?.Celular);

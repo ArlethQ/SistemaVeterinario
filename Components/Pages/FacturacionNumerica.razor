@@ -28,6 +28,8 @@
 @inject IJSRuntime JS
 @inject IEFactCatalogService CatalogoProductosLocal
 @inject IFacturacionIntegradaService FacturacionIntegrada
+@inject IAdmisionFacturacionService AdmisionFacturacion
+@inject ILogger<FacturacionNumerica> LoggerOrdenFactura
 @inject EmisionControlService EmisionControlService
 @inject EmisorSistemaService EmisorSistemaService
 @inject NavigationManager NavigationManager
@@ -52,10 +54,6 @@
     }
     else
     {
-    <SaveForm Model="@factura" OnValidSubmit="ProcesarGuardado">
-        <DataAnnotationsValidator />
-        <ValidationSummary class="text-danger mb-3" />
-
         <InitialSequenceModal Visible="@mostrarModalSecuenciaInicial"
                               Title="Configuración inicial de secuencia"
                               Description="Antes de emitir tu primera factura en este sistema, indícanos si ya habías generado facturas anteriormente."
@@ -161,6 +159,88 @@
             </div>
         </section>
 
+        <section class="card border-0 shadow-sm mb-3" aria-labelledby="titulo-orden-factura">
+            <div class="card-body">
+                <h3 class="h6 fw-bold" id="titulo-orden-factura">Orden veterinaria</h3>
+                <label class="visually-hidden" for="buscar-orden-factura">Número de orden, NHCL, mascota o propietario</label>
+                <input type="text" id="buscar-orden-factura" class="form-control form-control-sm"
+                       placeholder="Número de orden, NHCL, mascota o propietario" autocomplete="off"
+                       disabled="@(isDemoMode || EsContextoBackOffice)"
+                       @bind:get="textoBusquedaOrdenFactura" @bind:set="BuscarOrdenesFacturaAsync" @bind:event="oninput" />
+                @if (!string.IsNullOrEmpty(mensajeOrdenFactura))
+                {
+                    <p class="small mt-2 mb-0" role="status">@mensajeOrdenFactura</p>
+                }
+                @if (ordenesFactura.Count > 0)
+                {
+                    <div class="list-group mt-2 overflow-auto" style="max-height: 14rem">
+                        @foreach (var orden in ordenesFactura)
+                        {
+                            <button type="button" class="list-group-item list-group-item-action py-2"
+                                    disabled="@cargandoOrdenFactura" @onclick="() => SeleccionarOrdenFactura(orden)">
+                                <strong>Orden #@orden.IdOrden · @orden.MascotaNombre</strong>
+                                <span class="d-block small text-muted">NHCL @orden.Nhcl · @orden.ClienteNombre · @orden.FechaOrden.ToString("dd/MM/yyyy")</span>
+                            </button>
+                        }
+                    </div>
+                }
+                @if (ordenFactura is { } ordenActiva)
+                {
+                    <div class="rounded border p-2 mt-2">
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <strong>Orden #@ordenActiva.IdOrden · @ordenActiva.MascotaNombre</strong>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@cargandoOrdenFactura"
+                                    @onclick="QuitarOrdenFactura">Quitar orden</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+
+        @if (ordenFactura is { } propietarioOrden)
+        {
+            <section class="n-card mb-4" aria-labelledby="titulo-propietario-factura">
+                <div class="n-card-header">
+                    <h5 id="titulo-propietario-factura"><i class="bi bi-person-vcard me-2"></i> Información del propietario de la mascota</h5>
+                </div>
+                <div class="n-card-body n-client-card-body">
+                    <div class="n-owner-grid">
+                        <div>
+                            <label class="n-label" for="propietario-factura-nombre">Nombre completo</label>
+                            <input id="propietario-factura-nombre" class="n-input" value="@propietarioOrden.ClienteNombre.Trim()" placeholder="Sin registrar" readonly />
+                        </div>
+                        <div>
+                            <label class="n-label" for="propietario-factura-identificacion">Identificación</label>
+                            <input id="propietario-factura-identificacion" class="n-input" value="@propietarioOrden.ClienteCedula" placeholder="Sin registrar" readonly />
+                        </div>
+                        <div>
+                            <label class="n-label" for="propietario-factura-direccion">Dirección</label>
+                            <input id="propietario-factura-direccion" class="n-input" value="@propietarioOrden.ClienteDireccion" placeholder="Sin registrar" readonly />
+                        </div>
+                        <div>
+                            <label class="n-label" for="propietario-factura-telefono">Teléfono</label>
+                            <input id="propietario-factura-telefono" class="n-input" value="@propietarioOrden.ClienteTelefono" placeholder="Sin registrar" readonly />
+                        </div>
+                        <div class="n-owner-email">
+                            <label class="n-label" for="propietario-factura-correo">Correo electrónico</label>
+                            <input id="propietario-factura-correo" class="n-input" value="@propietarioOrden.ClienteEmail" placeholder="Sin registrar" readonly />
+                        </div>
+                        <div class="n-owner-billing">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="facturar-al-propietario" checked="@usarPropietarioFactura"
+                                       disabled="@(cargandoOrdenFactura || propietarioOrden.IdCliente <= 0 || string.IsNullOrWhiteSpace(propietarioOrden.ClienteCedula))"
+                                       @onchange="CambiarPropietarioFacturaAsync" />
+                                <label class="form-check-label" for="facturar-al-propietario">Usar los datos del propietario para la factura</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        }
+
+    <SaveForm Model="@factura" OnValidSubmit="ProcesarGuardado">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="text-danger mb-3" />
         <section class="n-client-search-strip" data-tour="invoice.client-search">
             <div class="n-client-search-strip-copy">
                 <span class="n-client-search-eyebrow">Buscador de cliente</span>
@@ -171,8 +251,8 @@
                 <div class="n-input-wrapper">
                     <i class="bi bi-search n-input-icon"></i>
                     <input type="text" class="n-input n-input-with-icon n-input-with-toggle"
-                           value="@textoBusqueda"
-                           @oninput="OnInputBusqueda"
+                           @bind:get="textoBusqueda"
+                           @bind:set="OnInputBusqueda" @bind:event="oninput"
                            @onfocus="MostrarSugerenciasClientesAsync"
                            @onkeydown="OnKeyDownBusquedaNombre"
                            @onblur="OnBlurBusqueda"
@@ -180,7 +260,7 @@
                            autocomplete="off" />
                     <button type="button"
                             class="n-input-toggle-btn"
-                            @onclick="ToggleSugerenciasClientesAsync"
+                            @onmousedown:preventDefault @onclick="ToggleSugerenciasClientesAsync"
                             aria-label="Mostrar sugerencias de cliente">
                         <i class="bi @((sugerencias != null && sugerencias.Any()) ? "bi-chevron-up" : "bi-chevron-down")"></i>
                     </button>
@@ -191,7 +271,7 @@
                         @for (var i = 0; i < sugerencias.Count; i++)
                         {
                             var c = sugerencias[i];
-                            <li @onmousedown="PrepararSeleccionCliente"
+                            <li @onmousedown:preventDefault
                                 class="@(indiceSugerenciaClienteActiva == i ? "is-active" : null)"
                                 @onclick="() => SeleccionarCliente(c)">
                                 <strong>@ObtenerNombreClienteVisual(c)</strong><br />
@@ -237,7 +317,7 @@
         ======================================================= *@
         <div class="n-card mb-4" data-tour="invoice.client-section">
             <div class="n-card-header">
-                <h5><i class="bi bi-person-vcard me-2"></i> Información del Cliente</h5>
+                <h5><i class="bi bi-person-vcard me-2"></i> @(ordenFactura is null ? "Información del cliente" : "Cliente de facturación")</h5>
                 <small class="d-none d-sm-flex"><i class="bi bi-arrow-repeat me-1"></i> Los datos se actualizarán automáticamente</small>
             </div>
 
@@ -253,8 +333,8 @@
                                 <div class="n-input-wrapper">
                                     <i class="bi bi-search n-input-icon"></i>
                                     <input type="text" class="n-input n-input-with-icon n-input-with-toggle"
-                                           value="@textoBusqueda"
-                                           @oninput="OnInputBusqueda"
+                                           @bind:get="textoBusqueda"
+                                           @bind:set="OnInputBusqueda" @bind:event="oninput"
                                            @onfocus="MostrarSugerenciasClientesAsync"
                                            @onkeydown="OnKeyDownBusquedaNombre"
                                            @onblur="OnBlurBusqueda"
@@ -262,7 +342,7 @@
                                            autocomplete="off" />
                                     <button type="button"
                                             class="n-input-toggle-btn"
-                                            @onclick="ToggleSugerenciasClientesAsync"
+                                            @onmousedown:preventDefault @onclick="ToggleSugerenciasClientesAsync"
                                             aria-label="Mostrar sugerencias de cliente">
                                         <i class="bi @((sugerencias != null && sugerencias.Any()) ? "bi-chevron-up" : "bi-chevron-down")"></i>
                                     </button>
@@ -273,7 +353,7 @@
                                         @for (var i = 0; i < sugerencias.Count; i++)
                                         {
                                             var c = sugerencias[i];
-                                            <li @onmousedown="PrepararSeleccionCliente"
+                                            <li @onmousedown:preventDefault
                                                 class="@(indiceSugerenciaClienteActiva == i ? "is-active" : null)"
                                                 @onclick="() => SeleccionarCliente(c)">
                                                 <strong>@ObtenerNombreClienteVisual(c)</strong><br />
@@ -315,7 +395,7 @@
                                    autocomplete="off" />
                             <button type="button"
                                     class="n-input-toggle-btn"
-                                    @onclick="ToggleSugerenciasIdentificacionAsync"
+                                    @onmousedown:preventDefault @onclick="ToggleSugerenciasIdentificacionAsync"
                                     aria-label="Mostrar sugerencias por identificación">
                                 <i class="bi @((sugerenciasIdentificacion != null && sugerenciasIdentificacion.Any()) ? "bi-chevron-up" : "bi-chevron-down")"></i>
                             </button>
@@ -326,7 +406,7 @@
                                 @for (var i = 0; i < sugerenciasIdentificacion.Count; i++)
                                 {
                                     var c = sugerenciasIdentificacion[i];
-                                    <li @onmousedown="PrepararSeleccionCliente"
+                                    <li @onmousedown:preventDefault
                                         class="@(indiceSugerenciaIdentificacionActiva == i ? "is-active" : null)"
                                         @onclick="() => SeleccionarCliente(c)">
                                         <strong>@ObtenerNombreClienteVisual(c)</strong><br />
@@ -1147,7 +1227,7 @@
 
                             <SaveButton Type="submit"
                                     class="@("n-btn-primary " + (mostrarPantallaCargaEmision ? "n-auto-loading" : null))"
-                                    Disabled="@(!PuedeIntentarGuardarFactura || mostrarPantallaCargaEmision || facturaSecuenciaPendiente != null)">
+                                    Disabled="@(!PuedeIntentarGuardarFactura || cargandoOrdenFactura || mostrarPantallaCargaEmision || facturaSecuenciaPendiente != null)">
                                 @if (!mostrarPantallaCargaEmision)
                                 {
                                     <i class="bi bi-check2-circle fs-5 me-2"></i>
@@ -1929,6 +2009,16 @@
     private string formaPagoSeleccionada = "";
     private bool facturaEsCredito;
     private int currentUserId;
+    [SupplyParameterFromQuery(Name = "ordenId")] public int? OrdenIdFactura { get; set; }
+    private string textoBusquedaOrdenFactura = "";
+    private bool PuedeBuscarOrdenesFactura => !isDemoMode && !EsContextoBackOffice && currentUserId > 0;
+    private long revisionBusquedaOrdenFactura;
+    private string? mensajeOrdenFactura;
+    private List<OrdenProformaResumenDto> ordenesFactura = [];
+    private OrdenProformaResumenDto? ordenFactura;
+    private bool cargandoOrdenFactura;
+    private bool usarPropietarioFactura;
+    private int? codigoPropietarioFactura;
     private int productUserId;
     private bool backofficeSinAcceso;
     private string backofficeMensaje = "";
@@ -1976,7 +2066,6 @@
     // ===================== SUGERENCIAS CLIENTE =====================
     private List<Simetric.Models.Cliente>? sugerencias;
     private List<Simetric.Models.Cliente>? sugerenciasIdentificacion;
-    private bool seleccionandoClienteDesdeLista = false;
     private bool clienteDetectadoEnCatalogoFactura = false;
     private bool continuarConClienteSinRegistro = false;
     private int indiceSugerenciaClienteActiva = -1;
@@ -2401,7 +2490,8 @@
         }
 
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var userClaim = authState.User.FindFirst("IdUsuario")?.Value;
+        var userClaim = authState.User.FindFirst("IdUsuario")?.Value
+                        ?? authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         currentUserId = int.TryParse(userClaim, out var id) ? id : 0;
         productUserId = currentUserId;
         Simetric.Models.Emisor? emisorSistema = null;
@@ -2498,6 +2588,145 @@
 
         cliente.Usuario = currentUserId;
         cliente.Estado = true;
+        if (OrdenIdFactura is int idOrden && idOrden > 0 && !EsContextoBackOffice)
+            await CargarOrdenesFacturaAsync(idOrden);
+    }
+
+    private async Task BuscarOrdenesFacturaAsync(string texto)
+    {
+        textoBusquedaOrdenFactura = texto;
+        if (!PuedeBuscarOrdenesFactura) return;
+        var revision = ++revisionBusquedaOrdenFactura;
+        var filtro = texto.Trim();
+        ordenesFactura = [];
+        mensajeOrdenFactura = null;
+        if (string.IsNullOrWhiteSpace(filtro.TrimStart('#')))
+            return;
+
+        await Task.Delay(300);
+        if (revision != revisionBusquedaOrdenFactura)
+            return;
+
+        try
+        {
+            var encontradas = await AdmisionFacturacion.BuscarOrdenesParaFacturaAsync(filtro);
+            if (revision != revisionBusquedaOrdenFactura)
+                return;
+
+            ordenesFactura = encontradas;
+            if (encontradas.Count == 0)
+                mensajeOrdenFactura = "No se encontraron órdenes con anamnesis o procedimiento finalizado.";
+        }
+        catch (Exception ex)
+        {
+            LoggerOrdenFactura.LogWarning(ex, "No se pudieron consultar las órdenes para factura.");
+            if (revision == revisionBusquedaOrdenFactura)
+                mensajeOrdenFactura = "No se pudieron consultar las órdenes. Intenta nuevamente.";
+        }
+    }
+
+    private async Task CargarOrdenesFacturaAsync(int idOrden)
+    {
+        if (cargandoOrdenFactura) return;
+
+        cargandoOrdenFactura = true;
+        var revision = ++revisionBusquedaOrdenFactura;
+        ordenesFactura = [];
+        mensajeOrdenFactura = null;
+        try
+        {
+            var encontradas = await AdmisionFacturacion.BuscarOrdenesParaFacturaAsync("", idOrden);
+            if (revision != revisionBusquedaOrdenFactura)
+                return;
+
+            if (encontradas.FirstOrDefault() is { } orden)
+                SeleccionarOrdenFactura(orden);
+            else
+                mensajeOrdenFactura = "No se encontraron órdenes con anamnesis o procedimiento finalizado.";
+        }
+        catch (Exception ex)
+        {
+            LoggerOrdenFactura.LogWarning(ex, "No se pudieron consultar las órdenes para factura.");
+            if (revision == revisionBusquedaOrdenFactura)
+                mensajeOrdenFactura = "No se pudieron consultar las órdenes. Intenta nuevamente.";
+        }
+        finally
+        {
+            cargandoOrdenFactura = false;
+        }
+    }
+
+    private void SeleccionarOrdenFactura(OrdenProformaResumenDto orden)
+    {
+        QuitarOrdenFactura();
+        ordenFactura = orden;
+        ordenesFactura = [];
+        textoBusquedaOrdenFactura = $"#{orden.IdOrden}";
+    }
+
+    private void QuitarOrdenFactura()
+    {
+        revisionBusquedaOrdenFactura++;
+        ordenesFactura = [];
+        LimpiarPropietarioFactura();
+        ordenFactura = null;
+        mensajeOrdenFactura = null;
+        textoBusquedaOrdenFactura = "";
+    }
+
+    private void LimpiarPropietarioFactura()
+    {
+        if (codigoPropietarioFactura.HasValue && cliente.Codcliente == codigoPropietarioFactura.Value)
+            LimpiarClienteFacturaParaNuevaBusqueda();
+        usarPropietarioFactura = false;
+        codigoPropietarioFactura = null;
+    }
+
+    private async Task CambiarPropietarioFacturaAsync(ChangeEventArgs e)
+    {
+        if (cargandoOrdenFactura || ordenFactura is not { } orden) return;
+
+        mensajeOrdenFactura = null;
+        if (e.Value is not true)
+        {
+            LimpiarPropietarioFactura();
+            return;
+        }
+
+        cargandoOrdenFactura = true;
+        usarPropietarioFactura = true;
+        try
+        {
+            var resultado = await FacturacionIntegrada.SincronizarClienteAsync(orden.IdCliente, currentUserId);
+            if (!resultado.Exito || resultado.CodClienteFacturacion is not int codigo)
+            {
+                mensajeOrdenFactura = resultado.Mensaje;
+                usarPropietarioFactura = false;
+                return;
+            }
+
+            var clientes = await FacturacionService.BuscarClientesFiltroAsync(currentUserId, orden.ClienteCedula);
+            var propietario = clientes.FirstOrDefault(c => c.Codcliente == codigo);
+            if (propietario is null)
+            {
+                mensajeOrdenFactura = "No se pudieron cargar los datos de facturación del propietario.";
+                usarPropietarioFactura = false;
+                return;
+            }
+
+            codigoPropietarioFactura = codigo;
+            await SeleccionarCliente(propietario);
+        }
+        catch (Exception ex)
+        {
+            LoggerOrdenFactura.LogWarning(ex, "No se pudo usar el propietario de la orden {Orden} en la factura.", orden.IdOrden);
+            LimpiarPropietarioFactura();
+            mensajeOrdenFactura = "No se pudieron cargar los datos del propietario. Intenta nuevamente.";
+        }
+        finally
+        {
+            cargandoOrdenFactura = false;
+        }
     }
 
     private void OnPaymentMethodChanged()
@@ -2562,6 +2791,13 @@
 
     private void InicializarModelos()
     {
+        revisionBusquedaOrdenFactura++;
+        ordenFactura = null;
+        ordenesFactura = [];
+        textoBusquedaOrdenFactura = "";
+        mensajeOrdenFactura = null;
+        usarPropietarioFactura = false;
+        codigoPropietarioFactura = null;
         factura = new Simetric.Models.Factura
         {
             Estado = true,
@@ -3663,16 +3899,8 @@
         }
     }
 
-    private async Task OnBlurIdentificacion()
+    private void OnBlurIdentificacion()
     {
-        await Task.Delay(200);
-
-        if (seleccionandoClienteDesdeLista)
-        {
-            seleccionandoClienteDesdeLista = false;
-            return;
-        }
-
         versionBusquedaIdentificacion++;
         sugerenciasIdentificacion = null;
         indiceSugerenciaIdentificacionActiva = -1;
@@ -3683,9 +3911,8 @@
         StateHasChanged();
     }
 
-    private async Task OnInputBusqueda(ChangeEventArgs e)
+    private async Task OnInputBusqueda(string nuevoTextoBusqueda)
     {
-        var nuevoTextoBusqueda = e.Value?.ToString() ?? string.Empty;
         var digitosBusqueda = new string(nuevoTextoBusqueda.Where(char.IsDigit).ToArray());
         var identificacionClienteActual = cliente.Numeroidentificacion?.Trim() ?? string.Empty;
         var buscaOtroCliente = string.IsNullOrWhiteSpace(identificacionClienteActual) ||
@@ -3794,25 +4021,12 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task OnBlurBusqueda()
+    private void OnBlurBusqueda()
     {
-        await Task.Delay(200);
-
-        if (seleccionandoClienteDesdeLista)
-        {
-            seleccionandoClienteDesdeLista = false;
-            return;
-        }
-
         versionBusquedaCliente++;
         sugerencias = null;
         indiceSugerenciaClienteActiva = -1;
         StateHasChanged();
-    }
-
-    private void PrepararSeleccionCliente()
-    {
-        seleccionandoClienteDesdeLista = true;
     }
 
     private void SincronizarClienteDesdeBusquedaUnificada(string valor)
@@ -3944,9 +4158,14 @@
 
     private async Task SeleccionarCliente(Simetric.Models.Cliente c)
     {
+        if (usarPropietarioFactura && c.Codcliente != codigoPropietarioFactura)
+        {
+            usarPropietarioFactura = false;
+            codigoPropietarioFactura = null;
+        }
+
         versionBusquedaCliente++;
         versionBusquedaIdentificacion++;
-        seleccionandoClienteDesdeLista = false;
         cliente = c;
         clienteDetectadoEnCatalogoFactura = true;
         continuarConClienteSinRegistro = false;
@@ -5252,6 +5471,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        revisionBusquedaOrdenFactura++;
         EmisionControlService.Changed -= OnEmisionChanged;
 
         if (!productoModalScrollLockApplied)
@@ -5474,6 +5694,9 @@
     // ===================== GUARDAR FACTURA =====================
     private async Task ProcesarGuardado(EditContext editContext)
     {
+        if (cargandoOrdenFactura || mostrarPantallaCargaEmision)
+            return;
+
         if (isDemoMode)
         {
             await AlertService.ShowInfoAsync("Modo demo: la emision esta bloqueada para invitados.");
@@ -5592,12 +5815,30 @@
             mensajeRapidoFacturaEsError = false;
             facturaGeneradaPdfUrl = null;
             await InvokeAsync(StateHasChanged);
+            if (ordenFactura is { } ordenSeleccionada)
+            {
+                var ordenVigente = (await AdmisionFacturacion.BuscarOrdenesParaFacturaAsync("", ordenSeleccionada.IdOrden)).FirstOrDefault();
+                if (ordenVigente is null)
+                {
+                    await AlertService.ShowErrorAsync("La orden seleccionada ya no está habilitada para facturación.");
+                    return;
+                }
+
+                if (usarPropietarioFactura && (cliente.Codcliente != codigoPropietarioFactura ||
+                    ordenVigente.IdCliente != ordenSeleccionada.IdCliente ||
+                    !string.Equals(cliente.Numeroidentificacion?.Trim(), ordenVigente.ClienteCedula, StringComparison.OrdinalIgnoreCase)))
+                {
+                    await AlertService.ShowErrorAsync("Vuelve a cargar los datos del propietario o desmarca la casilla para facturar a otro cliente.");
+                    return;
+                }
+            }
             var exito = await FacturacionService.GuardarFacturaCompletaAsync(
                 currentUserId,
                 factura,
                 cliente,
                 detallesParaGuardar,
-                correosFactura);
+                correosFactura,
+                idOrdenVeterinaria: ordenFactura?.IdOrden);
 
             if (!exito)
             {
