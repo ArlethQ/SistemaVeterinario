@@ -1433,16 +1433,25 @@ public sealed class EContaxInventarioService
     {
         await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.ComprasRecepciones, EContaxAccion.Ver);
         await using var context = await _dbFactory.CreateDbContextAsync();
+        var userContext = await _tenant.GetContextAsync(context, userId);
+
+        var usuariosEmpresa = await context.EContaxUsuariosContexto
+            .AsNoTracking()
+            .Where(x => x.IdEmpresa == userContext.IdEmpresa && x.Estado)
+            .Select(x => x.IdUsuario)
+            .ToListAsync();
+        if (!usuariosEmpresa.Contains(userId)) usuariosEmpresa.Add(userId);
+        if (!usuariosEmpresa.Contains(userContext.IdUsuarioTitular)) usuariosEmpresa.Add(userContext.IdUsuarioTitular);
 
         var cabeceras = await (
             from c in context.ComprasFacturas.AsNoTracking()
             join cl in context.Clientes.AsNoTracking() on c.CodClientes equals cl.Codcliente into cls
             from cl in cls.DefaultIfEmpty()
-            where c.Usuario == userId &&
-                  c.Estado == true &&
-                  c.CodDocumento == "01" &&
-                  (c.TipoDocumento == "COM" || c.TipoDocumento == "COMPRA") &&
-                  c.Inventario != true
+            where c.Estado == true &&
+                  (c.Inventario == null || c.Inventario == false) &&
+                  (c.CodDocumento == "01" || c.CodDocumento == "03") &&
+                  (c.TipoDocumento == null || c.TipoDocumento == "COM" || c.TipoDocumento == "COMPRA" || c.TipoDocumento == "LIQ") &&
+                  (c.Usuario == null || usuariosEmpresa.Contains(c.Usuario.Value))
             orderby c.FechaRegistro descending, c.CodFactura descending
             select new
             {
@@ -1532,12 +1541,20 @@ public sealed class EContaxInventarioService
             var sucursales = await _tenant.GetSucursalesEmpresaAsync(context, userContext.IdEmpresa);
             var sucursal = ResolverSucursalUnica(userContext, sucursales, sucursalId);
 
+            var usuariosEmpresa = await context.EContaxUsuariosContexto
+                .AsNoTracking()
+                .Where(x => x.IdEmpresa == userContext.IdEmpresa && x.Estado)
+                .Select(x => x.IdUsuario)
+                .ToListAsync();
+            if (!usuariosEmpresa.Contains(userId)) usuariosEmpresa.Add(userId);
+            if (!usuariosEmpresa.Contains(userContext.IdUsuarioTitular)) usuariosEmpresa.Add(userContext.IdUsuarioTitular);
+
             var compra = await context.ComprasFacturas.FirstOrDefaultAsync(x =>
                 x.CodFactura == codFactura &&
-                x.Usuario == userId &&
                 x.Estado == true &&
-                x.CodDocumento == "01" &&
-                (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA"));
+                (x.CodDocumento == "01" || x.CodDocumento == "03") &&
+                (x.TipoDocumento == null || x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA" || x.TipoDocumento == "LIQ") &&
+                (x.Usuario == null || usuariosEmpresa.Contains(x.Usuario.Value)));
 
             if (compra is null)
                 throw new InvalidOperationException("No se encontró la compra registrada.");
@@ -1547,14 +1564,6 @@ public sealed class EContaxInventarioService
             var detallesDb = await context.ComprasDetalleFac
                 .Where(x => x.CodFactura == codFactura)
                 .ToListAsync();
-
-            var usuariosEmpresa = await context.EContaxUsuariosContexto
-                .AsNoTracking()
-                .Where(x => x.IdEmpresa == userContext.IdEmpresa && x.Estado)
-                .Select(x => x.IdUsuario)
-                .ToListAsync();
-            if (!usuariosEmpresa.Contains(userId)) usuariosEmpresa.Add(userId);
-            if (!usuariosEmpresa.Contains(userContext.IdUsuarioTitular)) usuariosEmpresa.Add(userContext.IdUsuarioTitular);
 
             var metodo = await ObtenerMetodoAsync(context, userContext.IdEmpresa);
             var serie = compra.Serie ?? "";
