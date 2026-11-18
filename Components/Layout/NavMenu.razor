@@ -299,19 +299,28 @@
                                 </details>
                             }
 
-                            @if (TieneAlguno("compras/importar-xml", "facturacion/retenciones-generadas", "compras/nueva-liquidacion", "compras/liquidaciones-generadas", "contabilidad/compra-documentos"))
+                            @if (TieneAlguno("compras/importar-xml", "facturacion/retenciones-generadas"))
                             {
                                 <details class="submenu-group">
-                                    <summary><span>Compras y Retenciones</span><i>⌄</i></summary>
+                                    <summary><span>Retención de compras</span><i>⌄</i></summary>
                                     <div class="submenu">
                                         @if (TienePermiso("compras/importar-xml"))
                                         {
-                                            <NavLink href="compras/importar-xml">Importar compra / generar retención</NavLink>
+                                            <NavLink href="compras/importar-xml">Retención de compra</NavLink>
                                         }
                                         @if (TienePermiso("facturacion/retenciones-generadas"))
                                         {
                                             <NavLink href="facturacion/retenciones-generadas">Retenciones</NavLink>
                                         }
+                                    </div>
+                                </details>
+                            }
+
+                            @if (TieneAlguno("compras/nueva-liquidacion", "compras/liquidaciones-generadas"))
+                            {
+                                <details class="submenu-group">
+                                    <summary><span>Liquidación de compras</span><i>⌄</i></summary>
+                                    <div class="submenu">
                                         @if (TienePermiso("compras/nueva-liquidacion"))
                                         {
                                             <NavLink href="compras/nueva-liquidacion">Liquidación de compra</NavLink>
@@ -320,15 +329,11 @@
                                         {
                                             <NavLink href="compras/liquidaciones-generadas">Liquidaciones emitidas</NavLink>
                                         }
-                                        @if (TienePermiso("contabilidad/compra-documentos"))
-                                        {
-                                            <NavLink href="contabilidad/compra-documentos">Recargar documentos</NavLink>
-                                        }
                                     </div>
                                 </details>
                             }
 
-                            @if (TieneAlguno("facturacion/configuracion/emisor", "facturacion/configuracion/firma", "facturacion/configuracion/caja"))
+                            @if (TieneAlguno("facturacion/configuracion/emisor", "facturacion/configuracion/firma", "facturacion/configuracion/caja", "contabilidad/compra-documentos"))
                             {
                                 <details class="submenu-group">
                                     <summary><span>Configuración SRI</span><i>⌄</i></summary>
@@ -344,6 +349,10 @@
                                         @if (TienePermiso("facturacion/configuracion/caja"))
                                         {
                                             <NavLink href="facturacion/configuracion/caja">Caja y secuenciales</NavLink>
+                                        }
+                                        @if (TienePermiso("contabilidad/compra-documentos"))
+                                        {
+                                            <NavLink href="contabilidad/compra-documentos">Recargar documentos</NavLink>
                                         }
                                     </div>
                                 </details>
