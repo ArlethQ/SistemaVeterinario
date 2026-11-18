@@ -42,8 +42,8 @@
                     <div class="n-invoice-id-pill"><span>SRI</span><strong>No aplica</strong></div>
                 </div>
                 <label class="n-btn n-btn-secondary n-xml-upload-btn">
-                    <i class="bi bi-filetype-xml me-2"></i>Importar XML autorizado
-                    <InputFile OnChange="OnXmlSelected" accept=".xml" />
+                    <i class="bi bi-filetype-xml me-2"></i>@(cargandoLoteXml ? "Leyendo XML..." : "Importar XML (1 o varios)")
+                    <InputFile multiple OnChange="OnXmlSelected" accept=".xml,text/xml,application/xml" disabled="@(cargandoLoteXml || importandoLoteXml)" />
                 </label>
                 @if (xmlCargado)
                 {
@@ -55,6 +55,105 @@
             </div>
         </div>
     </section>
+
+    @if (xmlLote.Count > 0)
+    {
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-2 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <span class="text-uppercase text-primary fw-bold" style="font-size:0.72rem;letter-spacing:.06em;">Carga masiva · Máximo @MaxXmlBatch archivos</span>
+                    <h5 class="mb-0 fw-bold">XMLs cargados en lista (@xmlLote.Count)</h5>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge bg-success-subtle text-success border">Listos: @xmlLote.Count(x => x.PuedeImportar)</span>
+                    <span class="badge bg-warning-subtle text-warning-emphasis border">Duplicados: @xmlLote.Count(x => x.Estado == EstadoLoteXml.Duplicado)</span>
+                    <span class="badge bg-danger-subtle text-danger border">Errores: @xmlLote.Count(x => x.Estado == EstadoLoteXml.Error)</span>
+                    <span class="badge bg-primary-subtle text-primary border">Total selec.: $@TotalLoteSeleccionado.ToString("N2")</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="LimpiarLoteXml" disabled="@importandoLoteXml">
+                        <i class="bi bi-trash me-1"></i>Limpiar lista
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary fw-semibold" @onclick="ImportarLoteXmlAsync" disabled="@(importandoLoteXml || SeleccionadosLoteCount == 0)">
+                        <i class="bi bi-cloud-check me-1"></i>@(importandoLoteXml ? "Importando..." : $"Importar seleccionadas ({SeleccionadosLoteCount})")
+                    </button>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(mensajeLote))
+            {
+                <div class="px-4 pt-2">
+                    <div class="alert @(loteEsError ? "alert-warning" : "alert-success") border-0 rounded-3 mb-0 py-2">
+                        @mensajeLote
+                    </div>
+                </div>
+            }
+
+            <div class="card-body px-4 pt-2 pb-3">
+                <div class="table-responsive" style="max-height:420px;overflow-y:auto;">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th style="width:36px;" class="text-center">
+                                    <input type="checkbox" class="form-check-input" checked="@TodosLoteSeleccionados" @onchange="ToggleTodosLote" disabled="@importandoLoteXml" title="Seleccionar todos los válidos" />
+                                </th>
+                                <th>Archivo</th>
+                                <th>Proveedor / RUC</th>
+                                <th>Factura / Emisión</th>
+                                <th class="text-end">Subtotal</th>
+                                <th class="text-end">IVA</th>
+                                <th class="text-end">Total</th>
+                                <th>Estado</th>
+                                <th style="width:48px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in xmlLote)
+                            {
+                                <tr @key="item.Id" class="@(item.Seleccionado ? "table-primary" : "")">
+                                    <td class="text-center">
+                                        <input type="checkbox" class="form-check-input" @bind="item.Seleccionado" disabled="@(!item.PuedeImportar || importandoLoteXml)" />
+                                    </td>
+                                    <td class="small font-monospace text-truncate" style="max-width:190px;" title="@item.NombreArchivo">@item.NombreArchivo</td>
+                                    <td>
+                                        <div class="fw-semibold small">@(string.IsNullOrWhiteSpace(item.Proveedor) ? "—" : item.Proveedor)</div>
+                                        <small class="text-muted font-monospace">@item.RucProveedor</small>
+                                    </td>
+                                    <td>
+                                        <div class="small font-monospace">@item.NumeroFactura</div>
+                                        <small class="text-muted">@item.FechaEmisionTexto</small>
+                                    </td>
+                                    <td class="text-end small">$@item.Subtotal.ToString("N2")</td>
+                                    <td class="text-end small">$@item.Iva.ToString("N2")</td>
+                                    <td class="text-end fw-semibold small">$@item.Total.ToString("N2")</td>
+                                    <td>
+                                        @switch (item.Estado)
+                                        {
+                                            case EstadoLoteXml.Listo:
+                                                <span class="badge bg-success-subtle text-success border">Listo</span>
+                                                break;
+                                            case EstadoLoteXml.Importado:
+                                                <span class="badge bg-primary-subtle text-primary border">@item.DetalleEstado</span>
+                                                break;
+                                            case EstadoLoteXml.Duplicado:
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border">@item.DetalleEstado</span>
+                                                break;
+                                            case EstadoLoteXml.Error:
+                                                <span class="badge bg-danger-subtle text-danger border text-wrap text-start" style="max-width:220px;">@item.DetalleEstado</span>
+                                                break;
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-link text-danger p-0" title="Quitar de la lista" @onclick="() => QuitarItemLote(item)" disabled="@importandoLoteXml">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
 
     <section class="n-client-search-strip" data-tour="invoice.client-search">
         <div class="n-client-search-strip-copy">
@@ -199,15 +298,21 @@
 </div>
 
 @code {
+    private const int MaxXmlBatch = 50;
     private FacturaCompraManualVM model = new() { Detalles = new() { new() } };
     private List<LiquidacionProveedorLookupDto> sugerencias = new();
     private List<LiquidacionCatalogoOptionDto> formasPago = new();
+    private List<ItemLoteXml> xmlLote = new();
     private string proveedorBusqueda = "";
     private int currentUserId;
     private bool guardando;
+    private bool cargandoLoteXml;
+    private bool importandoLoteXml;
     private bool creditoSeleccionado;
     private bool xmlCargado;
     private string error = "";
+    private string mensajeLote = "";
+    private bool loteEsError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -314,55 +419,229 @@
         sugerencias.Clear();
     }
 
+    private int SeleccionadosLoteCount => xmlLote.Count(x => x.Seleccionado && x.PuedeImportar);
+    private decimal TotalLoteSeleccionado => xmlLote.Where(x => x.Seleccionado && x.PuedeImportar).Sum(x => x.Total);
+    private bool TodosLoteSeleccionados => xmlLote.Any(x => x.PuedeImportar) && xmlLote.Where(x => x.PuedeImportar).All(x => x.Seleccionado);
+
+    private void ToggleTodosLote(ChangeEventArgs e)
+    {
+        var marcar = e.Value is bool b && b;
+        foreach (var item in xmlLote.Where(x => x.PuedeImportar))
+            item.Seleccionado = marcar;
+    }
+
+    private void QuitarItemLote(ItemLoteXml item) => xmlLote.Remove(item);
+
+    private void LimpiarLoteXml()
+    {
+        xmlLote.Clear();
+        mensajeLote = "";
+        loteEsError = false;
+    }
+
     private async Task OnXmlSelected(InputFileChangeEventArgs e)
     {
         error = "";
-        xmlCargado = false;
+        mensajeLote = "";
+        loteEsError = false;
+
+        var archivos = e.GetMultipleFiles(MaxXmlBatch);
+        if (archivos.Count == 0)
+        {
+            error = "No se seleccionó ningún archivo XML.";
+            return;
+        }
+
+        if (archivos.Count == 1 && xmlLote.Count == 0)
+        {
+            xmlCargado = false;
+            try
+            {
+                var file = archivos[0];
+                if (file.Size > 10 * 1024 * 1024)
+                    throw new InvalidOperationException("El archivo XML supera el máximo permitido de 10 MB.");
+
+                using var stream = file.OpenReadStream(10 * 1024 * 1024);
+                using var reader = new StreamReader(stream);
+                var preview = await ComprasXmlService.LeerCompraDesdeXmlAsync(await reader.ReadToEndAsync(), permitirFactura: true);
+                CargarPreviewEnFormulario(preview);
+            }
+            catch (Exception ex)
+            {
+                error = $"No se pudo cargar el XML: {ex.GetBaseException().Message}";
+            }
+            return;
+        }
+
+        cargandoLoteXml = true;
         try
         {
-            var file = e.File ?? throw new InvalidOperationException("No se seleccionó ningún archivo XML.");
-            using var stream = file.OpenReadStream(10 * 1024 * 1024);
-            using var reader = new StreamReader(stream);
-            var preview = await ComprasXmlService.LeerCompraDesdeXmlAsync(await reader.ReadToEndAsync(), permitirFactura: true);
+            var clavesEnLote = new HashSet<string>(
+                xmlLote.Where(x => !string.IsNullOrWhiteSpace(x.ClaveAcceso)).Select(x => x.ClaveAcceso!),
+                StringComparer.OrdinalIgnoreCase);
 
-            var tarifasPermitidas = new[] { 0, 5, 8, 12, 15 };
-            model = new FacturaCompraManualVM
+            var disponibles = MaxXmlBatch - xmlLote.Count;
+            if (disponibles <= 0)
             {
-                RucProveedor = preview.RucProveedor,
-                Proveedor = preview.RazonSocialProveedor,
-                TipoIdentificacion = preview.RucProveedor.Count(char.IsDigit) == 13 ? "04" : "05",
-                NombreComercial = preview.RazonSocialProveedor,
-                Direccion = preview.DireccionProveedor,
-                Telefono = preview.TelefonoProveedor,
-                Correo = preview.EmailProveedor,
-                FechaEmision = preview.FechaEmision?.Date ?? DateTime.Today,
-                FormaPago = formasPago.Any(x => x.Codigo == preview.FormaPago) ? preview.FormaPago : "20",
-                Referencia = $"Importada desde XML {preview.Estab}-{preview.PtoEmi}-{preview.Secuencial}".Trim('-'),
-                Observacion = "Factura de compra cargada desde XML.",
-                Detalles = preview.Detalles.Select(x => new FacturaCompraManualDetalleVM
+                mensajeLote = $"Ya alcanzaste el máximo de {MaxXmlBatch} archivos en la lista. Limpia o importa los actuales primero.";
+                loteEsError = true;
+                return;
+            }
+
+            foreach (var file in archivos.Take(disponibles))
+            {
+                var item = new ItemLoteXml { NombreArchivo = file.Name };
+                try
                 {
-                    Codigo = string.IsNullOrWhiteSpace(x.CodPrincipal) ? x.CodAuxiliar : x.CodPrincipal,
-                    Descripcion = x.Descripcion,
-                    Detalle = "Importado desde XML",
-                    Cantidad = x.Cantidad > 0 ? x.Cantidad : 1m,
-                    PrecioUnitario = x.PrecioUnitario,
-                    Descuento = x.Descuento,
-                    Tarifa = tarifasPermitidas.Contains(x.Tarifa) ? x.Tarifa : 0
-                }).ToList()
-            };
+                    if (file.Size > 10 * 1024 * 1024)
+                        throw new InvalidOperationException("Supera 10 MB.");
 
-            if (model.Detalles.Count == 0)
-                model.Detalles.Add(new());
+                    using var stream = file.OpenReadStream(10 * 1024 * 1024);
+                    using var reader = new StreamReader(stream);
+                    var preview = await ComprasXmlService.LeerCompraDesdeXmlAsync(await reader.ReadToEndAsync(), permitirFactura: true);
+                    if (preview.CodDocumentoSustento != "01")
+                        throw new InvalidOperationException("No es una factura electrónica (01).");
 
-            creditoSeleccionado = model.FormaPago == "19";
-            model.PlazoCredito = creditoSeleccionado ? 30 : 0;
-            proveedorBusqueda = model.Proveedor;
-            sugerencias.Clear();
-            xmlCargado = true;
+                    item.Preview = preview;
+                    item.ClaveAcceso = preview.ClaveAcceso;
+                    item.Proveedor = string.IsNullOrWhiteSpace(preview.RazonSocialProveedor) ? preview.RucProveedor : preview.RazonSocialProveedor;
+                    item.RucProveedor = preview.RucProveedor;
+                    item.NumeroFactura = $"{preview.Estab}-{preview.PtoEmi}-{preview.Secuencial}".Trim('-');
+                    item.FechaEmisionTexto = preview.FechaEmision?.ToString("dd/MM/yyyy") ?? "—";
+                    item.Subtotal = preview.TotalSinImpuestos;
+                    item.Total = preview.ImporteTotal;
+                    item.Iva = Math.Max(0m, preview.ImporteTotal - preview.TotalSinImpuestos);
+
+                    if (preview.YaImportado)
+                    {
+                        item.Estado = EstadoLoteXml.Duplicado;
+                        item.DetalleEstado = "Ya registrada";
+                        item.Seleccionado = false;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(preview.ClaveAcceso) && !clavesEnLote.Add(preview.ClaveAcceso))
+                    {
+                        item.Estado = EstadoLoteXml.Duplicado;
+                        item.DetalleEstado = "Repetida en lista";
+                        item.Seleccionado = false;
+                    }
+                    else
+                    {
+                        item.Estado = EstadoLoteXml.Listo;
+                        item.DetalleEstado = "Listo";
+                        item.Seleccionado = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    item.Estado = EstadoLoteXml.Error;
+                    item.DetalleEstado = ex.GetBaseException().Message;
+                    item.Seleccionado = false;
+                }
+
+                xmlLote.Add(item);
+            }
+
+            if (e.FileCount > MaxXmlBatch || archivos.Count > disponibles)
+            {
+                mensajeLote = $"Se cargaron hasta el límite máximo de {MaxXmlBatch} archivos en la lista.";
+                loteEsError = true;
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            error = $"No se pudo cargar el XML: {ex.Message}";
+            cargandoLoteXml = false;
+        }
+    }
+
+    private void CargarPreviewEnFormulario(CompraXmlPreviewDto preview)
+    {
+        var tarifasPermitidas = new[] { 0, 5, 8, 12, 15 };
+        model = new FacturaCompraManualVM
+        {
+            RucProveedor = preview.RucProveedor,
+            Proveedor = preview.RazonSocialProveedor,
+            TipoIdentificacion = preview.RucProveedor.Count(char.IsDigit) == 13 ? "04" : "05",
+            NombreComercial = preview.RazonSocialProveedor,
+            Direccion = preview.DireccionProveedor,
+            Telefono = preview.TelefonoProveedor,
+            Correo = preview.EmailProveedor,
+            FechaEmision = preview.FechaEmision?.Date ?? DateTime.Today,
+            FormaPago = formasPago.Any(x => x.Codigo == preview.FormaPago) ? preview.FormaPago : "20",
+            Referencia = $"Importada desde XML {preview.Estab}-{preview.PtoEmi}-{preview.Secuencial}".Trim('-'),
+            Observacion = "Factura de compra cargada desde XML.",
+            Detalles = preview.Detalles.Select(x => new FacturaCompraManualDetalleVM
+            {
+                Codigo = string.IsNullOrWhiteSpace(x.CodPrincipal) ? x.CodAuxiliar : x.CodPrincipal,
+                Descripcion = x.Descripcion,
+                Detalle = "Importado desde XML",
+                Cantidad = x.Cantidad > 0 ? x.Cantidad : 1m,
+                PrecioUnitario = x.PrecioUnitario,
+                Descuento = x.Descuento,
+                Tarifa = tarifasPermitidas.Contains(x.Tarifa) ? x.Tarifa : 0
+            }).ToList()
+        };
+
+        if (model.Detalles.Count == 0)
+            model.Detalles.Add(new());
+
+        creditoSeleccionado = model.FormaPago == "19";
+        model.PlazoCredito = creditoSeleccionado ? 30 : 0;
+        proveedorBusqueda = model.Proveedor;
+        sugerencias.Clear();
+        xmlCargado = true;
+    }
+
+    private async Task ImportarLoteXmlAsync()
+    {
+        var seleccionados = xmlLote.Where(x => x.Seleccionado && x.PuedeImportar && x.Preview is not null).ToList();
+        if (seleccionados.Count == 0)
+            return;
+
+        importandoLoteXml = true;
+        mensajeLote = "";
+        loteEsError = false;
+        int importadas = 0;
+        int duplicadas = 0;
+        int errores = 0;
+
+        try
+        {
+            foreach (var item in seleccionados)
+            {
+                try
+                {
+                    var (codFactura, duplicada) = await FacturaCompraService.ImportarFacturaXmlEContaxAsync(currentUserId, item.Preview!);
+                    item.Seleccionado = false;
+                    if (duplicada)
+                    {
+                        item.Estado = EstadoLoteXml.Duplicado;
+                        item.DetalleEstado = $"Duplicada (#{codFactura})";
+                        duplicadas++;
+                    }
+                    else
+                    {
+                        item.Estado = EstadoLoteXml.Importado;
+                        item.DetalleEstado = $"Importada #{codFactura}";
+                        importadas++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    item.Estado = EstadoLoteXml.Error;
+                    item.DetalleEstado = ex.GetBaseException().Message;
+                    item.Seleccionado = false;
+                    errores++;
+                }
+            }
+
+            mensajeLote = $"Proceso completado: {importadas} importada(s), {duplicadas} duplicada(s), {errores} con error.";
+            loteEsError = errores > 0 && importadas == 0;
+            if (importadas > 0)
+                await AlertService.ShowSuccessAsync($"Se importaron {importadas} factura(s) de compra correctamente.");
+        }
+        finally
+        {
+            importandoLoteXml = false;
         }
     }
 
@@ -405,6 +684,7 @@
         sugerencias.Clear();
         creditoSeleccionado = false;
         xmlCargado = false;
+        LimpiarLoteXml();
     }
 
     private async Task GuardarAsync()
@@ -419,5 +699,32 @@
         catch (InvalidOperationException ex) { await AlertService.ShowErrorAsync(ex.Message); }
         catch (Exception ex) { error = $"No se pudo guardar la factura: {ex.Message}"; }
         finally { guardando = false; }
+    }
+
+    private enum EstadoLoteXml
+    {
+        Listo,
+        Importado,
+        Duplicado,
+        Error
+    }
+
+    private sealed class ItemLoteXml
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public string NombreArchivo { get; set; } = "";
+        public string? ClaveAcceso { get; set; }
+        public string Proveedor { get; set; } = "";
+        public string RucProveedor { get; set; } = "";
+        public string NumeroFactura { get; set; } = "";
+        public string FechaEmisionTexto { get; set; } = "—";
+        public decimal Subtotal { get; set; }
+        public decimal Iva { get; set; }
+        public decimal Total { get; set; }
+        public bool Seleccionado { get; set; }
+        public EstadoLoteXml Estado { get; set; } = EstadoLoteXml.Listo;
+        public string DetalleEstado { get; set; } = "";
+        public CompraXmlPreviewDto? Preview { get; set; }
+        public bool PuedeImportar => Estado == EstadoLoteXml.Listo && Preview is not null;
     }
 }
