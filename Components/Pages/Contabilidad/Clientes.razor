@@ -555,9 +555,9 @@
                                             @bind:get="model.Numeroidentificacion"
                                             @bind:set="CambiarIdentificacion"
                                             data-consultar-identificacion
-                                            @oninput="ConsultarRucAlEscribirAsync"
+                                            data-consultar-ruc-automatico="@(EsModoProveedores ? "true" : "false")"
                                             @onconsultaridentificacion="ConsultarIdentificacionAsync"
-                                            aria-label="Número de identificación. Presiona Enter para consultar." />
+                                            aria-label="@(EsModoProveedores ? "Número de identificación. El RUC terminado en 001 se consulta automáticamente; también puedes presionar Enter." : "Número de identificación. Presiona Enter para consultar.")" />
                                      <ValidationMessage For="@(() => model.Numeroidentificacion)" class="text-danger small" />
                                      @if (consultandoCedula)
                                      {
@@ -966,9 +966,9 @@
                                                             @bind:get="model.Numeroidentificacion"
                                                             @bind:set="CambiarIdentificacion"
                                                             data-consultar-identificacion
-                                            @oninput="ConsultarRucAlEscribirAsync"
+                                            data-consultar-ruc-automatico="@(EsModoProveedores ? "true" : "false")"
                                                             @onconsultaridentificacion="ConsultarIdentificacionAsync"
-                                                            aria-label="Número de identificación. Presiona Enter para consultar." />
+                                                            aria-label="@(EsModoProveedores ? "Número de identificación. El RUC terminado en 001 se consulta automáticamente; también puedes presionar Enter." : "Número de identificación. Presiona Enter para consultar.")" />
                                                      <ValidationMessage For="@(() => model.Numeroidentificacion)" class="text-danger small" />
                                                      @if (consultandoCedula)
                                                      {
@@ -4004,20 +4004,6 @@
         model.DatosIdentificacion = null;
         mensajeConsultaCedula = null;
         consultaCedulaEsError = false;
-    }
-
-    private async Task ConsultarRucAlEscribirAsync(ChangeEventArgs evento)
-    {
-        if (!EsModoProveedores)
-            return;
-
-        var identificacion = evento.Value?.ToString()?.Trim() ?? string.Empty;
-        CambiarIdentificacion(identificacion);
-        if (identificacion.Length == 13 && identificacion.All(char.IsAsciiDigit) &&
-            identificacion.EndsWith("001", StringComparison.Ordinal) && !EsIdentificacionAlfanumericaSeleccionada)
-        {
-            await ConsultarIdentificacionAsync(new ConsultaIdentificacionEventArgs { Valor = identificacion });
-        }
     }
 
     private async Task ConsultarIdentificacionAsync(ConsultaIdentificacionEventArgs evento)

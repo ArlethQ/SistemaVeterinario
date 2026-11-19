@@ -988,3 +988,34 @@ window.hosvetDraft = {
         } catch { }
     }
 };
+// Keep typing local to the input. Notify Blazor only when the RUC is complete,
+// so intermediate keystrokes do not render the supplier form again.
+(() => {
+    const pending = new WeakMap();
+    document.addEventListener('input', event => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement) ||
+            input.getAttribute('data-consultar-ruc-automatico') !== 'true') return;
+
+        clearTimeout(pending.get(input));
+        if (event.isComposing) return;
+        const ruc = input.value.trim();
+        if (!/^\d{10}001$/.test(ruc)) return;
+
+        pending.set(input, setTimeout(() => {
+            pending.delete(input);
+            if (input.isConnected && input.value.trim() === ruc) {
+                input.dispatchEvent(new CustomEvent('consultaridentificacion', {
+                    bubbles: true,
+                    detail: ruc
+                }));
+            }
+        }, 300));
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && event.target instanceof HTMLInputElement) {
+            clearTimeout(pending.get(event.target));
+            pending.delete(event.target);
+        }
+    }, true);
+})();

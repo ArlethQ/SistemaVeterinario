@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -11,11 +12,13 @@ public sealed class FirmaInfoApiService
 {
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<FirmaInfoApiService> _logger;
 
-    public FirmaInfoApiService(HttpClient httpClient, IConfiguration configuration)
+    public FirmaInfoApiService(HttpClient httpClient, IConfiguration configuration, ILogger<FirmaInfoApiService> logger)
     {
         _httpClient = httpClient;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<FirmaInfoApiResult> ConsultarAsync(
@@ -79,17 +82,14 @@ public sealed class FirmaInfoApiService
         }
     }
 
-    private static FirmaInfoApiResult ValidarCertificadoLocal(string rutaFirma, string passwordFirma)
+    private FirmaInfoApiResult ValidarCertificadoLocal(string rutaFirma, string passwordFirma)
     {
         if (string.IsNullOrWhiteSpace(rutaFirma) || !File.Exists(rutaFirma))
             return FirmaInfoApiResult.Error("No se encontro el archivo .p12 para validar.");
 
         try
         {
-            using var certificado = new X509Certificate2(
-                rutaFirma,
-                passwordFirma,
-                X509KeyStorageFlags.EphemeralKeySet);
+            using var certificado = AbrirCertificado(rutaFirma, passwordFirma);
 
             var ahora = DateTimeOffset.Now;
             var fechaEmision = new DateTimeOffset(certificado.NotBefore);
@@ -125,10 +125,12 @@ public sealed class FirmaInfoApiService
 
             return FirmaInfoApiResult.Ok(info);
         }
-        catch (CryptographicException)
+        catch (CryptographicException ex)
         {
+            // Record the native error without recording passwords or certificate data.
+            _logger.LogWarning("No se pudo abrir el certificado PKCS#12. Codigo criptografico: 0x{Codigo:X8}", ex.HResult);
             return FirmaInfoApiResult.Error(
-                "No se pudo abrir la firma. Verifica que la clave corresponda al archivo .p12 y que el archivo no este danado.");
+                MensajeErrorCriptografico(ex.HResult));
         }
         catch (UnauthorizedAccessException)
         {
@@ -139,6 +141,37 @@ public sealed class FirmaInfoApiService
             return FirmaInfoApiResult.Error("No se pudo leer el archivo .p12.");
         }
     }
+
+    private X509Certificate2 AbrirCertificado(string ruta, string clave)
+    {
+        try
+        {
+            return new X509Certificate2(ruta, clave, X509KeyStorageFlags.EphemeralKeySet);
+        }
+        catch (CryptographicException ex) when (OperatingSystem.IsWindows() && EsErrorProveedor(ex.HResult))
+        {
+            // Some Windows providers cannot import ephemeral keys. Use the machine
+            // context rather than the IIS user's profile; do not persist the key.
+            _logger.LogInformation("Reintentando lectura PKCS#12 en contexto de equipo. Codigo: 0x{Codigo:X8}", ex.HResult);
+            return new X509Certificate2(ruta, clave, X509KeyStorageFlags.MachineKeySet);
+        }
+    }
+
+    private static bool EsErrorProveedor(int codigo) => unchecked((uint)codigo) is
+        0x80090016 or // NTE_BAD_KEYSET
+        0x80090017 or // NTE_PROV_TYPE_NOT_DEF
+        0x80090014 or // NTE_BAD_PROV_TYPE
+        0x80090029 or // NTE_NOT_SUPPORTED
+        0x80070002;   // Provider key file/profile not found
+
+    private static string MensajeErrorCriptografico(int codigo) => unchecked((uint)codigo) switch
+    {
+        0x80070005 or 0x80090010 =>
+            "El servidor no tiene permisos para abrir la clave privada de la firma. Revisa los permisos de la identidad del sitio en IIS.",
+        var valor when EsErrorProveedor(unchecked((int)valor)) =>
+            "El servidor no pudo cargar el proveedor criptográfico de la firma. Revisa la compatibilidad del certificado y la configuración de IIS.",
+        _ => $"No se pudo abrir la firma en este servidor (código 0x{codigo:X8}). Comprueba la clave y el archivo .p12; si funcionan localmente, revisa la compatibilidad criptográfica del servidor."
+    };
 
     private static IReadOnlyList<string> ExtraerIdentificaciones(X509Certificate2 certificado)
     {
