@@ -498,7 +498,7 @@ public class AuthService : IAuthService
                 (1045, 'Notas de débito emitidas', 10, 'contabilidad/facturacion/notas-debito-generadas'),
                 (1046, 'Puntos de emisión', 10, 'contabilidad/configuracion/puntos-emision'),
                 (1047, 'Retenciones emitidas', 10, 'contabilidad/facturacion/retenciones-generadas'),
-                (1048, 'Seguridad contable', 10, 'contabilidad/configuracion/seguridad'),
+                (1048, 'Seguridad contable', 12, 'contabilidad/configuracion/seguridad'),
                 (1049, 'Tipos de cliente', 10, 'contabilidad/configuracion/tipos-cliente'),
                 (1050, 'Usuarios de la empresa', 10, 'contabilidad/usuarios'),
                 (1051, 'Asignar stock a productos', 10, 'contabilidad/inventarios/asignar-stock'),
