@@ -3508,7 +3508,14 @@
 
         prefillFacturaAplicado = true;
 
-        _ = int.TryParse(ClientePrefill.Tipoidentificacion, out var tipoIdentificacion);
+        var identificacionPrefill = ClientePrefill.Tipoidentificacion?.Trim();
+        _ = int.TryParse(identificacionPrefill, out var tipoIdentificacion);
+        if (identificacionPrefill is "04" or "05")
+        {
+            tipoIdentificacion = identificaciones.FirstOrDefault(identificacionPrefill == "04"
+                ? EsIdentificacionRuc
+                : EsIdentificacionCedula)?.Id ?? tipoIdentificacion;
+        }
 
         RestablecerPasosFormulario();
         model = new ClienteUpsertDto

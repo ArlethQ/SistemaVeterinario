@@ -15,7 +15,7 @@ public sealed class FacturaCompraManualService
         _dbFactory = dbFactory;
     }
 
-    public async Task<int> GuardarAsync(int idUsuario, FacturaCompraManualVM modelo)
+    public async Task<int> GuardarAsync(int idUsuario, FacturaCompraManualVM modelo, bool registrarProveedor = false)
     {
         if (string.IsNullOrWhiteSpace(modelo.RucProveedor) || string.IsNullOrWhiteSpace(modelo.Proveedor))
             throw new InvalidOperationException("Selecciona un proveedor del CRUD de proveedores.");
@@ -40,12 +40,38 @@ public sealed class FacturaCompraManualService
         if (modelo.Total <= 0m)
             throw new InvalidOperationException("La factura debe tener un total mayor a cero.");
 
+        var clave = $"MANUAL-COMPRA-{Guid.NewGuid():N}";
         await using var context = await _dbFactory.CreateDbContextAsync();
-        if (!await context.Proveedores.AsNoTracking().AnyAsync(x => x.estado == true && x.ruc == ruc))
-            throw new InvalidOperationException("El proveedor debe existir y estar activo en el CRUD de proveedores.");
+        return await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var intento = await _dbFactory.CreateDbContextAsync();
+            await using var transaccion = await intento.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            var facturaGuardada = await intento.ComprasFacturas
+                .Where(x => x.CodClave == clave && x.Usuario == idUsuario)
+                .Select(x => (int?)x.CodFactura)
+                .FirstOrDefaultAsync();
+            if (facturaGuardada.HasValue)
+                return facturaGuardada.Value;
+
+            var id = await GuardarManualAsync(intento, idUsuario, modelo, ruc, clave, registrarProveedor);
+            await transaccion.CommitAsync();
+            return id;
+        });
+    }
+
+    private static async Task<int> GuardarManualAsync(
+        AppDbContext context, int idUsuario, FacturaCompraManualVM modelo, string ruc, string clave, bool registrarProveedor)
+    {
+        var proveedor = await context.Proveedores.AsNoTracking().FirstOrDefaultAsync(x => x.ruc == ruc);
+        if (proveedor is not null && proveedor.estado != true)
+            throw new InvalidOperationException("El proveedor está inactivo. Actívalo en el catálogo de proveedores.");
+        if (proveedor is null && !registrarProveedor)
+            throw new ProveedorCompraNoRegistradoException();
 
         var cliente = await context.Clientes.FirstOrDefaultAsync(x => x.Numeroidentificacion == ruc && (x.Usuario == idUsuario || x.Usuario == null));
-        if (cliente == null)
+        if (proveedor is null)
+            cliente = await AsegurarProveedorYClienteAsync(context, idUsuario, ruc, modelo, soloUsuario: true);
+        else if (cliente == null)
         {
             cliente = new Cliente
             {
@@ -81,7 +107,7 @@ public sealed class FacturaCompraManualService
         var esCredito = modelo.EsCredito;
         var compra = new ComprasFactura
         {
-            CodClave = $"MANUAL-COMPRA-{Guid.NewGuid():N}",
+            CodClave = clave,
             CodClientes = cliente.Codcliente,
             FchAutorizacion = modelo.FechaEmision.Date,
             NumFactura = numero,
@@ -644,7 +670,8 @@ public sealed class FacturaCompraManualService
         AppDbContext context,
         int idUsuario,
         string ruc,
-        FacturaCompraManualVM modelo)
+        FacturaCompraManualVM modelo,
+        bool soloUsuario = false)
     {
         var proveedorDb = await context.Proveedores.FirstOrDefaultAsync(x => x.ruc == ruc);
         if (proveedorDb == null)
@@ -677,7 +704,7 @@ public sealed class FacturaCompraManualService
         }
 
         var cliente = await context.Clientes.FirstOrDefaultAsync(x =>
-            x.Numeroidentificacion == ruc && (x.Usuario == idUsuario || x.Usuario == null));
+            x.Numeroidentificacion == ruc && (x.Usuario == idUsuario || (!soloUsuario && x.Usuario == null)));
         if (cliente == null)
         {
             cliente = new Cliente
@@ -710,3 +737,6 @@ public sealed class FacturaCompraManualService
 
     private static string SoloDigitos(string? valor) => new((valor ?? "").Where(char.IsDigit).ToArray());
 }
+
+public sealed class ProveedorCompraNoRegistradoException()
+    : InvalidOperationException("El proveedor debe existir y estar activo en el CRUD de proveedores.");

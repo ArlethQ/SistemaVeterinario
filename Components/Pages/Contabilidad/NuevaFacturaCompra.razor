@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
+@using Simetric.Components
 @using Simetric.DTOs
 @using Simetric.Services
 @using Simetric.Services.EContax
@@ -163,7 +164,7 @@
         <div class="n-client-search-input position-relative">
             <div class="n-input-wrapper">
                 <i class="bi bi-search n-input-icon"></i>
-                <input type="text" class="n-input n-input-with-icon" value="@proveedorBusqueda" @oninput="BuscarProveedorAsync" placeholder="Buscar por identificación o razón social" autocomplete="off" />
+                <input type="text" class="n-input n-input-with-icon" value="@proveedorBusqueda" @oninput="BuscarProveedorAsync" placeholder="Buscar por identificación o razón social" autocomplete="off" disabled="@guardando" />
             </div>
             @if (EsRucCompleto(proveedorBusqueda.Trim()))
             {
@@ -190,12 +191,35 @@
         </div>
     </section>
 
+    @if (mostrarOpcionesProveedor)
+    {
+        <div class="n-client-create-notice n-client-create-notice-inline @(continuarConProveedor ? "is-continued" : "")" role="status">
+            <span class="n-client-create-icon"><i class="bi bi-person-plus"></i></span>
+            <div>
+                <strong>Proveedor no registrado</strong>
+                <small>@(continuarConProveedor
+                    ? "El proveedor se registrará al guardar la factura."
+                    : "Agrega el proveedor ahora o continúa con los datos de esta factura.")</small>
+            </div>
+            <div class="n-client-create-actions">
+                <button type="button" class="n-client-create-check" @onclick="AbrirRegistroProveedor" disabled="@guardando">
+                    <i class="bi bi-person-plus"></i><span>Agregar ahora</span>
+                </button>
+                <button type="button" class="n-client-continue-check @(continuarConProveedor ? "is-active" : "")"
+                        @onclick="() => continuarConProveedor = !continuarConProveedor" disabled="@guardando">
+                    <i class="bi @(continuarConProveedor ? "bi-x-circle" : "bi-arrow-right-circle")"></i>
+                    <span>@(continuarConProveedor ? "Desmarcar" : "Continuar")</span>
+                </button>
+            </div>
+        </div>
+    }
+
     <div class="n-card mb-4" data-tour="invoice.client-section">
         <div class="n-card-header"><h5><i class="bi bi-person-vcard me-2"></i> Información del proveedor / emisor</h5><small class="d-none d-sm-flex"><i class="bi bi-arrow-repeat me-1"></i> Los datos se actualizarán automáticamente</small></div>
         <div class="n-card-body n-client-card-body">
             <div class="row g-3 n-client-block n-client-main-grid">
                 <div class="col-lg-3 col-md-6"><label class="n-label">Tipo identificación</label><div class="n-select-shell"><select class="n-select" @bind="model.TipoIdentificacion"><option value="">-- Seleccione --</option><option value="04">RUC</option><option value="05">Cédula</option><option value="06">Pasaporte</option></select></div></div>
-                <div class="col-lg-3 col-md-6"><label class="n-label">Número de identificación *</label><div class="n-input-wrapper"><i class="bi bi-person-badge n-input-icon"></i><input class="n-input n-input-with-icon" @bind="model.RucProveedor" maxlength="13" /></div></div>
+                <div class="col-lg-3 col-md-6"><label class="n-label">Número de identificación *</label><div class="n-input-wrapper"><i class="bi bi-person-badge n-input-icon"></i><input class="n-input n-input-with-icon" @bind="model.RucProveedor" @bind:event="oninput" @bind:after="VerificarProveedorAsync" maxlength="13" /></div></div>
                 <div class="col-lg-3 col-md-6"><label class="n-label">Razón social *</label><input class="n-input" @bind="model.Proveedor" maxlength="150" /></div>
                 <div class="col-lg-3 col-md-6"><label class="n-label">Obligado a llevar contabilidad</label><div class="n-select-shell"><select class="n-select" @bind="model.ObligadoContabilidad"><option value="NO">No</option><option value="SI">Sí</option></select></div></div>
                 <div class="col-lg-3 col-md-6"><label class="n-label">Nombre comercial</label><input class="n-input" @bind="model.NombreComercial" maxlength="100" /></div>
@@ -297,6 +321,18 @@
     </div>
 </div>
 
+<DocumentWorkspaceModal Visible="@(proveedorPrefill is not null)"
+                        Eyebrow="Proveedores"
+                        Title="Registrar proveedor"
+                        ModalClass="docs-client-workspace-modal"
+                        OnClose="@(() => proveedorPrefill = null)">
+    <div class="docs-client-crud-frame">
+        <HosvetKardex.Web.Components.Pages.Contabilidad.Clientes ClientePrefill="@proveedorPrefill"
+                                                                 EsModoProveedores="true"
+                                                                 OnClienteGuardado="ProveedorGuardadoAsync" />
+    </div>
+</DocumentWorkspaceModal>
+
 @code {
     private const int MaxXmlBatch = 50;
     private FacturaCompraManualVM model = new() { Detalles = new() { new() } };
@@ -306,6 +342,10 @@
     private string proveedorBusqueda = "";
     private int currentUserId;
     private bool guardando;
+    private bool mostrarOpcionesProveedor;
+    private bool continuarConProveedor;
+    private int revisionProveedor;
+    private Simetric.Models.Cliente? proveedorPrefill;
     private bool cargandoLoteXml;
     private bool importandoLoteXml;
     private bool creditoSeleccionado;
@@ -331,17 +371,48 @@
 
     private async Task BuscarProveedorAsync(ChangeEventArgs e)
     {
+        RestablecerAvisoProveedor();
+        var revision = revisionProveedor;
         mensajeSri = null;
         proveedorBusqueda = e.Value?.ToString() ?? "";
+        var filtro = proveedorBusqueda.Trim();
         error = "";
+        sugerencias.Clear();
+        if (currentUserId <= 0 || filtro.Length == 0)
+            return;
+
         try
         {
-            sugerencias = string.IsNullOrWhiteSpace(proveedorBusqueda) ? new() : await LiquidacionCompraService.BuscarProveedoresAsync(proveedorBusqueda, currentUserId);
+            var coincidencias = await LiquidacionCompraService.BuscarProveedoresAsync(filtro, currentUserId);
+            if (revision != revisionProveedor)
+                return;
+
+            sugerencias = coincidencias;
+            if (EsIdentificacionCompleta(filtro) && !coincidencias.Any(x => x.Identificacion == filtro))
+            {
+                if (!string.IsNullOrWhiteSpace(model.RucProveedor) && model.RucProveedor.Trim() != filtro)
+                {
+                    model.Proveedor = "";
+                    model.NombreComercial = "";
+                    model.Nombres = "";
+                    model.Apellidos = "";
+                    model.Direccion = "";
+                    model.Telefono = "";
+                    model.Correo = "";
+                    model.Referencia = "";
+                    model.ObligadoContabilidad = "NO";
+                }
+
+                model.CodCliente = null;
+                model.RucProveedor = filtro;
+                model.TipoIdentificacion = EsRucCompleto(filtro) ? "04" : "05";
+                mostrarOpcionesProveedor = true;
+            }
         }
         catch (Exception ex)
         {
-            sugerencias = new();
-            error = $"No se pudo buscar el proveedor: {ex.Message}";
+            if (revision == revisionProveedor)
+                error = $"No se pudo buscar el proveedor: {ex.Message}";
         }
     }
 
@@ -350,6 +421,38 @@
 
     private static bool EsRucCompleto(string valor) =>
         valor.Length == 13 && valor.All(c => c is >= '0' and <= '9');
+
+    private static bool EsIdentificacionCompleta(string valor) =>
+        valor.Length is 10 or 13 && valor.All(char.IsAsciiDigit);
+
+    private void RestablecerAvisoProveedor()
+    {
+        revisionProveedor++;
+        mostrarOpcionesProveedor = false;
+        continuarConProveedor = false;
+    }
+
+    private async Task VerificarProveedorAsync()
+    {
+        RestablecerAvisoProveedor();
+        model.CodCliente = null;
+        var revision = revisionProveedor;
+        var identificacion = model.RucProveedor.Trim();
+        if (currentUserId <= 0 || !EsIdentificacionCompleta(identificacion))
+            return;
+
+        try
+        {
+            var coincidencias = await LiquidacionCompraService.BuscarProveedoresAsync(identificacion, currentUserId);
+            if (revision == revisionProveedor)
+                mostrarOpcionesProveedor = !coincidencias.Any(x => x.Identificacion == identificacion);
+        }
+        catch (Exception)
+        {
+            if (revision == revisionProveedor)
+                error = "No se pudo verificar si el proveedor está registrado.";
+        }
+    }
 
     private async Task ConsultarProveedorSriAsync()
     {
@@ -389,6 +492,7 @@
             model.Direccion = datos.DireccionMatriz ?? datos.DireccionEstablecimiento ?? "";
             sugerencias.Clear();
             mensajeSri = "Datos del proveedor cargados desde el SRI.";
+            await VerificarProveedorAsync();
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
         {
@@ -403,6 +507,7 @@
 
     private void SeleccionarProveedor(LiquidacionProveedorLookupDto proveedor)
     {
+        RestablecerAvisoProveedor();
         mensajeSri = null;
         model.CodCliente = proveedor.CodCliente;
         model.RucProveedor = proveedor.Identificacion;
@@ -465,6 +570,7 @@
                 using var reader = new StreamReader(stream);
                 var preview = await ComprasXmlService.LeerCompraDesdeXmlAsync(await reader.ReadToEndAsync(), permitirFactura: true);
                 CargarPreviewEnFormulario(preview);
+                await VerificarProveedorAsync();
             }
             catch (Exception ex)
             {
@@ -679,6 +785,7 @@
 
     private void LimpiarFormulario()
     {
+        RestablecerAvisoProveedor();
         model = new() { Detalles = new() { new() } };
         proveedorBusqueda = "";
         sugerencias.Clear();
@@ -687,15 +794,71 @@
         LimpiarLoteXml();
     }
 
+    private void AbrirRegistroProveedor()
+    {
+        continuarConProveedor = false;
+        var identificacion = model.RucProveedor.Trim();
+        proveedorPrefill = new()
+        {
+            Numeroidentificacion = identificacion,
+            Tipoidentificacion = EsRucCompleto(identificacion) ? "04" : "05",
+            Nombrerazonsocial = NombreProveedorFactura,
+            Nombrecomercial = model.NombreComercial,
+            Nombres = string.IsNullOrWhiteSpace(model.Nombres) ? model.Proveedor : model.Nombres,
+            Apellidos = model.Apellidos,
+            Direccion = model.Direccion,
+            Telefonoconvencional = model.Telefono,
+            Correo = model.Correo,
+            Observaciones = model.Referencia,
+            Oblgconta = model.ObligadoContabilidad,
+            DiasCredito = model.PlazoCredito
+        };
+    }
+
+    private async Task ProveedorGuardadoAsync(string identificacion)
+    {
+        proveedorPrefill = null;
+        RestablecerAvisoProveedor();
+        model.RucProveedor = identificacion;
+        try
+        {
+            var proveedores = await LiquidacionCompraService.BuscarProveedoresAsync(identificacion, currentUserId);
+            var proveedor = proveedores.FirstOrDefault(x => x.Identificacion == identificacion);
+            if (proveedor is null)
+                return;
+
+            var formaPago = model.FormaPago;
+            var plazoCredito = model.PlazoCredito;
+            var modoCredito = creditoSeleccionado;
+            SeleccionarProveedor(proveedor);
+            model.FormaPago = formaPago;
+            model.PlazoCredito = plazoCredito;
+            creditoSeleccionado = modoCredito;
+        }
+        catch (Exception ex)
+        {
+            error = $"Se guardó el proveedor, pero no se pudieron actualizar sus datos en la factura: {ex.Message}";
+        }
+    }
+
+    private string NombreProveedorFactura => string.IsNullOrWhiteSpace(model.Proveedor)
+        ? $"{model.Nombres.Trim()} {model.Apellidos.Trim()}".Trim()
+        : model.Proveedor.Trim();
+
     private async Task GuardarAsync()
     {
+        if (guardando)
+            return;
+
         guardando = true;
         try
         {
-            var id = await FacturaCompraService.GuardarAsync(currentUserId, model);
+            model.Proveedor = NombreProveedorFactura;
+            var id = await FacturaCompraService.GuardarAsync(currentUserId, model, continuarConProveedor);
             await AlertService.ShowSuccessAsync($"Factura de compra guardada. Código interno: {id}");
             Navigation.NavigateTo(EContaxRoutes.CuentasPorPagar);
         }
+        catch (ProveedorCompraNoRegistradoException) { mostrarOpcionesProveedor = true; }
         catch (InvalidOperationException ex) { await AlertService.ShowErrorAsync(ex.Message); }
         catch (Exception ex) { error = $"No se pudo guardar la factura: {ex.Message}"; }
         finally { guardando = false; }
