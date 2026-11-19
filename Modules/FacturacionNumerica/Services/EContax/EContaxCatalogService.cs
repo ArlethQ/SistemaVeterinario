@@ -27,13 +27,15 @@ public sealed class EContaxCatalogService
         _incluirProductosSinEmpresa = incluirProductosSinEmpresa;
     }
 
-    public async Task<List<EContaxClienteDto>> GetClientesAsync(int userId, bool incluirInactivos = false)
+    public async Task<List<EContaxClienteDto>> GetClientesAsync(int userId, bool incluirInactivos = false, bool todosProveedores = false)
     {
         await using var context = await _dbFactory.CreateDbContextAsync();
         var userContext = await _tenantService.GetContextAsync(context, userId);
         await EnsureConsumidorFinalEmpresaAsync(context, userContext);
 
-        var query = BuildClientesEmpresaQuery(context, userContext);
+        var query = todosProveedores
+            ? BuildProveedoresGlobalesQuery(context)
+            : BuildClientesEmpresaQuery(context, userContext);
 
         if (!incluirInactivos)
             query = query.Where(c => c.Estado == true);
@@ -72,6 +74,19 @@ public sealed class EContaxCatalogService
             })
             .ToListAsync();
 
+        if (todosProveedores)
+        {
+            data = data
+                .GroupBy(c => c.Numeroidentificacion?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g
+                    .OrderByDescending(x => x.Idempresa == userContext.IdEmpresa)
+                    .ThenByDescending(x => x.Idempresa.HasValue)
+                    .ThenByDescending(x => x.Codcliente)
+                    .First())
+                .OrderByDescending(c => c.Codcliente)
+                .ToList();
+        }
+
         await CompletarDatosProveedoresAsync(context, data);
         return data;
     }
@@ -88,8 +103,17 @@ public sealed class EContaxCatalogService
         await using var context = await _dbFactory.CreateDbContextAsync();
         var userContext = await _tenantService.GetContextAsync(context, userId);
 
-        var data = await BuildClientesEmpresaQuery(context, userContext)
-            .Where(c => c.Codcliente == codCliente)
+        var query = BuildClientesEmpresaQuery(context, userContext)
+            .Where(c => c.Codcliente == codCliente);
+
+        var existeEnEmpresa = await query.AnyAsync();
+        if (!existeEnEmpresa)
+        {
+            query = BuildProveedoresGlobalesQuery(context)
+                .Where(c => c.Codcliente == codCliente);
+        }
+
+        var data = await query
             .Select(c => new EContaxClienteDto
             {
                 Codcliente = c.Codcliente,
@@ -195,7 +219,9 @@ public sealed class EContaxCatalogService
             var userContext = await _tenantService.GetContextAsync(context, userId);
 
             var cliente = await BuildClientesEmpresaQuery(context, userContext)
-                .FirstOrDefaultAsync(c => c.Codcliente == codCliente);
+                .FirstOrDefaultAsync(c => c.Codcliente == codCliente)
+                ?? await BuildProveedoresGlobalesQuery(context)
+                    .FirstOrDefaultAsync(c => c.Codcliente == codCliente);
 
             if (cliente is null)
                 throw new InvalidOperationException("El cliente no existe o no pertenece a la empresa.");
@@ -204,6 +230,7 @@ public sealed class EContaxCatalogService
             var codigoIdentificacion = await GetCodigoIdentificacionAsync(context, dto.Tipoidentificacion);
             NormalizarCliente(dto);
 
+            var esOtraEmpresaProveedor = cliente.Idempresa.HasValue && cliente.Idempresa != userContext.IdEmpresa && dto.EsProveedor == true;
             cliente.Apellidos = dto.Apellidos;
             cliente.Nombres = dto.Nombres;
             cliente.Nombrecomercial = dto.Nombrecomercial;
@@ -225,8 +252,11 @@ public sealed class EContaxCatalogService
             cliente.Provincia = dto.Provincia;
             cliente.Ciudad = dto.Ciudad;
             cliente.Tipoidentificacion = codigoIdentificacion;
-            cliente.Usuario = userContext.IdUsuarioTitular;
-            cliente.Idempresa = userContext.IdEmpresa;
+            if (!esOtraEmpresaProveedor)
+            {
+                cliente.Usuario = userContext.IdUsuarioTitular;
+                cliente.Idempresa = userContext.IdEmpresa;
+            }
             cliente.Idsucursal = null;
 
             if (dto.Estado is not null)
@@ -246,7 +276,9 @@ public sealed class EContaxCatalogService
         await using var context = await _dbFactory.CreateDbContextAsync();
         var userContext = await _tenantService.GetContextAsync(context, userId);
         var cliente = await BuildClientesEmpresaQuery(context, userContext)
-            .FirstOrDefaultAsync(c => c.Codcliente == codCliente);
+            .FirstOrDefaultAsync(c => c.Codcliente == codCliente)
+            ?? await BuildProveedoresGlobalesQuery(context)
+                .FirstOrDefaultAsync(c => c.Codcliente == codCliente);
 
         if (cliente is null)
             throw new InvalidOperationException("Cliente no encontrado.");
@@ -545,21 +577,31 @@ public sealed class EContaxCatalogService
         await using var context = await _dbFactory.CreateDbContextAsync();
         var userContext = await _tenantService.GetContextAsync(context, userId);
 
-        var proveedores = await BuildClientesEmpresaQuery(context, userContext)
+        var proveedores = await BuildProveedoresGlobalesQuery(context)
             .AsNoTracking()
-            .Where(c => c.Estado == true && context.Proveedores.Any(p => p.ruc == c.Numeroidentificacion && p.estado != false))
+            .Where(c => c.Estado == true)
             .Select(c => new
             {
                 c.Codcliente,
                 c.Nombrerazonsocial,
                 c.Nombres,
                 c.Apellidos,
-                c.Numeroidentificacion
+                c.Numeroidentificacion,
+                c.Idempresa
             })
-            .OrderBy(x => x.Nombrerazonsocial ?? x.Apellidos ?? x.Nombres)
             .ToListAsync();
 
-        return proveedores.Select(x => new EContaxProveedorLookupDto
+        var unicos = proveedores
+            .GroupBy(x => x.Numeroidentificacion?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g
+                .OrderByDescending(x => x.Idempresa == userContext.IdEmpresa)
+                .ThenByDescending(x => x.Idempresa.HasValue)
+                .ThenByDescending(x => x.Codcliente)
+                .First())
+            .OrderBy(x => x.Nombrerazonsocial ?? x.Apellidos ?? x.Nombres)
+            .ToList();
+
+        return unicos.Select(x => new EContaxProveedorLookupDto
         {
             IdProveedor = x.Codcliente,
             Nombre = string.IsNullOrWhiteSpace(x.Nombrerazonsocial)
@@ -779,6 +821,12 @@ public sealed class EContaxCatalogService
         context.Clientes
             .ExcluirClientesExclusivosBackOffice()
             .Where(c => c.Idempresa == userContext.IdEmpresa);
+
+    private static IQueryable<Cliente> BuildProveedoresGlobalesQuery(AppDbContext context) =>
+        context.Clientes
+            .ExcluirClientesExclusivosBackOffice()
+            .Where(c => c.Numeroidentificacion != null &&
+                        context.Proveedores.Any(p => p.ruc == c.Numeroidentificacion && p.estado != false));
 
     private static async Task CompletarDatosProveedoresAsync(
         AppDbContext context,
@@ -1210,14 +1258,22 @@ public sealed class EContaxCatalogService
         if (!dto.Numeroidentificacion.All(char.IsDigit) || dto.Numeroidentificacion.Length is < 10 or > 13)
             throw new InvalidOperationException("La identificacion debe tener entre 10 y 13 digitos numericos.");
 
-        var duplicado = await BuildClientesEmpresaQuery(context, userContext)
-            .AnyAsync(c =>
-                c.Codcliente != (codClienteActual ?? 0) &&
-                c.Numeroidentificacion == dto.Numeroidentificacion &&
-                c.Estado == true);
+        var duplicado = dto.EsProveedor == true
+            ? await BuildProveedoresGlobalesQuery(context)
+                .AnyAsync(c =>
+                    c.Codcliente != (codClienteActual ?? 0) &&
+                    c.Numeroidentificacion == dto.Numeroidentificacion &&
+                    c.Estado == true)
+            : await BuildClientesEmpresaQuery(context, userContext)
+                .AnyAsync(c =>
+                    c.Codcliente != (codClienteActual ?? 0) &&
+                    c.Numeroidentificacion == dto.Numeroidentificacion &&
+                    c.Estado == true);
 
         if (duplicado)
-            throw new InvalidOperationException("Ya existe un cliente con esa identificacion dentro de la empresa.");
+            throw new InvalidOperationException(dto.EsProveedor == true
+                ? "Ya existe un proveedor con esa identificacion."
+                : "Ya existe un cliente con esa identificacion dentro de la empresa.");
 
         if (string.IsNullOrWhiteSpace(dto.Correo))
             throw new InvalidOperationException("El correo electronico es obligatorio.");
@@ -1229,6 +1285,31 @@ public sealed class EContaxCatalogService
         catch
         {
             throw new InvalidOperationException("Correo electronico invalido.");
+        }
+
+        if (dto.EsProveedor == true)
+        {
+            var correoNormalizado = dto.Correo.Trim().ToLowerInvariant();
+            var idActual = dto.Numeroidentificacion.Trim();
+            var correoDuplicadoEnProveedores = await context.Proveedores
+                .AsNoTracking()
+                .AnyAsync(p =>
+                    p.estado != false &&
+                    p.email != null &&
+                    p.email.Trim().ToLower() == correoNormalizado &&
+                    (p.ruc == null || p.ruc.Trim() != idActual));
+
+            var correoDuplicadoEnClientesProveedor = await BuildProveedoresGlobalesQuery(context)
+                .AsNoTracking()
+                .AnyAsync(c =>
+                    c.Estado == true &&
+                    c.Codcliente != (codClienteActual ?? 0) &&
+                    c.Correo != null &&
+                    c.Correo.Trim().ToLower() == correoNormalizado &&
+                    (c.Numeroidentificacion == null || c.Numeroidentificacion.Trim() != idActual));
+
+            if (correoDuplicadoEnProveedores || correoDuplicadoEnClientesProveedor)
+                throw new InvalidOperationException("Ya existe un proveedor registrado con ese correo electronico.");
         }
 
         if (string.IsNullOrWhiteSpace(dto.Direccion))

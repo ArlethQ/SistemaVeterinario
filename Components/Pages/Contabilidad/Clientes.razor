@@ -2354,7 +2354,10 @@
             if (!model.Pais.HasValue && ecuadorPaisId.HasValue)
                 model.Pais = ecuadorPaisId;
 
-            var resp = await Http.GetAsync($"api/e-contax/clientes?userId={usuarioLogueadoId}");
+            var urlClientes = EsModoProveedores
+                ? $"api/e-contax/clientes?userId={usuarioLogueadoId}&todosProveedores=true"
+                : $"api/e-contax/clientes?userId={usuarioLogueadoId}";
+            var resp = await Http.GetAsync(urlClientes);
             var body = await resp.Content.ReadAsStringAsync();
 
             if (!resp.IsSuccessStatusCode)

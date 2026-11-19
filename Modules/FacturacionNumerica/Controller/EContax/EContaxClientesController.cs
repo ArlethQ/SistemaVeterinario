@@ -30,14 +30,14 @@ public sealed class EContaxClientesController : EContaxApiControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] int userId, [FromQuery] bool incluirInactivos = false)
+    public async Task<IActionResult> GetAll([FromQuery] int userId, [FromQuery] bool incluirInactivos = false, [FromQuery] bool todosProveedores = false)
     {
         if (userId <= 0)
             return Unauthorized("Sesion no valida.");
 
         try
         {
-            return Ok(await _catalogService.GetClientesAsync(userId, incluirInactivos));
+            return Ok(await _catalogService.GetClientesAsync(userId, incluirInactivos, todosProveedores));
         }
         catch (InvalidOperationException ex)
         {
