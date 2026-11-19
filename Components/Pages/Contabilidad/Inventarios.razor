@@ -90,7 +90,7 @@
                             }
                         </select></label>
                     }
-                    <div class="inventory-stock-total"><span>Stock actual</span><strong>@kardex.StockActual.ToString("N2") <small style="font-size:0.75rem;font-weight:500;">@kardex.UnidadMedida</small></strong><small>@(kardex.FactorConversion > 1 ? $"{FormatearPaquetes(kardex.StockActual, kardex.FactorConversion)} · " : "")Costo promedio @kardex.CostoPromedio.ToString("C2")</small></div>
+                    <div class="inventory-stock-total"><span>Stock actual</span><strong>@kardex.StockActual.ToString("N2") <small style="font-size:0.75rem;font-weight:500;">@kardex.UnidadMedida</small></strong><small>@(kardex.FactorConversion > 1 ? $"{FormatearPaquetes(kardex.StockActual, kardex.FactorConversion)} · " : "")Costo promedio @CostoUnidadCompra(kardex.CostoPromedio, kardex.FactorConversion).ToString("C2")</small></div>
                     @if (kardex.PuedeEditar)
                     {
                         <button type="button" class="inventory-icon-button" title="Configurar método" @onclick="AbrirConfiguracion"><i class="ri-settings-3-line"></i></button>
@@ -197,10 +197,10 @@
             }
             else
             {
-                    <div class="inventory-table-wrap"><table class="table inventory-table mb-0"><thead><tr><th>Producto</th><th>Bodega</th><th class="text-end">Paquetes</th><th class="text-end">Stock actual</th><th class="text-end">Disponible vigente</th><th class="text-end">Mínimo</th><th class="text-end">Máximo</th><th class="text-end">Costo promedio</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody>
+                    <div class="inventory-table-wrap"><table class="table inventory-table mb-0"><thead><tr><th>Producto</th><th>Bodega</th><th class="text-end">Presentación</th><th class="text-end">Stock actual</th><th class="text-end">Disponible vigente</th><th class="text-end">Mínimo</th><th class="text-end">Máximo</th><th class="text-end">Costo promedio</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody>
                     @foreach (var item in ItemsInventarioPagina)
                     {
-                        <tr @key="@($"{item.CodigoProducto}-{item.IdSucursal}")"><td><div class="inventory-product-cell"><strong>@item.NombreProducto</strong><span>@(item.CodigoPrincipal ?? $"#{item.CodigoProducto}") · @item.UnidadMedida@(item.FactorConversion > 1 ? $" (×{item.FactorConversion:G29})" : "")</span></div></td><td><span class="inventory-branch"><i class="ri-building-2-line"></i>@(string.IsNullOrWhiteSpace(item.NombreBodega) ? "Sin asignar" : item.NombreBodega)</span></td><td class="text-end text-nowrap">@if (item.FactorConversion > 1){<span class="fw-semibold text-primary">@FormatearPaquetes(item.StockActual, item.FactorConversion)</span>}else{<span class="text-muted">-</span>}</td><td class="text-end fw-bold text-nowrap">@item.StockActual.ToString("N2") <small class="text-muted fw-normal">@item.UnidadMedida</small></td><td class="text-end text-nowrap">@item.StockDisponibleVigente.ToString("N2") <small class="text-muted">@item.UnidadMedida</small></td><td class="text-end">@item.StockMinimo.ToString("N2")</td><td class="text-end">@(item.StockMaximo > 0 ? item.StockMaximo.ToString("N2") : "-")</td><td class="text-end">@item.CostoPromedio.ToString("C2")</td><td><span class="inventory-alert-pill @ClaseAlerta(item)">@TextoAlerta(item)</span></td><td class="text-end"><div class="inventory-action-group"><button type="button" class="inventory-icon-button" title="Ver Kardex" @onclick="() => AbrirKardex(item.CodigoProducto, item.IdSucursal)"><i class="ri-file-list-3-line"></i></button>@if (dashboard.PuedeEditar){<button type="button" class="inventory-icon-button is-edit" title="Ajustar existencias" @onclick="() => AbrirAjuste(item)"><i class="ri-edit-line"></i></button>}</div></td></tr>
+                        <tr @key="@($"{item.CodigoProducto}-{item.IdSucursal}")"><td><div class="inventory-product-cell"><strong>@item.NombreProducto</strong><span>@(item.CodigoPrincipal ?? $"#{item.CodigoProducto}") · @item.UnidadMedida@(item.FactorConversion > 1 ? $" (×{item.FactorConversion:G29})" : "")</span></div></td><td><span class="inventory-branch"><i class="ri-building-2-line"></i>@(string.IsNullOrWhiteSpace(item.NombreBodega) ? "Sin asignar" : item.NombreBodega)</span></td><td class="text-end text-nowrap">@if (item.FactorConversion > 1){<span class="fw-semibold text-primary">@FormatearPaquetes(item.StockActual, item.FactorConversion)</span>}else{<span class="text-muted">-</span>}</td><td class="text-end fw-bold text-nowrap">@item.StockActual.ToString("N2") <small class="text-muted fw-normal">@item.UnidadMedida</small></td><td class="text-end text-nowrap">@item.StockDisponibleVigente.ToString("N2") <small class="text-muted">@item.UnidadMedida</small></td><td class="text-end">@item.StockMinimo.ToString("N2")</td><td class="text-end">@(item.StockMaximo > 0 ? item.StockMaximo.ToString("N2") : "-")</td><td class="text-end">@CostoUnidadCompra(item.CostoPromedio, item.FactorConversion).ToString("C2")</td><td><span class="inventory-alert-pill @ClaseAlerta(item)">@TextoAlerta(item)</span></td><td class="text-end"><div class="inventory-action-group"><button type="button" class="inventory-icon-button" title="Ver Kardex" @onclick="() => AbrirKardex(item.CodigoProducto, item.IdSucursal)"><i class="ri-file-list-3-line"></i></button>@if (dashboard.PuedeEditar){<button type="button" class="inventory-icon-button is-edit" title="Ajustar existencias" @onclick="() => AbrirAjuste(item)"><i class="ri-edit-line"></i></button>}</div></td></tr>
                     }
                 </tbody></table></div>
                 <div class="inventory-table-pagination"><span>Mostrando @PrimerItemInventario-@UltimoItemInventario de @TotalItemsInventario registros</span><div class="inventory-pagination-actions"><button type="button" class="inventory-icon-button" title="Página anterior" @onclick="() => CambiarPaginaInventario(PaginaInventarioSegura - 1)" disabled="@(PaginaInventarioSegura <= 1)"><i class="ri-arrow-left-s-line"></i></button><strong>Página @PaginaInventarioSegura de @TotalPaginasInventario</strong><button type="button" class="inventory-icon-button" title="Página siguiente" @onclick="() => CambiarPaginaInventario(PaginaInventarioSegura + 1)" disabled="@(PaginaInventarioSegura >= TotalPaginasInventario)"><i class="ri-arrow-right-s-line"></i></button></div></div>
@@ -269,7 +269,7 @@
     private List<EContaxInventarioItemDto> ItemsInventarioOrdenados => ordenInventario switch
     {
         "stock" => ItemsFiltrados.OrderByDescending(x => x.StockActual).ToList(),
-        "costo" => ItemsFiltrados.OrderByDescending(x => x.CostoPromedio).ToList(),
+        "costo" => ItemsFiltrados.OrderByDescending(x => CostoUnidadCompra(x.CostoPromedio, x.FactorConversion)).ToList(),
         "alerta" => ItemsFiltrados.OrderByDescending(x => !string.IsNullOrWhiteSpace(x.Alerta) || !string.IsNullOrWhiteSpace(x.AlertaVencimiento)).ThenBy(x => x.NombreProducto).ToList(),
         _ => ItemsFiltrados.OrderBy(x => x.NombreProducto).ToList()
     };
@@ -453,17 +453,17 @@
     {
         var items = ItemsInventarioOrdenados;
         if (items.Count == 0) return;
-        var csv = new StringBuilder("Producto;Código;Sucursal;Bodega;Stock actual;Unidad;Paquetes;Disponible;Mínimo;Máximo;Costo promedio;Alerta");
+        var csv = new StringBuilder("Producto;Código;Sucursal;Bodega;Presentación;Stock actual;Unidad;Disponible;Mínimo;Máximo;Costo promedio;Alerta");
         foreach (var item in items)
         {
             var equiv = item.FactorConversion > 1 ? FormatearPaquetes(item.StockActual, item.FactorConversion) : string.Empty;
             csv.AppendLine().Append(string.Join(';',
                 Csv(item.NombreProducto), Csv(item.CodigoPrincipal ?? $"#{item.CodigoProducto}"), Csv(item.NombreSucursal),
                 Csv(string.IsNullOrWhiteSpace(item.NombreBodega) ? "Sin asignar" : item.NombreBodega),
-                item.StockActual.ToString("0.00", CultureInfo.InvariantCulture), Csv(item.UnidadMedida), Csv(equiv),
+                Csv(equiv), item.StockActual.ToString("0.00", CultureInfo.InvariantCulture), Csv(item.UnidadMedida),
                 item.StockDisponibleVigente.ToString("0.00", CultureInfo.InvariantCulture),
                 item.StockMinimo.ToString("0.00", CultureInfo.InvariantCulture), item.StockMaximo.ToString("0.00", CultureInfo.InvariantCulture),
-                item.CostoPromedio.ToString("0.00", CultureInfo.InvariantCulture), Csv(TextoAlerta(item))));
+                CostoUnidadCompra(item.CostoPromedio, item.FactorConversion).ToString("0.00", CultureInfo.InvariantCulture), Csv(TextoAlerta(item))));
         }
 
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray();
@@ -571,12 +571,18 @@
     private void AbrirConfiguracion() { metodoBorrador = MetodoVisible; error = null; mostrarConfiguracion = true; }
     private void CerrarConfiguracion() { if (!guardando) mostrarConfiguracion = false; }
 
+    private static decimal CostoUnidadCompra(decimal costoBase, decimal factor)
+    {
+        var f = factor > 1m ? factor : 1m;
+        return Math.Round(costoBase * f, 2, MidpointRounding.AwayFromZero);
+    }
+
     private static string FormatearPaquetes(decimal stockBase, decimal factor)
     {
         if (factor <= 1m) return string.Empty;
-        var paquetes = Math.Round(stockBase / factor, 2, MidpointRounding.AwayFromZero);
-        var paquetesTxt = paquetes == Math.Truncate(paquetes) ? paquetes.ToString("N0") : paquetes.ToString("N2");
-        return paquetes == 1m ? $"{paquetesTxt} paquete" : $"{paquetesTxt} paquetes";
+        var presentaciones = Math.Round(stockBase / factor, 2, MidpointRounding.AwayFromZero);
+        var txt = presentaciones == Math.Truncate(presentaciones) ? presentaciones.ToString("N0") : presentaciones.ToString("N2");
+        return presentaciones == 1m ? $"{txt} presentación" : $"{txt} presentaciones";
     }
 
     private void AbrirAjuste(EContaxInventarioItemDto item)

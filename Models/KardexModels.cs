@@ -120,6 +120,7 @@ public class FarmacoStockDto
     public decimal Available { get; set; }
     public decimal UnitPrice { get; set; }
     public string BaseUnitOfMeasureCode { get; set; } = string.Empty;
+    public decimal FactorConversion { get; set; } = 1m;
     public string Location { get; set; } = string.Empty;
 }
 

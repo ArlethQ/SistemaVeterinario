@@ -31,39 +31,56 @@ public class InventarioService : IInventarioService
     public async Task<List<FarmacoStockDto>> BuscarMedicamentosConStockAsync(string filtro, int idLocalidad, string apostrofe = "HV")
     {
         var resultados = new List<FarmacoStockDto>();
-        if (string.IsNullOrWhiteSpace(filtro) || filtro.Trim().Length < 1)
-            return resultados;
+        int sedeId = idLocalidad > 0 ? idLocalidad : 1;
+        string terminoNorm = NormalizarTexto(filtro?.Trim() ?? string.Empty);
 
-        string terminoNorm = NormalizarTexto(filtro.Trim());
-
-        // El catálogo migrado de PRODUCTO es la fuente exclusiva. Los registros
-        // se consultan directamente en VeterinariaFacturacion por localidad activa.
         try
         {
-            var productosEFact = await ObtenerCatalogoEFactCacheAsync();
-            resultados.AddRange(productosEFact
-                .Where(x => x.Estado == "A" &&
-                    !x.EsServicio &&
-                    x.Inventario &&
-                    (NormalizarTexto(x.Descripcion).Contains(terminoNorm) ||
-                     NormalizarTexto(x.Codigo).Contains(terminoNorm)))
-                .Take(40)
-                .Select(x => new FarmacoStockDto
-                {
-                    Number = string.IsNullOrWhiteSpace(x.Codigo) ? x.Id.ToString() : x.Codigo,
-                    DisplayName = x.Descripcion,
-                    Id = x.Id.ToString(),
-                    TaxGroupCode = x.CodigoImpuesto == "2" ? $"IVA{x.PorcentajeImpuesto}" : "IVA0",
-                    Inventory = 0,
-                    Available = 0,
-                    UnitPrice = x.Precio ?? 0,
-                    BaseUnitOfMeasureCode = string.IsNullOrWhiteSpace(x.UnidadMedida) ? "UND" : x.UnidadMedida,
-                    Location = "VETERINARIA"
-                }));
+            const string sql = @"
+                SELECT
+                    CAST(p.CODIGO AS VARCHAR(50)) AS Id,
+                    ISNULL(NULLIF(LTRIM(RTRIM(p.CODIGO_PRINCIPAL)), ''), CAST(p.CODIGO AS VARCHAR(50))) AS Number,
+                    ISNULL(p.NOMBRE, '') AS DisplayName,
+                    CASE WHEN ISNULL(p.CODIGOIMPUESTO, '') = '2' THEN 'IVA' + ISNULL(p.PORCENTAJEIMPUESTO, '15') ELSE 'IVA0' END AS TaxGroupCode,
+                    CAST(SUM(e.stock_actual) AS DECIMAL(18,4)) AS Inventory,
+                    CAST(SUM(CASE WHEN e.stock_actual - ISNULL(e.stock_reservado, 0) > 0 THEN e.stock_actual - ISNULL(e.stock_reservado, 0) ELSE 0 END) AS DECIMAL(18,4)) AS Available,
+                    CAST(MAX(CASE WHEN ISNULL(p.VALOR_UNITARIO, 0) > 0 THEN p.VALOR_UNITARIO ELSE ISNULL(e.costo_promedio, 0) END) AS DECIMAL(18,4)) AS UnitPrice,
+                    ISNULL(NULLIF(LTRIM(RTRIM(p.UNIDAD_MEDIDA)), ''), 'UNIDAD') AS BaseUnitOfMeasureCode,
+                    CAST(CASE WHEN ISNULL(p.FACTOR_CONVERSION_INVENTARIO, 0) <= 0 THEN 1 ELSE p.FACTOR_CONVERSION_INVENTARIO END AS DECIMAL(18,4)) AS FactorConversion,
+                    ISNULL(NULLIF(MAX(CASE WHEN b.nombre IS NOT NULL THEN b.nombre + CASE WHEN ISNULL(b.codigo, '') <> '' THEN ' (' + b.codigo + ')' ELSE '' END ELSE '' END), ''), 'Sede actual') AS Location
+                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e
+                INNER JOIN dbo.PRODUCTO p ON p.CODIGO = e.codigo_producto
+                LEFT JOIN dbo.ECONTAX_BODEGA b ON b.id_bodega = e.id_bodega
+                WHERE e.id_sucursal = @IdLocalidad
+                  AND ISNULL(p.ESTADO, 1) <> 0
+                  AND ISNULL(UPPER(p.TIPOCOMPRAVENA), 'B') NOT IN ('SERVICIO', 'S')
+                GROUP BY
+                    p.CODIGO,
+                    p.CODIGO_PRINCIPAL,
+                    p.NOMBRE,
+                    p.CODIGOIMPUESTO,
+                    p.PORCENTAJEIMPUESTO,
+                    p.UNIDAD_MEDIDA,
+                    p.FACTOR_CONVERSION_INVENTARIO
+                HAVING SUM(CASE WHEN e.stock_actual - ISNULL(e.stock_reservado, 0) > 0 THEN e.stock_actual - ISNULL(e.stock_reservado, 0) ELSE 0 END) > 0
+                ORDER BY p.NOMBRE";
+
+            var enStockSede = (await _sql.QueryAsync<FarmacoStockDto>(sql, new { IdLocalidad = sedeId })).ToList();
+            if (!string.IsNullOrWhiteSpace(terminoNorm))
+            {
+                enStockSede = enStockSede
+                    .Where(x =>
+                        NormalizarTexto(x.DisplayName).Contains(terminoNorm) ||
+                        NormalizarTexto(x.Number).Contains(terminoNorm) ||
+                        NormalizarTexto(x.Id).Contains(terminoNorm))
+                    .ToList();
+            }
+
+            resultados.AddRange(enStockSede.Take(60));
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo consultar el catálogo local de productos e insumos.");
+            _logger.LogWarning(ex, "No se pudo consultar las existencias de la sede {IdLocalidad}.", sedeId);
         }
 
         return resultados;
