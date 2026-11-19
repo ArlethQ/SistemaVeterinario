@@ -78,6 +78,7 @@ public sealed class EContaxTenantService
             var titular = empresa.IdTitular ?? emisorActivo?.IdUsuario ?? 0;
             if (titular <= 0)
                 throw new InvalidOperationException("La empresa no tiene un emisor activo con cuenta principal.");
+            await SincronizarLocalidadesVeterinariaSiAplicaAsync(context, asignacion.IdEmpresa, _configuration);
             var jefe = titular == userId;
             if (jefe && asignacion.IdSucursal is not > 0)
             {
@@ -133,6 +134,7 @@ public sealed class EContaxTenantService
 
                 context.EContaxUsuariosContexto.Add(new EContaxUsuarioContexto { IdUsuario = userId, IdEmpresa = empresaIdInicial, IdSucursal = sucursalIdInicial });
                 await context.SaveChangesAsync();
+                await SincronizarLocalidadesVeterinariaSiAplicaAsync(context, empresaIdInicial, _configuration);
                 return new(userId, userId, empresaIdInicial, sucursalIdInicial, RolJefeEmpresa, true);
             }
         }
@@ -151,6 +153,8 @@ public sealed class EContaxTenantService
 
         if (empresaId <= 0)
             throw new InvalidOperationException("El usuario no tiene empresa asignada para E-Contax.");
+
+        await SincronizarLocalidadesVeterinariaSiAplicaAsync(context, empresaId, _configuration);
 
         var esJefe = EsRolJefeEmpresa(rol) || userId == ownerId && string.IsNullOrWhiteSpace(rol);
         if (esJefe)
@@ -313,7 +317,7 @@ public sealed class EContaxTenantService
                 if (placeholderMatriz is not null)
                 {
                     placeholderMatriz.Nombre = loc.Nombre;
-                    if (!string.IsNullOrWhiteSpace(loc.Codigo)) placeholderMatriz.Codigo = loc.Codigo;
+                    placeholderMatriz.Codigo = placeholderMatriz.IdSucursal.ToString("000");
                     if (!string.IsNullOrWhiteSpace(loc.Direccion)) placeholderMatriz.Direccion = loc.Direccion;
                     placeholderMatriz.Estado = true;
                     placeholderMatriz.FechaActualizacion = DateTime.UtcNow;
@@ -330,7 +334,7 @@ public sealed class EContaxTenantService
                     IdEmpresa = empresaId,
                     IdSucursal = idSucursal,
                     Nombre = loc.Nombre,
-                    Codigo = string.IsNullOrWhiteSpace(loc.Codigo) ? idSucursal.ToString("000") : loc.Codigo,
+                    Codigo = idSucursal.ToString("000"),
                     Direccion = string.IsNullOrWhiteSpace(loc.Direccion) ? null : loc.Direccion,
                     Estado = true,
                     FechaCreacion = DateTime.UtcNow
