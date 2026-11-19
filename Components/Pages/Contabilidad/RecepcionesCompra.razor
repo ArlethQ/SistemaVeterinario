@@ -20,6 +20,222 @@
 
 <PageTitle>Recepciones de compra | E-Contax</PageTitle>
 <link rel="stylesheet" href="/_content/Simetric/css/econtax-compras.css?v=20261023-compras-buttons" />
+<style>
+    .homol-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 2990;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: .75rem;
+        background: rgba(15, 23, 42, .56);
+        backdrop-filter: blur(4px);
+    }
+
+    .homol-modal {
+        width: min(1480px, calc(100vw - 1.5rem));
+        max-height: calc(100vh - 1.5rem);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border-radius: 18px;
+        background: #ffffff;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, .30);
+        border: 1px solid #dbe6f2;
+    }
+
+    .homol-modal *, .homol-modal *::before, .homol-modal *::after {
+        box-sizing: border-box;
+    }
+
+    .homol-header {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: .95rem 1.35rem;
+        border-bottom: 1px solid #e2e8f0;
+        background: linear-gradient(180deg, #ffffff, #f8fbff);
+    }
+
+    .homol-toolbar {
+        flex: 0 0 auto;
+        display: grid;
+        grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto;
+        gap: .9rem;
+        align-items: start;
+        padding: .85rem 1.35rem;
+        border-bottom: 1px solid #e2e8f0;
+        background: #f1f6fb;
+    }
+
+    .homol-toolbar > div { min-width: 0; }
+
+    .homol-body {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 1rem 1.35rem;
+        background: #f8fafc;
+        display: flex;
+        flex-direction: column;
+        gap: .9rem;
+    }
+
+    .homol-card {
+        background: #ffffff;
+        border: 1px solid #dbe5f0;
+        border-radius: 14px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+        overflow: hidden;
+    }
+
+    .homol-card-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: .65rem 1rem;
+        padding: .65rem 1rem;
+        background: #f8fbff;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .homol-card-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .65rem;
+        min-width: 0;
+    }
+
+    .homol-item-bodega {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        min-width: 220px;
+        max-width: 300px;
+    }
+
+    .homol-item-bodega select {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .homol-mode-group {
+        display: inline-flex;
+        flex-wrap: nowrap;
+        flex: 0 0 auto;
+    }
+
+    .homol-mode-group .btn {
+        white-space: nowrap;
+        font-size: .8rem;
+        padding: .32rem .68rem;
+    }
+
+    .homol-card-body {
+        padding: .9rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: .85rem;
+    }
+
+    .homol-compare-grid {
+        display: grid;
+        grid-template-columns: minmax(260px, 4.5fr) minmax(0, 7.5fr);
+        gap: .9rem;
+        align-items: stretch;
+    }
+
+    .homol-compare-grid > div { min-width: 0; }
+
+    .homol-box {
+        height: 100%;
+        padding: .85rem 1rem;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        min-width: 0;
+    }
+
+    .homol-box-invoice { background: #f8fafc; }
+    .homol-box-target { background: #ffffff; }
+
+    .homol-box-label {
+        font-size: .68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        margin-bottom: .45rem;
+    }
+
+    .homol-new-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+        gap: .65rem .8rem;
+        align-items: start;
+    }
+
+    .homol-new-grid > div { min-width: 0; }
+
+    .homol-stock-grid {
+        display: grid;
+        grid-template-columns: minmax(150px, 1.2fr) minmax(125px, 1fr) minmax(125px, 1fr) minmax(135px, 1fr) minmax(155px, 1.1fr);
+        gap: .75rem;
+        align-items: start;
+        padding-top: .8rem;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .homol-stock-grid > div { min-width: 0; }
+
+    .homol-field-label {
+        display: block;
+        font-size: .72rem;
+        font-weight: 700;
+        color: #475569;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        margin-bottom: .3rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .homol-modal .form-control,
+    .homol-modal .form-select {
+        width: 100%;
+        max-width: 100%;
+        min-height: 36px;
+        font-size: .85rem;
+    }
+
+    .homol-footer {
+        flex: 0 0 auto;
+        border-top: 1px solid #e2e8f0;
+        background: #ffffff;
+        padding: .85rem 1.35rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    @@media (max-width: 1024px) {
+        .homol-toolbar { grid-template-columns: 1fr; }
+        .homol-compare-grid { grid-template-columns: 1fr; }
+        .homol-stock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @@media (max-width: 640px) {
+        .homol-new-grid,
+        .homol-stock-grid { grid-template-columns: 1fr; }
+        .homol-item-bodega { width: 100%; max-width: none; }
+    }
+</style>
 
 <div class="container-fluid py-4 purchase-receptions-page purchase-flow-shell">
     <header class="purchase-hero">
@@ -161,7 +377,13 @@
                             @foreach (var compra in ComprasPendientesFiltradas)
                             {
                                 <tr @key="compra.CodFactura">
-                                    <td><strong class="font-monospace">@compra.NumeroDocumento</strong></td>
+                                    <td>
+                                        <strong class="font-monospace">@compra.NumeroDocumento</strong>
+                                        @if (facturasConBorrador.Contains(compra.CodFactura))
+                                        {
+                                            <span class="badge bg-warning-subtle text-dark border ms-1" title="Tienes cambios guardados en borrador"><i class="ri-draft-line me-1"></i>Borrador</span>
+                                        }
+                                    </td>
                                     <td>@(compra.FechaEmision?.ToString("dd/MM/yyyy") ?? "—")</td>
                                     <td>@compra.Proveedor</td>
                                     <td class="font-monospace">@compra.RucProveedor</td>
@@ -324,17 +546,14 @@
     var cntNuevos = lineasHomologacion.Count(l => l.CrearNuevoProducto);
     var cntOmitidos = lineasHomologacion.Count(l => !l.CrearNuevoProducto && l.CodigoProducto == 0);
 
-    <div class="purchase-modal-backdrop reception-modal-backdrop"
-         style="position:fixed;inset:0;z-index:2990;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);"
-         @onclick="CerrarHomologacion">
-        <section class="reception-modal purchase-modal"
-                 style="width:min(1240px, calc(100vw - 2rem));max-height:calc(100vh - 2rem);display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:#fff;box-shadow:0 24px 60px rgba(15,23,42,.28);"
+    <div class="homol-backdrop" @onclick="CerrarHomologacionAsync">
+        <section class="homol-modal"
                  role="dialog"
                  aria-modal="true"
                  aria-labelledby="homologacion-modal-title"
                  @onclick:stopPropagation="true">
-            <header class="purchase-modal-header" style="flex:0 0 auto;border-bottom:1px solid #e2e8f0;background:linear-gradient(180deg,#ffffff,#f8fafc);padding:1rem 1.25rem;">
-                <div>
+            <header class="homol-header">
+                <div style="min-width:0;">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
                         <span class="badge bg-primary-subtle text-primary border">HOMOLOGACIÓN A INVENTARIO</span>
                         <span class="badge bg-info-subtle text-dark border"><i class="ri-building-line me-1"></i>@NombreSucursalActiva</span>
@@ -344,24 +563,75 @@
                             <span class="badge bg-primary-subtle text-primary border">@cntNuevos nuevos</span>
                             <span class="badge bg-secondary-subtle text-secondary border">@cntOmitidos omitidos</span>
                         }
+                        @if (!string.IsNullOrWhiteSpace(horaBorradorHomologacion))
+                        {
+                            <span class="badge bg-warning-subtle text-dark border"><i class="ri-save-3-line me-1"></i>@(borradorRestaurado ? "Borrador restaurado" : "Borrador guardado") (@horaBorradorHomologacion)</span>
+                        }
                     </div>
                     <h2 id="homologacion-modal-title" class="h5 fw-bold mb-1">Factura @compraSeleccionadaHomologar.NumeroDocumento</h2>
                     <p class="mb-0 text-muted small">@compraSeleccionadaHomologar.Proveedor (@compraSeleccionadaHomologar.RucProveedor) · Total <strong>$@compraSeleccionadaHomologar.ValorTotal.ToString("N2")</strong> · @compraSeleccionadaHomologar.Detalles.Count ítem(s)</p>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-secondary rounded-circle d-inline-flex align-items-center justify-content-center" style="width:34px;height:34px;" aria-label="Cerrar" @onclick="CerrarHomologacion" disabled="@guardandoHomologacion">
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-circle d-inline-flex align-items-center justify-content-center flex-shrink-0" style="width:36px;height:36px;" aria-label="Cerrar" @onclick="CerrarHomologacionAsync" disabled="@guardandoHomologacion">
                     <i class="ri-close-line fs-5"></i>
                 </button>
             </header>
 
-            <div class="purchase-modal-body p-4" style="flex:1 1 auto;overflow-y:auto;background:#f8fafc;">
+            @if (!cargandoHomologacion)
+            {
+                <div class="homol-toolbar">
+                    <div>
+                        <label class="homol-field-label">Sucursal activa</label>
+                        <div class="form-control bg-white fw-semibold d-flex align-items-center gap-2">
+                            <i class="ri-map-pin-2-line text-primary"></i>
+                            <span class="text-truncate">@NombreSucursalActiva</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="homol-field-label">Bodega general de ingreso (aplica a todos los ítems)</label>
+                        @if (bodegasSucursal.Count > 0)
+                        {
+                            <select class="form-select"
+                                    value="@bodegaGeneralHomologacionId"
+                                    @onchange="CambiarBodegaGeneralHomologacionAsync"
+                                    disabled="@guardandoHomologacion">
+                                @foreach (var bod in bodegasSucursal)
+                                {
+                                    <option value="@bod.IdBodega">@bod.Nombre (@bod.Codigo)</option>
+                                }
+                            </select>
+                            <small class="text-muted d-block mt-1">Al cambiar esta bodega se actualiza en todos los productos; también puedes ajustarla en cada ítem antes de homologar.</small>
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning py-2 px-3 mb-0 small d-flex justify-content-between align-items-center gap-2">
+                                <span>No hay bodegas activas creadas para <strong>@NombreSucursalActiva</strong>.</span>
+                                <a class="btn btn-sm btn-outline-primary text-nowrap" href="/contabilidad/inventarios/bodegas">Crear bodega</a>
+                            </div>
+                        }
+                    </div>
+                    <div class="d-flex flex-column align-items-end">
+                        <label class="homol-field-label">Borrador local</label>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary text-nowrap"
+                                style="min-height:36px;"
+                                title="Descartar cambios guardados en borrador y recargar desde la factura"
+                                @onclick="RestablecerBorradorHomologacionAsync"
+                                disabled="@(guardandoHomologacion || string.IsNullOrWhiteSpace(horaBorradorHomologacion))">
+                            <i class="ri-refresh-line me-1"></i>Restablecer
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <div class="homol-body">
                 @if (!string.IsNullOrWhiteSpace(errorHomologacion))
                 {
-                    <div class="alert alert-danger" role="alert">@errorHomologacion</div>
+                    <div class="alert alert-danger mb-0" role="alert">@errorHomologacion</div>
                 }
 
                 @if (cargandoHomologacion)
                 {
-                    <div class="text-center py-5">
+                    <div class="text-center py-5 my-4">
                         <div class="spinner-border text-primary mb-3" role="status"></div>
                         <div class="fw-semibold text-dark">Cargando bodegas de @NombreSucursalActiva y catálogo de productos...</div>
                         <small class="text-muted">Esto puede tardar unos segundos la primera vez mientras se sincroniza el inventario.</small>
@@ -369,37 +639,6 @@
                 }
                 else
                 {
-                <div class="row g-2 align-items-end mb-3 p-3 rounded-3 border bg-light-subtle">
-                    <div class="col-md-4">
-                        <label class="form-label form-label-sm fw-semibold mb-1">Sucursal activa</label>
-                        <div class="form-control form-control-sm bg-white fw-semibold">@NombreSucursalActiva</div>
-                    </div>
-                    <div class="col-md-8">
-                        <label class="form-label form-label-sm fw-semibold mb-1">Bodega de ingreso (aplicar a todos los ítems)</label>
-                        @if (bodegasSucursal.Count > 0)
-                        {
-                            <select class="form-select form-select-sm"
-                                    value="@bodegaGeneralHomologacionId"
-                                    @onchange="CambiarBodegaGeneralHomologacion"
-                                    disabled="@guardandoHomologacion">
-                                @foreach (var bod in bodegasSucursal)
-                                {
-                                    <option value="@bod.IdBodega">@bod.Nombre (@bod.Codigo)</option>
-                                }
-                            </select>
-                            <small class="text-muted">Al cambiar esta bodega se actualiza en todos los productos; también puedes cambiarla individualmente abajo.</small>
-                        }
-                        else
-                        {
-                            <div class="alert alert-warning py-2 px-3 mb-0 small d-flex justify-content-between align-items-center">
-                                <span>No hay bodegas activas creadas para <strong>@NombreSucursalActiva</strong>.</span>
-                                <a class="btn btn-sm btn-outline-primary" href="/contabilidad/inventarios/bodegas">Crear bodega</a>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                <div class="d-flex flex-column gap-3">
                     @for (var idx = 0; idx < lineasHomologacion.Count; idx++)
                     {
                         var linea = lineasHomologacion[idx];
@@ -413,10 +652,11 @@
                             ? (string.IsNullOrWhiteSpace(linea.NuevaUnidadMedida) ? "UNIDAD" : linea.NuevaUnidadMedida)
                             : (prodSel?.UnidadMedida ?? "UNIDAD");
                         var ingresaStock = linea.CrearNuevoProducto || linea.CodigoProducto > 0;
+                        var esOmitido = !linea.CrearNuevoProducto && !linea.ModoForzadoExistente && linea.CodigoProducto == 0;
 
-                        <div @key="linea.CodLinea" class="card border rounded-4 shadow-sm overflow-hidden">
-                            <div class="card-header bg-light-subtle border-bottom py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                                <div class="d-flex align-items-center gap-2">
+                        <div @key="linea.CodLinea" class="homol-card">
+                            <div class="homol-card-header">
+                                <div class="d-flex flex-wrap align-items-center gap-2">
                                     <span class="badge bg-dark-subtle text-dark border">#@(idx + 1)</span>
                                     @if (linea.CrearNuevoProducto)
                                     {
@@ -426,117 +666,137 @@
                                     {
                                         <span class="badge bg-success-subtle text-success border"><i class="ri-link me-1"></i>Homologado a inventario</span>
                                     }
+                                    else if (linea.ModoForzadoExistente)
+                                    {
+                                        <span class="badge bg-warning-subtle text-dark border"><i class="ri-search-eye-line me-1"></i>Pendiente de seleccionar producto</span>
+                                    }
                                     else
                                     {
                                         <span class="badge bg-secondary-subtle text-secondary border"><i class="ri-forbid-line me-1"></i>Omitido (no inventariar)</span>
                                     }
                                 </div>
-                                <div class="btn-group btn-group-sm" role="group" aria-label="Acción para línea">
-                                    <button type="button"
-                                            class="btn @(!linea.CrearNuevoProducto && linea.CodigoProducto > 0 ? "btn-success" : "btn-outline-secondary")"
-                                            @onclick="() => CambiarModoHomologacion(linea, ModoHomologacion.Existente)"
-                                            disabled="@guardandoHomologacion">
-                                        <i class="ri-search-line me-1"></i>Elegir existente
-                                    </button>
-                                    <button type="button"
-                                            class="btn @(linea.CrearNuevoProducto ? "btn-primary" : "btn-outline-primary")"
-                                            @onclick="() => CambiarModoHomologacion(linea, ModoHomologacion.CrearNuevo)"
-                                            disabled="@guardandoHomologacion">
-                                        <i class="ri-add-line me-1"></i>Crear nuevo
-                                    </button>
-                                    <button type="button"
-                                            class="btn @(!linea.CrearNuevoProducto && linea.CodigoProducto == 0 ? "btn-secondary" : "btn-outline-secondary")"
-                                            @onclick="() => CambiarModoHomologacion(linea, ModoHomologacion.Omitir)"
-                                            disabled="@guardandoHomologacion">
-                                        Omitir
-                                    </button>
+
+                                <div class="homol-card-controls">
+                                    <div class="homol-item-bodega" title="Bodega donde ingresará este producto">
+                                        <i class="ri-store-2-line text-primary flex-shrink-0"></i>
+                                        @if (bodegasSucursal.Count > 0)
+                                        {
+                                            <select class="form-select form-select-sm"
+                                                    style="min-height:32px;font-size:.8rem;"
+                                                    value="@linea.IdBodega"
+                                                    @onchange="e => CambiarBodegaLineaAsync(linea, e.Value)"
+                                                    disabled="@(guardandoHomologacion || esOmitido)">
+                                                @foreach (var bod in bodegasSucursal)
+                                                {
+                                                    <option value="@bod.IdBodega">@bod.Nombre (@bod.Codigo)</option>
+                                                }
+                                            </select>
+                                        }
+                                        else
+                                        {
+                                            <span class="small text-muted">Sin bodega</span>
+                                        }
+                                    </div>
+
+                                    <div class="btn-group btn-group-sm homol-mode-group" role="group" aria-label="Acción para línea">
+                                        <button type="button"
+                                                class="btn @(!linea.CrearNuevoProducto && (linea.CodigoProducto > 0 || linea.ModoForzadoExistente) ? "btn-success" : "btn-outline-secondary")"
+                                                @onclick="() => CambiarModoHomologacionAsync(linea, ModoHomologacion.Existente)"
+                                                disabled="@guardandoHomologacion">
+                                            <i class="ri-search-line me-1"></i>Elegir existente
+                                        </button>
+                                        <button type="button"
+                                                class="btn @(linea.CrearNuevoProducto ? "btn-primary" : "btn-outline-primary")"
+                                                @onclick="() => CambiarModoHomologacionAsync(linea, ModoHomologacion.CrearNuevo)"
+                                                disabled="@guardandoHomologacion">
+                                            <i class="ri-add-line me-1"></i>Crear nuevo
+                                        </button>
+                                        <button type="button"
+                                                class="btn @(esOmitido ? "btn-secondary" : "btn-outline-secondary")"
+                                                @onclick="() => CambiarModoHomologacionAsync(linea, ModoHomologacion.Omitir)"
+                                                disabled="@guardandoHomologacion">
+                                            Omitir
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div class="card-body p-3">
-                                <div class="row g-3 align-items-stretch">
-                                    <div class="col-12 col-lg-5">
-                                        <div class="h-100 p-3 rounded-3 border bg-light">
-                                            <div class="text-uppercase text-muted fw-bold mb-1" style="font-size:0.68rem;letter-spacing:.05em;">En factura del proveedor</div>
-                                            <div class="fw-bold text-dark mb-1">@linea.DescripcionFactura</div>
-                                            <div class="small text-muted font-monospace mb-2">Código XML: @(string.IsNullOrWhiteSpace(linea.CodPrincipalFactura) ? "Sin código" : linea.CodPrincipalFactura)</div>
-                                            <div class="d-flex flex-wrap gap-3 small">
-                                                <span><strong>Cant.:</strong> @linea.CantidadFactura.ToString("0.####")</span>
-                                                <span><strong>Costo:</strong> $@linea.PrecioFactura.ToString("N4")</span>
-                                            </div>
+                            <div class="homol-card-body">
+                                <div class="homol-compare-grid">
+                                    <div class="homol-box homol-box-invoice">
+                                        <div class="homol-box-label text-muted">En factura del proveedor</div>
+                                        <div class="fw-bold text-dark mb-1" style="word-break:break-word;">@linea.DescripcionFactura</div>
+                                        <div class="small text-muted font-monospace mb-2">Código XML: @(string.IsNullOrWhiteSpace(linea.CodPrincipalFactura) ? "Sin código" : linea.CodPrincipalFactura)</div>
+                                        <div class="d-flex flex-wrap gap-3 small">
+                                            <span><strong>Cant.:</strong> @linea.CantidadFactura.ToString("0.####")</span>
+                                            <span><strong>Costo:</strong> $@linea.PrecioFactura.ToString("N4")</span>
                                         </div>
                                     </div>
 
-                                    <div class="col-12 col-lg-7">
-                                        <div class="h-100 p-3 rounded-3 border bg-white">
-                                            @if (linea.CrearNuevoProducto)
-                                            {
-                                                <div class="text-uppercase text-primary fw-bold mb-2" style="font-size:0.68rem;letter-spacing:.05em;">Nuevo producto en tu inventario</div>
-                                                <div class="row g-2">
-                                                    <div class="col-md-7">
-                                                        <label class="form-label form-label-sm mb-1">Nombre del producto <span class="text-danger">*</span></label>
-                                                        <input type="text" class="form-control form-control-sm" @bind="linea.NuevoNombreProducto" disabled="@guardandoHomologacion" />
-                                                    </div>
-                                                    <div class="col-md-5">
-                                                        <label class="form-label form-label-sm mb-1">Código principal</label>
-                                                        <input type="text" class="form-control form-control-sm font-monospace" @bind="linea.NuevoCodigoPrincipal" placeholder="Opcional" disabled="@guardandoHomologacion" />
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label form-label-sm mb-1">Unidad de medida</label>
-                                                        <select class="form-select form-select-sm" @bind="linea.NuevaUnidadMedida" disabled="@guardandoHomologacion">
-                                                            @foreach (var u in UnidadesMedidaHomologacion)
-                                                            {
-                                                                <option value="@u">@u</option>
-                                                            }
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label form-label-sm mb-1">Factor de conversión</label>
-                                                        <input type="number" min="1" step="0.0001" class="form-control form-control-sm text-end" @bind="linea.NuevoFactorConversion" disabled="@guardandoHomologacion" />
-                                                    </div>
+                                    <div class="homol-box homol-box-target">
+                                        @if (linea.CrearNuevoProducto)
+                                        {
+                                            <div class="homol-box-label text-primary">Nuevo producto en tu inventario</div>
+                                            <div class="homol-new-grid">
+                                                <div>
+                                                    <label class="homol-field-label">Nombre del producto <span class="text-danger">*</span></label>
+                                                    <input type="text" class="form-control" @bind="linea.NuevoNombreProducto" @bind:after="GuardarBorradorHomologacionAsync" disabled="@guardandoHomologacion" />
                                                 </div>
-                                            }
-                                            else if (linea.CodigoProducto > 0 || linea.ModoForzadoExistente)
-                                            {
-                                                <div class="text-uppercase text-success fw-bold mb-2" style="font-size:0.68rem;letter-spacing:.05em;">Comparar y elegir producto existente</div>
-                                                <div class="row g-2">
-                                                    <div class="col-12">
-                                                        <input class="form-control form-control-sm" @bind="linea.FiltroProducto" @bind:event="oninput" placeholder="Buscar en tu inventario por nombre o código..." disabled="@guardandoHomologacion" />
-                                                    </div>
-                                                    <div class="col-12">
-                                                        <select class="form-select form-select-sm"
-                                                                value="@linea.CodigoProducto"
-                                                                @onchange="e => SeleccionarProductoHomologacion(linea, e.Value)"
-                                                                disabled="@guardandoHomologacion">
-                                                            <option value="0">-- Selecciona un producto de tu inventario --</option>
-                                                            @foreach (var p in ProductosFiltradosParaLinea(linea))
-                                                            {
-                                                                <option value="@p.CodigoProducto">@p.NombreProducto @(string.IsNullOrWhiteSpace(p.CodigoPrincipal) ? "" : $"({p.CodigoPrincipal})") · Stock: @p.StockActual.ToString("N2") @p.UnidadMedida@(p.FactorConversion > 1 ? $" (×{p.FactorConversion:G29})" : "")</option>
-                                                            }
-                                                        </select>
-                                                    </div>
+                                                <div>
+                                                    <label class="homol-field-label">Código principal</label>
+                                                    <input type="text" class="form-control font-monospace" @bind="linea.NuevoCodigoPrincipal" @bind:after="GuardarBorradorHomologacionAsync" placeholder="Opcional" disabled="@guardandoHomologacion" />
                                                 </div>
-                                            }
-                                            else
-                                            {
-                                                <div class="text-muted small d-flex align-items-center h-100">
-                                                    <span><i class="ri-information-line me-1"></i>Esta línea no ingresará al inventario (útil para servicios, fletes o gastos). Usa <strong>Elegir existente</strong> o <strong>Crear nuevo</strong> si sí es mercadería.</span>
+                                                <div>
+                                                    <label class="homol-field-label">Unidad de medida</label>
+                                                    <select class="form-select" @bind="linea.NuevaUnidadMedida" @bind:after="GuardarBorradorHomologacionAsync" disabled="@guardandoHomologacion">
+                                                        @foreach (var u in UnidadesMedidaHomologacion)
+                                                        {
+                                                            <option value="@u">@u</option>
+                                                        }
+                                                    </select>
                                                 </div>
-                                            }
-                                        </div>
+                                                <div>
+                                                    <label class="homol-field-label">Factor de conversión</label>
+                                                    <input type="number" min="1" step="0.0001" class="form-control text-end" @bind="linea.NuevoFactorConversion" @bind:after="GuardarBorradorHomologacionAsync" disabled="@guardandoHomologacion" />
+                                                </div>
+                                            </div>
+                                        }
+                                        else if (linea.CodigoProducto > 0 || linea.ModoForzadoExistente)
+                                        {
+                                            <div class="homol-box-label text-success">Comparar y elegir producto existente</div>
+                                            <div class="d-flex flex-column gap-2">
+                                                <input class="form-control" @bind="linea.FiltroProducto" @bind:event="oninput" placeholder="Buscar en tu inventario por nombre o código..." disabled="@guardandoHomologacion" />
+                                                <select class="form-select"
+                                                        value="@linea.CodigoProducto"
+                                                        @onchange="e => SeleccionarProductoHomologacionAsync(linea, e.Value)"
+                                                        disabled="@guardandoHomologacion">
+                                                    <option value="0">-- Selecciona un producto de tu inventario --</option>
+                                                    @foreach (var p in ProductosFiltradosParaLinea(linea))
+                                                    {
+                                                        <option value="@p.CodigoProducto">@p.NombreProducto @(string.IsNullOrWhiteSpace(p.CodigoPrincipal) ? "" : $"({p.CodigoPrincipal})") · Stock: @p.StockActual.ToString("N2") @p.UnidadMedida@(p.FactorConversion > 1 ? $" (×{p.FactorConversion:G29})" : "")</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-muted small d-flex align-items-center h-100">
+                                                <span><i class="ri-information-line me-1"></i>Esta línea no ingresará al inventario (útil para servicios, fletes o gastos). Usa <strong>Elegir existente</strong> o <strong>Crear nuevo</strong> si sí es mercadería.</span>
+                                            </div>
+                                        }
                                     </div>
                                 </div>
 
                                 @if (ingresaStock)
                                 {
-                                    <div class="row g-2 mt-2 pt-2 border-top align-items-end">
-                                        <div class="col-6 col-md-2">
-                                            <label class="form-label form-label-sm mb-1">Modo ingreso</label>
+                                    <div class="homol-stock-grid">
+                                        <div>
+                                            <label class="homol-field-label">Modo ingreso</label>
                                             @if (factorActivo > 1)
                                             {
-                                                <select class="form-select form-select-sm"
+                                                <select class="form-select"
                                                         value="@(linea.PorEnvase ? "envase" : "directo")"
-                                                        @onchange='e => linea.PorEnvase = string.Equals(e.Value?.ToString(), "envase", StringComparison.Ordinal)'
+                                                        @onchange="e => CambiarModoIngresoLineaAsync(linea, e.Value)"
                                                         disabled="@guardandoHomologacion">
                                                     <option value="envase">Envases (×@factorActivo.ToString("G29"))</option>
                                                     <option value="directo">Directo (@unidadActiva)</option>
@@ -544,58 +804,41 @@
                                             }
                                             else
                                             {
-                                                <div class="form-control form-control-sm bg-light text-muted">Directo (@unidadActiva)</div>
+                                                <div class="form-control bg-light text-muted d-flex align-items-center">Directo (@unidadActiva)</div>
                                             }
                                         </div>
-                                        <div class="col-6 col-md-2">
-                                            <label class="form-label form-label-sm mb-1">Bodega</label>
-                                            @if (bodegasSucursal.Count > 0)
-                                            {
-                                                <select class="form-select form-select-sm" @bind="linea.IdBodega" disabled="@guardandoHomologacion">
-                                                    @foreach (var bod in bodegasSucursal)
-                                                    {
-                                                        <option value="@bod.IdBodega">@bod.Nombre (@bod.Codigo)</option>
-                                                    }
-                                                </select>
-                                            }
-                                            else
-                                            {
-                                                <div class="form-control form-control-sm bg-light text-muted">Sin bodega</div>
-                                            }
-                                        </div>
-                                        <div class="col-6 col-md-2">
-                                            <label class="form-label form-label-sm mb-1">Cantidad (+)</label>
-                                            <input type="number" min="0" step="0.0001" class="form-control form-control-sm text-end" @bind="linea.CantidadIngreso" disabled="@guardandoHomologacion" />
+                                        <div>
+                                            <label class="homol-field-label">Cantidad (+)</label>
+                                            <input type="number" min="0" step="0.0001" class="form-control text-end" @bind="linea.CantidadIngreso" @bind:after="GuardarBorradorHomologacionAsync" disabled="@guardandoHomologacion" />
                                             @if (factorActivo > 1 && linea.PorEnvase && linea.CantidadIngreso > 0)
                                             {
-                                                <small class="text-primary d-block text-end">= @((linea.CantidadIngreso * factorActivo).ToString("N2")) @unidadActiva</small>
+                                                <small class="text-primary d-block text-end mt-1 fw-semibold">= @((linea.CantidadIngreso * factorActivo).ToString("N2")) @unidadActiva</small>
                                             }
                                         </div>
-                                        <div class="col-6 col-md-2">
-                                            <label class="form-label form-label-sm mb-1">Costo unit.</label>
-                                            <input type="number" min="0" step="0.0001" class="form-control form-control-sm text-end" @bind="linea.CostoUnitario" disabled="@guardandoHomologacion" />
+                                        <div>
+                                            <label class="homol-field-label">Costo unit.</label>
+                                            <input type="number" min="0" step="0.0001" class="form-control text-end" @bind="linea.CostoUnitario" @bind:after="GuardarBorradorHomologacionAsync" disabled="@guardandoHomologacion" />
                                         </div>
-                                        <div class="col-6 col-md-2">
-                                            <label class="form-label form-label-sm mb-1">Lote</label>
-                                            <input type="text" maxlength="80" class="form-control form-control-sm" placeholder="Opcional" @bind="linea.NumeroLote" disabled="@guardandoHomologacion" />
+                                        <div>
+                                            <label class="homol-field-label">Lote</label>
+                                            <input type="text" maxlength="80" class="form-control" placeholder="Opcional" @bind="linea.NumeroLote" @bind:after="GuardarBorradorHomologacionAsync" disabled="@guardandoHomologacion" />
                                         </div>
-                                        <div class="col-6 col-md-2">
-                                            <label class="form-label form-label-sm mb-1">Vencimiento</label>
-                                            <input type="date" min="@FechaMinimaLote" class="form-control form-control-sm" @bind="linea.FechaVencimiento" disabled="@guardandoHomologacion" />
+                                        <div>
+                                            <label class="homol-field-label">Vencimiento</label>
+                                            <input type="date" min="@FechaMinimaLote" class="form-control" @bind="linea.FechaVencimiento" @bind:after="GuardarBorradorHomologacionAsync" disabled="@guardandoHomologacion" />
                                         </div>
                                     </div>
                                 }
                             </div>
                         </div>
                     }
-                </div>
                 }
             </div>
 
-            <footer class="purchase-modal-footer" style="flex:0 0 auto;border-top:1px solid #e2e8f0;background:#fff;padding:.9rem 1.25rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
-                <span class="small text-muted"><i class="ri-information-line me-1"></i>Los ítems homologados sumarán stock al kardex en la bodega elegida; los omitidos se marcarán como revisados sin ingreso físico.</span>
+            <footer class="homol-footer">
+                <span class="small text-muted"><i class="ri-shield-check-line me-1 text-primary"></i>Tus cambios se guardan automáticamente como borrador en este navegador. Al confirmar, los ítems homologados suman stock al kardex.</span>
                 <div class="d-flex align-items-center gap-2">
-                    <button type="button" class="btn btn-outline-secondary" @onclick="CerrarHomologacion" disabled="@guardandoHomologacion">Cancelar</button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CerrarHomologacionAsync" disabled="@guardandoHomologacion">Guardar borrador y cerrar</button>
                     <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" @onclick="ConfirmarHomologacionAsync" disabled="@(cargandoHomologacion || guardandoHomologacion)">
                         <i class="ri-check-double-line"></i><span>@(guardandoHomologacion ? "Ingresando..." : "Confirmar ingreso a inventario")</span>
                     </button>
@@ -819,6 +1062,10 @@
     private int editorBodegaGeneralId;
     private EContaxInventarioService.CompraPendienteRecepcionDto? compraSeleccionadaHomologar;
     private List<HomologacionLineaModel> lineasHomologacion = new();
+    private readonly HashSet<int> facturasConBorrador = new();
+    private bool borradorRestaurado;
+    private string? horaBorradorHomologacion;
+    private bool jsDisponible;
     private int? SucursalActivaId => Session.Localidad > 0 ? Session.Localidad : null;
     private string NombreSucursalActiva => string.IsNullOrWhiteSpace(Session.LocalidadDescripcion) ? "Sucursal actual" : Session.LocalidadDescripcion;
     private string filtro = string.Empty;
@@ -919,6 +1166,19 @@
             cargando = false;
             cargandoComprasPendientes = false;
         }
+
+        if (jsDisponible)
+            await ActualizarIndicadoresBorradorAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            jsDisponible = true;
+            await ActualizarIndicadoresBorradorAsync();
+            StateHasChanged();
+        }
     }
 
     private IEnumerable<EContaxInventarioService.CompraPendienteRecepcionDto> ComprasPendientesFiltradas =>
@@ -952,11 +1212,208 @@
             .ToList();
     }
 
-    private void CambiarBodegaGeneralHomologacion(ChangeEventArgs e)
+    private string ObtenerClaveBorradorHomologacion(int codFactura) =>
+        $"hosvet_homol_draft_v1_{usuarioId}_{SucursalActivaId ?? 0}_{codFactura}";
+
+    private async Task ActualizarIndicadoresBorradorAsync()
+    {
+        facturasConBorrador.Clear();
+        if (!jsDisponible || usuarioId <= 0 || comprasPendientes.Count == 0)
+            return;
+
+        foreach (var c in comprasPendientes)
+        {
+            try
+            {
+                var raw = await JS.InvokeAsync<string?>("localStorage.getItem", ObtenerClaveBorradorHomologacion(c.CodFactura));
+                if (!string.IsNullOrWhiteSpace(raw))
+                    facturasConBorrador.Add(c.CodFactura);
+            }
+            catch
+            {
+                break;
+            }
+        }
+    }
+
+    private async Task GuardarBorradorHomologacionAsync()
+    {
+        if (!jsDisponible || compraSeleccionadaHomologar is null || cargandoHomologacion || lineasHomologacion.Count == 0)
+            return;
+
+        try
+        {
+            var ahora = DateTime.Now;
+            var borrador = new HomologacionBorradorDto
+            {
+                GuardadoEnIso = ahora.ToString("O"),
+                BodegaGeneralId = bodegaGeneralHomologacionId,
+                Lineas = lineasHomologacion.Select(l => new HomologacionBorradorLineaDto
+                {
+                    CodLinea = l.CodLinea,
+                    CodigoProducto = l.CodigoProducto,
+                    IdBodega = l.IdBodega,
+                    ModoForzadoExistente = l.ModoForzadoExistente,
+                    CrearNuevoProducto = l.CrearNuevoProducto,
+                    NuevoNombreProducto = l.NuevoNombreProducto,
+                    NuevoCodigoPrincipal = l.NuevoCodigoPrincipal,
+                    NuevaUnidadMedida = l.NuevaUnidadMedida,
+                    NuevoFactorConversion = l.NuevoFactorConversion,
+                    PorEnvase = l.PorEnvase,
+                    CantidadIngreso = l.CantidadIngreso,
+                    CostoUnitario = l.CostoUnitario,
+                    NumeroLote = l.NumeroLote,
+                    FechaVencimiento = l.FechaVencimiento
+                }).ToList()
+            };
+
+            var json = JsonSerializer.Serialize(borrador);
+            await JS.InvokeVoidAsync("localStorage.setItem", ObtenerClaveBorradorHomologacion(compraSeleccionadaHomologar.CodFactura), json);
+            facturasConBorrador.Add(compraSeleccionadaHomologar.CodFactura);
+            borradorRestaurado = false;
+            horaBorradorHomologacion = ahora.ToString("HH:mm");
+        }
+        catch
+        {
+            // Ignorar si localStorage no está disponible en el navegador
+        }
+    }
+
+    private async Task RestaurarBorradorHomologacionAsync(int codFactura)
+    {
+        borradorRestaurado = false;
+        horaBorradorHomologacion = null;
+        if (!jsDisponible) return;
+
+        try
+        {
+            var raw = await JS.InvokeAsync<string?>("localStorage.getItem", ObtenerClaveBorradorHomologacion(codFactura));
+            if (string.IsNullOrWhiteSpace(raw)) return;
+
+            var borrador = JsonSerializer.Deserialize<HomologacionBorradorDto>(raw);
+            if (borrador is null) return;
+
+            if (borrador.BodegaGeneralId > 0 && bodegasSucursal.Any(b => b.IdBodega == borrador.BodegaGeneralId))
+                bodegaGeneralHomologacionId = borrador.BodegaGeneralId;
+
+            var mapa = borrador.Lineas.ToDictionary(x => x.CodLinea);
+            foreach (var linea in lineasHomologacion)
+            {
+                if (!mapa.TryGetValue(linea.CodLinea, out var saved)) continue;
+
+                linea.CodigoProducto = saved.CodigoProducto;
+                if (saved.IdBodega > 0 && bodegasSucursal.Any(b => b.IdBodega == saved.IdBodega))
+                    linea.IdBodega = saved.IdBodega;
+                else
+                    linea.IdBodega = bodegaGeneralHomologacionId;
+
+                linea.ModoForzadoExistente = saved.ModoForzadoExistente;
+                linea.CrearNuevoProducto = saved.CrearNuevoProducto;
+                if (!string.IsNullOrWhiteSpace(saved.NuevoNombreProducto))
+                    linea.NuevoNombreProducto = saved.NuevoNombreProducto;
+                linea.NuevoCodigoPrincipal = saved.NuevoCodigoPrincipal ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(saved.NuevaUnidadMedida))
+                    linea.NuevaUnidadMedida = saved.NuevaUnidadMedida;
+                if (saved.NuevoFactorConversion > 0)
+                    linea.NuevoFactorConversion = saved.NuevoFactorConversion;
+                linea.PorEnvase = saved.PorEnvase;
+                linea.CantidadIngreso = saved.CantidadIngreso;
+                linea.CostoUnitario = saved.CostoUnitario;
+                linea.NumeroLote = saved.NumeroLote;
+                linea.FechaVencimiento = saved.FechaVencimiento;
+            }
+
+            borradorRestaurado = true;
+            horaBorradorHomologacion = DateTime.TryParse(borrador.GuardadoEnIso, out var dt)
+                ? dt.ToString("dd/MM HH:mm")
+                : "recuperado";
+            facturasConBorrador.Add(codFactura);
+        }
+        catch
+        {
+            // Ignorar borrador corrupto
+        }
+    }
+
+    private async Task EliminarBorradorHomologacionAsync(int codFactura)
+    {
+        facturasConBorrador.Remove(codFactura);
+        borradorRestaurado = false;
+        horaBorradorHomologacion = null;
+        if (!jsDisponible) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.removeItem", ObtenerClaveBorradorHomologacion(codFactura));
+        }
+        catch
+        {
+            // Ignorar
+        }
+    }
+
+    private async Task RestablecerBorradorHomologacionAsync()
+    {
+        if (compraSeleccionadaHomologar is null || guardandoHomologacion) return;
+        var compra = compraSeleccionadaHomologar;
+        await EliminarBorradorHomologacionAsync(compra.CodFactura);
+        ConstruirLineasHomologacionPorDefecto(compra);
+    }
+
+    private void ConstruirLineasHomologacionPorDefecto(EContaxInventarioService.CompraPendienteRecepcionDto compra)
+    {
+        bodegaGeneralHomologacionId = bodegasSucursal.FirstOrDefault()?.IdBodega ?? 0;
+
+        lineasHomologacion = compra.Detalles.Select(d =>
+        {
+            var match = productosInventario.FirstOrDefault(p =>
+                d.CodProductoActual > 0 && p.CodigoProducto == d.CodProductoActual)
+                ?? productosInventario.FirstOrDefault(p =>
+                    !string.IsNullOrWhiteSpace(d.CodPrincipal) &&
+                    string.Equals(p.CodigoPrincipal, d.CodPrincipal, StringComparison.OrdinalIgnoreCase))
+                ?? productosInventario.FirstOrDefault(p =>
+                    !string.IsNullOrWhiteSpace(d.Descripcion) &&
+                    string.Equals(p.NombreProducto?.Trim(), d.Descripcion.Trim(), StringComparison.OrdinalIgnoreCase));
+
+            return new HomologacionLineaModel
+            {
+                CodLinea = d.CodLinea,
+                CodPrincipalFactura = d.CodPrincipal,
+                DescripcionFactura = d.Descripcion,
+                CantidadFactura = d.Cantidad,
+                PrecioFactura = d.PrecioUnitario,
+                CodigoProducto = match?.CodigoProducto ?? 0,
+                IdBodega = bodegaGeneralHomologacionId,
+                ModoForzadoExistente = true,
+                NuevoNombreProducto = d.Descripcion,
+                NuevoCodigoPrincipal = d.CodPrincipal,
+                NuevaUnidadMedida = "UNIDAD",
+                NuevoFactorConversion = 1m,
+                PorEnvase = match is not null && match.FactorConversion > 1,
+                CantidadIngreso = d.Cantidad,
+                CostoUnitario = d.PrecioUnitario
+            };
+        }).ToList();
+    }
+
+    private async Task CambiarBodegaGeneralHomologacionAsync(ChangeEventArgs e)
     {
         bodegaGeneralHomologacionId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
         foreach (var linea in lineasHomologacion)
             linea.IdBodega = bodegaGeneralHomologacionId;
+        await GuardarBorradorHomologacionAsync();
+    }
+
+    private async Task CambiarBodegaLineaAsync(HomologacionLineaModel linea, object? value)
+    {
+        linea.IdBodega = int.TryParse(value?.ToString(), out var id) ? id : 0;
+        await GuardarBorradorHomologacionAsync();
+    }
+
+    private async Task CambiarModoIngresoLineaAsync(HomologacionLineaModel linea, object? value)
+    {
+        linea.PorEnvase = string.Equals(value?.ToString(), "envase", StringComparison.Ordinal);
+        await GuardarBorradorHomologacionAsync();
     }
 
     private void CambiarBodegaGeneralEditor(ChangeEventArgs e)
@@ -970,6 +1427,8 @@
     {
         errorHomologacion = null;
         mensajeHomologacion = null;
+        borradorRestaurado = false;
+        horaBorradorHomologacion = null;
         compraSeleccionadaHomologar = compra;
         lineasHomologacion = new();
         cargandoHomologacion = true;
@@ -989,38 +1448,8 @@
                 await CargarBodegasSucursalActivaAsync();
             }
 
-            bodegaGeneralHomologacionId = bodegasSucursal.FirstOrDefault()?.IdBodega ?? 0;
-
-            lineasHomologacion = compra.Detalles.Select(d =>
-            {
-                var match = productosInventario.FirstOrDefault(p =>
-                    d.CodProductoActual > 0 && p.CodigoProducto == d.CodProductoActual)
-                    ?? productosInventario.FirstOrDefault(p =>
-                        !string.IsNullOrWhiteSpace(d.CodPrincipal) &&
-                        string.Equals(p.CodigoPrincipal, d.CodPrincipal, StringComparison.OrdinalIgnoreCase))
-                    ?? productosInventario.FirstOrDefault(p =>
-                        !string.IsNullOrWhiteSpace(d.Descripcion) &&
-                        string.Equals(p.NombreProducto?.Trim(), d.Descripcion.Trim(), StringComparison.OrdinalIgnoreCase));
-
-                return new HomologacionLineaModel
-                {
-                    CodLinea = d.CodLinea,
-                    CodPrincipalFactura = d.CodPrincipal,
-                    DescripcionFactura = d.Descripcion,
-                    CantidadFactura = d.Cantidad,
-                    PrecioFactura = d.PrecioUnitario,
-                    CodigoProducto = match?.CodigoProducto ?? 0,
-                    IdBodega = bodegaGeneralHomologacionId,
-                    ModoForzadoExistente = true,
-                    NuevoNombreProducto = d.Descripcion,
-                    NuevoCodigoPrincipal = d.CodPrincipal,
-                    NuevaUnidadMedida = "UNIDAD",
-                    NuevoFactorConversion = 1m,
-                    PorEnvase = match is not null && match.FactorConversion > 1,
-                    CantidadIngreso = d.Cantidad,
-                    CostoUnitario = d.PrecioUnitario
-                };
-            }).ToList();
+            ConstruirLineasHomologacionPorDefecto(compra);
+            await RestaurarBorradorHomologacionAsync(compra.CodFactura);
         }
         catch (Exception ex)
         {
@@ -1032,13 +1461,16 @@
         }
     }
 
-    private void CerrarHomologacion()
+    private async Task CerrarHomologacionAsync()
     {
         if (guardandoHomologacion) return;
+        await GuardarBorradorHomologacionAsync();
         mostrarHomologacion = false;
         compraSeleccionadaHomologar = null;
         lineasHomologacion.Clear();
         errorHomologacion = null;
+        borradorRestaurado = false;
+        horaBorradorHomologacion = null;
     }
 
     private IEnumerable<EContaxProductoParaStockDto> ProductosFiltradosParaLinea(HomologacionLineaModel linea)
@@ -1070,7 +1502,7 @@
 
     private enum ModoHomologacion { Existente, CrearNuevo, Omitir }
 
-    private void CambiarModoHomologacion(HomologacionLineaModel linea, ModoHomologacion modo)
+    private async Task CambiarModoHomologacionAsync(HomologacionLineaModel linea, ModoHomologacion modo)
     {
         switch (modo)
         {
@@ -1093,15 +1525,18 @@
                 linea.CodigoProducto = 0;
                 break;
         }
+
+        await GuardarBorradorHomologacionAsync();
     }
 
-    private void SeleccionarProductoHomologacion(HomologacionLineaModel linea, object? value)
+    private async Task SeleccionarProductoHomologacionAsync(HomologacionLineaModel linea, object? value)
     {
         linea.CodigoProducto = int.TryParse(value?.ToString(), out var id) ? id : 0;
         linea.CrearNuevoProducto = false;
         linea.ModoForzadoExistente = true;
         var prod = productosInventario.FirstOrDefault(p => p.CodigoProducto == linea.CodigoProducto);
         linea.PorEnvase = prod is not null && prod.FactorConversion > 1;
+        await GuardarBorradorHomologacionAsync();
     }
 
     private async Task ConfirmarHomologacionAsync()
@@ -1138,7 +1573,9 @@
             if (creoNuevos)
                 productosInventario.Clear();
 
+            var codFacturaConfirmada = compraSeleccionadaHomologar.CodFactura;
             var numDoc = compraSeleccionadaHomologar.NumeroDocumento;
+            await EliminarBorradorHomologacionAsync(codFacturaConfirmada);
             mostrarHomologacion = false;
             compraSeleccionadaHomologar = null;
             lineasHomologacion.Clear();
@@ -1637,6 +2074,31 @@
         public string NuevaUnidadMedida { get; set; } = "UNIDAD";
         public decimal NuevoFactorConversion { get; set; } = 1m;
         public string FiltroProducto { get; set; } = string.Empty;
+        public bool PorEnvase { get; set; }
+        public decimal CantidadIngreso { get; set; }
+        public decimal CostoUnitario { get; set; }
+        public string? NumeroLote { get; set; }
+        public DateTime? FechaVencimiento { get; set; }
+    }
+
+    private sealed class HomologacionBorradorDto
+    {
+        public string? GuardadoEnIso { get; set; }
+        public int BodegaGeneralId { get; set; }
+        public List<HomologacionBorradorLineaDto> Lineas { get; set; } = new();
+    }
+
+    private sealed class HomologacionBorradorLineaDto
+    {
+        public int CodLinea { get; set; }
+        public int CodigoProducto { get; set; }
+        public int IdBodega { get; set; }
+        public bool ModoForzadoExistente { get; set; }
+        public bool CrearNuevoProducto { get; set; }
+        public string? NuevoNombreProducto { get; set; }
+        public string? NuevoCodigoPrincipal { get; set; }
+        public string? NuevaUnidadMedida { get; set; }
+        public decimal NuevoFactorConversion { get; set; }
         public bool PorEnvase { get; set; }
         public decimal CantidadIngreso { get; set; }
         public decimal CostoUnitario { get; set; }
