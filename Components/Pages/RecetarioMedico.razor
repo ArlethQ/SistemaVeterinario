@@ -211,14 +211,7 @@
                     <div class="row g-2 mb-3 p-2 bg-light rounded border">
                         <div class="col-md-5">
                             <label class="form-label small fw-semibold">Medicamento / Principio Activo / Presentación *</label>
-                            <input type="text" class="form-control form-control-sm" list="listaProductosEFact" @bind="NuevoItem.Descripcionamento" @bind:event="oninput"
-                                   placeholder="Seleccione de Productos e Insumos o escriba..." />
-                            <datalist id="listaProductosEFact">
-                                @foreach (var prod in _catalogoEFact)
-                                {
-                                    <option value="@prod.Descripcion">@prod.Codigo — $@prod.Precio?.ToString("F2")</option>
-                                }
-                            </datalist>
+                            <BuscadorMedicamentos Value="@NuevoItem.Descripcionamento" ValueChanged="@(texto => { NuevoItem.Descripcionamento = texto; NuevoItem.CodigoProd = string.Empty; })" Productos="@_catalogoEFact" Selected="@(producto => NuevoItem.CodigoProd = producto.Id.ToString())" />
                             @foreach (var aviso in _advertencias.Where(aviso => aviso.EstaVigente(HoyClinica) && aviso.AplicaA(NuevoItem)))
                             {
                                 <p class="text-danger small mb-0" role="alert">No administrar. @aviso.Motivo</p>
@@ -595,10 +588,13 @@
         if (string.IsNullOrWhiteSpace(NuevoItem.CodigoProd))
         {
             var exacto = _catalogoEFact.FirstOrDefault(p =>
-                string.Equals(p.Descripcion.Trim(), NuevoItem.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase));
+                (string.Equals(p.Descripcion.Trim(), NuevoItem.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.Codigo, NuevoItem.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase)
+                || p.Id.ToString() == NuevoItem.Descripcionamento.Trim()));
             if (exacto != null)
             {
                 NuevoItem.CodigoProd = exacto.Id.ToString();
+                NuevoItem.Descripcionamento = exacto.Descripcion;
             }
         }
         NuevoItem.IdOrden = IdOrden;

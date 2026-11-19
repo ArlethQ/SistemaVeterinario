@@ -36,6 +36,27 @@ public class InventarioService : IInventarioService
 
         try
         {
+            var productosEFact = await ObtenerCatalogoEFactCacheAsync();
+            resultados.AddRange(productosEFact
+                .Where(x => x.Estado == "A" &&
+                    !x.EsServicio &&
+                    x.Inventario &&
+                    (NormalizarTexto(x.Descripcion).Contains(terminoNorm) ||
+                     NormalizarTexto(x.Codigo).Contains(terminoNorm) ||
+                     x.Id.ToString().Contains(terminoNorm)))
+                .Take(40)
+                .Select(x => new FarmacoStockDto
+                {
+                    Number = string.IsNullOrWhiteSpace(x.Codigo) ? x.Id.ToString() : x.Codigo,
+                    DisplayName = x.Descripcion,
+                    Id = x.Id.ToString(),
+                    TaxGroupCode = x.CodigoImpuesto == "2" ? $"IVA{x.PorcentajeImpuesto}" : "IVA0",
+                    Inventory = 0,
+                    Available = 0,
+                    UnitPrice = x.Precio ?? 0,
+                    BaseUnitOfMeasureCode = string.IsNullOrWhiteSpace(x.UnidadMedida) ? "UND" : x.UnidadMedida,
+                    Location = "VETERINARIA"
+                }));
             const string sql = @"
                 SELECT
                     CAST(p.CODIGO AS VARCHAR(50)) AS Id,

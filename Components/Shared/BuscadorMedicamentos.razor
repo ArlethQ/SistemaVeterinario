@@ -1,0 +1,58 @@
+<div class="med-search" @onfocusout="Cerrar">
+    <input type="text" class="form-control form-control-sm" autocomplete="off"
+           value="@Value" @oninput="CambiarAsync" @onfocus="Abrir" @onkeydown="TeclaAsync"
+           placeholder="Buscar por nombre o código..." aria-label="Buscar medicamento por nombre o código"
+           role="combobox" aria-autocomplete="list" aria-expanded="@_abierto" aria-controls="@_listaId" />
+    @if (_abierto && !string.IsNullOrWhiteSpace(Value))
+    {
+        <div id="@_listaId" class="med-search-results" role="listbox">
+            @foreach (var producto in Coincidencias)
+            {
+                <button type="button" class="med-search-option" role="option"
+                        @onmousedown:preventDefault="true" @onclick="() => SeleccionarAsync(producto)">
+                    <span class="med-search-name">@producto.Descripcion</span>
+                    <span class="med-search-detail">Código: @(string.IsNullOrWhiteSpace(producto.Codigo) ? producto.Id.ToString() : producto.Codigo) · Interno: @producto.Id</span>
+                </button>
+            }
+            @if (!Coincidencias.Any())
+            {
+                <div class="med-search-empty">Sin coincidencias en el catálogo.</div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public IEnumerable<CatalogoOperativoDto> Productos { get; set; } = Array.Empty<CatalogoOperativoDto>();
+    [Parameter] public EventCallback<CatalogoOperativoDto> Selected { get; set; }
+    private readonly string _listaId = $"medicamentos-{Guid.NewGuid():N}";
+    private bool _abierto;
+    private IEnumerable<CatalogoOperativoDto> Coincidencias => Productos.Where(p =>
+        p.Descripcion.Contains(Value.Trim(), StringComparison.OrdinalIgnoreCase)
+        || p.Codigo.Contains(Value.Trim(), StringComparison.OrdinalIgnoreCase)
+        || p.Id.ToString().Contains(Value.Trim(), StringComparison.OrdinalIgnoreCase)).Take(15);
+
+    private void Abrir() => _abierto = true;
+    private void Cerrar() => _abierto = false;
+    private async Task CambiarAsync(ChangeEventArgs args)
+    {
+        Value = args.Value?.ToString() ?? string.Empty;
+        _abierto = true;
+        await ValueChanged.InvokeAsync(Value);
+    }
+    private async Task SeleccionarAsync(CatalogoOperativoDto producto)
+    {
+        Value = producto.Descripcion;
+        _abierto = false;
+        await ValueChanged.InvokeAsync(Value);
+        await Selected.InvokeAsync(producto);
+    }
+    private async Task TeclaAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") Cerrar();
+        if (args.Key == "Enter" && _abierto && !string.IsNullOrWhiteSpace(Value) && Coincidencias.FirstOrDefault() is { } producto)
+            await SeleccionarAsync(producto);
+    }
+}

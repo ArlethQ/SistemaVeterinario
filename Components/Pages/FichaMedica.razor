@@ -573,7 +573,7 @@
                                            @bind:event="oninput"
                                            @bind:after="OnMedicamentoInputChanged"
                                            @onfocus="OnMedicamentoFocus"
-                                           placeholder="Escriba medicamento del catálogo..." />
+                                           placeholder="Buscar por nombre o código..." />
                                     @if (!string.IsNullOrWhiteSpace(NuevoMedicamento.Descripcionamento))
                                     {
                                         <button type="button" class="btn btn-outline-secondary" title="Limpiar" @onclick="LimpiarSeleccionMedicamento">
@@ -588,7 +588,7 @@
                                         {
                                             <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center"
                                                     @onclick="() => SeleccionarMedicamento(prod)">
-                                                <span><strong>[@prod.Id]</strong> @prod.Descripcion</span>
+                                                <span><strong>[@prod.Id] @prod.Codigo</strong> @prod.Descripcion</span>
                                                 <span class="text-muted ms-2">$@(prod.Precio?.ToString("F2") ?? "0.00")</span>
                                             </button>
                                         }
@@ -1917,10 +1917,13 @@
             if (string.IsNullOrWhiteSpace(NuevoMedicamento.CodigoProd))
             {
                 var exacto = _catalogoMedicamentos.FirstOrDefault(p =>
-                    string.Equals(p.Descripcion.Trim(), NuevoMedicamento.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase));
+                    (string.Equals(p.Descripcion.Trim(), NuevoMedicamento.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(p.Codigo, NuevoMedicamento.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase)
+                     || p.Id.ToString() == NuevoMedicamento.Descripcionamento.Trim()));
                 if (exacto != null)
                 {
                     NuevoMedicamento.CodigoProd = exacto.Id.ToString();
+                    NuevoMedicamento.Descripcionamento = exacto.Descripcion;
                 }
             }
 

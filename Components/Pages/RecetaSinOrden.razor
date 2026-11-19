@@ -156,7 +156,7 @@
                             <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">4. Medicamentos *</h6></div>
                             <div class="card-body">
                                 <div class="row g-2 p-2 bg-light rounded border mb-3">
-                                    <div class="col-md-7"><label class="form-label small fw-semibold">Medicamento del catálogo u otro</label><input class="form-control form-control-sm" list="productosRecetaExterna" @bind="nuevoMedicamento.Descripcionamento" /><datalist id="productosRecetaExterna">@foreach (var prod in catalogoProductos){<option value="@prod.Descripcion">@prod.Codigo</option>}</datalist></div>
+                                    <div class="col-md-7"><label class="form-label small fw-semibold">Medicamento del catálogo u otro</label><BuscadorMedicamentos Value="@nuevoMedicamento.Descripcionamento" ValueChanged="@(texto => { nuevoMedicamento.Descripcionamento = texto; nuevoMedicamento.CodigoProd = string.Empty; })" Productos="@catalogoProductos" Selected="@(producto => nuevoMedicamento.CodigoProd = producto.Id.ToString())" /></div>
                                     <div class="col-md-2"><label class="form-label small fw-semibold">Cantidad</label><input type="number" min="0.01" step="0.01" class="form-control form-control-sm" @bind="nuevoMedicamento.Cantidad" /></div>
                                     <div class="col-md-3"><label class="form-label small fw-semibold">Fecha</label><input type="date" class="form-control form-control-sm" @bind="nuevoMedicamento.Fecha" /></div>
                                     <div class="col-md-9"><label class="form-label small fw-semibold">Dosis, frecuencia y duración</label><textarea class="form-control form-control-sm" rows="2" maxlength="250" @bind="nuevoMedicamento.Indicaciones"></textarea></div>
@@ -350,7 +350,8 @@
 
     private async Task AgregarMedicamentoAsync()
     {
-        var producto = catalogoProductos.FirstOrDefault(x => string.Equals(x.Descripcion.Trim(), nuevoMedicamento.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase));
+        var producto = catalogoProductos.FirstOrDefault(x => (string.Equals(x.Descripcion.Trim(), nuevoMedicamento.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase) || string.Equals(x.Codigo, nuevoMedicamento.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase) || x.Id.ToString() == nuevoMedicamento.Descripcionamento.Trim()));
+        if (producto is not null) nuevoMedicamento.Descripcionamento = producto.Descripcion;
         nuevoMedicamento.CodigoProd = producto?.Id.ToString() ?? "0"; nuevoMedicamento.Nhcl = cabecera.Nhcl;
         var r = await ConsultaService.AgregarMedicamentoRecetaExternaAsync(cabecera.IdFicha, nuevoMedicamento, cabecera.Serial);
         esError = !r.Ok; mensaje = r.Ok ? "Medicamento agregado." : r.Mensaje ?? "No se pudo agregar.";
