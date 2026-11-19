@@ -337,6 +337,16 @@
                     <div class="alert alert-danger" role="alert">@errorHomologacion</div>
                 }
 
+                @if (cargandoHomologacion)
+                {
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary mb-3" role="status"></div>
+                        <div class="fw-semibold text-dark">Cargando bodegas de @NombreSucursalActiva y catálogo de productos...</div>
+                        <small class="text-muted">Esto puede tardar unos segundos la primera vez mientras se sincroniza el inventario.</small>
+                    </div>
+                }
+                else
+                {
                 <div class="row g-2 align-items-end mb-3 p-3 rounded-3 border bg-light-subtle">
                     <div class="col-md-4">
                         <label class="form-label form-label-sm fw-semibold mb-1">Sucursal activa</label>
@@ -557,13 +567,14 @@
                         </div>
                     }
                 </div>
+                }
             </div>
 
             <footer class="purchase-modal-footer">
                 <span><i class="ri-information-line"></i>Los ítems homologados sumarán stock al kardex; los omitidos se marcarán como revisados sin ingreso físico.</span>
                 <div>
                     <button type="button" class="purchase-secondary-btn" @onclick="CerrarHomologacion" disabled="@guardandoHomologacion">Cancelar</button>
-                    <button type="button" class="purchase-primary-btn" @onclick="ConfirmarHomologacionAsync" disabled="@guardandoHomologacion">
+                    <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" @onclick="ConfirmarHomologacionAsync" disabled="@(cargandoHomologacion || guardandoHomologacion)">
                         <i class="ri-check-double-line"></i><span>@(guardandoHomologacion ? "Ingresando..." : "Confirmar ingreso a inventario")</span>
                     </button>
                 </div>
@@ -776,6 +787,7 @@
     private string filtroComprasPendientes = string.Empty;
     private bool cargandoComprasPendientes;
     private bool mostrarHomologacion;
+    private bool cargandoHomologacion;
     private bool guardandoHomologacion;
     private string? errorHomologacion;
     private string? mensajeHomologacion;
@@ -861,15 +873,18 @@
             var url = $"{ApiUrl}?userId={usuarioId}&search={Uri.EscapeDataString(filtro)}&estado={Uri.EscapeDataString(estadoFiltro)}" +
                 $"&fechaDesde={Uri.EscapeDataString(fechaDesde?.ToString("yyyy-MM-dd") ?? string.Empty)}&fechaHasta={Uri.EscapeDataString(fechaHasta?.ToString("yyyy-MM-dd") ?? string.Empty)}" +
                 (SucursalActivaId is > 0 ? $"&sucursalId={SucursalActivaId.Value}" : string.Empty);
-            var resultado = await Http.GetFromJsonAsync<List<EContaxRecepcionCompraListaDto>>(url) ?? new();
+
+            var tRecepciones = Http.GetFromJsonAsync<List<EContaxRecepcionCompraListaDto>>(url);
+            var tPendientes = InventarioService.ListarComprasPendientesRecepcionAsync(usuarioId, SucursalActivaId);
+            var tIngresadas = InventarioService.ListarComprasIngresadasRecepcionAsync(usuarioId, SucursalActivaId);
+            var tBodegas = CargarBodegasSucursalActivaAsync();
+
+            await Task.WhenAll(tRecepciones, tPendientes, tIngresadas, tBodegas);
+
             recepciones.Clear();
-            recepciones.AddRange(resultado);
-
-            var pendientes = await InventarioService.ListarComprasPendientesRecepcionAsync(usuarioId, SucursalActivaId);
-            comprasPendientes.AddRange(pendientes);
-
-            var ingresadas = await InventarioService.ListarComprasIngresadasRecepcionAsync(usuarioId, SucursalActivaId);
-            comprasIngresadas.AddRange(ingresadas);
+            recepciones.AddRange(await tRecepciones ?? new());
+            comprasPendientes.AddRange(await tPendientes);
+            comprasIngresadas.AddRange(await tIngresadas);
         }
         catch (Exception ex)
         {
@@ -932,18 +947,25 @@
         errorHomologacion = null;
         mensajeHomologacion = null;
         compraSeleccionadaHomologar = compra;
+        lineasHomologacion = new();
+        cargandoHomologacion = true;
         mostrarHomologacion = true;
 
         try
         {
-            await CargarBodegasSucursalActivaAsync();
-            bodegaGeneralHomologacionId = bodegasSucursal.FirstOrDefault()?.IdBodega ?? 0;
-
             if (productosInventario.Count == 0)
             {
-                var resp = await InventarioService.GetProductosParaStockAsync(usuarioId, SucursalActivaId, null);
-                productosInventario = resp.Productos;
+                var tBodegas = CargarBodegasSucursalActivaAsync();
+                var tProductos = InventarioService.GetProductosParaStockAsync(usuarioId, SucursalActivaId, null);
+                await Task.WhenAll(tBodegas, tProductos);
+                productosInventario = (await tProductos).Productos;
             }
+            else
+            {
+                await CargarBodegasSucursalActivaAsync();
+            }
+
+            bodegaGeneralHomologacionId = bodegasSucursal.FirstOrDefault()?.IdBodega ?? 0;
 
             lineasHomologacion = compra.Detalles.Select(d =>
             {
@@ -979,6 +1001,10 @@
         catch (Exception ex)
         {
             errorHomologacion = ex.GetBaseException().Message;
+        }
+        finally
+        {
+            cargandoHomologacion = false;
         }
     }
 
