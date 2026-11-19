@@ -16,6 +16,8 @@
 @inject IJSRuntime JS
 @inject ISimpleExcelExportService ExcelExportService
 @inject IEContaxInventarioReportePdfService InventarioPdfService
+@inject HosvetKardex.Web.Services.SessionStateService Session
+@implements IDisposable
 @attribute [AllowAnonymous]
 
 <PageTitle>Inventarios | E-Contax</PageTitle>
@@ -88,7 +90,7 @@
                             }
                         </select></label>
                     }
-                    <div class="inventory-stock-total"><span>Stock actual</span><strong>@kardex.StockActual.ToString("N2") <small style="font-size:0.75rem;font-weight:500;">@kardex.UnidadMedida</small></strong><small>@(kardex.FactorConversion > 1 ? $"{FormatearEnvases(kardex.StockActual, kardex.FactorConversion, kardex.UnidadMedida)} · " : "")Costo promedio @kardex.CostoPromedio.ToString("C2")</small></div>
+                    <div class="inventory-stock-total"><span>Stock actual</span><strong>@kardex.StockActual.ToString("N2") <small style="font-size:0.75rem;font-weight:500;">@kardex.UnidadMedida</small></strong><small>@(kardex.FactorConversion > 1 ? $"{FormatearPaquetes(kardex.StockActual, kardex.FactorConversion)} · " : "")Costo promedio @kardex.CostoPromedio.ToString("C2")</small></div>
                     @if (kardex.PuedeEditar)
                     {
                         <button type="button" class="inventory-icon-button" title="Configurar método" @onclick="AbrirConfiguracion"><i class="ri-settings-3-line"></i></button>
@@ -97,7 +99,7 @@
             </section>
 
             <section class="inventory-kardex-insights" aria-label="Resumen del inventario">
-                <article class="inventory-kardex-insight"><span><i class="ri-checkbox-circle-line"></i> Disponible</span><strong>@kardex.StockDisponible.ToString("N2") <small style="font-size:0.75rem;font-weight:500;">@kardex.UnidadMedida</small></strong><small>@(kardex.FactorConversion > 1 ? FormatearEnvases(kardex.StockDisponible, kardex.FactorConversion, kardex.UnidadMedida) : "Unidades libres para salida")</small></article>
+                <article class="inventory-kardex-insight"><span><i class="ri-checkbox-circle-line"></i> Disponible</span><strong>@kardex.StockDisponible.ToString("N2") <small style="font-size:0.75rem;font-weight:500;">@kardex.UnidadMedida</small></strong><small>@(kardex.FactorConversion > 1 ? FormatearPaquetes(kardex.StockDisponible, kardex.FactorConversion) : "Unidades libres para salida")</small></article>
                 <article class="inventory-kardex-insight"><span><i class="ri-lock-line"></i> Reservado</span><strong>@kardex.StockReservado.ToString("N2") <small style="font-size:0.75rem;font-weight:500;">@kardex.UnidadMedida</small></strong><small>Unidades comprometidas</small></article>
                 <article class="inventory-kardex-insight"><span><i class="ri-money-dollar-circle-line"></i> Valor estimado</span><strong>@ValorInventarioKardex.ToString("C2")</strong><small>Stock actual a costo promedio</small></article>
                 <article class="inventory-kardex-insight"><span><i class="ri-history-line"></i> Último movimiento</span><strong>@UltimoMovimientoTexto</strong><small>@kardex.Movimientos.Count movimientos registrados</small></article>
@@ -195,10 +197,10 @@
             }
             else
             {
-                    <div class="inventory-table-wrap"><table class="table inventory-table mb-0"><thead><tr><th>Producto</th><th>Sucursal</th><th>Bodega</th><th class="text-end">Stock actual</th><th class="text-end">Disponible vigente</th><th class="text-end">Mínimo</th><th class="text-end">Máximo</th><th class="text-end">Costo promedio</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody>
+                    <div class="inventory-table-wrap"><table class="table inventory-table mb-0"><thead><tr><th>Producto</th><th>Bodega</th><th class="text-end">Paquetes</th><th class="text-end">Stock actual</th><th class="text-end">Disponible vigente</th><th class="text-end">Mínimo</th><th class="text-end">Máximo</th><th class="text-end">Costo promedio</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody>
                     @foreach (var item in ItemsInventarioPagina)
                     {
-                        <tr @key="@($"{item.CodigoProducto}-{item.IdSucursal}")"><td><div class="inventory-product-cell"><strong>@item.NombreProducto</strong><span>@(item.CodigoPrincipal ?? $"#{item.CodigoProducto}") · @item.UnidadMedida@(item.FactorConversion > 1 ? $" (×{item.FactorConversion:G29})" : "")</span></div></td><td><span class="inventory-branch"><i class="ri-store-2-line"></i>@item.NombreSucursal</span></td><td><span class="inventory-branch"><i class="ri-building-2-line"></i>@(string.IsNullOrWhiteSpace(item.NombreBodega) ? "Sin asignar" : item.NombreBodega)</span></td><td class="text-end"><div class="fw-bold">@item.StockActual.ToString("N2") <small class="text-muted fw-normal">@item.UnidadMedida</small></div>@if (item.FactorConversion > 1){<div class="text-primary" style="font-size:0.78rem;">@FormatearEnvases(item.StockActual, item.FactorConversion, item.UnidadMedida)</div>}</td><td class="text-end">@item.StockDisponibleVigente.ToString("N2") <small class="text-muted">@item.UnidadMedida</small></td><td class="text-end">@item.StockMinimo.ToString("N2")</td><td class="text-end">@(item.StockMaximo > 0 ? item.StockMaximo.ToString("N2") : "-")</td><td class="text-end">@item.CostoPromedio.ToString("C2")</td><td><span class="inventory-alert-pill @ClaseAlerta(item)">@TextoAlerta(item)</span></td><td class="text-end"><div class="inventory-action-group"><button type="button" class="inventory-icon-button" title="Ver Kardex" @onclick="() => AbrirKardex(item.CodigoProducto, item.IdSucursal)"><i class="ri-file-list-3-line"></i></button>@if (dashboard.PuedeEditar){<button type="button" class="inventory-icon-button is-edit" title="Ajustar existencias" @onclick="() => AbrirAjuste(item)"><i class="ri-edit-line"></i></button>}</div></td></tr>
+                        <tr @key="@($"{item.CodigoProducto}-{item.IdSucursal}")"><td><div class="inventory-product-cell"><strong>@item.NombreProducto</strong><span>@(item.CodigoPrincipal ?? $"#{item.CodigoProducto}") · @item.UnidadMedida@(item.FactorConversion > 1 ? $" (×{item.FactorConversion:G29})" : "")</span></div></td><td><span class="inventory-branch"><i class="ri-building-2-line"></i>@(string.IsNullOrWhiteSpace(item.NombreBodega) ? "Sin asignar" : item.NombreBodega)</span></td><td class="text-end text-nowrap">@if (item.FactorConversion > 1){<span class="fw-semibold text-primary">@FormatearPaquetes(item.StockActual, item.FactorConversion)</span>}else{<span class="text-muted">-</span>}</td><td class="text-end fw-bold text-nowrap">@item.StockActual.ToString("N2") <small class="text-muted fw-normal">@item.UnidadMedida</small></td><td class="text-end text-nowrap">@item.StockDisponibleVigente.ToString("N2") <small class="text-muted">@item.UnidadMedida</small></td><td class="text-end">@item.StockMinimo.ToString("N2")</td><td class="text-end">@(item.StockMaximo > 0 ? item.StockMaximo.ToString("N2") : "-")</td><td class="text-end">@item.CostoPromedio.ToString("C2")</td><td><span class="inventory-alert-pill @ClaseAlerta(item)">@TextoAlerta(item)</span></td><td class="text-end"><div class="inventory-action-group"><button type="button" class="inventory-icon-button" title="Ver Kardex" @onclick="() => AbrirKardex(item.CodigoProducto, item.IdSucursal)"><i class="ri-file-list-3-line"></i></button>@if (dashboard.PuedeEditar){<button type="button" class="inventory-icon-button is-edit" title="Ajustar existencias" @onclick="() => AbrirAjuste(item)"><i class="ri-edit-line"></i></button>}</div></td></tr>
                     }
                 </tbody></table></div>
                 <div class="inventory-table-pagination"><span>Mostrando @PrimerItemInventario-@UltimoItemInventario de @TotalItemsInventario registros</span><div class="inventory-pagination-actions"><button type="button" class="inventory-icon-button" title="Página anterior" @onclick="() => CambiarPaginaInventario(PaginaInventarioSegura - 1)" disabled="@(PaginaInventarioSegura <= 1)"><i class="ri-arrow-left-s-line"></i></button><strong>Página @PaginaInventarioSegura de @TotalPaginasInventario</strong><button type="button" class="inventory-icon-button" title="Página siguiente" @onclick="() => CambiarPaginaInventario(PaginaInventarioSegura + 1)" disabled="@(PaginaInventarioSegura >= TotalPaginasInventario)"><i class="ri-arrow-right-s-line"></i></button></div></div>
@@ -216,7 +218,7 @@
 @if (mostrarAjuste && ajuste is not null)
 {
     <div class="inventory-modal-backdrop"></div>
-    <section class="inventory-modal" role="dialog" aria-modal="true" aria-labelledby="inventarioAjusteTitulo"><header class="inventory-modal-header"><div><span class="inventory-section-kicker">Administrar existencias</span><h3 id="inventarioAjusteTitulo">Ajustar inventario</h3><p>@itemAjuste?.NombreProducto · @itemAjuste?.NombreSucursal</p></div><button type="button" class="inventory-modal-close" @onclick="CerrarAjuste" disabled="@guardando"><i class="ri-close-line"></i></button></header><div class="inventory-modal-body"><div class="inventory-current-stock"><span>Stock actual</span><strong>@itemAjuste?.StockActual.ToString("N2") @itemAjuste?.UnidadMedida</strong><small>@(itemAjuste is { FactorConversion: > 1 } ? $"{FormatearEnvases(itemAjuste.StockActual, itemAjuste.FactorConversion, itemAjuste.UnidadMedida)} · " : "")Los límites generan alertas automáticas.</small></div><div class="inventory-form-grid"><label class="inventory-modal-field"><span>Bodega</span><select @bind="ajuste.IdBodega" disabled="@guardando"><option value="">Sin asignar</option>@foreach (var bod in dashboard.Bodegas.Where(b => b.IdSucursal == itemAjuste?.IdSucursal)){<option value="@bod.IdBodega">@bod.Nombre@(string.IsNullOrWhiteSpace(bod.Codigo) ? "" : $" ({bod.Codigo})")</option>}</select></label><label class="inventory-modal-field"><span>Movimiento</span><select @bind="ajuste.TipoMovimiento" disabled="@guardando"><option value="ENTRADA">Entrada</option><option value="SALIDA">Salida</option><option value="AJUSTE">Fijar stock</option><option value="BAJA_VENCIDO">Dar de baja vencido</option></select></label><label class="inventory-modal-field"><span>@(ajuste.TipoMovimiento == "AJUSTE" ? "Stock objetivo" : "Cantidad")</span><input type="number" min="0" step="0.01" @bind="ajuste.Cantidad" disabled="@guardando" /></label><label class="inventory-modal-field"><span>Costo unitario</span><input type="number" min="0" step="0.01" @bind="ajuste.CostoUnitario" disabled="@guardando" /></label><label class="inventory-modal-field"><span>Stock mínimo</span><input type="number" min="0" step="0.01" @bind="ajuste.StockMinimo" disabled="@guardando" /></label><label class="inventory-modal-field"><span>Stock máximo</span><input type="number" min="0" step="0.01" @bind="ajuste.StockMaximo" disabled="@guardando" /></label>@if (ajuste.TipoMovimiento is "ENTRADA" or "AJUSTE") { <label class="inventory-modal-field"><span>Número de lote</span><input @bind="ajuste.NumeroLote" maxlength="80" disabled="@guardando" /></label><label class="inventory-modal-field"><span>Fecha de vencimiento</span><input type="date" min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" @bind="ajuste.FechaVencimiento" disabled="@guardando" /></label> }<label class="inventory-modal-field is-wide"><span>Observación</span><textarea rows="3" @bind="ajuste.Observacion" disabled="@guardando"></textarea></label></div>@if (!string.IsNullOrWhiteSpace(error)){<div class="inventory-modal-error">@error</div>}</div><footer class="inventory-modal-footer"><button type="button" class="inventory-secondary-btn" @onclick="CerrarAjuste" disabled="@guardando">Cancelar</button><SaveButton Type="button" class="inventory-primary-btn" OnClick="GuardarAjusteAsync" Disabled="@guardando">@(guardando ? "Guardando..." : "Guardar ajuste")</SaveButton></footer></section>
+    <section class="inventory-modal" role="dialog" aria-modal="true" aria-labelledby="inventarioAjusteTitulo"><header class="inventory-modal-header"><div><span class="inventory-section-kicker">Administrar existencias</span><h3 id="inventarioAjusteTitulo">Ajustar inventario</h3><p>@itemAjuste?.NombreProducto · @itemAjuste?.NombreSucursal</p></div><button type="button" class="inventory-modal-close" @onclick="CerrarAjuste" disabled="@guardando"><i class="ri-close-line"></i></button></header><div class="inventory-modal-body"><div class="inventory-current-stock"><span>Stock actual</span><strong>@itemAjuste?.StockActual.ToString("N2") @itemAjuste?.UnidadMedida</strong><small>@(itemAjuste is { FactorConversion: > 1 } ? $"{FormatearPaquetes(itemAjuste.StockActual, itemAjuste.FactorConversion)} · " : "")Los límites generan alertas automáticas.</small></div><div class="inventory-form-grid"><label class="inventory-modal-field"><span>Bodega</span><select @bind="ajuste.IdBodega" disabled="@guardando"><option value="">Sin asignar</option>@foreach (var bod in dashboard.Bodegas.Where(b => b.IdSucursal == itemAjuste?.IdSucursal)){<option value="@bod.IdBodega">@bod.Nombre@(string.IsNullOrWhiteSpace(bod.Codigo) ? "" : $" ({bod.Codigo})")</option>}</select></label><label class="inventory-modal-field"><span>Movimiento</span><select @bind="ajuste.TipoMovimiento" disabled="@guardando"><option value="ENTRADA">Entrada</option><option value="SALIDA">Salida</option><option value="AJUSTE">Fijar stock</option><option value="BAJA_VENCIDO">Dar de baja vencido</option></select></label><label class="inventory-modal-field"><span>@(ajuste.TipoMovimiento == "AJUSTE" ? "Stock objetivo" : "Cantidad")</span><input type="number" min="0" step="0.01" @bind="ajuste.Cantidad" disabled="@guardando" /></label><label class="inventory-modal-field"><span>Costo unitario</span><input type="number" min="0" step="0.01" @bind="ajuste.CostoUnitario" disabled="@guardando" /></label><label class="inventory-modal-field"><span>Stock mínimo</span><input type="number" min="0" step="0.01" @bind="ajuste.StockMinimo" disabled="@guardando" /></label><label class="inventory-modal-field"><span>Stock máximo</span><input type="number" min="0" step="0.01" @bind="ajuste.StockMaximo" disabled="@guardando" /></label>@if (ajuste.TipoMovimiento is "ENTRADA" or "AJUSTE") { <label class="inventory-modal-field"><span>Número de lote</span><input @bind="ajuste.NumeroLote" maxlength="80" disabled="@guardando" /></label><label class="inventory-modal-field"><span>Fecha de vencimiento</span><input type="date" min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" @bind="ajuste.FechaVencimiento" disabled="@guardando" /></label> }<label class="inventory-modal-field is-wide"><span>Observación</span><textarea rows="3" @bind="ajuste.Observacion" disabled="@guardando"></textarea></label></div>@if (!string.IsNullOrWhiteSpace(error)){<div class="inventory-modal-error">@error</div>}</div><footer class="inventory-modal-footer"><button type="button" class="inventory-secondary-btn" @onclick="CerrarAjuste" disabled="@guardando">Cancelar</button><SaveButton Type="button" class="inventory-primary-btn" OnClick="GuardarAjusteAsync" Disabled="@guardando">@(guardando ? "Guardando..." : "Guardar ajuste")</SaveButton></footer></section>
 }
 
 @if (movimientoSeleccionado is not null)
@@ -250,6 +252,7 @@
     private int registrosInventarioPagina = 10;
     private int? SucursalSeleccionada { get; set; }
     private int usuarioId;
+    private int _ultimaLocalidadCargada;
     private bool cargando = true;
     private bool guardando;
     private bool mostrarAjuste;
@@ -281,13 +284,47 @@
     private decimal ValorInventarioKardex => kardex is null ? 0 : kardex.StockActual * kardex.CostoPromedio;
     private string UltimoMovimientoTexto => kardex?.Movimientos.FirstOrDefault()?.FechaMovimiento.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "Sin movimientos";
 
+    protected override void OnInitialized()
+    {
+        Session.OnChange += OnSessionChanged;
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(RecargarPorCambioSesionAsync);
+
+    private async Task RecargarPorCambioSesionAsync()
+    {
+        var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        var nuevoUsuarioId = int.TryParse(user.FindFirst("IdUsuario")?.Value ?? user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+        if (nuevoUsuarioId <= 0) return;
+
+        var nuevaLocalidad = Session.Localidad > 0 ? Session.Localidad : 1;
+        if (nuevoUsuarioId == usuarioId && nuevaLocalidad == _ultimaLocalidadCargada)
+            return;
+
+        usuarioId = nuevoUsuarioId;
+        _ultimaLocalidadCargada = nuevaLocalidad;
+        SucursalSeleccionada = SucursalIdQuery > 0 ? SucursalIdQuery : nuevaLocalidad;
+
+        if (EsKardexRuta && ProductoId is > 0) await CargarKardexAsync(ProductoId.Value);
+        else if (!EsKardexRuta) await CargarDashboardAsync();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Session.OnChange -= OnSessionChanged;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
         var user = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
         usuarioId = int.TryParse(user.FindFirst("IdUsuario")?.Value ?? user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
         if (usuarioId <= 0) { error = "Sesión no válida."; cargando = false; return; }
-        SucursalSeleccionada = SucursalIdQuery > 0 ? SucursalIdQuery : null;
+        _ultimaLocalidadCargada = Session.Localidad > 0 ? Session.Localidad : 1;
+        SucursalSeleccionada = SucursalIdQuery > 0
+            ? SucursalIdQuery
+            : (Session.Localidad > 0 ? Session.Localidad : null);
         rutaCargada = ObtenerClaveRuta();
         if (EsKardexRuta && ProductoId is > 0) await CargarKardexAsync(ProductoId.Value);
         else if (EsKardexRuta) { error = "Seleccione un producto desde el catálogo para consultar su Kardex."; cargando = false; }
@@ -305,7 +342,9 @@
             return;
 
         rutaCargada = nuevaRuta;
-        SucursalSeleccionada = SucursalIdQuery > 0 ? SucursalIdQuery : null;
+        SucursalSeleccionada = SucursalIdQuery > 0
+            ? SucursalIdQuery
+            : (Session.Localidad > 0 ? Session.Localidad : null);
         if (EsKardexRuta && ProductoId is > 0)
             await CargarKardexAsync(ProductoId.Value);
         else if (!EsKardexRuta)
@@ -414,10 +453,10 @@
     {
         var items = ItemsInventarioOrdenados;
         if (items.Count == 0) return;
-        var csv = new StringBuilder("Producto;Código;Sucursal;Bodega;Stock actual;Unidad;Equivalente envases;Disponible;Mínimo;Máximo;Costo promedio;Alerta");
+        var csv = new StringBuilder("Producto;Código;Sucursal;Bodega;Stock actual;Unidad;Paquetes;Disponible;Mínimo;Máximo;Costo promedio;Alerta");
         foreach (var item in items)
         {
-            var equiv = item.FactorConversion > 1 ? FormatearEnvases(item.StockActual, item.FactorConversion, item.UnidadMedida) : string.Empty;
+            var equiv = item.FactorConversion > 1 ? FormatearPaquetes(item.StockActual, item.FactorConversion) : string.Empty;
             csv.AppendLine().Append(string.Join(';',
                 Csv(item.NombreProducto), Csv(item.CodigoPrincipal ?? $"#{item.CodigoProducto}"), Csv(item.NombreSucursal),
                 Csv(string.IsNullOrWhiteSpace(item.NombreBodega) ? "Sin asignar" : item.NombreBodega),
@@ -532,13 +571,12 @@
     private void AbrirConfiguracion() { metodoBorrador = MetodoVisible; error = null; mostrarConfiguracion = true; }
     private void CerrarConfiguracion() { if (!guardando) mostrarConfiguracion = false; }
 
-    private static string FormatearEnvases(decimal stockBase, decimal factor, string unidad)
+    private static string FormatearPaquetes(decimal stockBase, decimal factor)
     {
         if (factor <= 1m) return string.Empty;
-        var envases = Math.Round(stockBase / factor, 2, MidpointRounding.AwayFromZero);
-        var envasesTxt = envases == Math.Truncate(envases) ? envases.ToString("N0") : envases.ToString("N2");
-        var factorTxt = factor == Math.Truncate(factor) ? factor.ToString("N0") : factor.ToString("G29");
-        return $"{envasesTxt} unid. (×{factorTxt} {unidad})";
+        var paquetes = Math.Round(stockBase / factor, 2, MidpointRounding.AwayFromZero);
+        var paquetesTxt = paquetes == Math.Truncate(paquetes) ? paquetes.ToString("N0") : paquetes.ToString("N2");
+        return paquetes == 1m ? $"{paquetesTxt} paquete" : $"{paquetesTxt} paquetes";
     }
 
     private void AbrirAjuste(EContaxInventarioItemDto item)
@@ -582,7 +620,8 @@
 
     private async Task LimpiarFiltros()
     {
-        filtro = string.Empty; filtroAlerta = string.Empty; ordenInventario = "producto"; paginaInventario = 1; registrosInventarioPagina = 10; SucursalSeleccionada = dashboard.PuedeConsultarTodasSucursales ? 0 : null;
+        filtro = string.Empty; filtroAlerta = string.Empty; ordenInventario = "producto"; paginaInventario = 1; registrosInventarioPagina = 10;
+        SucursalSeleccionada = Session.Localidad > 0 ? Session.Localidad : (dashboard.PuedeConsultarTodasSucursales ? 0 : null);
         await CargarDashboardAsync();
     }
 }
