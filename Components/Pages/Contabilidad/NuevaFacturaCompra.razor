@@ -895,6 +895,7 @@
             return;
 
         guardando = true;
+        var formularioGuardado = model;
         var razonSocial = model.Proveedor;
         var personaNatural = model.EsPersonaNatural;
         try
@@ -905,14 +906,19 @@
             var id = await FacturaCompraService.GuardarAsync(currentUserId, model, continuarConProveedor);
             await AlertService.ShowSuccessAsync($"Factura de compra guardada. Código interno: {id}");
             Navigation.NavigateTo(EContaxRoutes.CuentasPorPagar);
+            await FacturaCompraService.GuardarAsync(currentUserId, model, continuarConProveedor);
+            LimpiarFormulario();
+            error = null;
+            await AlertService.ShowSuccessAsync("Factura de compra guardada correctamente.");
+
         }
         catch (ProveedorCompraNoRegistradoException) { mostrarOpcionesProveedor = true; }
         catch (InvalidOperationException ex) { await AlertService.ShowErrorAsync(ex.Message); }
         catch (Exception ex) { error = $"No se pudo guardar la factura: {ex.Message}"; }
         finally
         {
-            model.Proveedor = razonSocial;
-            model.EsPersonaNatural = personaNatural;
+            formularioGuardado.Proveedor = razonSocial;
+            formularioGuardado.EsPersonaNatural = personaNatural;
             guardando = false;
         }
     }

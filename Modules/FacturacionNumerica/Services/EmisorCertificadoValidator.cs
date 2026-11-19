@@ -27,10 +27,7 @@ public sealed class EmisorCertificadoValidator
 
         var rutaRelativa = NormalizarRutaCertificado(emisor.PathCertificado);
         var clave = _certificadoProtector.DesprotegerClave(emisor.ClaveCertificado);
-        if (string.IsNullOrWhiteSpace(clave) && !string.IsNullOrWhiteSpace(emisor.ClaveCertificado))
-            clave = emisor.ClaveCertificado.StartsWith("CfDJ", StringComparison.Ordinal)
-                ? null
-                : emisor.ClaveCertificado;
+
 
         if (string.IsNullOrWhiteSpace(rutaRelativa) && string.IsNullOrWhiteSpace(clave))
         {
@@ -44,7 +41,7 @@ public sealed class EmisorCertificadoValidator
 
         if (string.IsNullOrWhiteSpace(clave))
         {
-            return CertificadoEmisorValidationResult.Fail("Debes ingresar la clave de la firma electronica.");
+            return CertificadoEmisorValidationResult.Fail("No se pudo recuperar la clave de la firma. Vuelve a ingresarla en la configuración de firma electrónica de este servidor.");
         }
 
         return CertificadoEmisorValidationResult.Ok(null, null);
@@ -64,10 +61,7 @@ public sealed class EmisorCertificadoValidator
             return CertificadoEmisorValidationResult.Fail("No se encontro el archivo .p12 configurado para el emisor.");
 
         var clave = _certificadoProtector.DesprotegerClave(emisor.ClaveCertificado);
-        if (string.IsNullOrWhiteSpace(clave) && !string.IsNullOrWhiteSpace(emisor.ClaveCertificado))
-            clave = emisor.ClaveCertificado.StartsWith("CfDJ", StringComparison.Ordinal)
-                ? null
-                : emisor.ClaveCertificado;
+
 
         if (string.IsNullOrWhiteSpace(clave))
             return CertificadoEmisorValidationResult.Fail("No se pudo obtener la clave de la firma electronica.");
@@ -179,7 +173,8 @@ public sealed class EmisorCertificadoValidator
         string clave,
         CancellationToken cancellationToken = default)
     {
-        var rutaParaApi = _firmaPathResolver.ResolverRutaParaApi(rutaFirma);
+        var rutaParaApi = _firmaPathResolver.ResolverRutaExistente(rutaFirma)
+            ?? _firmaPathResolver.ResolverRutaParaApi(rutaFirma);
         if (string.IsNullOrWhiteSpace(rutaParaApi))
             return FirmaInfoApiResult.Error("No se encontro el archivo .p12 para validar.");
 

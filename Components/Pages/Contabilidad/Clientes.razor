@@ -55,14 +55,14 @@
             <span class="hero-eyebrow">Catálogo comercial</span>
             <h2>Gestión de @(EsModoProveedores ? "proveedores" : "clientes contables")</h2>
             <p>
-                Centraliza la cartera comercial y mantén el registro de clientes alineado
+                Centraliza la cartera comercial y mantén el registro de @(EsModoProveedores ? "proveedores" : "clientes") alineado
                 con el mismo patrón visual y operativo de Productos.
             </p>
         </div>
 
         <div class="hero-summary">
             <article class="summary-card summary-card-primary">
-                <span class="summary-label">Clientes activos</span>
+                <span class="summary-label">@TextoEntidad("Clientes activos")</span>
                 <strong>@totalActivos</strong>
                 <small>Registros disponibles para facturación y operación diaria.</small>
             </article>
@@ -76,7 +76,7 @@
             <article class="summary-card">
                 <span class="summary-label">Con correo</span>
                 <strong>@totalConCorreo</strong>
-                <small>Clientes listos para notificaciones y documentos electrónicos.</small>
+                <small>@TextoEntidad("Clientes listos para notificaciones y documentos electrónicos.")</small>
             </article>
         </div>
     </section>
@@ -229,7 +229,7 @@
                     <div class="state-icon">
                         <span class="spinner-border text-primary" role="status"></span>
                     </div>
-                    <h3>Cargando clientes</h3>
+                    <h3>@(EsModoProveedores ? "Cargando proveedores" : "Cargando clientes")</h3>
                     <p>Preparando la cartera comercial y sus datos de identificación.</p>
                 </div>
             }
@@ -239,8 +239,8 @@
                     <div class="state-icon">
                         <i class="bi bi-people"></i>
                     </div>
-                    <h3>No hay clientes para mostrar</h3>
-                    <p>Ajusta la búsqueda, cambia el tipo o registra un nuevo cliente.</p>
+                    <h3>@(EsModoProveedores ? "No hay proveedores para mostrar" : "No hay clientes para mostrar")</h3>
+                    <p>@(EsModoProveedores ? "Ajusta la búsqueda o registra un nuevo proveedor." : "Ajusta la búsqueda, cambia el tipo o registra un nuevo cliente.")</p>
                 </div>
             }
             else
@@ -249,7 +249,7 @@
                     <table class="table entity-table entity-table-clients responsive-cards-table mb-0">
                         <thead>
                             <tr>
-                                <th>Cliente</th>
+                                <th>@(EsModoProveedores ? "Proveedor" : "Cliente")</th>
                                 <th class="list-extra-col">Contacto</th>
                                 <th>Identificación</th>
                                 <th class="text-end">Facturas emitidas</th>
@@ -262,7 +262,7 @@
                             @foreach (var c in clientesPaginados)
                             {
                                 <tr>
-                                    <td data-label="Cliente">
+                                    <td data-label="@(EsModoProveedores ? "Proveedor" : "Cliente")">
                                         <div class="cell-main cell-main-stacked">
                                             <strong>@GetNombreCompletoCliente(c)</strong>
                                             @if (!string.IsNullOrWhiteSpace(ObtenerNombreSecundarioCliente(c)))
@@ -363,7 +363,7 @@
             {
                 <div class="confirm-card">
                     <div class="confirm-copy">
-                        <strong>Eliminar el cliente seleccionado</strong>
+                        <strong>Eliminar el @(EsModoProveedores ? "proveedor" : "cliente") seleccionado</strong>
                         <p>@GetNombreCompletoCliente(clienteAEliminar)</p>
                     </div>
 
@@ -377,7 +377,7 @@
             @if (clienteEnVista is not null)
             {
                 <div class="detail-modal-backdrop" data-no-backdrop-dismiss="true" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onpointerdown:stopPropagation="true"></div>
-                <div class="detail-modal" data-no-backdrop-dismiss="true" role="dialog" aria-modal="true" aria-labelledby="clienteDetalleTitulo" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onpointerdown:stopPropagation="true">
+                <div class="detail-modal" data-no-backdrop-dismiss="true" role="dialog" aria-modal="true" aria-labelledby="clienteDetalleTitulo" data-supplier-detail="@EsModoProveedores" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onpointerdown:stopPropagation="true">
                     <div class="detail-modal-content" @onclick:stopPropagation="true">
                         <div class="detail-modal-header">
                             <div>
@@ -501,7 +501,7 @@
                 <div>
 
                     <h3>@(editando ? "Editar" : "Registrar") @(EsModoProveedores ? "proveedor" : "cliente")</h3>
-                    <p>Complete los datos comerciales, de contacto y ubicación del cliente.</p>
+                    <p>Complete los datos comerciales, de contacto y ubicación del @(EsModoProveedores ? "proveedor" : "cliente").</p>
                 </div>
 
             </div>
@@ -521,7 +521,7 @@
 
                             <div class="row mb-2">
                                 <div class="col">
-                                    <label class="form-label small fw-bold">Tipo de Cliente *</label>
+                                    <label class="form-label small fw-bold">Tipo de persona *</label>
                                     <InputSelect class="form-select form-select-sm"
                                                  @bind-Value="model.TipoCliente"
                                                  @bind-Value:after="OnTipoClienteChanged">
@@ -555,6 +555,7 @@
                                             @bind:get="model.Numeroidentificacion"
                                             @bind:set="CambiarIdentificacion"
                                             data-consultar-identificacion
+                                            @oninput="ConsultarRucAlEscribirAsync"
                                             @onconsultaridentificacion="ConsultarIdentificacionAsync"
                                             aria-label="Número de identificación. Presiona Enter para consultar." />
                                      <ValidationMessage For="@(() => model.Numeroidentificacion)" class="text-danger small" />
@@ -576,7 +577,7 @@
                             {
                                 <div class="status-banner status-banner-info mb-2">
                                     <i class="bi bi-info-circle"></i>
-                                    <span>Selecciona primero el tipo de cliente</span>
+                                    <span>Selecciona primero el tipo de persona</span>
                                 </div>
                             }
 
@@ -931,7 +932,7 @@
 
                                             <div class="row mb-2">
                                                 <div class="col">
-                                                    <label class="form-label small fw-bold">Tipo de Cliente *</label>
+                                                    <label class="form-label small fw-bold">Tipo de persona *</label>
                                                     <InputSelect class="form-select form-select-sm"
                                                                  @bind-Value="model.TipoCliente"
                                                                  @bind-Value:after="OnTipoClienteChanged">
@@ -965,6 +966,7 @@
                                                             @bind:get="model.Numeroidentificacion"
                                                             @bind:set="CambiarIdentificacion"
                                                             data-consultar-identificacion
+                                            @oninput="ConsultarRucAlEscribirAsync"
                                                             @onconsultaridentificacion="ConsultarIdentificacionAsync"
                                                             aria-label="Número de identificación. Presiona Enter para consultar." />
                                                      <ValidationMessage For="@(() => model.Numeroidentificacion)" class="text-danger small" />
@@ -986,7 +988,7 @@
                                             {
                                                 <div class="status-banner status-banner-info mb-2">
                                                     <i class="bi bi-info-circle"></i>
-                                                    <span>Selecciona primero el tipo de cliente</span>
+                                                    <span>Selecciona primero el tipo de persona</span>
                                                 </div>
                                             }
 
@@ -1374,7 +1376,7 @@
             <div class="detail-modal-header" style="background: linear-gradient(135deg, #00a896, #007c73); padding: 1.15rem 1.25rem; color: #ffffff;">
                 <div>
                     <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.85;">Carga masiva</span>
-                    <h3 id="importacionClientesTitulo" style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #ffffff;">Importar clientes desde Excel</h3>
+                    <h3 id="importacionClientesTitulo" style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #ffffff;">@TextoEntidad("Importar clientes desde Excel")</h3>
                     <p style="margin: 5px 0 0 0; font-size: 0.82rem; opacity: 0.9;">Descarga la plantilla, llénala en Excel y vuelve a cargarla.</p>
                 </div>
                 <button type="button" style="background: rgba(255, 255, 255, 0.16); border: 0; color: #ffffff; width: 36px; height: 36px; border-radius: 12px; font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center;" @onclick="CerrarImportacion" aria-label="Cerrar modal">
@@ -1398,7 +1400,7 @@
                     <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
                         <div style="flex: 1;">
                             <strong style="font-size: 0.88rem; color: #0f172a; display: block; margin-bottom: 0.25rem;">2. Carga tu archivo</strong>
-                            <p style="margin: 0; font-size: 0.76rem; color: #64748b;">Selecciona el archivo con tus clientes para importar.</p>
+                            <p style="margin: 0; font-size: 0.76rem; color: #64748b;">@TextoEntidad("Selecciona el archivo con tus clientes para importar.")</p>
                         </div>
                         <label class="import-file-button" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 10px; background: #e9faf7; color: #007c73; font-size: 0.82rem; font-weight: 600; border: 1px solid #bce8e3;">
                             <i class="bi bi-upload"></i>
@@ -1416,7 +1418,7 @@
                         </div>
                         <div>
                             <strong style="color: #b45309; font-size: 1.08rem; font-weight: 800; display: block;">Procesando archivo...</strong>
-                            <span style="color: #d97706; font-size: 0.81rem;">Estamos importando y validando tus clientes. Por favor, no cierres esta ventana.</span>
+                            <span style="color: #d97706; font-size: 0.81rem;">@TextoEntidad("Estamos importando y validando tus clientes. Por favor, no cierres esta ventana.")</span>
                         </div>
                     </div>
                 }
@@ -1477,6 +1479,10 @@
 </div>
 
 @code {
+    private string TextoEntidad(string texto) => EsModoProveedores
+        ? texto.Replace("Clientes", "Proveedores").Replace("clientes", "proveedores")
+            .Replace("Cliente", "Proveedor").Replace("cliente", "proveedor")
+        : texto;
 
     [Parameter] public Simetric.Models.Cliente? ClientePrefill { get; set; }
     [Parameter] public bool? PersonaNaturalPrefill { get; set; }
@@ -1604,7 +1610,7 @@
         [RegularExpression(@"^(SI|NO)$", ErrorMessage = "Solo se permite SI o NO")]
         public string? Oblgconta { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Debe seleccionar el tipo de cliente")]
+        [Range(1, int.MaxValue, ErrorMessage = "Debe seleccionar el tipo de persona")]
         public int TipoCliente { get; set; }
 
         [JsonIgnore]
@@ -2591,7 +2597,7 @@
             ? nombreCompleto
             : !string.IsNullOrWhiteSpace(razonSocial)
                 ? razonSocial
-                : $"Cliente #{cliente.Codcliente}";
+                : TextoEntidad($"Cliente #{cliente.Codcliente}");
     }
 
     private string ObtenerNombreSecundarioCliente(ClienteDto cliente)
@@ -2613,7 +2619,7 @@
 
     private string GetTipoClienteDescripcion(int tipoCliente)
     {
-        if (tipoCliente <= 0) return "Sin tipo de cliente";
+        if (tipoCliente <= 0) return TextoEntidad("Sin tipo de cliente");
         var tipo = tiposCliente.FirstOrDefault(t => t.TclCodigo == tipoCliente);
         return tipo is null ? $"Tipo #{tipoCliente}" : GetTipoClienteEtiqueta(tipo);
     }
@@ -2908,10 +2914,10 @@
 
                 if (rows.Count < 2)
                 {
-                    mensajeImportacion = "El archivo no contiene clientes para importar.";
+                    mensajeImportacion = TextoEntidad("El archivo no contiene clientes para importar.");
                     erroresImportacion = 1;
                     importandoClientes = false;
-                    await JS.ShowAlertAsync("Archivo vacío", "El archivo no contiene clientes para importar.", "warning");
+                    await JS.ShowAlertAsync("Archivo vacío", TextoEntidad("El archivo no contiene clientes para importar."), "warning");
                     return;
                 }
 
@@ -2956,7 +2962,7 @@
                         string.IsNullOrWhiteSpace(correo) ||
                         string.IsNullOrWhiteSpace(oblgConta))
                     {
-                        errores.Add($"Fila {fila}: Faltan campos obligatorios (Tipo de cliente, Tipo de identificación, Identificación, Correo, o Llevar contabilidad) en las columnas del registro.");
+                        errores.Add($"Fila {fila}: Faltan campos obligatorios (Tipo de persona, Tipo de identificación, Identificación, Correo, o Llevar contabilidad) en las columnas del registro.");
                         continue;
                     }
 
@@ -2974,7 +2980,7 @@
 
                     if (tipoClienteId <= 0)
                     {
-                        errores.Add($"Fila {fila}: Tipo de cliente '{tipoClienteText}' no válido (debe ser Natural o Juridica).");
+                        errores.Add($"Fila {fila}: Tipo de persona '{tipoClienteText}' no válido (debe ser Natural o Juridica).");
                         continue;
                     }
 
@@ -3089,10 +3095,10 @@
 
                 if (lineas.Length < 2)
                 {
-                    mensajeImportacion = "El archivo no contiene clientes para importar.";
+                    mensajeImportacion = TextoEntidad("El archivo no contiene clientes para importar.");
                     erroresImportacion = 1;
                     importandoClientes = false;
-                    await JS.ShowAlertAsync("Archivo vacío", "El archivo no contiene clientes para importar.", "warning");
+                    await JS.ShowAlertAsync("Archivo vacío", TextoEntidad("El archivo no contiene clientes para importar."), "warning");
                     return;
                 }
 
@@ -3142,7 +3148,7 @@
                         string.IsNullOrWhiteSpace(correo) ||
                         string.IsNullOrWhiteSpace(oblgConta))
                     {
-                        errores.Add($"Fila {fila}: Faltan campos obligatorios (Tipo de cliente, Tipo de identificación, Identificación, Correo, o Llevar contabilidad) en las columnas del registro.");
+                        errores.Add($"Fila {fila}: Faltan campos obligatorios (Tipo de persona, Tipo de identificación, Identificación, Correo, o Llevar contabilidad) en las columnas del registro.");
                         continue;
                     }
 
@@ -3160,7 +3166,7 @@
 
                     if (tipoClienteId <= 0)
                     {
-                        errores.Add($"Fila {fila}: Tipo de cliente '{tipoClienteText}' no válido (debe ser Natural o Juridica).");
+                        errores.Add($"Fila {fila}: Tipo de persona '{tipoClienteText}' no válido (debe ser Natural o Juridica).");
                         continue;
                     }
 
@@ -3290,8 +3296,8 @@
             erroresImportacion = errores.Count;
             listaErroresImportacion = errores;
             mensajeImportacion = errores.Count == 0
-                ? $"Importación completada: {creados} clientes creados."
-                : $"Se crearon {creados} clientes. {errores.Count} filas presentaron errores.";
+                ? TextoEntidad($"Importación completada: {creados} clientes creados.")
+                : TextoEntidad($"Se crearon {creados} clientes. {errores.Count} filas presentaron errores.");
 
             if (errores.Count == 0)
             {
@@ -3620,7 +3626,7 @@
             return;
         }
 
-        mensaje = "Cargando cliente...";
+        mensaje = (EsModoProveedores ? "Cargando proveedor..." : "Cargando cliente...");
         debugError = null;
         clienteEnVista = null;
 
@@ -3635,7 +3641,7 @@
 
             if (!resp.IsSuccessStatusCode)
             {
-                mensaje = $"No se pudo cargar el cliente (HTTP {(int)resp.StatusCode}).";
+                mensaje = TextoEntidad($"No se pudo cargar el cliente (HTTP {(int)resp.StatusCode}).");
                 debugError = body;
                 return;
             }
@@ -3646,7 +3652,7 @@
 
             if (item is null)
             {
-                mensaje = "Respuesta vacía al cargar cliente.";
+                mensaje = TextoEntidad("Respuesta vacía al cargar cliente.");
                 debugError = body;
                 return;
             }
@@ -3700,14 +3706,14 @@
             mensajeConsultaCedula = null;
             consultaCedulaEsError = false;
             editando = true;
-            mensaje = "Cliente cargado para edición.";
+            mensaje = (EsModoProveedores ? "Proveedor cargado para edición." : "Cliente cargado para edición.");
             mostrarModalFormularioCliente = true;
             StateHasChanged();
         }
         catch (Exception ex)
         {
             debugError = $"{ex.Message} | INNER: {ex.InnerException?.Message}";
-            mensaje = "Error al cargar cliente.";
+            mensaje = (EsModoProveedores ? "Error al cargar proveedor." : "Error al cargar cliente.");
         }
     }
 
@@ -3778,7 +3784,7 @@
 
         if (isDemoMode)
         {
-            SetMensajeFormularioOListado("Modo demo: guardar clientes esta bloqueado.", esError: true);
+            SetMensajeFormularioOListado(TextoEntidad("Modo demo: guardar clientes esta bloqueado."), esError: true);
             return;
         }
 
@@ -3858,11 +3864,11 @@
 
             mostrarModalFormularioCliente = false;
             Nuevo();
-            mensaje = estabaEditando ? "Cliente actualizado correctamente." : "Cliente creado correctamente.";
+            mensaje = estabaEditando ? (EsModoProveedores ? "Proveedor actualizado correctamente." : "Cliente actualizado correctamente.") : (EsModoProveedores ? "Proveedor creado correctamente." : "Cliente creado correctamente.");
         }
         catch (Exception ex)
         {
-            SetMensajeFormularioOListado("Error al guardar cliente.", $"{ex.Message} | INNER: {ex.InnerException?.Message}", esError: true);
+            SetMensajeFormularioOListado((EsModoProveedores ? "Error al guardar proveedor." : "Error al guardar cliente."), $"{ex.Message} | INNER: {ex.InnerException?.Message}", esError: true);
         }
         finally
         {
@@ -4000,6 +4006,20 @@
         consultaCedulaEsError = false;
     }
 
+    private async Task ConsultarRucAlEscribirAsync(ChangeEventArgs evento)
+    {
+        if (!EsModoProveedores)
+            return;
+
+        var identificacion = evento.Value?.ToString()?.Trim() ?? string.Empty;
+        CambiarIdentificacion(identificacion);
+        if (identificacion.Length == 13 && identificacion.All(char.IsAsciiDigit) &&
+            identificacion.EndsWith("001", StringComparison.Ordinal) && !EsIdentificacionAlfanumericaSeleccionada)
+        {
+            await ConsultarIdentificacionAsync(new ConsultaIdentificacionEventArgs { Valor = identificacion });
+        }
+    }
+
     private async Task ConsultarIdentificacionAsync(ConsultaIdentificacionEventArgs evento)
     {
         if (consultandoCedula || guardandoCliente)
@@ -4028,7 +4048,7 @@
             : EsIdentificacionCedula(x));
         if (tipoDocumento is null)
         {
-            mensajeConsultaCedula = "Selecciona un tipo de cliente compatible con el documento ingresado.";
+            mensajeConsultaCedula = "Selecciona un tipo de persona compatible con el documento ingresado.";
             consultaCedulaEsError = true;
             return;
         }
@@ -4262,7 +4282,7 @@
 
         if (isDemoMode)
         {
-            mensaje = "Modo demo: eliminar clientes está bloqueado.";
+            mensaje = TextoEntidad("Modo demo: eliminar clientes está bloqueado.");
             debugError = null;
             CancelarEliminar();
             return;
@@ -4280,7 +4300,7 @@
                 return;
             }
 
-            mensaje = "Cliente desactivado (eliminación lógica).";
+            mensaje = (EsModoProveedores ? "Proveedor desactivado correctamente." : "Cliente desactivado (eliminación lógica).");
             await CargarTodo();
             EmisionControlService.NotifyChanged();
             CancelarEliminar();
