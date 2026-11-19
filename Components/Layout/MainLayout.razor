@@ -5,20 +5,23 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
-<div class="page">
+<div class="page @(_sidebarCollapsed ? "sidebar-collapsed" : "")">
     <aside class="sidebar">
         <a class="sidebar-brand" href="/dashboard"><img class="brand-logo" src="/favicon.png" alt="" /><span><strong>e-ForVets</strong><small>Gestión veterinaria</small></span></a>
         <NavMenu />
     </aside>
     <main class="workspace">
         <header class="workspace-header">
+            <button type="button" class="sidebar-toggle" @onclick="() => _sidebarCollapsed = !_sidebarCollapsed" aria-label="Abrir o cerrar menú lateral" aria-expanded="@(!_sidebarCollapsed)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
             <div class="workspace-brand">
-                <span class="mobile-mark">H</span>
+                <span class="mobile-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 21V3h10v18M8 8H3v13h18M11 7h4M11 11h4M11 15h4M12 21v-3h2v3" /></svg></span>
                 <div>
                     <small>Hospital Veterinario</small>
                     @if (Session.IsAuthenticated && Session.EsAdministrador && _localidades.Count > 1)
                     {
-                        <select class="form-select form-select-sm fw-bold mt-1" style="min-width: 170px;" value="@Session.Localidad" @onchange="CambiarSucursalAsync" aria-label="Cambiar sucursal activa">
+                        <select class="branch-select" value="@Session.Localidad" @onchange="CambiarSucursalAsync" aria-label="Cambiar sucursal activa">
                             @foreach (var loc in _localidades)
                             {
                                 <option value="@loc.Id">@LimpiarNombreSucursal(loc.Descripcion)</option>
@@ -31,7 +34,33 @@
                     }
                 </div>
             </div>
-            <div class="session-actions"><RelojSistema /><div class="user-avatar">@Session.Iniciales</div><div class="user-copy"><strong>@Session.NombreUsuario</strong><small>@Session.LoginUser</small></div><button type="button" class="logout-button" @onclick="CerrarSesion">Salir</button></div>
+            <div class="header-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg>
+                <input aria-label="Buscar sección del sistema" placeholder="Buscar sección del sistema..." @bind="_search" @bind:event="oninput" @onkeydown="BuscarConTeclado" />
+                @if (!string.IsNullOrWhiteSpace(_search))
+                {
+                    <div class="header-search-results">
+                        @foreach (var destino in DestinosEncontrados)
+                        {
+                            <a href="@destino.Ruta" @onclick="LimpiarBusqueda">@destino.Nombre</a>
+                        }
+                        @if (!DestinosEncontrados.Any())
+                        {
+                            <span>No se encontraron secciones.</span>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="session-actions">
+                @if (Permisos.Permite("admision/citas"))
+                {
+                    <a class="header-icon" href="/admision/citas" aria-label="Abrir agenda de citas" title="Agenda de citas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 2v6M17 2v6M3 11h18M7 15h3M14 15h3M7 18h3" /></svg></a>
+                }
+                <details class="header-account">
+                    <summary><span class="user-avatar">@Session.Iniciales</span><span class="user-copy"><strong>@Session.NombreUsuario</strong><small>@(Session.EsAdministrador ? "Administrador" : Session.LoginUser)</small></span><svg class="account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg></summary>
+                    <div class="account-panel"><RelojSistema /><button type="button" class="logout-button" @onclick="CerrarSesion">Cerrar sesión</button></div>
+                </details>
+            </div>
         </header>
         <article class="workspace-content">@Body</article>
     </main>
@@ -40,6 +69,32 @@
 <div id="blazor-error-ui" data-nosnippet>Ha ocurrido un error inesperado. <a href="." class="reload">Recargar</a><span class="dismiss">🗙</span></div>
 
 @code {
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+    private string _search = "";
+    private static readonly (string Nombre, string Ruta)[] Destinos =
+    [
+        ("Dashboard", "/dashboard"),
+        ("Clientes, tutores y mascotas", "/admision/clientes-pacientes"),
+        ("Recepción de órdenes", "/admision/ordenes"),
+        ("Agenda de citas", "/admision/citas"),
+        ("Triaje de ingreso", "/admision/triaje"),
+        ("Historia clínica", "/consulta/fichamedica"),
+        ("Proveedores", "/contabilidad/proveedores"),
+        ("Mis compras", "/contabilidad/mis-compras")
+    ];
+    private IEnumerable<(string Nombre, string Ruta)> DestinosEncontrados => Destinos
+        .Where(d => Permisos.Permite(d.Ruta.TrimStart('/')) && d.Nombre.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase));
+    private void LimpiarBusqueda() => _search = "";
+    private void BuscarConTeclado(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") LimpiarBusqueda();
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_search) && DestinosEncontrados.FirstOrDefault() is var destino && destino.Ruta is not null)
+        {
+            LimpiarBusqueda();
+            Nav.NavigateTo(destino.Ruta);
+        }
+    }
+    private bool _sidebarCollapsed;
     private DotNetObjectReference<MainLayout>? _dotNetRef;
     private List<CatalogoItemGenericoDto> _localidades = [];
 
