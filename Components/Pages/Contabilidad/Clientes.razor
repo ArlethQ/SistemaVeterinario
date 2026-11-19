@@ -5,6 +5,7 @@
 @using Simetric.DTOs.EContax
 @using System.Text
 @inject HttpClient Http
+@inject ILogger<Clientes> Logger
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.ComponentModel.DataAnnotations
@@ -80,14 +81,17 @@
         </div>
     </section>
 
-    <section class="quick-action-bar" aria-label="Acciones rápidas de clientes">
-        <button type="button" class="quick-action-card quick-action-primary" @onclick="AbrirBotAsync">
-            <span class="quick-action-icon"><i class="bi bi-stars"></i></span>
-            <span>
-                <strong>@(EsModoProveedores ? "Crear proveedor con IA" : "Crear cliente con IA")</strong>
-                <small>Abre el bot para asistirte</small>
-            </span>
-        </button>
+    <section class="quick-action-bar @(EsModoProveedores ? "quick-action-bar-proveedores" : null)" aria-label="@(EsModoProveedores ? "Acciones rápidas de proveedores" : "Acciones rápidas de clientes")">
+        @if (!EsModoProveedores)
+        {
+            <button type="button" class="quick-action-card quick-action-primary" @onclick="AbrirBotAsync">
+                <span class="quick-action-icon"><i class="bi bi-stars"></i></span>
+                <span>
+                    <strong>Crear cliente con IA</strong>
+                    <small>Abre el bot para asistirte</small>
+                </span>
+            </button>
+        }
 
         <button type="button" class="quick-action-card" @onclick="AbrirImportacion">
             <span class="quick-action-icon quick-action-icon-green"><i class="bi bi-file-earmark-spreadsheet"></i></span>
@@ -611,28 +615,9 @@
                             </div>
                             </details>
 
-                            @if (EsModoProveedores)
-                            {
-                                <details class="form-accordion client-provider-accordion" open>
-                                    <summary class="form-section-heading">
-                                        <span>2</span>
-                                        <strong>Productos que vende el proveedor</strong>
-                                        <i class="bi bi-chevron-down"></i>
-                                    </summary>
-                                    <div class="form-accordion-body">
-                                        <label class="form-label small d-block">
-                                            Observaciones (opcional)
-                                            <textarea class="form-control form-control-sm w-100" rows="3"
-                                                      placeholder="Describe los productos que ofrece"
-                                                      @bind="model.Observaciones"></textarea>
-                                        </label>
-                                    </div>
-                                </details>
-                            }
-
                             <details class="form-accordion">
                             <summary class="form-section-heading">
-                                <span>3</span>
+                                <span>2</span>
                                 <strong>Contacto</strong>
                                 <i class="bi bi-chevron-down"></i>
                             </summary>
@@ -749,6 +734,25 @@
                             </div>
                             </details>
 
+                            @if (EsModoProveedores)
+                            {
+                                <details class="form-accordion client-provider-accordion" open>
+                                    <summary class="form-section-heading">
+                                        <span>2</span>
+                                        <strong>Productos que vende el proveedor</strong>
+                                        <i class="bi bi-chevron-down"></i>
+                                    </summary>
+                                    <div class="form-accordion-body">
+                                        <label class="form-label small d-block">
+                                            Observaciones (opcional)
+                                            <textarea class="form-control form-control-sm w-100" rows="3"
+                                                      placeholder="Describe los productos que ofrece"
+                                                      @bind="model.Observaciones"></textarea>
+                                        </label>
+                                    </div>
+                                </details>
+                            }
+
                             <details class="form-accordion">
                             <summary class="form-section-heading">
                                 <span>3</span>
@@ -811,7 +815,7 @@
 
                             <details class="form-accordion">
                                 <summary class="form-section-heading">
-                                    <span>4</span>
+                                    <span>3</span>
                                     <strong>Información adicional</strong>
                                     <i class="bi bi-chevron-down"></i>
                                 </summary>
@@ -1021,28 +1025,9 @@
                                             </div>
                                             </details>
 
-                                            @if (EsModoProveedores)
-                                            {
-                                                <details class="form-accordion client-provider-accordion" open>
-                                                    <summary class="form-section-heading">
-                                                        <span>2</span>
-                                                        <strong>Productos que vende el proveedor</strong>
-                                                        <i class="bi bi-chevron-down"></i>
-                                                    </summary>
-                                                    <div class="form-accordion-body">
-                                                        <label class="form-label small d-block">
-                                                            Observaciones (opcional)
-                                                            <textarea class="form-control form-control-sm w-100" rows="3"
-                                                                      placeholder="Describe los productos que ofrece"
-                                                                      @bind="model.Observaciones"></textarea>
-                                                        </label>
-                                                    </div>
-                                                </details>
-                                            }
-
                                             <details class="form-accordion">
                                             <summary class="form-section-heading">
-                                                <span>3</span>
+                                                <span>2</span>
                                                 <strong>Contacto</strong>
                                                 <i class="bi bi-chevron-down"></i>
                                             </summary>
@@ -1159,6 +1144,25 @@
                                             </div>
                                             </details>
 
+                                            @if (EsModoProveedores)
+                                            {
+                                                <details class="form-accordion client-provider-accordion" open>
+                                                    <summary class="form-section-heading">
+                                                        <span>2</span>
+                                                        <strong>Productos que vende el proveedor</strong>
+                                                        <i class="bi bi-chevron-down"></i>
+                                                    </summary>
+                                                    <div class="form-accordion-body">
+                                                        <label class="form-label small d-block">
+                                                            Observaciones (opcional)
+                                                            <textarea class="form-control form-control-sm w-100" rows="3"
+                                                                      placeholder="Describe los productos que ofrece"
+                                                                      @bind="model.Observaciones"></textarea>
+                                                        </label>
+                                                    </div>
+                                                </details>
+                                            }
+
                                             <details class="form-accordion">
                                             <summary class="form-section-heading">
                                                 <span>3</span>
@@ -1221,7 +1225,7 @@
 
                                             <details class="form-accordion">
                                                 <summary class="form-section-heading">
-                                                    <span>4</span>
+                                                    <span>3</span>
                                                     <strong>Información adicional</strong>
                                                     <i class="bi bi-chevron-down"></i>
                                                 </summary>
@@ -1331,33 +1335,34 @@
         }
     </section>
 
-    <section class="quick-tips-section" aria-label="Consejos rápidos de clientes">
-        <div class="quick-tips-head">
-            <span class="quick-tips-head-icon"><i class="bi bi-lightbulb"></i></span>
-            <div>
-                <strong>Consejos rápidos</strong>
-                <small>Pequeñas acciones para mantener tu cartera lista para facturar.</small>
+    @if (!EsModoProveedores)
+    {
+        <section class="quick-tips-section" aria-label="Consejos rápidos de clientes">
+            <div class="quick-tips-head">
+                <span class="quick-tips-head-icon"><i class="bi bi-lightbulb"></i></span>
+                <div>
+                    <strong>Consejos rápidos</strong>
+                    <small>Pequeñas acciones para mantener tu cartera lista para facturar.</small>
+                </div>
             </div>
-        </div>
-
-        <div class="quick-tip-grid">
-            <article class="quick-tip-item">
-                <span class="quick-tip-item-icon quick-tip-item-icon-blue"><i class="bi bi-stars"></i></span>
-                <div>
-                    <strong>Usa el asistente IA</strong>
-                    <p>Crea clientes con datos guiados y evita completar el formulario desde cero.</p>
-                </div>
-            </article>
-
-            <article class="quick-tip-item">
-                <span class="quick-tip-item-icon quick-tip-item-icon-violet"><i class="bi bi-envelope-plus"></i></span>
-                <div>
-                    <strong>Agrega correos extra</strong>
-                    <p>Registra contactos adicionales para enviar documentos a más destinatarios.</p>
-                </div>
-            </article>
-        </div>
-    </section>
+            <div class="quick-tip-grid">
+                <article class="quick-tip-item">
+                    <span class="quick-tip-item-icon quick-tip-item-icon-blue"><i class="bi bi-stars"></i></span>
+                    <div>
+                        <strong>Usa el asistente IA</strong>
+                        <p>Crea clientes con datos guiados y evita completar el formulario desde cero.</p>
+                    </div>
+                </article>
+                <article class="quick-tip-item">
+                    <span class="quick-tip-item-icon quick-tip-item-icon-violet"><i class="bi bi-envelope-plus"></i></span>
+                    <div>
+                        <strong>Agrega correos extra</strong>
+                        <p>Registra contactos adicionales para enviar documentos a más destinatarios.</p>
+                    </div>
+                </article>
+            </div>
+        </section>
+    }
 
 
 
@@ -2713,7 +2718,7 @@
                 Pais = "Ecuador",
                 Provincia = "Pichincha",
                 Ciudad = "Quito",
-                Observaciones = "Cliente corporativo"
+                Observaciones = EsModoProveedores ? "Proveedor corporativo" : "Cliente corporativo"
             },
             new
             {
@@ -2729,31 +2734,21 @@
                 Telefono = "022765432",
                 Direccion = "Calle Los Tulipanes N32",
                 ObligadoContabilidad = "NO",
-                DiasCredito = 0,
+                DiasCredito = EsModoProveedores ? 30 : 0,
                 Pais = "Ecuador",
                 Provincia = "Pichincha",
                 Ciudad = "Quito",
-                Observaciones = "Cliente frecuente"
+                Observaciones = EsModoProveedores ? "Proveedor frecuente" : "Cliente frecuente"
             }
         };
 
-        using var stream = new MemoryStream();
-        stream.SaveAs(data);
-        stream.Position = 0;
-
-        using var streamRef = new DotNetStreamReference(stream);
-        await JS.InvokeVoidAsync(
-            "downloadFileFromStream",
-            "Modelo_importacion_clientes.xlsx",
-            streamRef,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        await DescargarExcelAsync(data, EsModoProveedores ? "Modelo_importacion_proveedores.xlsx" : "Modelo_importacion_clientes.xlsx", esPlantilla: true);
     }
 
     private async Task ExportarClientesExcelAsync()
     {
-        var dataList = new List<object>();
-
-        foreach (var c in ClientesFiltrados)
+        var registros = EsModoProveedores ? RegistrosDelModulo : ClientesFiltrados;
+        var data = registros.Select(c =>
         {
             var tipoClienteDesc = tiposCliente.FirstOrDefault(t => t.TclCodigo == c.TipoCliente)?.Descripcion ?? "Natural";
             var tipoClienteStr = TipoClienteClasificacion.EsJuridica(tipoClienteDesc) ? "Juridica" : "Natural";
@@ -2786,7 +2781,7 @@
 
             var observaciones = c.Observaciones ?? string.Empty;
 
-            dataList.Add(new
+            return new
             {
                 TipoCliente = tipoClienteStr,
                 TipoIdentificacion = tipoIdentificacionStr,
@@ -2805,22 +2800,40 @@
                 Provincia = provincia,
                 Ciudad = ciudad,
                 Observaciones = observaciones
-            });
-        }
+            };
+        }).ToArray();
 
-        using var stream = new MemoryStream();
-        stream.SaveAs(dataList);
-        stream.Position = 0;
-
-        using var streamRef = new DotNetStreamReference(stream);
-        await JS.InvokeVoidAsync(
-            "downloadFileFromStream",
-            $"Clientes_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx",
-            streamRef,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        );
+        var modulo = EsModoProveedores ? "Proveedores" : "Clientes";
+        await DescargarExcelAsync(data, $"{modulo}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
     }
 
+    private async Task DescargarExcelAsync<T>(T[] data, string archivo, bool esPlantilla = false)
+    {
+        try
+        {
+            using var stream = new MemoryStream();
+            stream.SaveAs(data);
+            stream.Position = 0;
+
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync(
+                "downloadFileFromStream", archivo, streamRef,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error al descargar el Excel {Archivo}", archivo);
+            if (esPlantilla)
+            {
+                erroresImportacion = 1;
+                mensajeImportacion = "No se pudo descargar la plantilla. Intenta nuevamente.";
+            }
+            else
+            {
+                debugError = "No se pudo exportar el Excel. Intenta nuevamente.";
+            }
+        }
+    }
 
     private async Task ImportarClientesAsync(InputFileChangeEventArgs e)
     {
@@ -3447,7 +3460,7 @@
             Telefonoconvencional = "",
             Celular = "",
             Correo = "",
-            DiasCredito = null,
+            DiasCredito = EsModoProveedores ? 30 : null,
             Oblgconta = "",
             TipoCliente = 0,
             Estado = true,
@@ -3495,7 +3508,7 @@
             Telefonoconvencional = ClientePrefill.Telefonoconvencional?.Trim() ?? string.Empty,
             Celular = ClientePrefill.Celular?.Trim() ?? string.Empty,
             Correo = ClientePrefill.Correo?.Trim() ?? string.Empty,
-            DiasCredito = ClientePrefill.DiasCredito,
+            DiasCredito = ClientePrefill.DiasCredito ?? (EsModoProveedores ? 30 : null),
             Oblgconta = NormalizarObligadoContabilidad(ClientePrefill.Oblgconta),
             TipoCliente = ClientePrefill.TipoCliente ?? 0,
             Estado = ClientePrefill.Estado ?? true,

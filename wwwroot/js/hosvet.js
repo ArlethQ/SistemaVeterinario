@@ -1,4 +1,22 @@
-﻿window.hosvetDownloadFile = (fileName, contentType, base64Data) => {
+window.downloadFileFromStream = async (fileName, contentStreamReference, contentType) => {
+    const buffer = await contentStreamReference.arrayBuffer();
+    const url = URL.createObjectURL(new Blob([buffer], {
+        type: contentType || "application/octet-stream"
+    }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName || "archivo";
+
+    try {
+        document.body.appendChild(link);
+        link.click();
+    } finally {
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+};
+
+window.hosvetDownloadFile = (fileName, contentType, base64Data) => {
     const link = document.createElement("a");
     link.download = fileName;
     link.href = `data:${contentType};base64,${base64Data}`;
