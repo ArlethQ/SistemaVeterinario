@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Simetric.Services;
 
 namespace Simetric.DTOs.EContax;
 
@@ -38,6 +39,7 @@ public sealed class EContaxClienteDto
 
 public sealed class EContaxClienteUpsertDto
 {
+    public CedulaLookupResult? DatosIdentificacion { get; set; }
     public List<EContaxProductoOfrecidoDto>? ProductosProveedor { get; set; }
     public int Codcliente { get; set; }
     public string? Apellidos { get; set; }

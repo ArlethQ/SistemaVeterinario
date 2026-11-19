@@ -151,6 +151,7 @@ public sealed class EContaxCatalogService
                 Nombrecomercial = dto.Nombrecomercial,
                 Nombrerazonsocial = dto.Nombrerazonsocial,
                 Numeroidentificacion = dto.Numeroidentificacion,
+                DatosIdentificacionJson = SerializarDatosIdentificacion(dto),
                 Direccion = dto.Direccion,
                 Telefonoconvencional = dto.Telefonoconvencional,
                 Celular = dto.Celular,
@@ -207,6 +208,10 @@ public sealed class EContaxCatalogService
             cliente.Nombres = dto.Nombres;
             cliente.Nombrecomercial = dto.Nombrecomercial;
             cliente.Nombrerazonsocial = dto.Nombrerazonsocial;
+            var datosIdentificacion = SerializarDatosIdentificacion(dto);
+            if (datosIdentificacion is not null || cliente.Numeroidentificacion != dto.Numeroidentificacion ||
+                cliente.Tipoidentificacion != codigoIdentificacion)
+                cliente.DatosIdentificacionJson = datosIdentificacion;
             cliente.Numeroidentificacion = dto.Numeroidentificacion;
             cliente.Direccion = dto.Direccion;
             cliente.Telefonoconvencional = dto.Telefonoconvencional;
@@ -1263,6 +1268,17 @@ public sealed class EContaxCatalogService
             dto.Nombrecomercial = null;
             dto.Nombrerazonsocial = null;
         }
+    }
+
+    private static string? SerializarDatosIdentificacion(EContaxClienteUpsertDto dto)
+    {
+        if (dto.DatosIdentificacion is not { Success: true, Found: true } datos)
+            return null;
+
+        var identificacion = datos.Tipo == "ruc" ? datos.Ruc : datos.Cedula;
+        return string.Equals(identificacion, dto.Numeroidentificacion, StringComparison.Ordinal)
+            ? System.Text.Json.JsonSerializer.Serialize(datos)
+            : null;
     }
 
     private async Task<string?> GetCodigoIdentificacionAsync(AppDbContext context, int? ideSec)

@@ -1,0 +1,8 @@
+USE [VeterinariaFacturacion];
+GO
+
+IF OBJECT_ID(N'dbo.CLIENTES', N'U') IS NULL
+    THROW 50000, N'No existe dbo.CLIENTES en VeterinariaFacturacion.', 1;
+
+IF COL_LENGTH(N'dbo.CLIENTES', N'DATOS_IDENTIFICACION_JSON') IS NULL
+    ALTER TABLE dbo.CLIENTES ADD DATOS_IDENTIFICACION_JSON nvarchar(max) NULL;

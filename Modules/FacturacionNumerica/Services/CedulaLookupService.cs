@@ -29,7 +29,8 @@ public sealed class CedulaLookupService
             ? await ConsultarCedulaInternaAsync(identificacionNormalizada, cancellationToken)
             : await ConsultarRucInternaAsync(identificacionNormalizada, cancellationToken);
 
-        _cache[identificacionNormalizada] = new CacheEntry(result, DateTimeOffset.UtcNow.Add(CacheDuration));
+        if (result.Success && result.Found)
+            _cache[identificacionNormalizada] = new CacheEntry(result, DateTimeOffset.UtcNow.Add(CacheDuration));
         return result;
     }
 
@@ -71,7 +72,7 @@ public sealed class CedulaLookupService
                 Success = true,
                 Found = true,
                 Tipo = "cedula",
-                Cedula = GetString(item, "cedula"),
+                Cedula = FirstNonEmpty(GetString(item, "cedula"), cedulaNormalizada),
                 NombreCompleto = GetString(item, "nombre"),
                 ObligadoLlevarContabilidad = "NO",
                 EstadoCivil = GetString(item, "estadoCivil"),
@@ -90,42 +91,11 @@ public sealed class CedulaLookupService
 
     private async Task<CedulaLookupResult> ConsultarRucInternaAsync(string rucNormalizado, CancellationToken cancellationToken)
     {
+        DatosPersonaSri? datos;
         try
         {
             var consulta = new CConsultaSri();
-            var datos = await Task.Run(() => consulta.GetRucSri(rucNormalizado), cancellationToken);
-
-            if (datos is null)
-                return CedulaLookupResult.Fail("La consulta del RUC no devolvio informacion.");
-
-            if (!string.IsNullOrWhiteSpace(datos.Error))
-                return CedulaLookupResult.NotFound(datos.Error);
-
-            var establecimiento = SeleccionarEstablecimiento(datos.personaEstablecimientos);
-            var nombreComercial = Convert.ToString(datos.nombreComercial)?.Trim();
-            var direccion = TextoSeguro(establecimiento?.direccionCompleta);
-
-            return new CedulaLookupResult
-            {
-                Success = true,
-                Found = true,
-                Tipo = "ruc",
-                Ruc = TextoSeguro(datos.numeroRuc),
-                NombreCompleto = TextoSeguro(datos.razonSocial),
-                RazonSocial = TextoSeguro(datos.razonSocial),
-                NombreComercial = FirstNonEmpty(nombreComercial, datos.razonSocial),
-                ObligadoLlevarContabilidad = NormalizarObligado(datos.obligado),
-                TipoContribuyente = FirstNonEmpty(
-                    datos.claseContribuyente,
-                    datos.subtipoContribuyente,
-                    datos.actividadContribuyente,
-                    datos.personaSociedad),
-                DireccionMatriz = direccion,
-                DireccionEstablecimiento = direccion,
-                NumeroEstablecimiento = TextoSeguro(establecimiento?.numeroEstablecimiento),
-                EstadoEstablecimiento = TextoSeguro(establecimiento?.estado),
-                Mensaje = "Datos consultados correctamente."
-            };
+            datos = await Task.Run(() => consulta.GetRucSri(rucNormalizado), cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -133,8 +103,37 @@ public sealed class CedulaLookupService
         }
         catch
         {
-            return await ConsultarRucPorApiAsync(rucNormalizado, cancellationToken);
+            datos = null;
         }
+
+        if (datos is null || !string.IsNullOrWhiteSpace(datos.Error))
+            return await ConsultarRucPorApiAsync(rucNormalizado, cancellationToken);
+
+        var establecimiento = SeleccionarEstablecimiento(datos.personaEstablecimientos);
+        var nombreComercial = Convert.ToString(datos.nombreComercial)?.Trim();
+        var direccion = TextoSeguro(establecimiento?.direccionCompleta);
+
+        return new CedulaLookupResult
+        {
+            Success = true,
+            Found = true,
+            Tipo = "ruc",
+            Ruc = FirstNonEmpty(TextoSeguro(datos.numeroRuc), rucNormalizado),
+            NombreCompleto = TextoSeguro(datos.razonSocial),
+            RazonSocial = TextoSeguro(datos.razonSocial),
+            NombreComercial = FirstNonEmpty(nombreComercial, datos.razonSocial),
+            ObligadoLlevarContabilidad = NormalizarObligado(datos.obligado),
+            TipoContribuyente = FirstNonEmpty(
+                datos.claseContribuyente,
+                datos.subtipoContribuyente,
+                datos.actividadContribuyente,
+                datos.personaSociedad),
+            DireccionMatriz = direccion,
+            DireccionEstablecimiento = direccion,
+            NumeroEstablecimiento = TextoSeguro(establecimiento?.numeroEstablecimiento),
+            EstadoEstablecimiento = TextoSeguro(establecimiento?.estado),
+            Mensaje = "Datos consultados correctamente."
+        };
     }
 
     private async Task<CedulaLookupResult> ConsultarRucPorApiAsync(string rucNormalizado, CancellationToken cancellationToken)
@@ -159,14 +158,19 @@ public sealed class CedulaLookupService
             if (!string.IsNullOrWhiteSpace(error))
                 return CedulaLookupResult.NotFound(error);
 
+            var razonSocial = GetString(root, "razonSocial");
+            if (string.IsNullOrWhiteSpace(razonSocial))
+                return CedulaLookupResult.Fail("La API del SRI respondió sin la razón social del RUC consultado.");
+
+
             return new CedulaLookupResult
             {
                 Success = true,
                 Found = true,
                 Tipo = "ruc",
-                Ruc = GetString(root, "numeroRuc"),
-                NombreCompleto = GetString(root, "razonSocial"),
-                RazonSocial = GetString(root, "razonSocial"),
+                Ruc = FirstNonEmpty(GetString(root, "numeroRuc"), rucNormalizado),
+                NombreCompleto = razonSocial,
+                RazonSocial = razonSocial,
                 NombreComercial = FirstNonEmpty(
                     GetString(root, "nombreComercial"),
                     GetString(root, "nombreFantasiaComercial"),
@@ -179,8 +183,8 @@ public sealed class CedulaLookupService
                     GetString(root, "tipoContribuyente"),
                     GetString(root, "claseContribuyente"),
                     GetString(root, "subtipoContribuyente")),
-                DireccionMatriz = GetDireccionEstablecimientoSeleccionado(root),
-                DireccionEstablecimiento = GetDireccionEstablecimientoSeleccionado(root),
+                DireccionMatriz = FirstNonEmpty(GetString(root, "direccionMatriz"), GetDireccionEstablecimientoSeleccionado(root)),
+                DireccionEstablecimiento = FirstNonEmpty(GetString(root, "direccionEstablecimiento"), GetDireccionEstablecimientoSeleccionado(root)),
                 NumeroEstablecimiento = GetNumeroEstablecimientoSeleccionado(root),
                 EstadoEstablecimiento = GetEstadoEstablecimientoSeleccionado(root),
                 Mensaje = "Datos consultados correctamente."

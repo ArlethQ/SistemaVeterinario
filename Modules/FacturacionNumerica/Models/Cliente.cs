@@ -13,6 +13,8 @@ public partial class Cliente
     public string? Nombrerazonsocial { get; set; }
     public string? Tipoidentificacion { get; set; }
     public string? Numeroidentificacion { get; set; }
+    [Column("DATOS_IDENTIFICACION_JSON")]
+    public string? DatosIdentificacionJson { get; set; }
     public string? Direccion { get; set; }
     public string? Telefonoconvencional { get; set; }
     public string? Celular { get; set; }
