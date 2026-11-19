@@ -269,10 +269,10 @@ public sealed class EContaxTenantService
             {
                 localidades = await context.Database
                     .SqlQuery<LocalidadVeterinariaRow>($@"
-                        SELECT loc_id AS LocId,
-                               RTRIM(ISNULL(loc_descripcion, '')) AS Nombre,
-                               RTRIM(ISNULL(loc_prefijo, '')) AS Codigo,
-                               RTRIM(ISNULL(loc_direccion, '')) AS Direccion
+                        SELECT CAST(loc_id AS INT) AS LocId,
+                               CAST(RTRIM(ISNULL(loc_descripcion, '')) AS NVARCHAR(200)) AS Nombre,
+                               CAST(RTRIM(ISNULL(loc_prefijo, '')) AS NVARCHAR(40)) AS Codigo,
+                               CAST(RTRIM(ISNULL(loc_direccion, '')) AS NVARCHAR(300)) AS Direccion
                         FROM dbo.vt_localidades
                         WHERE ISNULL(loc_estado, 'A') = 'A'
                           AND NULLIF(LTRIM(RTRIM(loc_descripcion)), '') IS NOT NULL
@@ -386,7 +386,7 @@ public sealed class EContaxTenantService
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             IF OBJECT_ID(N'dbo.vt_localidades', N'U') IS NOT NULL
-            SELECT loc_id AS LocId,
+            SELECT CAST(loc_id AS INT) AS LocId,
                    RTRIM(ISNULL(loc_descripcion, '')) AS Nombre,
                    RTRIM(ISNULL(loc_prefijo, '')) AS Codigo,
                    RTRIM(ISNULL(loc_direccion, '')) AS Direccion
@@ -399,7 +399,7 @@ public sealed class EContaxTenantService
         {
             resultado.Add(new LocalidadVeterinariaRow
             {
-                LocId = reader.IsDBNull(0) ? 0 : reader.GetInt32(0),
+                LocId = reader.IsDBNull(0) ? 0 : Convert.ToInt32(reader.GetValue(0)),
                 Nombre = reader.IsDBNull(1) ? string.Empty : reader.GetString(1).Trim(),
                 Codigo = reader.IsDBNull(2) ? string.Empty : reader.GetString(2).Trim(),
                 Direccion = reader.IsDBNull(3) ? string.Empty : reader.GetString(3).Trim()
