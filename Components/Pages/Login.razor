@@ -7,27 +7,18 @@
 
 <PageTitle>e-ForVets - Iniciar sesión</PageTitle>
 
-<div class="auth-page">
-    <a class="back-link" href="/">← Volver al inicio</a>
-    <section class="auth-card">
-        <div class="auth-welcome">
-            <a class="auth-brand" href="/"><img src="/favicon.png" alt="" /><div><strong>e-ForVets</strong><small>Gestión veterinaria</small></div></a>
-            <div><span class="auth-kicker">Gestión clínica integral</span><h1>La gestión de tu veterinaria comienza aquí.</h1><p>Accede a la información y módulos habilitados para tu equipo desde un solo lugar.</p></div>
-            <div class="welcome-detail"><span>🐾</span><div><strong>Atención coordinada</strong><small>Información segura para decisiones oportunas.</small></div></div>
-        </div>
-        <div class="auth-form-panel">
-            <div class="form-heading"><span>Bienvenido de nuevo</span><h2>Iniciar sesión</h2><p>Ingresa tus credenciales para continuar.</p></div>
+<AuthPageShell Title="Iniciar sesión" Description="Ingresa tus credenciales para continuar.">
             @if (!string.IsNullOrWhiteSpace(_mensajeError)) { <div class="auth-alert">@_mensajeError</div> }
             <form @onsubmit="IngresarAsync" @onsubmit:preventDefault>
                 <label>
                     Usuario o correo electrónico
-                    <input autocomplete="username" @bind="_username" @bind:event="oninput" @bind:after="OnUsuarioCambiadoAsync" placeholder="Ingresa tu usuario" />
+                    <span class="field-control"><i class="bi bi-person field-icon" aria-hidden="true"></i><input autocomplete="username" @bind="_username" @bind:event="oninput" @bind:after="OnUsuarioCambiadoAsync" placeholder="Ingresa tu usuario" /></span>
                 </label>
-                <label>Contraseña<span class="password-control"><input type="@(_mostrarClave ? "text" : "password")" autocomplete="current-password" @bind="_password" placeholder="Ingresa tu contraseña" /><button type="button" @onclick="() => _mostrarClave = !_mostrarClave">@(_mostrarClave ? "Ocultar" : "Mostrar")</button></span></label>
+                <label>Contraseña<span class="field-control password-control"><i class="bi bi-lock field-icon" aria-hidden="true"></i><input type="@(_mostrarClave ? "text" : "password")" autocomplete="current-password" @bind="_password" placeholder="Ingresa tu contraseña" /><button class="password-toggle" type="button" aria-label="@(_mostrarClave ? "Ocultar contraseña" : "Mostrar contraseña")" aria-pressed="@_mostrarClave" @onclick="() => _mostrarClave = !_mostrarClave"><i class="@(_mostrarClave ? "bi bi-eye-slash" : "bi bi-eye")" aria-hidden="true"></i></button></span></label>
                 <div class="form-options"><span></span><a href="/olvide-contrasena">¿Olvidaste tu contraseña?</a></div>
                 <label>
                     Veterinaria / Sucursal
-                    <select @bind="_localidad" disabled="@(_buscandoLocalidades || _localidades.Count == 0)">
+                    <span class="field-control"><i class="bi bi-shop field-icon" aria-hidden="true"></i><select @bind="_localidad" disabled="@(_buscandoLocalidades || _localidades.Count == 0)">
                         @if (_buscandoLocalidades)
                         {
                             <option value="0">Buscando sucursales asignadas...</option>
@@ -47,15 +38,12 @@
                                 <option value="@localidad.Id">@localidad.Descripcion</option>
                             }
                         }
-                    </select>
+                    </select><i class="bi bi-chevron-down select-chevron" aria-hidden="true"></i></span>
                 </label>
                 <button type="submit" disabled="@(_cargando || _localidades.Count == 0 || _localidad <= 0)">@(_cargando ? "Validando credenciales..." : "Ingresar")</button>
             </form>
-            <p class="register-prompt">Las cuentas son administradas por personal autorizado.</p>
-        </div>
-    </section>
-</div>
-
+            <p class="register-prompt"><i class="bi bi-shield-check" aria-hidden="true"></i>Las cuentas son administradas por personal autorizado.</p>
+</AuthPageShell>
 @code {
     [SupplyParameterFromQuery(Name = "returnUrl")]
     private string? ReturnUrl { get; set; }
