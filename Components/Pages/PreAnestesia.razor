@@ -1,5 +1,6 @@
 @page "/quirofano/preanestesia"
 @page "/quirofano/preanestesia/{IdOrden:int}/{Nhcl:int}"
+@implements IDisposable
 @inject IKardexService KardexService
 @inject IQuirofanoService QuirofanoService
 @inject IInventarioService InventarioService
@@ -231,25 +232,29 @@ else
         <!-- Columna Derecha: Medicación Pre-Anestésica y stock -->
         <div class="col-lg-5">
             <div class="card shadow-sm border-0 mb-3">
-                <div class="card-header bg-white fw-bold text-primary">
-                    3. Medicación Pre-Anestésica (Catálogo de productos)
+                <div class="card-header bg-white d-flex justify-content-between align-items-center gap-2">
+                    <span class="fw-bold text-primary">3. Medicación Pre-Anestésica (Stock en @NombreSedeActiva)</span>
+                    <span class="badge bg-primary-subtle text-primary border">@catalogoStockSede.Count en stock</span>
                 </div>
                 <div class="card-body">
                     <div class="input-group input-group-sm mb-2">
-                        <input type="text" class="form-control" autocomplete="off" placeholder="Buscar fármaco o insumo..."
+                        <input type="text" class="form-control" autocomplete="off" placeholder="Buscar fármaco o insumo con stock en @NombreSedeActiva..."
                                @bind="filtroProd" @bind:event="oninput" @bind:after="BuscarStockAutoAsync" @onkeydown="OnFiltroProdKeyDown" />
+                        @if (!string.IsNullOrWhiteSpace(filtroProd))
+                        {
+                            <button type="button" class="btn btn-outline-secondary" @onclick="LimpiarFiltroStock">×</button>
+                        }
                     </div>
 
                     @if (resultadosStock.Any())
                     {
-                        <div class="table-responsive mb-2 border rounded" style="max-height: 170px;">
-                            <table class="table table-sm table-hover mb-0 small">
+                        <div class="table-responsive mb-2 border rounded" style="max-height: 185px;">
+                            <table class="table table-sm table-hover align-middle mb-0 small">
                                 <thead class="table-light">
                                     <tr>
                                         <th>Código</th>
                                         <th>Producto</th>
-                                        <th>Bodega</th>
-                                        <th class="text-end">Precio</th>
+                                        <th>Stock disponible</th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -258,11 +263,19 @@ else
                                     {
                                         <tr>
                                             <td><code>@item.Number</code></td>
-                                            <td>@item.DisplayName</td>
-                                            <td>@item.Location</td>
-                                            <td class="text-end fw-bold">@item.UnitPrice.ToString("C2")</td>
+                                            <td>
+                                                <div class="fw-semibold">@item.DisplayName</div>
+                                                <small class="text-muted">@item.Location</small>
+                                            </td>
+                                            <td>
+                                                <span class="fw-bold text-success">@item.Available.ToString("0.##") @UnidadDeItem(item)</span>
+                                                @if (item.FactorConversion > 1m)
+                                                {
+                                                    <div class="text-muted" style="font-size:.72rem;">@FormatearPaquetesStock(item.Available, item.FactorConversion, UnidadDeItem(item))</div>
+                                                }
+                                            </td>
                                             <td class="text-end">
-                                                <button class="btn btn-xs btn-primary py-0 px-2" @onclick="() => SeleccionarProducto(item)">Elegir</button>
+                                                <button type="button" class="btn btn-xs btn-primary py-0 px-2" @onclick="() => SeleccionarProducto(item)">Elegir</button>
                                             </td>
                                         </tr>
                                     }
@@ -273,16 +286,62 @@ else
 
                     <div class="row g-2 small bg-light p-2 rounded border mb-3">
                         <div class="col-12">
-                            <label class="form-label mb-0 fw-semibold">Producto Seleccionado</label>
-                            <input type="text" class="form-control form-control-sm" @bind="nuevoProd.ProdDescripcion" placeholder="Seleccione de la lista o escriba..." />
+                            <label class="form-label mb-1 fw-semibold">Producto Seleccionado (en stock en @NombreSedeActiva)</label>
+                            <select class="form-select form-select-sm"
+                                    value="@(itemSeleccionadoStock?.Id ?? string.Empty)"
+                                    @onchange="OnSelectProductoStockChanged">
+                                <option value="">-- Seleccione un producto en stock (@ProductosEnStockFiltrados.Count()) --</option>
+                                @foreach (var item in ProductosEnStockFiltrados)
+                                {
+                                    <option value="@item.Id">@item.DisplayName (@item.Number) · Disp: @FormatearResumenStock(item)</option>
+                                }
+                            </select>
+                            @if (catalogoStockSede.Count == 0 && !buscandoStock)
+                            {
+                                <small class="text-warning-emphasis d-block mt-1">No hay productos con stock disponible en <strong>@NombreSedeActiva</strong>.</small>
+                            }
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label mb-0">Cantidad</label>
-                            <input type="number" min="0.01" step="0.01"
-                                   class="form-control form-control-sm" @bind="nuevoProd.CantProd" />
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label mb-1">Cantidad @(FactorSeleccionado > 1m ? "(Paquetes / Unidad)" : $"({UnidadSeleccionada})")</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" min="0.01" step="0.01"
+                                       class="form-control" @bind="nuevoProd.CantProd" />
+                                @if (FactorSeleccionado > 1m)
+                                {
+                                    <select class="form-select"
+                                            style="max-width: 155px;"
+                                            value="@(ingresarPorPaquete ? "paquete" : "unidad")"
+                                            @onchange='e => ingresarPorPaquete = string.Equals(e.Value?.ToString(), "paquete", StringComparison.Ordinal)'>
+                                        <option value="unidad">@UnidadSeleccionada</option>
+                                        <option value="paquete">Paq. (×@FactorSeleccionado.ToString("G29") @UnidadSeleccionada)</option>
+                                    </select>
+                                }
+                                else
+                                {
+                                    <span class="input-group-text">@UnidadSeleccionada</span>
+                                }
+                            </div>
+                            @if (itemSeleccionadoStock is not null)
+                            {
+                                @if (FactorSeleccionado > 1m && ingresarPorPaquete)
+                                {
+                                    <small class="text-primary d-block mt-1 fw-semibold">
+                                        @nuevoProd.CantProd.ToString("0.##") paq. × @FactorSeleccionado.ToString("G29") @UnidadSeleccionada = @CantidadBaseCalculada.ToString("0.##") @UnidadSeleccionada
+                                        <span class="text-muted fw-normal">· Disp: @FormatearResumenStock(itemSeleccionadoStock)</span>
+                                    </small>
+                                }
+                                else
+                                {
+                                    <small class="text-muted d-block mt-1">
+                                        Disp: <strong>@FormatearResumenStock(itemSeleccionadoStock)</strong>
+                                    </small>
+                                }
+                            }
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label mb-0">Vía</label>
+
+                        <div class="col-6 col-md-3">
+                            <label class="form-label mb-1">Vía</label>
                             <select class="form-select form-select-sm" @bind="nuevoProd.Via">
                                 @foreach (var v in catalogoVias)
                                 {
@@ -290,14 +349,14 @@ else
                                 }
                             </select>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label mb-0">Hora</label>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label mb-1">Hora</label>
                             <input type="time" class="form-control form-control-sm"
                                    value="@nuevoProd.Hora"
                                    @onchange="e => nuevoProd.Hora = e.Value?.ToString() ?? string.Empty" />
                         </div>
                         <div class="col-12">
-                            <label class="form-label mb-0">Indicaciones / Dosis Pre-Anestésica</label>
+                            <label class="form-label mb-1">Indicaciones / Dosis Pre-Anestésica</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control" @bind="nuevoProd.IndicacionesProd" placeholder="Ej: 0.02 mg/kg IM 20 min antes de inducción" />
                                 <SaveButton class="btn btn-primary" OnClick="AgregarProductoPreAnestesiaAsync">Agregar</SaveButton>
@@ -369,13 +428,55 @@ else
 
     private string filtroProd = string.Empty;
     private bool buscandoStock;
+    private List<FarmacoStockDto> catalogoStockSede = new();
     private List<FarmacoStockDto> resultadosStock = new();
+    private FarmacoStockDto? itemSeleccionadoStock;
+    private bool ingresarPorPaquete;
+    private int localidadCargadaStock;
     private ProductoQuirofanoDto nuevoProd = new() { Modulo = "PreAnestesia" };
+
+    private int SedeActivaId => Session.Localidad > 0 ? Session.Localidad : (Session.CurrentUser?.IdLocalidad ?? 1);
+    private string NombreSedeActiva => string.IsNullOrWhiteSpace(Session.LocalidadDescripcion) ? "Sede actual" : Session.LocalidadDescripcion;
+    private string UnidadSeleccionada => itemSeleccionadoStock is not null ? UnidadDeItem(itemSeleccionadoStock) : "UNIDAD";
+    private decimal FactorSeleccionado => itemSeleccionadoStock is { FactorConversion: > 1m } ? itemSeleccionadoStock.FactorConversion : 1m;
+    private decimal CantidadBaseCalculada => ingresarPorPaquete && FactorSeleccionado > 1m
+        ? Math.Round(nuevoProd.CantProd * FactorSeleccionado, 4)
+        : nuevoProd.CantProd;
+
+    private IEnumerable<FarmacoStockDto> ProductosEnStockFiltrados =>
+        string.IsNullOrWhiteSpace(filtroProd)
+            ? catalogoStockSede
+            : catalogoStockSede.Where(x =>
+                x.DisplayName.Contains(filtroProd.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                x.Number.Contains(filtroProd.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                x.Id.Contains(filtroProd.Trim(), StringComparison.OrdinalIgnoreCase));
 
     private bool cargandoInicial = true;
     private bool guardando;
     private string mensajeAlerta = string.Empty;
     private bool esError;
+
+    protected override void OnInitialized()
+    {
+        Session.OnChange += OnSessionChanged;
+    }
+
+    public void Dispose()
+    {
+        Session.OnChange -= OnSessionChanged;
+    }
+
+    private void OnSessionChanged()
+    {
+        if (localidadCargadaStock != SedeActivaId)
+        {
+            _ = InvokeAsync(async () =>
+            {
+                await CargarCatalogoStockSedeAsync();
+                StateHasChanged();
+            });
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -384,7 +485,8 @@ else
 
         var tVias = KardexService.ObtenerViasAdministracionAsync();
         var tOrdenes = KardexService.ObtenerOrdenesActivasAsync();
-        await Task.WhenAll(tVias, tOrdenes);
+        var tStock = CargarCatalogoStockSedeAsync();
+        await Task.WhenAll(tVias, tOrdenes, tStock);
 
         catalogoVias = await tVias;
         ordenesActivas = await tOrdenes;
@@ -499,6 +601,71 @@ else
             await OnGuardado.InvokeAsync();
     }
 
+    private async Task CargarCatalogoStockSedeAsync()
+    {
+        buscandoStock = true;
+        localidadCargadaStock = SedeActivaId;
+        catalogoStockSede = await InventarioService.BuscarMedicamentosConStockAsync(
+            string.Empty,
+            SedeActivaId,
+            Session.Apostrofe);
+        if (itemSeleccionadoStock is not null)
+        {
+            itemSeleccionadoStock = catalogoStockSede.FirstOrDefault(x => x.Id == itemSeleccionadoStock.Id);
+            if (itemSeleccionadoStock is null)
+            {
+                nuevoProd.CodigoProd = string.Empty;
+                nuevoProd.ProdDescripcion = string.Empty;
+                ingresarPorPaquete = false;
+            }
+        }
+        buscandoStock = false;
+    }
+
+    private static string UnidadDeItem(FarmacoStockDto item) =>
+        string.IsNullOrWhiteSpace(item.BaseUnitOfMeasureCode) ? "UNIDAD" : item.BaseUnitOfMeasureCode.Trim().ToUpperInvariant();
+
+    private static string FormatearPaquetesStock(decimal stockBase, decimal factor, string unidad)
+    {
+        if (factor <= 1m) return string.Empty;
+        var paquetes = Math.Round(stockBase / factor, 2, MidpointRounding.AwayFromZero);
+        var paqTxt = paquetes == Math.Truncate(paquetes) ? paquetes.ToString("0") : paquetes.ToString("0.##");
+        var facTxt = factor == Math.Truncate(factor) ? factor.ToString("0") : factor.ToString("G29");
+        return $"{paqTxt} {(paquetes == 1m ? "paquete" : "paquetes")} (×{facTxt} {unidad})";
+    }
+
+    private static string FormatearResumenStock(FarmacoStockDto item)
+    {
+        var unidad = UnidadDeItem(item);
+        var baseTxt = $"{item.Available:0.##} {unidad}";
+        return item.FactorConversion > 1m
+            ? $"{baseTxt} · {FormatearPaquetesStock(item.Available, item.FactorConversion, unidad)}"
+            : baseTxt;
+    }
+
+    private void LimpiarFiltroStock()
+    {
+        filtroProd = string.Empty;
+        resultadosStock.Clear();
+    }
+
+    private void OnSelectProductoStockChanged(ChangeEventArgs e)
+    {
+        var id = e.Value?.ToString();
+        var item = catalogoStockSede.FirstOrDefault(x => x.Id == id);
+        if (item is not null)
+        {
+            SeleccionarProducto(item);
+        }
+        else
+        {
+            itemSeleccionadoStock = null;
+            nuevoProd.CodigoProd = string.Empty;
+            nuevoProd.ProdDescripcion = string.Empty;
+            ingresarPorPaquete = false;
+        }
+    }
+
     private async Task OnFiltroProdKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
@@ -514,13 +681,10 @@ else
             resultadosStock.Clear();
             return;
         }
-        buscandoStock = true;
-        mensajeAlerta = string.Empty;
-        resultadosStock = await InventarioService.BuscarMedicamentosConStockAsync(
-            filtroProd.Trim(),
-            Session.CurrentUser?.IdLocalidad ?? 1,
-            Session.CurrentUser?.PrefijoLocalidad ?? "HV");
-        buscandoStock = false;
+        if (catalogoStockSede.Count == 0 || localidadCargadaStock != SedeActivaId)
+            await CargarCatalogoStockSedeAsync();
+
+        resultadosStock = ProductosEnStockFiltrados.Take(30).ToList();
     }
 
     private async Task BuscarStockBcAsync()
@@ -530,50 +694,63 @@ else
             resultadosStock.Clear();
             return;
         }
-        buscandoStock = true;
-        mensajeAlerta = string.Empty;
-        resultadosStock = await InventarioService.BuscarMedicamentosConStockAsync(
-            filtroProd.Trim(),
-            Session.CurrentUser?.IdLocalidad ?? 1,
-            Session.CurrentUser?.PrefijoLocalidad ?? "HV");
-        buscandoStock = false;
+        await CargarCatalogoStockSedeAsync();
+        resultadosStock = ProductosEnStockFiltrados.Take(30).ToList();
 
         if (resultadosStock.Count == 0)
         {
             esError = false;
-            mensajeAlerta = $"No se encontraron fármacos o insumos activos para '{filtroProd.Trim()}'.";
+            mensajeAlerta = $"No se encontraron productos con stock en {NombreSedeActiva} para '{filtroProd.Trim()}'.";
         }
     }
 
     private void SeleccionarProducto(FarmacoStockDto item)
     {
+        itemSeleccionadoStock = item;
         nuevoProd.CodigoProd = !string.IsNullOrWhiteSpace(item.Number) ? item.Number : item.Id;
         nuevoProd.ProdDescripcion = item.DisplayName;
         nuevoProd.PrecioProd = item.UnitPrice;
-        nuevoProd.StockProd = (int)item.Inventory;
+        nuevoProd.StockProd = (int)Math.Ceiling(item.Available);
         nuevoProd.MedBodega = item.Location;
-        nuevoProd.MedMedida = item.BaseUnitOfMeasureCode;
+        nuevoProd.MedMedida = UnidadDeItem(item);
         nuevoProd.MedIva = item.TaxGroupCode;
         nuevoProd.MedIdDinamics = item.Id;
+        ingresarPorPaquete = item.FactorConversion > 1m;
         resultadosStock.Clear();
     }
 
     private async Task AgregarProductoPreAnestesiaAsync()
     {
-        if (string.IsNullOrWhiteSpace(nuevoProd.CodigoProd) || string.IsNullOrWhiteSpace(nuevoProd.ProdDescripcion))
+        if (itemSeleccionadoStock is null || string.IsNullOrWhiteSpace(nuevoProd.CodigoProd) || string.IsNullOrWhiteSpace(nuevoProd.ProdDescripcion))
         {
             esError = true;
-            mensajeAlerta = "Seleccione el fármaco o insumo desde los resultados del catálogo.";
+            mensajeAlerta = $"Seleccione un fármaco o insumo con stock disponible en {NombreSedeActiva}.";
             return;
         }
-        if (nuevoProd.CantProd <= 0 || (nuevoProd.StockProd > 0 && nuevoProd.CantProd > nuevoProd.StockProd))
+
+        var cantidadBase = CantidadBaseCalculada;
+        var disponibleBase = itemSeleccionadoStock.Available;
+        if (cantidadBase <= 0 || (disponibleBase > 0 && cantidadBase > disponibleBase))
         {
             esError = true;
-            mensajeAlerta = nuevoProd.CantProd <= 0
+            mensajeAlerta = cantidadBase <= 0
                 ? "Ingrese una cantidad mayor que cero."
-                : $"La cantidad no puede superar el stock disponible ({nuevoProd.StockProd:N2}).";
+                : $"La cantidad solicitada ({cantidadBase:0.##} {UnidadSeleccionada}) supera el stock disponible en {NombreSedeActiva} ({FormatearResumenStock(itemSeleccionadoStock)}).";
             return;
         }
+
+        var cantOriginal = nuevoProd.CantProd;
+        nuevoProd.CantProd = cantidadBase;
+        nuevoProd.StockProd = (int)Math.Ceiling(disponibleBase);
+        if (FactorSeleccionado > 1m && ingresarPorPaquete)
+        {
+            var detallePaq = $"[{cantOriginal:0.##} paq. × {FactorSeleccionado:G29} {UnidadSeleccionada} = {cantidadBase:0.##} {UnidadSeleccionada}]";
+            if (string.IsNullOrWhiteSpace(nuevoProd.IndicacionesProd))
+                nuevoProd.IndicacionesProd = detallePaq;
+            else if (!nuevoProd.IndicacionesProd.Contains(detallePaq, StringComparison.OrdinalIgnoreCase))
+                nuevoProd.IndicacionesProd = $"{detallePaq} {nuevoProd.IndicacionesProd.Trim()}";
+        }
+
         nuevoProd.OrdenId = IdOrden;
         nuevoProd.Nhcl = Nhcl;
         nuevoProd.Modulo = "PreAnestesia";
@@ -584,11 +761,14 @@ else
         var ok = await QuirofanoService.AgregarProductoQuirofanoAsync(
             nuevoProd,
             Session.CurrentUser?.IdUsuario ?? 1,
-            Session.CurrentUser?.IdLocalidad ?? 1,
+            SedeActivaId,
             "PRE");
 
         if (ok)
         {
+            itemSeleccionadoStock = null;
+            ingresarPorPaquete = false;
+            filtroProd = string.Empty;
             nuevoProd = new ProductoQuirofanoDto { Modulo = "PreAnestesia", Via = "IV" };
             listaPremedicacion = await QuirofanoService.ObtenerProductosQuirofanoAsync(IdOrden, "PreAnestesia");
             esError = false;
