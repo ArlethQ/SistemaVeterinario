@@ -320,18 +320,40 @@
 
 @if (mostrarHomologacion && compraSeleccionadaHomologar is not null)
 {
-    <div class="reception-modal-backdrop" @onclick="CerrarHomologacion">
-        <section class="reception-modal purchase-modal" role="dialog" aria-modal="true" aria-labelledby="homologacion-modal-title" @onclick:stopPropagation="true">
-            <header class="purchase-modal-header">
+    var cntExistentes = lineasHomologacion.Count(l => !l.CrearNuevoProducto && l.CodigoProducto > 0);
+    var cntNuevos = lineasHomologacion.Count(l => l.CrearNuevoProducto);
+    var cntOmitidos = lineasHomologacion.Count(l => !l.CrearNuevoProducto && l.CodigoProducto == 0);
+
+    <div class="purchase-modal-backdrop reception-modal-backdrop"
+         style="position:fixed;inset:0;z-index:2990;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);"
+         @onclick="CerrarHomologacion">
+        <section class="reception-modal purchase-modal"
+                 style="width:min(1240px, calc(100vw - 2rem));max-height:calc(100vh - 2rem);display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:#fff;box-shadow:0 24px 60px rgba(15,23,42,.28);"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-labelledby="homologacion-modal-title"
+                 @onclick:stopPropagation="true">
+            <header class="purchase-modal-header" style="flex:0 0 auto;border-bottom:1px solid #e2e8f0;background:linear-gradient(180deg,#ffffff,#f8fafc);padding:1rem 1.25rem;">
                 <div>
-                    <span class="purchase-eyebrow">HOMOLOGACIÓN DE COMPRA A INVENTARIO · @NombreSucursalActiva.ToUpperInvariant()</span>
-                    <h2 id="homologacion-modal-title">Factura @compraSeleccionadaHomologar.NumeroDocumento</h2>
-                    <p>@compraSeleccionadaHomologar.Proveedor (@compraSeleccionadaHomologar.RucProveedor) · Total $@compraSeleccionadaHomologar.ValorTotal.ToString("N2")</p>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                        <span class="badge bg-primary-subtle text-primary border">HOMOLOGACIÓN A INVENTARIO</span>
+                        <span class="badge bg-info-subtle text-dark border"><i class="ri-building-line me-1"></i>@NombreSucursalActiva</span>
+                        @if (!cargandoHomologacion && lineasHomologacion.Count > 0)
+                        {
+                            <span class="badge bg-success-subtle text-success border">@cntExistentes existentes</span>
+                            <span class="badge bg-primary-subtle text-primary border">@cntNuevos nuevos</span>
+                            <span class="badge bg-secondary-subtle text-secondary border">@cntOmitidos omitidos</span>
+                        }
+                    </div>
+                    <h2 id="homologacion-modal-title" class="h5 fw-bold mb-1">Factura @compraSeleccionadaHomologar.NumeroDocumento</h2>
+                    <p class="mb-0 text-muted small">@compraSeleccionadaHomologar.Proveedor (@compraSeleccionadaHomologar.RucProveedor) · Total <strong>$@compraSeleccionadaHomologar.ValorTotal.ToString("N2")</strong> · @compraSeleccionadaHomologar.Detalles.Count ítem(s)</p>
                 </div>
-                <button type="button" class="purchase-modal-close" aria-label="Cerrar" @onclick="CerrarHomologacion"><i class="ri-close-line"></i></button>
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-circle d-inline-flex align-items-center justify-content-center" style="width:34px;height:34px;" aria-label="Cerrar" @onclick="CerrarHomologacion" disabled="@guardandoHomologacion">
+                    <i class="ri-close-line fs-5"></i>
+                </button>
             </header>
 
-            <div class="purchase-modal-body p-4 overflow-auto">
+            <div class="purchase-modal-body p-4" style="flex:1 1 auto;overflow-y:auto;background:#f8fafc;">
                 @if (!string.IsNullOrWhiteSpace(errorHomologacion))
                 {
                     <div class="alert alert-danger" role="alert">@errorHomologacion</div>
@@ -570,10 +592,10 @@
                 }
             </div>
 
-            <footer class="purchase-modal-footer">
-                <span><i class="ri-information-line"></i>Los ítems homologados sumarán stock al kardex; los omitidos se marcarán como revisados sin ingreso físico.</span>
-                <div>
-                    <button type="button" class="purchase-secondary-btn" @onclick="CerrarHomologacion" disabled="@guardandoHomologacion">Cancelar</button>
+            <footer class="purchase-modal-footer" style="flex:0 0 auto;border-top:1px solid #e2e8f0;background:#fff;padding:.9rem 1.25rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+                <span class="small text-muted"><i class="ri-information-line me-1"></i>Los ítems homologados sumarán stock al kardex en la bodega elegida; los omitidos se marcarán como revisados sin ingreso físico.</span>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CerrarHomologacion" disabled="@guardandoHomologacion">Cancelar</button>
                     <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" @onclick="ConfirmarHomologacionAsync" disabled="@(cargandoHomologacion || guardandoHomologacion)">
                         <i class="ri-check-double-line"></i><span>@(guardandoHomologacion ? "Ingresando..." : "Confirmar ingreso a inventario")</span>
                     </button>
@@ -585,7 +607,9 @@
 
 @if (mostrarEditor)
 {
-    <div class="reception-modal-backdrop" @onclick="CerrarEditorAsync">
+    <div class="purchase-modal-backdrop reception-modal-backdrop"
+         style="position:fixed;inset:0;z-index:2990;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);"
+         @onclick="CerrarEditorAsync">
         <section class="reception-modal purchase-modal" role="dialog" aria-modal="true" aria-labelledby="recepcion-compra-modal-title" @onclick:stopPropagation="true">
             <header class="purchase-modal-header">
                 <div>
