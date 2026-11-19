@@ -511,8 +511,8 @@
                     <DataAnnotationsValidator />
 
                     <div>
-                            <details class="form-accordion" open>
-                            <summary class="form-section-heading">
+                            <details class="form-accordion" open="@informacionBasicaAbierta">
+                            <summary class="form-section-heading" @onclick="() => informacionBasicaAbierta = !informacionBasicaAbierta" @onclick:preventDefault="true">
                                 <span>1</span>
                                 <strong>Información básica</strong>
                                 <i class="bi bi-chevron-down"></i>
@@ -615,8 +615,8 @@
                             </div>
                             </details>
 
-                            <details class="form-accordion">
-                            <summary class="form-section-heading">
+                            <details class="form-accordion" open="@contactoAbierto">
+                            <summary class="form-section-heading" @onclick="() => contactoAbierto = !contactoAbierto" @onclick:preventDefault="true">
                                 <span>2</span>
                                 <strong>Contacto</strong>
                                 <i class="bi bi-chevron-down"></i>
@@ -736,8 +736,8 @@
 
                             @if (EsModoProveedores)
                             {
-                                <details class="form-accordion client-provider-accordion" open>
-                                    <summary class="form-section-heading">
+                                <details class="form-accordion client-provider-accordion" open="@productosProveedorAbiertos">
+                                    <summary class="form-section-heading" @onclick="() => productosProveedorAbiertos = !productosProveedorAbiertos" @onclick:preventDefault="true">
                                         <span>2</span>
                                         <strong>Productos que vende el proveedor</strong>
                                         <i class="bi bi-chevron-down"></i>
@@ -753,8 +753,8 @@
                                 </details>
                             }
 
-                            <details class="form-accordion">
-                            <summary class="form-section-heading">
+                            <details class="form-accordion" open="@direccionAbierta">
+                            <summary class="form-section-heading" @onclick="() => direccionAbierta = !direccionAbierta" @onclick:preventDefault="true">
                                 <span>3</span>
                                 <strong>Dirección</strong>
                                 <i class="bi bi-chevron-down"></i>
@@ -813,8 +813,8 @@
                             </div>
                             </details>
 
-                            <details class="form-accordion">
-                                <summary class="form-section-heading">
+                            <details class="form-accordion" open="@informacionAdicionalAbierta">
+                                <summary class="form-section-heading" @onclick="() => informacionAdicionalAbierta = !informacionAdicionalAbierta" @onclick:preventDefault="true">
                                     <span>3</span>
                                     <strong>Información adicional</strong>
                                     <i class="bi bi-chevron-down"></i>
@@ -921,8 +921,8 @@
                                     <DataAnnotationsValidator />
 
                                     <div>
-                                            <details class="form-accordion" open>
-                                            <summary class="form-section-heading">
+                                            <details class="form-accordion" open="@informacionBasicaAbierta">
+                                            <summary class="form-section-heading" @onclick="() => informacionBasicaAbierta = !informacionBasicaAbierta" @onclick:preventDefault="true">
                                                 <span>1</span>
                                                 <strong>Información básica</strong>
                                                 <i class="bi bi-chevron-down"></i>
@@ -1025,8 +1025,8 @@
                                             </div>
                                             </details>
 
-                                            <details class="form-accordion">
-                                            <summary class="form-section-heading">
+                                            <details class="form-accordion" open="@contactoAbierto">
+                                            <summary class="form-section-heading" @onclick="() => contactoAbierto = !contactoAbierto" @onclick:preventDefault="true">
                                                 <span>2</span>
                                                 <strong>Contacto</strong>
                                                 <i class="bi bi-chevron-down"></i>
@@ -1146,8 +1146,8 @@
 
                                             @if (EsModoProveedores)
                                             {
-                                                <details class="form-accordion client-provider-accordion" open>
-                                                    <summary class="form-section-heading">
+                                                <details class="form-accordion client-provider-accordion" open="@productosProveedorAbiertos">
+                                                    <summary class="form-section-heading" @onclick="() => productosProveedorAbiertos = !productosProveedorAbiertos" @onclick:preventDefault="true">
                                                         <span>2</span>
                                                         <strong>Productos que vende el proveedor</strong>
                                                         <i class="bi bi-chevron-down"></i>
@@ -1163,8 +1163,8 @@
                                                 </details>
                                             }
 
-                                            <details class="form-accordion">
-                                            <summary class="form-section-heading">
+                                            <details class="form-accordion" open="@direccionAbierta">
+                                            <summary class="form-section-heading" @onclick="() => direccionAbierta = !direccionAbierta" @onclick:preventDefault="true">
                                                 <span>3</span>
                                                 <strong>Dirección</strong>
                                                 <i class="bi bi-chevron-down"></i>
@@ -1223,8 +1223,8 @@
                                             </div>
                                             </details>
 
-                                            <details class="form-accordion">
-                                                <summary class="form-section-heading">
+                                            <details class="form-accordion" open="@informacionAdicionalAbierta">
+                                                <summary class="form-section-heading" @onclick="() => informacionAdicionalAbierta = !informacionAdicionalAbierta" @onclick:preventDefault="true">
                                                     <span>3</span>
                                                     <strong>Información adicional</strong>
                                                     <i class="bi bi-chevron-down"></i>
@@ -1935,6 +1935,21 @@
     private string? debugError;
     private string dbName = "-";
     private EmisionEstado? emisionEstado;
+    private bool informacionBasicaAbierta = true;
+    private bool contactoAbierto;
+    private bool productosProveedorAbiertos = true;
+    private bool direccionAbierta;
+    private bool informacionAdicionalAbierta;
+
+    private void RestablecerPasosFormulario()
+    {
+        informacionBasicaAbierta = true;
+        contactoAbierto = false;
+        productosProveedorAbiertos = true;
+        direccionAbierta = false;
+        informacionAdicionalAbierta = false;
+    }
+
     private ClienteUpsertDto model = new();
     private bool editando = false;
     private bool estadoAux = true;
@@ -3447,6 +3462,7 @@
         mensajeFormularioEsError = false;
         clienteEnVista = null;
 
+        RestablecerPasosFormulario();
         model = new ClienteUpsertDto
         {
             Parent = this,
@@ -3494,6 +3510,7 @@
 
         _ = int.TryParse(ClientePrefill.Tipoidentificacion, out var tipoIdentificacion);
 
+        RestablecerPasosFormulario();
         model = new ClienteUpsertDto
         {
             Parent = this,
@@ -3543,6 +3560,7 @@
             if (itemDemo is null)
                 return;
 
+            RestablecerPasosFormulario();
             model = new ClienteUpsertDto
             {
                 Parent = this,
@@ -3620,6 +3638,7 @@
             }
 
             // Mapeo al modelo de edición
+            RestablecerPasosFormulario();
             model = new ClienteUpsertDto
             {
                 Parent = this,
