@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Simetric.Data;
 using Simetric.DTOs.EContax;
 using Simetric.Models;
@@ -15,10 +17,12 @@ public sealed class EContaxTenantService
     private static readonly ConcurrentDictionary<int, bool> _localidadesSincronizadas = new();
 
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly IConfiguration? _configuration;
 
-    public EContaxTenantService(IDbContextFactory<AppDbContext> dbFactory)
+    public EContaxTenantService(IDbContextFactory<AppDbContext> dbFactory, IConfiguration? configuration = null)
     {
         _dbFactory = dbFactory;
+        _configuration = configuration;
     }
 
     public async Task<EContaxUserContext> GetContextAsync(int userId)
@@ -169,7 +173,7 @@ public sealed class EContaxTenantService
 
     public async Task<List<EContaxSucursalDto>> GetSucursalesEmpresaAsync(AppDbContext context, int empresaId, bool includeInactive = false)
     {
-        await SincronizarLocalidadesVeterinariaSiAplicaAsync(context, empresaId);
+        await SincronizarLocalidadesVeterinariaSiAplicaAsync(context, empresaId, _configuration);
         var query = context.EContaxSucursales
             .AsNoTracking()
             .Where(x => x.IdEmpresa == empresaId);
@@ -245,33 +249,43 @@ public sealed class EContaxTenantService
         await context.SaveChangesAsync();
     }
 
-    private static async Task SincronizarLocalidadesVeterinariaSiAplicaAsync(AppDbContext context, int empresaId)
+    private static async Task SincronizarLocalidadesVeterinariaSiAplicaAsync(AppDbContext context, int empresaId, IConfiguration? configuration)
     {
         if (empresaId <= 0 || _localidadesSincronizadas.ContainsKey(empresaId))
             return;
 
         try
         {
-            var existeTabla = await context.Database
+            var existeEnContexto = await context.Database
                 .SqlQuery<int>($"SELECT CASE WHEN OBJECT_ID(N'dbo.vt_localidades', N'U') IS NULL THEN 0 ELSE 1 END AS [Value]")
-                .FirstOrDefaultAsync();
-            if (existeTabla != 1)
-            {
-                _localidadesSincronizadas[empresaId] = true;
-                return;
-            }
+                .FirstOrDefaultAsync() == 1;
 
-            var localidades = await context.Database
-                .SqlQuery<LocalidadVeterinariaRow>($@"
-                    SELECT loc_id AS LocId,
-                           RTRIM(ISNULL(loc_descripcion, '')) AS Nombre,
-                           RTRIM(ISNULL(loc_prefijo, '')) AS Codigo,
-                           RTRIM(ISNULL(loc_direccion, '')) AS Direccion
-                    FROM dbo.vt_localidades
-                    WHERE ISNULL(loc_estado, 'A') = 'A'
-                      AND NULLIF(LTRIM(RTRIM(loc_descripcion)), '') IS NOT NULL
-                    ORDER BY loc_id")
-                .ToListAsync();
+            List<LocalidadVeterinariaRow> localidades;
+            if (existeEnContexto)
+            {
+                localidades = await context.Database
+                    .SqlQuery<LocalidadVeterinariaRow>($@"
+                        SELECT loc_id AS LocId,
+                               RTRIM(ISNULL(loc_descripcion, '')) AS Nombre,
+                               RTRIM(ISNULL(loc_prefijo, '')) AS Codigo,
+                               RTRIM(ISNULL(loc_direccion, '')) AS Direccion
+                        FROM dbo.vt_localidades
+                        WHERE ISNULL(loc_estado, 'A') = 'A'
+                          AND NULLIF(LTRIM(RTRIM(loc_descripcion)), '') IS NOT NULL
+                        ORDER BY loc_id")
+                    .ToListAsync();
+            }
+            else
+            {
+                var vetConn = configuration?.GetConnectionString("VeterinariaConnection");
+                if (string.IsNullOrWhiteSpace(vetConn))
+                {
+                    _localidadesSincronizadas[empresaId] = true;
+                    return;
+                }
+
+                localidades = await LeerLocalidadesDesdeVeterinariaAsync(vetConn);
+            }
 
             if (localidades.Count == 0)
             {
@@ -329,22 +343,25 @@ public sealed class EContaxTenantService
             if (cambio)
                 await context.SaveChangesAsync();
 
-            var tieneColsMapeo = await context.Database
-                .SqlQuery<int>($"SELECT CASE WHEN COL_LENGTH(N'dbo.vt_localidades', N'idEmpresa') IS NOT NULL AND COL_LENGTH(N'dbo.vt_localidades', N'idSucursal') IS NOT NULL THEN 1 ELSE 0 END AS [Value]")
-                .FirstOrDefaultAsync();
-
-            if (tieneColsMapeo == 1)
+            if (existeEnContexto)
             {
-                foreach (var loc in localidades)
+                var tieneColsMapeo = await context.Database
+                    .SqlQuery<int>($"SELECT CASE WHEN COL_LENGTH(N'dbo.vt_localidades', N'idEmpresa') IS NOT NULL AND COL_LENGTH(N'dbo.vt_localidades', N'idSucursal') IS NOT NULL THEN 1 ELSE 0 END AS [Value]")
+                    .FirstOrDefaultAsync();
+
+                if (tieneColsMapeo == 1)
                 {
-                    var suc = sucursales.FirstOrDefault(s =>
-                        string.Equals(s.Nombre?.Trim(), loc.Nombre, StringComparison.OrdinalIgnoreCase));
-                    if (suc is not null)
+                    foreach (var loc in localidades)
                     {
-                        await context.Database.ExecuteSqlInterpolatedAsync($@"
-                            UPDATE dbo.vt_localidades
-                            SET idEmpresa = {empresaId}, idSucursal = {suc.IdSucursal}
-                            WHERE loc_id = {loc.LocId} AND (idEmpresa IS NULL OR idSucursal IS NULL)");
+                        var suc = sucursales.FirstOrDefault(s =>
+                            string.Equals(s.Nombre?.Trim(), loc.Nombre, StringComparison.OrdinalIgnoreCase));
+                        if (suc is not null)
+                        {
+                            await context.Database.ExecuteSqlInterpolatedAsync($@"
+                                UPDATE dbo.vt_localidades
+                                SET idEmpresa = {empresaId}, idSucursal = {suc.IdSucursal}
+                                WHERE loc_id = {loc.LocId} AND (idEmpresa IS NULL OR idSucursal IS NULL)");
+                        }
                     }
                 }
             }
@@ -355,6 +372,36 @@ public sealed class EContaxTenantService
         {
             // No bloquear la consulta de sucursales si el esquema veterinario difiere.
         }
+    }
+
+    private static async Task<List<LocalidadVeterinariaRow>> LeerLocalidadesDesdeVeterinariaAsync(string connectionString)
+    {
+        var resultado = new List<LocalidadVeterinariaRow>();
+        await using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            IF OBJECT_ID(N'dbo.vt_localidades', N'U') IS NOT NULL
+            SELECT loc_id AS LocId,
+                   RTRIM(ISNULL(loc_descripcion, '')) AS Nombre,
+                   RTRIM(ISNULL(loc_prefijo, '')) AS Codigo,
+                   RTRIM(ISNULL(loc_direccion, '')) AS Direccion
+            FROM dbo.vt_localidades
+            WHERE ISNULL(loc_estado, 'A') = 'A'
+              AND NULLIF(LTRIM(RTRIM(loc_descripcion)), '') IS NOT NULL
+            ORDER BY loc_id";
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            resultado.Add(new LocalidadVeterinariaRow
+            {
+                LocId = reader.IsDBNull(0) ? 0 : reader.GetInt32(0),
+                Nombre = reader.IsDBNull(1) ? string.Empty : reader.GetString(1).Trim(),
+                Codigo = reader.IsDBNull(2) ? string.Empty : reader.GetString(2).Trim(),
+                Direccion = reader.IsDBNull(3) ? string.Empty : reader.GetString(3).Trim()
+            });
+        }
+        return resultado;
     }
 
     private sealed class LocalidadVeterinariaRow
