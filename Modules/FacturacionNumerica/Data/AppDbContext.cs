@@ -569,6 +569,7 @@ namespace Simetric.Data
                 entity.Property(x => x.CodigoProducto).HasColumnName("codigo_producto");
                 entity.Property(x => x.IdEmpresa).HasColumnName("id_empresa");
                 entity.Property(x => x.IdSucursal).HasColumnName("id_sucursal");
+                entity.Property(x => x.IdBodega).HasColumnName("id_bodega");
                 entity.Property(x => x.StockActual).HasColumnName("stock_actual").HasColumnType("decimal(18,4)");
                 entity.Property(x => x.StockReservado).HasColumnName("stock_reservado").HasColumnType("decimal(18,4)");
                 entity.Property(x => x.StockMinimo).HasColumnName("stock_minimo").HasColumnType("decimal(18,4)");

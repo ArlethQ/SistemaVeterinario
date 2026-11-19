@@ -8,6 +8,7 @@ public sealed class EContaxInventarioExistencia
     public int CodigoProducto { get; set; }
     public int IdEmpresa { get; set; }
     public int IdSucursal { get; set; }
+    public int? IdBodega { get; set; }
     public decimal StockActual { get; set; }
     public decimal StockReservado { get; set; }
     public decimal StockMinimo { get; set; }

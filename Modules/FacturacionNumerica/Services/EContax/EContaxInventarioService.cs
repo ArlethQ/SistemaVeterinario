@@ -66,6 +66,22 @@ public sealed class EContaxInventarioService
             .AsNoTracking()
             .Where(x => x.IdEmpresa == userContext.IdEmpresa && idsSucursal.Contains(x.IdSucursal) && codigos.Contains(x.CodigoProducto))
             .ToListAsync();
+        var bodegas = await context.EContaxBodegas
+            .AsNoTracking()
+            .Where(b => b.IdEmpresa == userContext.IdEmpresa && idsSucursal.Contains(b.IdSucursal) && b.Estado)
+            .OrderBy(b => b.Nombre)
+            .ToListAsync();
+        var bodegasPorId = bodegas.ToDictionary(b => b.IdBodega);
+        var ultimosMovimientosBodega = await context.EContaxInventarioMovimientos
+            .AsNoTracking()
+            .Where(m => m.IdEmpresa == userContext.IdEmpresa && idsSucursal.Contains(m.IdSucursal) && codigos.Contains(m.CodigoProducto) &&
+                        m.Observacion != null && m.Observacion.Contains("Bodega:"))
+            .OrderByDescending(m => m.IdMovimiento)
+            .Select(m => new { m.CodigoProducto, m.IdSucursal, m.Observacion })
+            .ToListAsync();
+        var bodegaPorMovimiento = ultimosMovimientosBodega
+            .GroupBy(m => (m.CodigoProducto, m.IdSucursal))
+            .ToDictionary(g => g.Key, g => ExtraerTextoBodega(g.First().Observacion));
         var nombresSucursal = sucursales.ToDictionary(x => x.IdSucursal, x => x.Nombre);
         var fechaHoy = DateTime.UtcNow.Date;
         var fechaLimite7Dias = fechaHoy.AddDays(7);
@@ -105,6 +121,17 @@ public sealed class EContaxInventarioService
                         : lotePorVencer?.FechaVencimiento is { } fechaVencimiento && fechaVencimiento.Date <= fechaLimite7Dias
                             ? "VENCE_7"
                             : lotePorVencer is not null ? "VENCE_30" : null;
+                    string? nombreBodega = null;
+                    if (existencia?.IdBodega is int idBod && bodegasPorId.TryGetValue(idBod, out var bodInfo))
+                    {
+                        nombreBodega = string.IsNullOrWhiteSpace(bodInfo.Codigo) ? bodInfo.Nombre : $"{bodInfo.Nombre} ({bodInfo.Codigo})";
+                    }
+                    else if (bodegaPorMovimiento.TryGetValue((producto.Codigo, sucursal.IdSucursal), out var bodMov) &&
+                             !string.IsNullOrWhiteSpace(bodMov))
+                    {
+                        nombreBodega = bodMov;
+                    }
+
                     return new EContaxInventarioItemDto
                     {
                         CodigoProducto = producto.Codigo,
@@ -112,6 +139,8 @@ public sealed class EContaxInventarioService
                         NombreProducto = producto.Nombre,
                         IdSucursal = sucursal.IdSucursal,
                         NombreSucursal = nombresSucursal.GetValueOrDefault(sucursal.IdSucursal),
+                        IdBodega = existencia?.IdBodega,
+                        NombreBodega = nombreBodega,
                         UnidadMedida = string.IsNullOrWhiteSpace(producto.UnidadMedida) ? "UNIDAD" : producto.UnidadMedida.Trim().ToUpperInvariant(),
                         FactorConversion = producto.FactorConversionInventario <= 0 ? 1m : producto.FactorConversionInventario,
                         StockActual = stock,
@@ -142,6 +171,18 @@ public sealed class EContaxInventarioService
             LotesPorVencer = lotesReporte.Count(x => x.FechaVencimiento.HasValue && x.FechaVencimiento.Value.Date > fechaHoy && x.FechaVencimiento.Value.Date <= fechaLimiteVencimiento),
             ValorInventario = Math.Round(lotesReporte.Sum(x => x.CantidadDisponible * x.CostoUnitario), 4),
             Sucursales = userContext.EsJefeEmpresa ? sucursales : sucursalesConsulta,
+            Bodegas = bodegas.Select(b => new EContaxBodegaDto
+            {
+                IdBodega = b.IdBodega,
+                IdEmpresa = b.IdEmpresa,
+                IdSucursal = b.IdSucursal,
+                Nombre = b.Nombre,
+                Codigo = b.Codigo,
+                Direccion = b.Direccion,
+                Observacion = b.Observacion,
+                NombreSucursal = nombresSucursal.GetValueOrDefault(b.IdSucursal) ?? string.Empty,
+                Estado = b.Estado
+            }).ToList(),
             Items = items
         };
     }
@@ -206,6 +247,22 @@ public sealed class EContaxInventarioService
                 Observacion = movimiento.Observacion
             }).ToListAsync();
 
+        string? nombreBodegaKardex = null;
+        if (existencia?.IdBodega is int idBodKardex)
+        {
+            var bodKardex = await context.EContaxBodegas.AsNoTracking()
+                .FirstOrDefaultAsync(b => b.IdBodega == idBodKardex && b.IdEmpresa == userContext.IdEmpresa);
+            if (bodKardex is not null)
+                nombreBodegaKardex = string.IsNullOrWhiteSpace(bodKardex.Codigo) ? bodKardex.Nombre : $"{bodKardex.Nombre} ({bodKardex.Codigo})";
+        }
+        if (string.IsNullOrWhiteSpace(nombreBodegaKardex))
+        {
+            var obsConBodega = movimientos.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m.Observacion) && m.Observacion.Contains("Bodega:", StringComparison.OrdinalIgnoreCase))?.Observacion;
+            var bodTexto = ExtraerTextoBodega(obsConBodega);
+            if (!string.IsNullOrWhiteSpace(bodTexto))
+                nombreBodegaKardex = bodTexto;
+        }
+
         return new EContaxInventarioKardexDto
         {
             CodigoProducto = codigoProducto,
@@ -213,6 +270,10 @@ public sealed class EContaxInventarioService
             NombreProducto = producto.Nombre,
             CodigoPrincipal = producto.CodigoPrincipal,
             NombreSucursal = sucursal.Nombre,
+            IdBodega = existencia?.IdBodega,
+            NombreBodega = nombreBodegaKardex,
+            UnidadMedida = string.IsNullOrWhiteSpace(producto.UnidadMedida) ? "UNIDAD" : producto.UnidadMedida.Trim().ToUpperInvariant(),
+            FactorConversion = producto.FactorConversionInventario <= 0 ? 1m : producto.FactorConversionInventario,
             StockActual = existencia?.StockActual ?? 0,
              StockReservado = existencia?.StockReservado ?? 0,
             CostoPromedio = existencia?.CostoPromedio ?? 0,
@@ -285,6 +346,21 @@ public sealed class EContaxInventarioService
 
         var metodo = await ObtenerMetodoAsync(context, userContext.IdEmpresa);
         var existencia = await ObtenerExistenciaAsync(context, userContext.IdEmpresa, sucursal.IdSucursal, dto.CodigoProducto);
+        if (dto.IdBodega.HasValue)
+        {
+            if (dto.IdBodega.Value > 0)
+            {
+                var bodegaValida = await context.EContaxBodegas.AsNoTracking().AnyAsync(b =>
+                    b.IdBodega == dto.IdBodega.Value && b.IdEmpresa == userContext.IdEmpresa && b.IdSucursal == sucursal.IdSucursal && b.Estado);
+                if (!bodegaValida)
+                    throw new InvalidOperationException("La bodega seleccionada no pertenece a la sucursal o está inactiva.");
+                existencia.IdBodega = dto.IdBodega.Value;
+            }
+            else
+            {
+                existencia.IdBodega = null;
+            }
+        }
         var stockAnterior = existencia.StockActual;
         var costoAnterior = existencia.CostoPromedio;
         if (dto.StockMinimo is < 0 || dto.StockMaximo is < 0)
@@ -1800,6 +1876,8 @@ public sealed class EContaxInventarioService
                 }
 
                 var existencia = await ObtenerExistenciaAsync(context, userContext.IdEmpresa, sucursal.IdSucursal, producto.Codigo);
+                if (bodegaSeleccionada is not null)
+                    existencia.IdBodega = bodegaSeleccionada.IdBodega;
                 var factor = ObtenerFactorConversion(producto.FactorConversionInventario);
                 var cantidadBase = linea.PorEnvase ? linea.CantidadIngreso * factor : linea.CantidadIngreso;
                 var costoBase = linea.PorEnvase && factor > 0 ? linea.CostoUnitario / factor : linea.CostoUnitario;

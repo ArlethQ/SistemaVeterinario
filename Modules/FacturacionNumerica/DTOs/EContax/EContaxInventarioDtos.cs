@@ -7,6 +7,8 @@ public sealed class EContaxInventarioItemDto
     public string? NombreProducto { get; set; }
     public int IdSucursal { get; set; }
     public string? NombreSucursal { get; set; }
+    public int? IdBodega { get; set; }
+    public string? NombreBodega { get; set; }
     public string UnidadMedida { get; set; } = "UNIDAD";
     public decimal FactorConversion { get; set; } = 1m;
     public decimal StockActual { get; set; }
@@ -36,6 +38,7 @@ public sealed class EContaxInventarioDashboardDto
     public int LotesVencidos { get; set; }
     public decimal ValorInventario { get; set; }
     public List<EContaxSucursalDto> Sucursales { get; set; } = new();
+    public List<EContaxBodegaDto> Bodegas { get; set; } = new();
     public List<EContaxInventarioItemDto> Items { get; set; } = new();
 }
 
@@ -65,6 +68,10 @@ public sealed class EContaxInventarioKardexDto
     public string? NombreProducto { get; set; }
     public string? CodigoPrincipal { get; set; }
     public string? NombreSucursal { get; set; }
+    public int? IdBodega { get; set; }
+    public string? NombreBodega { get; set; }
+    public string UnidadMedida { get; set; } = "UNIDAD";
+    public decimal FactorConversion { get; set; } = 1m;
     public decimal StockActual { get; set; }
     public decimal StockReservado { get; set; }
     public decimal StockDisponible => Math.Max(0, StockActual - StockReservado);
@@ -80,6 +87,7 @@ public sealed class EContaxInventarioAjusteDto
 {
     public int CodigoProducto { get; set; }
     public int? IdSucursal { get; set; }
+    public int? IdBodega { get; set; }
     public string TipoMovimiento { get; set; } = "ENTRADA";
     public decimal Cantidad { get; set; }
     public decimal? CostoUnitario { get; set; }
