@@ -23,14 +23,15 @@ public sealed class EContaxRecepcionesCompraController : EContaxApiControllerBas
         [FromQuery] string? search = null,
         [FromQuery] string? estado = null,
         [FromQuery] DateTime? fechaDesde = null,
-        [FromQuery] DateTime? fechaHasta = null)
+        [FromQuery] DateTime? fechaHasta = null,
+        [FromQuery] int? sucursalId = null)
     {
         if (userId <= 0)
             return Unauthorized("Sesion no valida.");
 
         try
         {
-            return Ok(await _service.ListarAsync(userId, search, estado, fechaDesde, fechaHasta));
+            return Ok(await _service.ListarAsync(userId, search, estado, fechaDesde, fechaHasta, sucursalId));
         }
         catch (InvalidOperationException ex)
         {
@@ -39,14 +40,16 @@ public sealed class EContaxRecepcionesCompraController : EContaxApiControllerBas
     }
 
     [HttpGet("ordenes-disponibles")]
-    public async Task<ActionResult<List<EContaxRecepcionOrdenDto>>> OrdenesDisponibles([FromQuery] int userId)
+    public async Task<ActionResult<List<EContaxRecepcionOrdenDto>>> OrdenesDisponibles(
+        [FromQuery] int userId,
+        [FromQuery] int? sucursalId = null)
     {
         if (userId <= 0)
             return Unauthorized("Sesion no valida.");
 
         try
         {
-            return Ok(await _service.ListarOrdenesDisponiblesAsync(userId));
+            return Ok(await _service.ListarOrdenesDisponiblesAsync(userId, sucursalId));
         }
         catch (InvalidOperationException ex)
         {

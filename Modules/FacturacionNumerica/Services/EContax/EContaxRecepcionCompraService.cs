@@ -37,7 +37,8 @@ public sealed class EContaxRecepcionCompraService
         string? search = null,
         string? estado = null,
         DateTime? fechaDesde = null,
-        DateTime? fechaHasta = null)
+        DateTime? fechaHasta = null,
+        int? sucursalId = null)
     {
         await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.ComprasRecepciones, EContaxAccion.Ver);
         await using var context = await _dbFactory.CreateDbContextAsync();
@@ -50,6 +51,8 @@ public sealed class EContaxRecepcionCompraService
 
         if (!actor.EsJefeEmpresa && actor.IdSucursal is > 0)
             query = query.Where(x => x.recepcion.IdSucursal == actor.IdSucursal.Value);
+        else if (sucursalId is > 0)
+            query = query.Where(x => x.recepcion.IdSucursal == sucursalId.Value);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -83,12 +86,12 @@ public sealed class EContaxRecepcionCompraService
             .ToListAsync();
     }
 
-    public async Task<List<EContaxRecepcionOrdenDto>> ListarOrdenesDisponiblesAsync(int userId)
+    public async Task<List<EContaxRecepcionOrdenDto>> ListarOrdenesDisponiblesAsync(int userId, int? sucursalId = null)
     {
         await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.ComprasRecepciones, EContaxAccion.Ver);
         await using var context = await _dbFactory.CreateDbContextAsync();
         var actor = await _tenantService.GetContextAsync(context, userId);
-        var ordenes = await ObtenerOrdenesDisponiblesAsync(context, actor);
+        var ordenes = await ObtenerOrdenesDisponiblesAsync(context, actor, sucursalId);
         return ordenes.Select(x => MapOrden(x.Orden, x.Recibido)).ToList();
     }
 
@@ -314,13 +317,18 @@ public sealed class EContaxRecepcionCompraService
         return await query.FirstOrDefaultAsync();
     }
 
-    private async Task<List<(EContaxOrdenCompra Orden, Dictionary<int, decimal> Recibido)>> ObtenerOrdenesDisponiblesAsync(AppDbContext context, EContaxUserContext actor)
+    private async Task<List<(EContaxOrdenCompra Orden, Dictionary<int, decimal> Recibido)>> ObtenerOrdenesDisponiblesAsync(
+        AppDbContext context,
+        EContaxUserContext actor,
+        int? sucursalId = null)
     {
         var query = context.EContaxOrdenesCompra.AsNoTracking()
             .Include(x => x.Detalles)
             .Where(x => x.IdEmpresa == actor.IdEmpresa && (x.Estado == Aprobada || x.Estado == Enviada));
         if (!actor.EsJefeEmpresa && actor.IdSucursal is > 0)
             query = query.Where(x => x.IdSucursal == actor.IdSucursal.Value);
+        else if (sucursalId is > 0)
+            query = query.Where(x => x.IdSucursal == sucursalId.Value);
         var ordenes = await query.OrderByDescending(x => x.IdOrdenCompra).ToListAsync();
         var resultado = new List<(EContaxOrdenCompra, Dictionary<int, decimal>)>();
         foreach (var orden in ordenes)

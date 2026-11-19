@@ -7,6 +7,7 @@
 @using Simetric.Services
 @using Simetric.Services.EContax
 @using Simetric.ViewModels
+@using HosvetKardex.Web.Services
 @attribute [Authorize]
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavManager
@@ -16,6 +17,7 @@
 @inject ISimpleExcelExportService ExcelExportService
 @inject SweetAlertService AlertService
 @inject IJSRuntime JS
+@inject SessionStateService Session
 
 <PageTitle>Compras | E-Contax</PageTitle>
 <link rel="stylesheet" href="/_content/Simetric/css/econtax-compras.css?v=20261023-compras-buttons" />
@@ -342,7 +344,11 @@
         cargando = true;
         try
         {
-            compras = await FacturaCompraService.ListarComprasEContaxAsync(currentUserId, incluirAnuladas: true);
+            var sucursalActiva = Session.Localidad > 0 ? Session.Localidad : idSucursal;
+            compras = await FacturaCompraService.ListarComprasEContaxAsync(
+                currentUserId,
+                incluirAnuladas: true,
+                sucursalId: sucursalActiva);
         }
         catch (Exception ex)
         {
@@ -386,11 +392,12 @@
                         continue;
                     }
 
+                    var sucursalActiva = Session.Localidad > 0 ? Session.Localidad : idSucursal;
                     var (_, duplicada) = await FacturaCompraService.ImportarFacturaXmlEContaxAsync(
                         currentUserId,
                         preview,
                         idEmpresa,
-                        idSucursal);
+                        sucursalActiva);
                     if (duplicada)
                     {
                         duplicadas++;

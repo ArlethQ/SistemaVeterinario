@@ -1429,7 +1429,7 @@ public sealed class EContaxInventarioService
         return sucursal ?? throw new InvalidOperationException("La sucursal seleccionada no es válida.");
     }
 
-    public async Task<List<CompraPendienteRecepcionDto>> ListarComprasPendientesRecepcionAsync(int userId)
+    public async Task<List<CompraPendienteRecepcionDto>> ListarComprasPendientesRecepcionAsync(int userId, int? sucursalId = null)
     {
         await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.ComprasRecepciones, EContaxAccion.Ver);
         await using var context = await _dbFactory.CreateDbContextAsync();
@@ -1443,15 +1443,22 @@ public sealed class EContaxInventarioService
         if (!usuariosEmpresa.Contains(userId)) usuariosEmpresa.Add(userId);
         if (!usuariosEmpresa.Contains(userContext.IdUsuarioTitular)) usuariosEmpresa.Add(userContext.IdUsuarioTitular);
 
+        var query = context.ComprasFacturas.AsNoTracking()
+            .Where(c => c.Estado == true &&
+                        (c.Inventario == null || c.Inventario == false) &&
+                        (c.CodDocumento == "01" || c.CodDocumento == "03") &&
+                        (c.TipoDocumento == null || c.TipoDocumento == "COM" || c.TipoDocumento == "COMPRA" || c.TipoDocumento == "LIQ") &&
+                        (c.Usuario == null || usuariosEmpresa.Contains(c.Usuario.Value)));
+
+        if (!userContext.EsJefeEmpresa && userContext.IdSucursal is > 0)
+            query = query.Where(c => c.IdSucursal == userContext.IdSucursal.Value || c.IdSucursal == null);
+        else if (sucursalId is > 0)
+            query = query.Where(c => c.IdSucursal == sucursalId.Value || c.IdSucursal == null);
+
         var cabeceras = await (
-            from c in context.ComprasFacturas.AsNoTracking()
+            from c in query
             join cl in context.Clientes.AsNoTracking() on c.CodClientes equals cl.Codcliente into cls
             from cl in cls.DefaultIfEmpty()
-            where c.Estado == true &&
-                  (c.Inventario == null || c.Inventario == false) &&
-                  (c.CodDocumento == "01" || c.CodDocumento == "03") &&
-                  (c.TipoDocumento == null || c.TipoDocumento == "COM" || c.TipoDocumento == "COMPRA" || c.TipoDocumento == "LIQ") &&
-                  (c.Usuario == null || usuariosEmpresa.Contains(c.Usuario.Value))
             orderby c.FechaRegistro descending, c.CodFactura descending
             select new
             {
@@ -1520,6 +1527,138 @@ public sealed class EContaxInventarioService
         }).ToList();
     }
 
+    public async Task<List<CompraIngresadaRecepcionDto>> ListarComprasIngresadasRecepcionAsync(int userId, int? sucursalId = null)
+    {
+        await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.ComprasRecepciones, EContaxAccion.Ver);
+        await using var context = await _dbFactory.CreateDbContextAsync();
+        var userContext = await _tenant.GetContextAsync(context, userId);
+
+        var usuariosEmpresa = await context.EContaxUsuariosContexto
+            .AsNoTracking()
+            .Where(x => x.IdEmpresa == userContext.IdEmpresa && x.Estado)
+            .Select(x => x.IdUsuario)
+            .ToListAsync();
+        if (!usuariosEmpresa.Contains(userId)) usuariosEmpresa.Add(userId);
+        if (!usuariosEmpresa.Contains(userContext.IdUsuarioTitular)) usuariosEmpresa.Add(userContext.IdUsuarioTitular);
+
+        var query = context.ComprasFacturas.AsNoTracking()
+            .Where(c => c.Estado == true &&
+                        c.Inventario == true &&
+                        (c.CodDocumento == "01" || c.CodDocumento == "03") &&
+                        (c.TipoDocumento == null || c.TipoDocumento == "COM" || c.TipoDocumento == "COMPRA" || c.TipoDocumento == "LIQ") &&
+                        (c.Usuario == null || usuariosEmpresa.Contains(c.Usuario.Value)));
+
+        if (!userContext.EsJefeEmpresa && userContext.IdSucursal is > 0)
+            query = query.Where(c => c.IdSucursal == userContext.IdSucursal.Value || c.IdSucursal == null);
+        else if (sucursalId is > 0)
+            query = query.Where(c => c.IdSucursal == sucursalId.Value || c.IdSucursal == null);
+
+        var cabeceras = await (
+            from c in query
+            join cl in context.Clientes.AsNoTracking() on c.CodClientes equals cl.Codcliente into cls
+            from cl in cls.DefaultIfEmpty()
+            orderby c.FechaRegistro descending, c.CodFactura descending
+            select new
+            {
+                c.CodFactura,
+                c.Serie,
+                c.NumFactura,
+                c.FchAutorizacion,
+                c.FechaRegistro,
+                c.ValorTotal,
+                Proveedor = cl == null
+                    ? "Proveedor sin nombre"
+                    : (cl.Nombrerazonsocial ?? cl.Nombrecomercial ?? ((cl.Nombres ?? "") + " " + (cl.Apellidos ?? "")).Trim()),
+                RucProveedor = cl == null ? "" : (cl.Numeroidentificacion ?? "")
+            }).ToListAsync();
+
+        if (cabeceras.Count == 0)
+            return [];
+
+        var ids = cabeceras.Select(x => x.CodFactura).ToList();
+        var detalles = await (
+            from d in context.ComprasDetalleFac.AsNoTracking()
+            join p in context.Productos.AsNoTracking() on d.CodProducto equals p.Codigo into prods
+            from p in prods.DefaultIfEmpty()
+            where ids.Contains(d.CodFactura)
+            orderby d.CodLinea
+            select new
+            {
+                d.CodFactura,
+                d.CodLinea,
+                d.CodProducto,
+                d.CodPrincipal,
+                d.DescripProducto,
+                d.CantProducto,
+                d.PrecioProducto,
+                d.ValorTotal,
+                d.Observacion,
+                NombreProductoInventario = p == null ? null : p.Nombre
+            }).ToListAsync();
+
+        var detallesPorFactura = detalles.GroupBy(d => d.CodFactura).ToDictionary(g => g.Key, g => g.ToList());
+
+        return cabeceras.Select(c =>
+        {
+            var serie = c.Serie ?? "";
+            var numeroDoc = serie.Length == 6
+                ? $"{serie[..3]}-{serie[3..]}-{c.NumFactura}"
+                : $"{serie}-{c.NumFactura}".Trim('-');
+
+            var lines = detallesPorFactura.TryGetValue(c.CodFactura, out var list)
+                ? list.Select(d => new CompraIngresadaDetalleDto
+                {
+                    CodLinea = d.CodLinea,
+                    CodigoProducto = d.CodProducto,
+                    ProductoInventario = d.CodProducto > 0
+                        ? (string.IsNullOrWhiteSpace(d.NombreProductoInventario) ? $"Producto #{d.CodProducto}" : d.NombreProductoInventario)
+                        : "Omitido (no inventariar)",
+                    DescripcionFactura = d.DescripProducto ?? "Item",
+                    Cantidad = d.CantProducto ?? 0m,
+                    PrecioUnitario = d.PrecioProducto ?? 0m,
+                    ValorTotal = d.ValorTotal ?? 0m,
+                    Bodega = ExtraerTextoBodega(d.Observacion)
+                }).ToList()
+                : [];
+
+            var bodegas = lines
+                .Select(x => x.Bodega)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return new CompraIngresadaRecepcionDto
+            {
+                CodFactura = c.CodFactura,
+                NumeroDocumento = numeroDoc,
+                Proveedor = c.Proveedor,
+                RucProveedor = c.RucProveedor,
+                FechaEmision = c.FchAutorizacion ?? c.FechaRegistro,
+                ValorTotal = c.ValorTotal ?? 0m,
+                TotalCantidad = lines.Where(x => x.CodigoProducto > 0).Sum(x => x.Cantidad),
+                BodegaResumen = bodegas.Count > 0 ? string.Join(", ", bodegas) : "Sucursal sin bodega",
+                Detalles = lines
+            };
+        }).ToList();
+    }
+
+    private static string ExtraerTextoBodega(string? observacion)
+    {
+        if (string.IsNullOrWhiteSpace(observacion))
+            return string.Empty;
+
+        const string marcador = "Bodega:";
+        var idx = observacion.IndexOf(marcador, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0)
+            return string.Empty;
+
+        var texto = observacion[(idx + marcador.Length)..].Trim();
+        var fin = texto.IndexOf(']');
+        if (fin >= 0)
+            texto = texto[..fin].Trim();
+        return texto;
+    }
+
     public async Task<int> HomologarEIngresarCompraAsync(
         int userId,
         int codFactura,
@@ -1566,6 +1705,10 @@ public sealed class EContaxInventarioService
                 .ToListAsync();
 
             var metodo = await ObtenerMetodoAsync(context, userContext.IdEmpresa);
+            var bodegasActivas = await context.EContaxBodegas
+                .AsNoTracking()
+                .Where(b => b.IdEmpresa == userContext.IdEmpresa && b.IdSucursal == sucursal.IdSucursal && b.Estado)
+                .ToDictionaryAsync(b => b.IdBodega);
             var serie = compra.Serie ?? "";
             var numeroDoc = serie.Length == 6
                 ? $"{serie[..3]}-{serie[3..]}-{compra.NumFactura}"
@@ -1583,6 +1726,16 @@ public sealed class EContaxInventarioService
                         detalleDb.Inventariado = true;
                     continue;
                 }
+
+                EContaxBodega? bodegaSeleccionada = null;
+                if (bodegasActivas.Count > 0)
+                {
+                    if (linea.IdBodega is not > 0 || !bodegasActivas.TryGetValue(linea.IdBodega.Value, out bodegaSeleccionada))
+                        throw new InvalidOperationException("Selecciona una bodega válida de la sucursal actual para cada producto.");
+                }
+                var bodegaTexto = bodegaSeleccionada is not null
+                    ? $"Bodega: {bodegaSeleccionada.Nombre} ({bodegaSeleccionada.Codigo})"
+                    : null;
 
                 if (linea.CantidadIngreso <= 0)
                     throw new InvalidOperationException("La cantidad a ingresar debe ser mayor a cero.");
@@ -1653,20 +1806,27 @@ public sealed class EContaxInventarioService
 
                 await ValidarEntradaConLoteAsync(context, existencia, cantidadBase, linea.NumeroLote, linea.FechaVencimiento);
                 AgregarEntrada(context, existencia, cantidadBase, costoBase, metodo, linea.NumeroLote, linea.FechaVencimiento);
+                var observacionMovimiento = bodegaTexto is not null
+                    ? $"Recepción de compra {numeroDoc} · {bodegaTexto}"
+                    : $"Recepción de compra {numeroDoc}";
                 context.EContaxInventarioMovimientos.Add(CrearMovimiento(
                     existencia, userId, metodo, "ENTRADA",
-                    cantidadBase, $"Recepción de compra {numeroDoc}", "RECEPCION",
+                    cantidadBase, observacionMovimiento, "RECEPCION",
                     costoBase, referencia, linea.NumeroLote, linea.FechaVencimiento));
 
                 if (detalleDb is not null)
                 {
                     detalleDb.CodProducto = producto.Codigo;
                     detalleDb.Inventariado = true;
+                    if (!string.IsNullOrWhiteSpace(bodegaTexto))
+                        detalleDb.Observacion = bodegaTexto;
                 }
 
                 ingresadas++;
             }
 
+            compra.IdEmpresa ??= userContext.IdEmpresa;
+            compra.IdSucursal ??= sucursal.IdSucursal;
             compra.Inventario = true;
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
@@ -1701,6 +1861,7 @@ public sealed class EContaxInventarioService
     {
         public int CodLinea { get; set; }
         public int CodigoProducto { get; set; }
+        public int? IdBodega { get; set; }
         public bool CrearNuevoProducto { get; set; }
         public string? NuevoNombreProducto { get; set; }
         public string? NuevoCodigoPrincipal { get; set; }
@@ -1711,5 +1872,30 @@ public sealed class EContaxInventarioService
         public bool PorEnvase { get; set; }
         public string? NumeroLote { get; set; }
         public DateTime? FechaVencimiento { get; set; }
+    }
+
+    public sealed class CompraIngresadaRecepcionDto
+    {
+        public int CodFactura { get; set; }
+        public string NumeroDocumento { get; set; } = "";
+        public string Proveedor { get; set; } = "";
+        public string RucProveedor { get; set; } = "";
+        public DateTime? FechaEmision { get; set; }
+        public decimal ValorTotal { get; set; }
+        public decimal TotalCantidad { get; set; }
+        public string BodegaResumen { get; set; } = "";
+        public List<CompraIngresadaDetalleDto> Detalles { get; set; } = [];
+    }
+
+    public sealed class CompraIngresadaDetalleDto
+    {
+        public int CodLinea { get; set; }
+        public int CodigoProducto { get; set; }
+        public string ProductoInventario { get; set; } = "";
+        public string DescripcionFactura { get; set; } = "";
+        public decimal Cantidad { get; set; }
+        public decimal PrecioUnitario { get; set; }
+        public decimal ValorTotal { get; set; }
+        public string Bodega { get; set; } = "";
     }
 }

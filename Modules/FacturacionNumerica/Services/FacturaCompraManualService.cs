@@ -109,6 +109,8 @@ public sealed class FacturaCompraManualService
         {
             CodClave = clave,
             CodClientes = cliente.Codcliente,
+            IdEmpresa = modelo.IdEmpresa is > 0 ? modelo.IdEmpresa : null,
+            IdSucursal = modelo.IdSucursal is > 0 ? modelo.IdSucursal : null,
             FchAutorizacion = modelo.FechaEmision.Date,
             NumFactura = numero,
             CodDocumento = "01",
@@ -165,10 +167,10 @@ public sealed class FacturaCompraManualService
         return compra.CodFactura;
     }
 
-    public async Task<List<CompraManualVM>> ListarAsync(int idUsuario, bool incluirAnuladas = true)
+    public async Task<List<CompraManualVM>> ListarAsync(int idUsuario, bool incluirAnuladas = true, int? sucursalId = null)
     {
         await using var context = await _dbFactory.CreateDbContextAsync();
-        var compras = await CargarCabecerasAsync(context, idUsuario, incluirAnuladas);
+        var compras = await CargarCabecerasAsync(context, idUsuario, incluirAnuladas, sucursalId);
         var ids = compras.Select(x => x.IdFactura).ToList();
         var pagos = ids.Count == 0
             ? new Dictionary<int, decimal>()
@@ -244,13 +246,15 @@ public sealed class FacturaCompraManualService
         return true;
     }
 
-    private static async Task<List<CompraManualVM>> CargarCabecerasAsync(AppDbContext context, int idUsuario, bool incluirAnuladas)
+    private static async Task<List<CompraManualVM>> CargarCabecerasAsync(AppDbContext context, int idUsuario, bool incluirAnuladas, int? sucursalId = null)
     {
         var comprasQuery = context.ComprasFacturas.AsNoTracking()
             .Where(x => x.Usuario == idUsuario &&
                 x.CodDocumento == "01" &&
                 (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA") &&
                 x.CodClave != null && x.CodClave.StartsWith("MANUAL-COMPRA-"));
+        if (sucursalId is > 0)
+            comprasQuery = comprasQuery.Where(x => x.IdSucursal == sucursalId.Value || x.IdSucursal == null);
         if (!incluirAnuladas)
             comprasQuery = comprasQuery.Where(x => x.Estado == true);
 
@@ -510,13 +514,15 @@ public sealed class FacturaCompraManualService
         return (codFactura, false);
     }
 
-    public async Task<List<CompraManualVM>> ListarComprasEContaxAsync(int idUsuario, bool incluirAnuladas = true)
+    public async Task<List<CompraManualVM>> ListarComprasEContaxAsync(int idUsuario, bool incluirAnuladas = true, int? sucursalId = null)
     {
         await using var context = await _dbFactory.CreateDbContextAsync();
         var comprasQuery = context.ComprasFacturas.AsNoTracking()
             .Where(x => x.Usuario == idUsuario &&
                 x.CodDocumento == "01" &&
                 (x.TipoDocumento == "COM" || x.TipoDocumento == "COMPRA"));
+        if (sucursalId is > 0)
+            comprasQuery = comprasQuery.Where(x => x.IdSucursal == sucursalId.Value || x.IdSucursal == null);
         if (!incluirAnuladas)
             comprasQuery = comprasQuery.Where(x => x.Estado == true);
 

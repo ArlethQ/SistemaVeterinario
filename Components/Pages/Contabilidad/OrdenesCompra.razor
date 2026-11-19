@@ -9,11 +9,13 @@
 @using Simetric.DTOs.EContax
 @using Simetric.Services
 @using Simetric.Services.EContax
+@using HosvetKardex.Web.Services
 @inject HttpClient Http
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
 @inject ISimpleExcelExportService ExcelExportService
+@inject SessionStateService Session
 
 <PageTitle>Órdenes de compra | E-Contax</PageTitle>
 <link rel="stylesheet" href="/_content/Simetric/css/econtax-compras.css?v=20261023-compras-buttons" />
@@ -409,7 +411,8 @@
         try
         {
             var url = $"{ApiUrl}?userId={usuarioId}&search={Uri.EscapeDataString(filtro)}&estado={Uri.EscapeDataString(estadoFiltro)}" +
-                $"&fechaDesde={Uri.EscapeDataString(fechaDesde?.ToString("yyyy-MM-dd") ?? string.Empty)}&fechaHasta={Uri.EscapeDataString(fechaHasta?.ToString("yyyy-MM-dd") ?? string.Empty)}";
+                $"&fechaDesde={Uri.EscapeDataString(fechaDesde?.ToString("yyyy-MM-dd") ?? string.Empty)}&fechaHasta={Uri.EscapeDataString(fechaHasta?.ToString("yyyy-MM-dd") ?? string.Empty)}" +
+                (Session.Localidad > 0 ? $"&sucursalId={Session.Localidad}" : string.Empty);
             var resultado = await Http.GetFromJsonAsync<List<EContaxOrdenCompraListaDto>>(url) ?? new();
             ordenes.Clear();
             ordenes.AddRange(resultado);
@@ -597,6 +600,7 @@
         {
             var dto = new EContaxOrdenCompraUpsertDto
             {
+                IdSucursal = Session.Localidad > 0 ? Session.Localidad : null,
                 IdProveedor = editor.IdProveedor,
                 FechaEntregaEstimada = editor.FechaEntregaEstimada,
                 FormaPago = editor.FormaPago,

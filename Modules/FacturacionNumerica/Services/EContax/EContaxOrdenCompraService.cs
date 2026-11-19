@@ -40,7 +40,8 @@ public sealed class EContaxOrdenCompraService
         string? search = null,
         string? estado = null,
         DateTime? fechaDesde = null,
-        DateTime? fechaHasta = null)
+        DateTime? fechaHasta = null,
+        int? sucursalId = null)
     {
         await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.ComprasOrdenes, EContaxAccion.Ver);
         await using var context = await _dbFactory.CreateDbContextAsync();
@@ -50,6 +51,8 @@ public sealed class EContaxOrdenCompraService
 
         if (!actor.EsJefeEmpresa && actor.IdSucursal is > 0)
             query = query.Where(x => x.IdSucursal == actor.IdSucursal.Value);
+        else if (sucursalId is > 0)
+            query = query.Where(x => x.IdSucursal == sucursalId.Value);
 
         if (!string.IsNullOrWhiteSpace(search))
         {

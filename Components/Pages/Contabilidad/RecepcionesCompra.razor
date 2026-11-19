@@ -8,12 +8,15 @@
 @using Simetric.DTOs.EContax
 @using Simetric.Services
 @using Simetric.Services.EContax
+@using HosvetKardex.Web.Services
 @inject HttpClient Http
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
 @inject ISimpleExcelExportService ExcelExportService
 @inject EContaxInventarioService InventarioService
+@inject EContaxBodegaService BodegaService
+@inject SessionStateService Session
 
 <PageTitle>Recepciones de compra | E-Contax</PageTitle>
 <link rel="stylesheet" href="/_content/Simetric/css/econtax-compras.css?v=20261023-compras-buttons" />
@@ -23,9 +26,9 @@
         <div class="purchase-hero-copy">
             <div class="purchase-hero-icon purchase-hero-icon-reception"><i class="ri-inbox-archive-line"></i></div>
             <div>
-                <span class="purchase-eyebrow">ABASTECIMIENTO · E-CONTAX</span>
+                <span class="purchase-eyebrow">ABASTECIMIENTO · E-CONTAX · <strong class="text-primary">SUCURSAL: @NombreSucursalActiva.ToUpperInvariant()</strong></span>
                 <h1>Recepciones de compra</h1>
-                <p>Registra lo recibido, controla faltantes y conserva la trazabilidad de cada entrega.</p>
+                <p>Registra lo recibido, homologa facturas a tus productos y controla la bodega de ingreso en la sucursal activa.</p>
             </div>
         </div>
         <div class="purchase-hero-actions">
@@ -43,10 +46,10 @@
     </nav>
 
     <section class="purchase-kpis" aria-label="Resumen de recepciones">
-        <article class="purchase-kpi"><span><i class="ri-draft-line"></i>Borradores</span><strong>@TotalBorradores</strong><small>Pendientes de confirmar</small></article>
-        <article class="purchase-kpi purchase-kpi-success"><span><i class="ri-checkbox-circle-line"></i>Completas</span><strong>@TotalCompletas</strong><small>Ordenes cerradas</small></article>
-        <article class="purchase-kpi purchase-kpi-info"><span><i class="ri-pie-chart-line"></i>Parciales</span><strong>@TotalParciales</strong><small>Con cantidades pendientes</small></article>
-        <article class="purchase-kpi purchase-kpi-total"><span><i class="ri-inbox-line"></i>Unidades recibidas</span><strong>@TotalRecibido.ToString("0.####")</strong><small>@recepciones.Count recepción(es)</small></article>
+        <article class="purchase-kpi"><span><i class="ri-draft-line"></i>Por homologar</span><strong>@comprasPendientes.Count</strong><small>Facturas pendientes de ingreso</small></article>
+        <article class="purchase-kpi purchase-kpi-success"><span><i class="ri-checkbox-circle-line"></i>Ingresadas / Completas</span><strong>@(TotalCompletas + comprasIngresadas.Count)</strong><small>@comprasIngresadas.Count factura(s) · @TotalCompletas orden(es)</small></article>
+        <article class="purchase-kpi purchase-kpi-info"><span><i class="ri-pie-chart-line"></i>Borradores / Parciales</span><strong>@(TotalBorradores + TotalParciales)</strong><small>Órdenes pendientes o parciales</small></article>
+        <article class="purchase-kpi purchase-kpi-total"><span><i class="ri-inbox-line"></i>Unidades recibidas</span><strong>@((TotalRecibido + comprasIngresadas.Sum(x => x.TotalCantidad)).ToString("0.####"))</strong><small>@(recepciones.Count + comprasIngresadas.Count) ingreso(s)</small></article>
     </section>
 
     @if (!mostrarEditor && !string.IsNullOrWhiteSpace(error))
@@ -101,133 +104,218 @@
         </div>
     </div>
 
-    <div class="row g-3 align-items-start">
-        <div class="col-12 col-xl-6">
-            <div class="card shadow-sm purchase-table-card h-100">
-                <div class="purchase-table-heading"><div><span>TRAZABILIDAD DE ENTRADAS</span><h2>Recepciones registradas</h2></div><span class="purchase-count">@recepciones.Count registro@(recepciones.Count == 1 ? string.Empty : "s")</span></div>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0 purchase-data-table">
-                        <thead>
-                            <tr><th>Recepción / Orden</th><th>Proveedor / Fecha</th><th>Estado</th><th class="text-end">Acciones</th></tr>
-                        </thead>
-                        <tbody>
-                            @if (cargando)
+    <ul class="nav nav-pills gap-2 mb-3" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button type="button"
+                    class="btn @(tabActiva == "pendientes" ? "btn-primary" : "btn-outline-secondary") d-inline-flex align-items-center gap-2"
+                    @onclick='() => tabActiva = "pendientes"'>
+                <i class="ri-links-line"></i>
+                <span>Facturas por homologar</span>
+                <span class="badge @(tabActiva == "pendientes" ? "bg-white text-primary" : "bg-secondary-subtle text-dark")">@ComprasPendientesFiltradas.Count()</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button type="button"
+                    class="btn @(tabActiva == "registradas" ? "btn-primary" : "btn-outline-secondary") d-inline-flex align-items-center gap-2"
+                    @onclick='() => tabActiva = "registradas"'>
+                <i class="ri-inbox-archive-line"></i>
+                <span>Recepciones registradas</span>
+                <span class="badge @(tabActiva == "registradas" ? "bg-white text-primary" : "bg-secondary-subtle text-dark")">@(recepciones.Count + ComprasIngresadasFiltradas.Count())</span>
+            </button>
+        </li>
+    </ul>
+
+    @if (tabActiva == "pendientes")
+    {
+        <div class="card shadow-sm purchase-table-card">
+            <div class="purchase-table-heading">
+                <div>
+                    <span>COMPRAS REGISTRADAS · SUCURSAL @NombreSucursalActiva.ToUpperInvariant() · PENDIENTES DE INGRESO</span>
+                    <h2>Facturas por homologar</h2>
+                </div>
+                <span class="purchase-count">@ComprasPendientesFiltradas.Count() pendiente@(ComprasPendientesFiltradas.Count() == 1 ? string.Empty : "s")</span>
+            </div>
+            <div class="px-3 pt-2 pb-2 border-bottom bg-light-subtle">
+                <input class="form-control form-control-sm" @bind="filtroComprasPendientes" @bind:event="oninput" placeholder="Buscar factura, proveedor o RUC..." />
+            </div>
+            @if (!string.IsNullOrWhiteSpace(mensajeHomologacion))
+            {
+                <div class="alert alert-success m-3 mb-0 py-2" role="alert">@mensajeHomologacion</div>
+            }
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 purchase-data-table">
+                    <thead>
+                        <tr><th>Factura</th><th>Fecha</th><th>Proveedor</th><th>RUC</th><th class="text-center">Ítems</th><th class="text-end">Total</th><th class="text-end">Acción</th></tr>
+                    </thead>
+                    <tbody>
+                        @if (cargandoComprasPendientes)
+                        {
+                            <tr><td colspan="7"><div class="purchase-table-state"><i class="ri-loader-4-line"></i><span>Cargando compras pendientes...</span></div></td></tr>
+                        }
+                        else if (!ComprasPendientesFiltradas.Any())
+                        {
+                            <tr><td colspan="7"><div class="purchase-table-state is-empty"><i class="ri-checkbox-circle-line"></i><span>No hay compras registradas pendientes de ingreso en @NombreSucursalActiva.</span></div></td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var compra in ComprasPendientesFiltradas)
                             {
-                                <tr><td colspan="4"><div class="purchase-table-state" aria-live="polite"><i class="ri-loader-4-line"></i><span>Cargando recepciones...</span></div></td></tr>
+                                <tr @key="compra.CodFactura">
+                                    <td><strong class="font-monospace">@compra.NumeroDocumento</strong></td>
+                                    <td>@(compra.FechaEmision?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                    <td>@compra.Proveedor</td>
+                                    <td class="font-monospace">@compra.RucProveedor</td>
+                                    <td class="text-center"><span class="badge bg-light text-dark border">@compra.Detalles.Count ítem(s)</span></td>
+                                    <td class="text-end fw-semibold">$@compra.ValorTotal.ToString("N2")</td>
+                                    <td class="text-end text-nowrap">
+                                        <button class="purchase-table-btn is-primary" type="button" @onclick="() => AbrirHomologacionAsync(compra)">
+                                            <i class="ri-links-line"></i><span>Homologar e ingresar</span>
+                                        </button>
+                                    </td>
+                                </tr>
                             }
-                            else if (recepciones.Count == 0)
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm purchase-table-card mb-3">
+            <div class="purchase-table-heading">
+                <div>
+                    <span>FACTURAS HOMOLOGADAS · INGRESADAS A INVENTARIO (@NombreSucursalActiva.ToUpperInvariant())</span>
+                    <h2>Compras ingresadas a inventario</h2>
+                </div>
+                <span class="purchase-count">@ComprasIngresadasFiltradas.Count() ingreso@(ComprasIngresadasFiltradas.Count() == 1 ? string.Empty : "s")</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 purchase-data-table">
+                    <thead>
+                        <tr><th>Factura</th><th>Proveedor</th><th>Fecha</th><th>Bodega(s)</th><th class="text-end">Cant.</th><th class="text-end">Total</th><th>Estado</th><th class="text-end">Detalle</th></tr>
+                    </thead>
+                    <tbody>
+                        @if (cargandoComprasPendientes)
+                        {
+                            <tr><td colspan="8"><div class="purchase-table-state"><i class="ri-loader-4-line"></i><span>Cargando compras ingresadas...</span></div></td></tr>
+                        }
+                        else if (!ComprasIngresadasFiltradas.Any())
+                        {
+                            <tr><td colspan="8"><div class="purchase-table-state is-empty"><i class="ri-inbox-line"></i><span>Aún no hay facturas homologadas e ingresadas para los filtros actuales.</span></div></td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var compIng in ComprasIngresadasFiltradas)
                             {
-                                <tr><td colspan="4"><div class="purchase-table-state is-empty" aria-live="polite"><i class="ri-inbox-line"></i><span>No hay recepciones para los filtros seleccionados.</span></div></td></tr>
-                            }
-                            else
-                            {
-                                @foreach (var recepcion in RecepcionesPagina)
+                                <tr @key="compIng.CodFactura">
+                                    <td><strong class="font-monospace">@compIng.NumeroDocumento</strong></td>
+                                    <td>
+                                        <div>@compIng.Proveedor</div>
+                                        <small class="text-muted font-monospace">@compIng.RucProveedor</small>
+                                    </td>
+                                    <td>@(compIng.FechaEmision?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                    <td><span class="badge bg-info-subtle text-info-emphasis border">@compIng.BodegaResumen</span></td>
+                                    <td class="text-end">@compIng.TotalCantidad.ToString("0.####")</td>
+                                    <td class="text-end fw-semibold">$@compIng.ValorTotal.ToString("N2")</td>
+                                    <td><span class="badge text-bg-success">Ingresada</span></td>
+                                    <td class="text-end">
+                                        <button type="button" class="purchase-table-btn is-primary" @onclick="() => ToggleDetalleCompraIngresada(compIng.CodFactura)">
+                                            <i class="ri-eye-line"></i><span>@(compraIngresadaExpandidaId == compIng.CodFactura ? "Ocultar" : "Ver detalle")</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                                @if (compraIngresadaExpandidaId == compIng.CodFactura)
                                 {
-                                    <tr @key="recepcion.IdRecepcion">
-                                        <td>
-                                            <strong>@recepcion.NumeroRecepcion</strong>
-                                            <small class="d-block text-muted">@recepcion.NumeroOrden · @recepcion.Lineas lín.</small>
+                                    <tr>
+                                        <td colspan="8" class="bg-light p-3">
+                                            <div class="table-responsive">
+                                                <table class="table table-sm mb-0 bg-white border rounded">
+                                                    <thead class="table-light">
+                                                        <tr><th>Ítem factura</th><th>Producto homologado en inventario</th><th>Bodega</th><th class="text-end">Cant.</th><th class="text-end">Costo unit.</th><th class="text-end">Total</th></tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach (var det in compIng.Detalles)
+                                                        {
+                                                            <tr @key="det.CodLinea">
+                                                                <td>@det.DescripcionFactura</td>
+                                                                <td>@det.ProductoInventario</td>
+                                                                <td>@(string.IsNullOrWhiteSpace(det.Bodega) ? "—" : det.Bodega)</td>
+                                                                <td class="text-end">@det.Cantidad.ToString("0.####")</td>
+                                                                <td class="text-end">$@det.PrecioUnitario.ToString("N4")</td>
+                                                                <td class="text-end">$@det.ValorTotal.ToString("N2")</td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </td>
-                                        <td>
-                                            <div class="text-truncate" style="max-width:170px;" title="@recepcion.NombreProveedor">@recepcion.NombreProveedor</div>
-                                            <small class="text-muted">@recepcion.FechaRecepcion.ToString("dd/MM/yyyy")</small>
-                                        </td>
-                                        <td>
-                                            <span class="badge @ClaseEstado(recepcion.Estado)">@TextoEstado(recepcion.Estado)</span>
-                                            <small class="d-block text-muted">Cant: @recepcion.TotalRecibido.ToString("0.####")</small>
-                                        </td>
-                                        <td class="text-end text-nowrap"><div class="purchase-table-actions">
-                                            <button class="purchase-table-btn is-primary" type="button" @onclick="() => EditarAsync(recepcion.IdRecepcion)"><i class="ri-eye-line"></i><span>Ver</span></button>
-                                            @if (recepcion.Estado == "BORRADOR")
-                                            {
-                                                <button class="purchase-table-btn is-success" type="button" @onclick="() => ConfirmarAsync(recepcion.IdRecepcion)"><i class="ri-checkbox-circle-line"></i><span>Confirmar</span></button>
-                                            }
-                                            @if (recepcion.Estado is "BORRADOR" or "RECIBIDA_PARCIAL" or "RECIBIDA_COMPLETA")
-                                            {
-                                                <button class="purchase-table-btn is-danger" type="button" @onclick="() => AnularAsync(recepcion.IdRecepcion)"><i class="ri-close-circle-line"></i><span>Anular</span></button>
-                                            }
-                                        </div></td>
                                     </tr>
                                 }
                             }
-                        </tbody>
-                    </table>
-                </div>
-                @if (!cargando && recepciones.Count > 0)
-                {
-                    <div class="purchase-pagination" aria-label="Paginación de recepciones">
-                        <span>Mostrando @PrimerRegistroPagina–@UltimoRegistroPagina de @recepciones.Count</span>
-                        <div class="purchase-pagination-actions">
-                            <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(-1)" disabled="@(PaginaActualSegura == 1)"><i class="ri-arrow-left-s-line"></i><span>Anterior</span></button>
-                            <strong>Página @PaginaActualSegura de @TotalPaginas</strong>
-                            <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(1)" disabled="@(PaginaActualSegura == TotalPaginas)"><span>Siguiente</span><i class="ri-arrow-right-s-line"></i></button>
-                        </div>
-                    </div>
-                }
+                        }
+                    </tbody>
+                </table>
             </div>
         </div>
 
-        <div class="col-12 col-xl-6">
-            <div class="card shadow-sm purchase-table-card h-100">
-                <div class="purchase-table-heading">
-                    <div>
-                        <span>COMPRAS REGISTRADAS · PENDIENTES DE INGRESO</span>
-                        <h2>Facturas por homologar</h2>
-                    </div>
-                    <span class="purchase-count">@ComprasPendientesFiltradas.Count() pendiente@(ComprasPendientesFiltradas.Count() == 1 ? string.Empty : "s")</span>
-                </div>
-                <div class="px-3 pt-2 pb-2 border-bottom bg-light-subtle">
-                    <input class="form-control form-control-sm" @bind="filtroComprasPendientes" @bind:event="oninput" placeholder="Buscar factura, proveedor o RUC..." />
-                </div>
-                @if (!string.IsNullOrWhiteSpace(mensajeHomologacion))
-                {
-                    <div class="alert alert-success m-3 mb-0 py-2" role="alert">@mensajeHomologacion</div>
-                }
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0 purchase-data-table">
-                        <thead>
-                            <tr><th>Factura / Proveedor</th><th class="text-end">Total</th><th class="text-end">Acción</th></tr>
-                        </thead>
-                        <tbody>
-                            @if (cargandoComprasPendientes)
+        <div class="card shadow-sm purchase-table-card">
+            <div class="purchase-table-heading"><div><span>TRAZABILIDAD DE ÓRDENES DE COMPRA</span><h2>Recepciones de órdenes registradas</h2></div><span class="purchase-count">@recepciones.Count registro@(recepciones.Count == 1 ? string.Empty : "s")</span></div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 purchase-data-table">
+                    <thead>
+                        <tr><th>Recepción</th><th>Orden</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th class="text-end">Cantidad</th><th class="text-end">Acciones</th></tr>
+                    </thead>
+                    <tbody>
+                        @if (cargando)
+                        {
+                            <tr><td colspan="7"><div class="purchase-table-state" aria-live="polite"><i class="ri-loader-4-line"></i><span>Cargando recepciones...</span></div></td></tr>
+                        }
+                        else if (recepciones.Count == 0)
+                        {
+                            <tr><td colspan="7"><div class="purchase-table-state is-empty" aria-live="polite"><i class="ri-inbox-line"></i><span>No hay recepciones de órdenes para los filtros seleccionados.</span></div></td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var recepcion in RecepcionesPagina)
                             {
-                                <tr><td colspan="3"><div class="purchase-table-state"><i class="ri-loader-4-line"></i><span>Cargando compras pendientes...</span></div></td></tr>
+                                <tr @key="recepcion.IdRecepcion">
+                                    <td><strong>@recepcion.NumeroRecepcion</strong><small class="d-block text-muted">@recepcion.Lineas línea(s)</small></td>
+                                    <td>@recepcion.NumeroOrden</td>
+                                    <td>@recepcion.NombreProveedor</td>
+                                    <td>@recepcion.FechaRecepcion.ToString("dd/MM/yyyy")</td>
+                                    <td><span class="badge @ClaseEstado(recepcion.Estado)">@TextoEstado(recepcion.Estado)</span></td>
+                                    <td class="text-end">@recepcion.TotalRecibido.ToString("0.####")</td>
+                                    <td class="text-end text-nowrap"><div class="purchase-table-actions">
+                                        <button class="purchase-table-btn is-primary" type="button" @onclick="() => EditarAsync(recepcion.IdRecepcion)"><i class="ri-eye-line"></i><span>Ver / editar</span></button>
+                                        @if (recepcion.Estado == "BORRADOR")
+                                        {
+                                            <button class="purchase-table-btn is-success" type="button" @onclick="() => ConfirmarAsync(recepcion.IdRecepcion)"><i class="ri-checkbox-circle-line"></i><span>Confirmar</span></button>
+                                        }
+                                        @if (recepcion.Estado is "BORRADOR" or "RECIBIDA_PARCIAL" or "RECIBIDA_COMPLETA")
+                                        {
+                                            <button class="purchase-table-btn is-danger" type="button" @onclick="() => AnularAsync(recepcion.IdRecepcion)"><i class="ri-close-circle-line"></i><span>Anular</span></button>
+                                        }
+                                    </div></td>
+                                </tr>
                             }
-                            else if (!ComprasPendientesFiltradas.Any())
-                            {
-                                <tr><td colspan="3"><div class="purchase-table-state is-empty"><i class="ri-checkbox-circle-line"></i><span>No hay compras registradas pendientes de ingreso.</span></div></td></tr>
-                            }
-                            else
-                            {
-                                @foreach (var compra in ComprasPendientesFiltradas)
-                                {
-                                    <tr @key="compra.CodFactura">
-                                        <td>
-                                            <div class="d-flex flex-wrap align-items-center gap-2">
-                                                <strong class="font-monospace">@compra.NumeroDocumento</strong>
-                                                <small class="text-muted">@(compra.FechaEmision?.ToString("dd/MM/yyyy") ?? "—")</small>
-                                            </div>
-                                            <div class="small text-truncate" style="max-width:250px;" title="@compra.Proveedor">@compra.Proveedor</div>
-                                            <small class="text-muted font-monospace">@compra.RucProveedor</small>
-                                        </td>
-                                        <td class="text-end text-nowrap">
-                                            <strong>$@compra.ValorTotal.ToString("N2")</strong>
-                                            <small class="d-block text-muted">@compra.Detalles.Count ítem(s)</small>
-                                        </td>
-                                        <td class="text-end text-nowrap">
-                                            <button class="purchase-table-btn is-primary" type="button" @onclick="() => AbrirHomologacionAsync(compra)">
-                                                <i class="ri-links-line"></i><span>Homologar</span>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                        </tbody>
-                    </table>
-                </div>
+                        }
+                    </tbody>
+                </table>
             </div>
+            @if (!cargando && recepciones.Count > 0)
+            {
+                <div class="purchase-pagination" aria-label="Paginación de recepciones">
+                    <span>Mostrando @PrimerRegistroPagina–@UltimoRegistroPagina de @recepciones.Count</span>
+                    <div class="purchase-pagination-actions">
+                        <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(-1)" disabled="@(PaginaActualSegura == 1)"><i class="ri-arrow-left-s-line"></i><span>Anterior</span></button>
+                        <strong>Página @PaginaActualSegura de @TotalPaginas</strong>
+                        <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(1)" disabled="@(PaginaActualSegura == TotalPaginas)"><span>Siguiente</span><i class="ri-arrow-right-s-line"></i></button>
+                    </div>
+                </div>
+            }
         </div>
-    </div>
+    }
 </div>
 
 @if (mostrarHomologacion && compraSeleccionadaHomologar is not null)
@@ -236,7 +324,7 @@
         <section class="reception-modal purchase-modal" role="dialog" aria-modal="true" aria-labelledby="homologacion-modal-title" @onclick:stopPropagation="true">
             <header class="purchase-modal-header">
                 <div>
-                    <span class="purchase-eyebrow">HOMOLOGACIÓN DE COMPRA A INVENTARIO</span>
+                    <span class="purchase-eyebrow">HOMOLOGACIÓN DE COMPRA A INVENTARIO · @NombreSucursalActiva.ToUpperInvariant()</span>
                     <h2 id="homologacion-modal-title">Factura @compraSeleccionadaHomologar.NumeroDocumento</h2>
                     <p>@compraSeleccionadaHomologar.Proveedor (@compraSeleccionadaHomologar.RucProveedor) · Total $@compraSeleccionadaHomologar.ValorTotal.ToString("N2")</p>
                 </div>
@@ -249,20 +337,35 @@
                     <div class="alert alert-danger" role="alert">@errorHomologacion</div>
                 }
 
-                @if (sucursalesHomologacion.Count > 1)
-                {
-                    <div class="row g-2 mb-3">
-                        <div class="col-md-5">
-                            <label class="form-label fw-semibold">Sucursal destino de inventario</label>
-                            <select class="form-select form-select-sm" @bind="sucursalHomologacionId" disabled="@guardandoHomologacion">
-                                @foreach (var suc in sucursalesHomologacion)
+                <div class="row g-2 align-items-end mb-3 p-3 rounded-3 border bg-light-subtle">
+                    <div class="col-md-4">
+                        <label class="form-label form-label-sm fw-semibold mb-1">Sucursal activa</label>
+                        <div class="form-control form-control-sm bg-white fw-semibold">@NombreSucursalActiva</div>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label form-label-sm fw-semibold mb-1">Bodega de ingreso (aplicar a todos los ítems)</label>
+                        @if (bodegasSucursal.Count > 0)
+                        {
+                            <select class="form-select form-select-sm"
+                                    value="@bodegaGeneralHomologacionId"
+                                    @onchange="CambiarBodegaGeneralHomologacion"
+                                    disabled="@guardandoHomologacion">
+                                @foreach (var bod in bodegasSucursal)
                                 {
-                                    <option value="@suc.IdSucursal">@suc.Nombre</option>
+                                    <option value="@bod.IdBodega">@bod.Nombre (@bod.Codigo)</option>
                                 }
                             </select>
-                        </div>
+                            <small class="text-muted">Al cambiar esta bodega se actualiza en todos los productos; también puedes cambiarla individualmente abajo.</small>
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning py-2 px-3 mb-0 small d-flex justify-content-between align-items-center">
+                                <span>No hay bodegas activas creadas para <strong>@NombreSucursalActiva</strong>.</span>
+                                <a class="btn btn-sm btn-outline-primary" href="/contabilidad/inventarios/bodegas">Crear bodega</a>
+                            </div>
+                        }
                     </div>
-                }
+                </div>
 
                 <div class="d-flex flex-column gap-3">
                     @for (var idx = 0; idx < lineasHomologacion.Count; idx++)
@@ -395,7 +498,7 @@
                                 @if (ingresaStock)
                                 {
                                     <div class="row g-2 mt-2 pt-2 border-top align-items-end">
-                                        <div class="col-6 col-md-3">
+                                        <div class="col-6 col-md-2">
                                             <label class="form-label form-label-sm mb-1">Modo ingreso</label>
                                             @if (factorActivo > 1)
                                             {
@@ -410,6 +513,22 @@
                                             else
                                             {
                                                 <div class="form-control form-control-sm bg-light text-muted">Directo (@unidadActiva)</div>
+                                            }
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label form-label-sm mb-1">Bodega</label>
+                                            @if (bodegasSucursal.Count > 0)
+                                            {
+                                                <select class="form-select form-select-sm" @bind="linea.IdBodega" disabled="@guardandoHomologacion">
+                                                    @foreach (var bod in bodegasSucursal)
+                                                    {
+                                                        <option value="@bod.IdBodega">@bod.Nombre (@bod.Codigo)</option>
+                                                    }
+                                                </select>
+                                            }
+                                            else
+                                            {
+                                                <div class="form-control form-control-sm bg-light text-muted">Sin bodega</div>
                                             }
                                         </div>
                                         <div class="col-6 col-md-2">
@@ -428,7 +547,7 @@
                                             <label class="form-label form-label-sm mb-1">Lote</label>
                                             <input type="text" maxlength="80" class="form-control form-control-sm" placeholder="Opcional" @bind="linea.NumeroLote" disabled="@guardandoHomologacion" />
                                         </div>
-                                        <div class="col-12 col-md-3">
+                                        <div class="col-6 col-md-2">
                                             <label class="form-label form-label-sm mb-1">Vencimiento</label>
                                             <input type="date" min="@FechaMinimaLote" class="form-control form-control-sm" @bind="linea.FechaVencimiento" disabled="@guardandoHomologacion" />
                                         </div>
@@ -516,6 +635,25 @@
                         <label class="form-label">Clave de acceso</label>
                         <input class="form-control" @bind="editor.ClaveAccesoProveedor" maxlength="60" disabled="@(guardando || !PuedeEditar)" />
                     </div>
+                    <div class="col-12">
+                        <label class="form-label">Bodega de ingreso · @NombreSucursalActiva (aplicar a todos los ítems)</label>
+                        @if (bodegasSucursal.Count > 0)
+                        {
+                            <select class="form-select" value="@editorBodegaGeneralId" @onchange="CambiarBodegaGeneralEditor" disabled="@(guardando || !PuedeEditar)">
+                                @foreach (var bod in bodegasSucursal)
+                                {
+                                    <option value="@bod.IdBodega">@bod.Nombre (@bod.Codigo)</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning py-2 px-3 mb-0 small d-flex justify-content-between align-items-center">
+                                <span>No hay bodegas activas en <strong>@NombreSucursalActiva</strong>.</span>
+                                <a class="btn btn-sm btn-outline-primary" href="/contabilidad/inventarios/bodegas">Crear bodega</a>
+                            </div>
+                        }
+                    </div>
                     </div>
                 </div>
 
@@ -557,12 +695,27 @@
                         }
                         <div class="table-responsive p-3">
                         <table class="table table-sm align-middle mb-0 purchase-lines-table">
-                            <thead><tr><th>Producto</th><th style="width: 135px">Verificación</th><th class="text-end">Ordenado</th><th class="text-end">Ya recibido</th><th class="text-end">Pendiente</th><th class="text-end">Costo orden</th><th class="text-end">Variación</th><th style="width: 145px">Recibir ahora</th><th style="width: 145px">Costo real</th><th style="width: 210px">Lote</th><th style="width: 150px">Vencimiento</th><th style="width: 220px">Novedad / observación</th></tr></thead>
+                            <thead><tr><th>Producto</th><th style="width: 175px">Bodega</th><th style="width: 135px">Verificación</th><th class="text-end">Ordenado</th><th class="text-end">Ya recibido</th><th class="text-end">Pendiente</th><th class="text-end">Costo orden</th><th class="text-end">Variación</th><th style="width: 145px">Recibir ahora</th><th style="width: 145px">Costo real</th><th style="width: 210px">Lote</th><th style="width: 150px">Vencimiento</th><th style="width: 220px">Novedad / observación</th></tr></thead>
                             <tbody>
                                 @foreach (var linea in editor.Detalles)
                                 {
                                     <tr @key="linea.IdDetalleOrdenCompra">
                                         <td>@linea.Descripcion<small class="d-block text-muted">@linea.CodigoPrincipal</small><span class="reception-line-state @ClaseEstadoLinea(linea)">@TextoEstadoLinea(linea)</span></td>
+                                        <td>
+                                            @if (bodegasSucursal.Count > 0)
+                                            {
+                                                <select class="form-select form-select-sm" @bind="linea.IdBodega" disabled="@(guardando || !PuedeEditar)">
+                                                    @foreach (var bod in bodegasSucursal)
+                                                    {
+                                                        <option value="@bod.IdBodega">@bod.Nombre</option>
+                                                    }
+                                                </select>
+                                            }
+                                            else
+                                            {
+                                                <span class="small text-muted">Sin bodega</span>
+                                            }
+                                        </td>
                                         <td>
                                             <label class="purchase-check-control @(linea.Verificado ? "is-checked" : string.Empty)">
                                                 <input type="checkbox" @bind="linea.Verificado" disabled="@(guardando || !PuedeEditar)" />
@@ -615,17 +768,23 @@
     private readonly List<EContaxRecepcionCompraListaDto> recepciones = new();
     private readonly List<EContaxRecepcionOrdenDto> ordenesDisponibles = new();
     private readonly List<EContaxInventarioService.CompraPendienteRecepcionDto> comprasPendientes = new();
+    private readonly List<EContaxInventarioService.CompraIngresadaRecepcionDto> comprasIngresadas = new();
+    private List<EContaxBodegaDto> bodegasSucursal = new();
     private List<EContaxProductoParaStockDto> productosInventario = new();
-    private List<EContaxSucursalDto> sucursalesHomologacion = new();
+    private string tabActiva = "pendientes";
+    private int? compraIngresadaExpandidaId;
     private string filtroComprasPendientes = string.Empty;
     private bool cargandoComprasPendientes;
     private bool mostrarHomologacion;
     private bool guardandoHomologacion;
     private string? errorHomologacion;
     private string? mensajeHomologacion;
-    private int sucursalHomologacionId;
+    private int bodegaGeneralHomologacionId;
+    private int editorBodegaGeneralId;
     private EContaxInventarioService.CompraPendienteRecepcionDto? compraSeleccionadaHomologar;
     private List<HomologacionLineaModel> lineasHomologacion = new();
+    private int? SucursalActivaId => Session.Localidad > 0 ? Session.Localidad : null;
+    private string NombreSucursalActiva => string.IsNullOrWhiteSpace(Session.LocalidadDescripcion) ? "Sucursal actual" : Session.LocalidadDescripcion;
     private string filtro = string.Empty;
     private string estadoFiltro = string.Empty;
     private DateTime? fechaDesde;
@@ -696,16 +855,21 @@
         paginaActual = 1;
         recepciones.Clear();
         comprasPendientes.Clear();
+        comprasIngresadas.Clear();
         try
         {
             var url = $"{ApiUrl}?userId={usuarioId}&search={Uri.EscapeDataString(filtro)}&estado={Uri.EscapeDataString(estadoFiltro)}" +
-                $"&fechaDesde={Uri.EscapeDataString(fechaDesde?.ToString("yyyy-MM-dd") ?? string.Empty)}&fechaHasta={Uri.EscapeDataString(fechaHasta?.ToString("yyyy-MM-dd") ?? string.Empty)}";
+                $"&fechaDesde={Uri.EscapeDataString(fechaDesde?.ToString("yyyy-MM-dd") ?? string.Empty)}&fechaHasta={Uri.EscapeDataString(fechaHasta?.ToString("yyyy-MM-dd") ?? string.Empty)}" +
+                (SucursalActivaId is > 0 ? $"&sucursalId={SucursalActivaId.Value}" : string.Empty);
             var resultado = await Http.GetFromJsonAsync<List<EContaxRecepcionCompraListaDto>>(url) ?? new();
             recepciones.Clear();
             recepciones.AddRange(resultado);
 
-            var pendientes = await InventarioService.ListarComprasPendientesRecepcionAsync(usuarioId);
+            var pendientes = await InventarioService.ListarComprasPendientesRecepcionAsync(usuarioId, SucursalActivaId);
             comprasPendientes.AddRange(pendientes);
+
+            var ingresadas = await InventarioService.ListarComprasIngresadasRecepcionAsync(usuarioId, SucursalActivaId);
+            comprasIngresadas.AddRange(ingresadas);
         }
         catch (Exception ex)
         {
@@ -725,6 +889,44 @@
             c.Proveedor.Contains(filtroComprasPendientes.Trim(), StringComparison.OrdinalIgnoreCase) ||
             c.RucProveedor.Contains(filtroComprasPendientes.Trim(), StringComparison.OrdinalIgnoreCase));
 
+    private IEnumerable<EContaxInventarioService.CompraIngresadaRecepcionDto> ComprasIngresadasFiltradas =>
+        comprasIngresadas.Where(c =>
+            (string.IsNullOrWhiteSpace(filtro) ||
+             c.NumeroDocumento.Contains(filtro.Trim(), StringComparison.OrdinalIgnoreCase) ||
+             c.Proveedor.Contains(filtro.Trim(), StringComparison.OrdinalIgnoreCase) ||
+             c.RucProveedor.Contains(filtro.Trim(), StringComparison.OrdinalIgnoreCase) ||
+             c.BodegaResumen.Contains(filtro.Trim(), StringComparison.OrdinalIgnoreCase)) &&
+            (!fechaDesde.HasValue || (c.FechaEmision.HasValue && c.FechaEmision.Value.Date >= fechaDesde.Value.Date)) &&
+            (!fechaHasta.HasValue || (c.FechaEmision.HasValue && c.FechaEmision.Value.Date <= fechaHasta.Value.Date)));
+
+    private void ToggleDetalleCompraIngresada(int codFactura)
+    {
+        compraIngresadaExpandidaId = compraIngresadaExpandidaId == codFactura ? null : codFactura;
+    }
+
+    private async Task CargarBodegasSucursalActivaAsync()
+    {
+        var lista = await BodegaService.ListarAsync(usuarioId, SucursalActivaId);
+        bodegasSucursal = lista
+            .Where(b => b.Estado && (!SucursalActivaId.HasValue || b.IdSucursal == SucursalActivaId.Value))
+            .OrderBy(b => b.Nombre)
+            .ToList();
+    }
+
+    private void CambiarBodegaGeneralHomologacion(ChangeEventArgs e)
+    {
+        bodegaGeneralHomologacionId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        foreach (var linea in lineasHomologacion)
+            linea.IdBodega = bodegaGeneralHomologacionId;
+    }
+
+    private void CambiarBodegaGeneralEditor(ChangeEventArgs e)
+    {
+        editorBodegaGeneralId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        foreach (var linea in editor.Detalles)
+            linea.IdBodega = editorBodegaGeneralId;
+    }
+
     private async Task AbrirHomologacionAsync(EContaxInventarioService.CompraPendienteRecepcionDto compra)
     {
         errorHomologacion = null;
@@ -734,12 +936,13 @@
 
         try
         {
+            await CargarBodegasSucursalActivaAsync();
+            bodegaGeneralHomologacionId = bodegasSucursal.FirstOrDefault()?.IdBodega ?? 0;
+
             if (productosInventario.Count == 0)
             {
-                var resp = await InventarioService.GetProductosParaStockAsync(usuarioId, null, null);
+                var resp = await InventarioService.GetProductosParaStockAsync(usuarioId, SucursalActivaId, null);
                 productosInventario = resp.Productos;
-                sucursalesHomologacion = resp.Sucursales;
-                sucursalHomologacionId = resp.IdSucursalActiva;
             }
 
             lineasHomologacion = compra.Detalles.Select(d =>
@@ -761,6 +964,7 @@
                     CantidadFactura = d.Cantidad,
                     PrecioFactura = d.PrecioUnitario,
                     CodigoProducto = match?.CodigoProducto ?? 0,
+                    IdBodega = bodegaGeneralHomologacionId,
                     ModoForzadoExistente = true,
                     NuevoNombreProducto = d.Descripcion,
                     NuevoCodigoPrincipal = d.CodPrincipal,
@@ -861,6 +1065,7 @@
             {
                 CodLinea = l.CodLinea,
                 CodigoProducto = l.CodigoProducto,
+                IdBodega = l.IdBodega > 0 ? l.IdBodega : null,
                 CrearNuevoProducto = l.CrearNuevoProducto,
                 NuevoNombreProducto = l.NuevoNombreProducto,
                 NuevoCodigoPrincipal = l.NuevoCodigoPrincipal,
@@ -877,7 +1082,7 @@
             var ingresadas = await InventarioService.HomologarEIngresarCompraAsync(
                 usuarioId,
                 compraSeleccionadaHomologar.CodFactura,
-                sucursalHomologacionId > 0 ? sucursalHomologacionId : null,
+                SucursalActivaId,
                 payload);
 
             if (creoNuevos)
@@ -948,6 +1153,8 @@
         mostrarErrores = false;
         try
         {
+            await CargarBodegasSucursalActivaAsync();
+            editorBodegaGeneralId = bodegasSucursal.FirstOrDefault()?.IdBodega ?? 0;
             await CargarOrdenesDisponiblesAsync();
             editorSnapshot = JsonSerializer.Serialize(editor);
             mostrarEditor = true;
@@ -962,11 +1169,13 @@
     {
         try
         {
-            var resultado = await Http.GetFromJsonAsync<List<EContaxRecepcionOrdenDto>>($"{ApiUrl}/ordenes-disponibles?userId={usuarioId}") ?? new();
+            var url = $"{ApiUrl}/ordenes-disponibles?userId={usuarioId}" +
+                (SucursalActivaId is > 0 ? $"&sucursalId={SucursalActivaId.Value}" : string.Empty);
+            var resultado = await Http.GetFromJsonAsync<List<EContaxRecepcionOrdenDto>>(url) ?? new();
             ordenesDisponibles.Clear();
             ordenesDisponibles.AddRange(resultado);
             if (ordenesDisponibles.Count == 0)
-                throw new InvalidOperationException("No hay órdenes aprobadas o enviadas con cantidades pendientes.");
+                throw new InvalidOperationException("No hay órdenes aprobadas o enviadas con cantidades pendientes en la sucursal actual.");
         }
         catch (Exception ex)
         {
@@ -1001,7 +1210,8 @@
                 CantidadOrdenada = x.CantidadOrdenada,
                 PrecioUnitarioOrden = x.PrecioUnitarioOrden,
                 CantidadYaRecibida = x.CantidadYaRecibida,
-                CantidadPendiente = x.CantidadPendiente
+                CantidadPendiente = x.CantidadPendiente,
+                IdBodega = editorBodegaGeneralId
             }).ToList();
         }
         catch (Exception ex)
@@ -1015,10 +1225,12 @@
         error = null;
         try
         {
+            await CargarBodegasSucursalActivaAsync();
+            editorBodegaGeneralId = bodegasSucursal.FirstOrDefault()?.IdBodega ?? 0;
             var detalle = await Http.GetFromJsonAsync<EContaxRecepcionCompraDto>($"{ApiUrl}/{id}?userId={usuarioId}");
             if (detalle is null)
                 return;
-            editor = EditorModel.From(detalle);
+            editor = EditorModel.From(detalle, bodegasSucursal, editorBodegaGeneralId);
             codigoBarrasRecepcion = string.Empty;
             mensajeEscaneoRecepcion = null;
             mostrarErrores = false;
@@ -1061,7 +1273,7 @@
                     IdDetalleOrdenCompra = x.IdDetalleOrdenCompra,
                     CantidadRecibida = x.CantidadRecibida,
                     CostoUnitario = x.CostoUnitario,
-                    Observacion = x.Observacion,
+                    Observacion = ConstruirObservacionConBodega(x.Observacion, x.IdBodega),
                     NumeroLote = x.NumeroLote,
                     FechaVencimiento = x.FechaVencimiento
                 }).ToList()
@@ -1261,7 +1473,7 @@
         public string? Observacion { get; set; }
         public List<EditorDetail> Detalles { get; set; } = new();
 
-        public static EditorModel From(EContaxRecepcionCompraDto dto) => new()
+        public static EditorModel From(EContaxRecepcionCompraDto dto, IReadOnlyList<EContaxBodegaDto> bodegas, int bodegaPredeterminadaId) => new()
         {
             Id = dto.IdRecepcion,
             NumeroRecepcion = dto.NumeroRecepcion,
@@ -1273,23 +1485,71 @@
             NumeroFacturaProveedor = dto.NumeroFacturaProveedor,
             ClaveAccesoProveedor = dto.ClaveAccesoProveedor,
             Observacion = dto.Observacion,
-            Detalles = dto.Detalles.Select(x => new EditorDetail
+            Detalles = dto.Detalles.Select(x =>
             {
-                IdDetalleOrdenCompra = x.IdDetalleOrdenCompra,
-                CodigoProducto = x.CodigoProducto,
-                CodigoPrincipal = x.CodigoPrincipal,
-                Descripcion = x.Descripcion,
-                CantidadOrdenada = x.CantidadOrdenada,
-                CantidadYaRecibida = x.CantidadYaRecibida,
-                CantidadRecibida = x.CantidadRecibida,
-                CantidadPendiente = dto.Estado == Borrador ? x.CantidadPendiente + x.CantidadRecibida : x.CantidadPendiente,
-                PrecioUnitarioOrden = x.PrecioUnitarioOrden,
-                CostoUnitario = x.CostoUnitario,
-                Observacion = x.Observacion
-                ,NumeroLote = x.NumeroLote
-                ,FechaVencimiento = x.FechaVencimiento
+                var (idBodega, obsLimpia) = ExtraerBodegaDeObservacion(x.Observacion, bodegas, bodegaPredeterminadaId);
+                return new EditorDetail
+                {
+                    IdDetalleOrdenCompra = x.IdDetalleOrdenCompra,
+                    CodigoProducto = x.CodigoProducto,
+                    CodigoPrincipal = x.CodigoPrincipal,
+                    Descripcion = x.Descripcion,
+                    CantidadOrdenada = x.CantidadOrdenada,
+                    CantidadYaRecibida = x.CantidadYaRecibida,
+                    CantidadRecibida = x.CantidadRecibida,
+                    CantidadPendiente = dto.Estado == Borrador ? x.CantidadPendiente + x.CantidadRecibida : x.CantidadPendiente,
+                    PrecioUnitarioOrden = x.PrecioUnitarioOrden,
+                    CostoUnitario = x.CostoUnitario,
+                    IdBodega = idBodega,
+                    Observacion = obsLimpia,
+                    NumeroLote = x.NumeroLote,
+                    FechaVencimiento = x.FechaVencimiento
+                };
             }).ToList()
         };
+    }
+
+    private string? ConstruirObservacionConBodega(string? observacion, int idBodega)
+    {
+        var limpia = LimpiarPrefijoBodega(observacion);
+        var bodega = bodegasSucursal.FirstOrDefault(b => b.IdBodega == idBodega);
+        if (bodega is null)
+            return limpia;
+
+        var prefijo = $"[Bodega: {bodega.Nombre} ({bodega.Codigo})]";
+        var combinada = string.IsNullOrWhiteSpace(limpia) ? prefijo : $"{prefijo} {limpia}";
+        return combinada.Length <= 500 ? combinada : combinada[..500];
+    }
+
+    private static (int IdBodega, string? Observacion) ExtraerBodegaDeObservacion(
+        string? observacion,
+        IReadOnlyList<EContaxBodegaDto> bodegas,
+        int bodegaPredeterminadaId)
+    {
+        if (string.IsNullOrWhiteSpace(observacion))
+            return (bodegaPredeterminadaId, observacion);
+
+        var limpia = LimpiarPrefijoBodega(observacion);
+        var match = bodegas.FirstOrDefault(b =>
+            observacion.Contains($"[Bodega: {b.Nombre} ({b.Codigo})]", StringComparison.OrdinalIgnoreCase) ||
+            observacion.Contains($"Bodega: {b.Nombre}", StringComparison.OrdinalIgnoreCase));
+        return (match?.IdBodega ?? bodegaPredeterminadaId, limpia);
+    }
+
+    private static string? LimpiarPrefijoBodega(string? observacion)
+    {
+        if (string.IsNullOrWhiteSpace(observacion))
+            return observacion;
+
+        var texto = observacion.Trim();
+        while (texto.StartsWith("[Bodega:", StringComparison.OrdinalIgnoreCase))
+        {
+            var cierre = texto.IndexOf(']');
+            if (cierre < 0)
+                break;
+            texto = texto[(cierre + 1)..].Trim();
+        }
+        return string.IsNullOrWhiteSpace(texto) ? null : texto;
     }
 
     private sealed class EditorDetail
@@ -1304,6 +1564,7 @@
         public decimal CantidadPendiente { get; set; }
         public decimal PrecioUnitarioOrden { get; set; }
         public decimal? CostoUnitario { get; set; }
+        public int IdBodega { get; set; }
         public string? Observacion { get; set; }
         public bool Verificado { get; set; }
         public string? NumeroLote { get; set; }
@@ -1318,6 +1579,7 @@
         public decimal CantidadFactura { get; set; }
         public decimal PrecioFactura { get; set; }
         public int CodigoProducto { get; set; }
+        public int IdBodega { get; set; }
         public bool ModoForzadoExistente { get; set; } = true;
         public bool CrearNuevoProducto { get; set; }
         public string NuevoNombreProducto { get; set; } = string.Empty;

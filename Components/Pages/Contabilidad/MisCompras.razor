@@ -4,11 +4,13 @@
 @using Simetric.Services
 @using Simetric.Services.EContax
 @using Simetric.ViewModels
+@using HosvetKardex.Web.Services
 @attribute [AllowAnonymous]
 @inject FacturaCompraManualService FacturaCompraService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Navigation
 @inject SweetAlertService AlertService
+@inject SessionStateService Session
 
 <PageTitle>Mis compras | E-Contax</PageTitle>
 <link rel="stylesheet" href="/_content/Simetric/css/econtax-compras.css?v=20261023-compras-buttons" />
@@ -155,7 +157,9 @@
         error = "";
         try
         {
-            compras = await FacturaCompraService.ListarAsync(currentUserId);
+            compras = await FacturaCompraService.ListarAsync(
+                currentUserId,
+                sucursalId: Session.Localidad > 0 ? Session.Localidad : null);
             if (seleccionadoId.HasValue && !compras.Any(x => x.IdFactura == seleccionadoId.Value))
                 CerrarDetalle();
         }

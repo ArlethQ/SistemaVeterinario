@@ -8,6 +8,7 @@
 @using Simetric.Services.EContax
 @using Simetric.ViewModels
 @using System.Globalization
+@using HosvetKardex.Web.Services
 @attribute [AllowAnonymous]
 @inject FacturaCompraManualService FacturaCompraService
 @inject ComprasXmlService ComprasXmlService
@@ -16,6 +17,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Navigation
 @inject SweetAlertService AlertService
+@inject SessionStateService Session
 
 <link rel="stylesheet" href="/_content/Simetric/css/nueva-factura-shared.css?v=20261023-invoice-parity" />
 <PageTitle>Nueva factura de compra | E-Contax</PageTitle>
@@ -747,7 +749,10 @@
             {
                 try
                 {
-                    var (codFactura, duplicada) = await FacturaCompraService.ImportarFacturaXmlEContaxAsync(currentUserId, item.Preview!);
+                    var (codFactura, duplicada) = await FacturaCompraService.ImportarFacturaXmlEContaxAsync(
+                        currentUserId,
+                        item.Preview!,
+                        idSucursal: Session.Localidad > 0 ? Session.Localidad : null);
                     item.Seleccionado = false;
                     if (duplicada)
                     {
@@ -896,6 +901,7 @@
         {
             model.Proveedor = NombreProveedorFactura;
             model.EsPersonaNatural = EsPersonaNatural;
+            model.IdSucursal = Session.Localidad > 0 ? Session.Localidad : null;
             var id = await FacturaCompraService.GuardarAsync(currentUserId, model, continuarConProveedor);
             await AlertService.ShowSuccessAsync($"Factura de compra guardada. Código interno: {id}");
             Navigation.NavigateTo(EContaxRoutes.CuentasPorPagar);
