@@ -184,6 +184,10 @@ public class LiquidacionCompraService
                     .FirstOrDefault(),
                 Identificacion = x.Numeroidentificacion ?? "",
                 TipoIdentificacion = x.Tipoidentificacion ?? "",
+                NombreComercial = x.Nombrecomercial ?? "",
+                Nombres = x.Nombres ?? "",
+                Apellidos = x.Apellidos ?? "",
+
                 RazonSocial = !string.IsNullOrWhiteSpace(x.Nombrerazonsocial)
                     ? x.Nombrerazonsocial!
                     : (!string.IsNullOrWhiteSpace(x.Nombrecomercial)
@@ -217,6 +221,10 @@ public class LiquidacionCompraService
                 IdProveedor = x.idProveedor,
                 Identificacion = x.ruc ?? "",
                 TipoIdentificacion = x.tipoIdentificacion ?? "",
+                NombreComercial = x.nombreComercial ?? "",
+                EsPersonaNatural = x.personaNatural == 'S' || x.personaNatural == '1' ? true
+                    : x.personaNatural == 'N' || x.personaNatural == '0' ? false : (bool?)null,
+
                 RazonSocial = !string.IsNullOrWhiteSpace(x.nombre) ? x.nombre! : (x.nombreComercial ?? ""),
                 Direccion = x.direccion ?? "",
                 TelefonoFijo = x.telefono ?? "",
@@ -2552,6 +2560,10 @@ public class LiquidacionCompraService
             Identificacion = Tomar(lista.Select(x => x.Identificacion).ToArray()),
             TipoIdentificacion = Tomar(lista.Select(x => x.TipoIdentificacion).ToArray()),
             RazonSocial = Tomar(lista.Select(x => x.RazonSocial).ToArray()),
+            NombreComercial = Tomar(lista.Select(x => x.NombreComercial).ToArray()),
+            Nombres = Tomar(lista.Select(x => x.Nombres).ToArray()),
+            Apellidos = Tomar(lista.Select(x => x.Apellidos).ToArray()),
+            EsPersonaNatural = lista.Select(x => x.EsPersonaNatural).FirstOrDefault(x => x.HasValue),
             Direccion = Tomar(lista.Select(x => x.Direccion).ToArray()),
             TelefonoFijo = Tomar(lista.Select(x => x.TelefonoFijo).ToArray()),
             TelefonoMovil = Tomar(lista.Select(x => x.TelefonoMovil).ToArray()),

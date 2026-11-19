@@ -77,16 +77,16 @@ public sealed class FacturaCompraManualService
             {
                 Numeroidentificacion = ruc,
                 Tipoidentificacion = string.IsNullOrWhiteSpace(modelo.TipoIdentificacion) ? (ruc.Length == 13 ? "04" : "05") : modelo.TipoIdentificacion,
-                Nombrerazonsocial = modelo.Proveedor.Trim(),
-                Nombrecomercial = string.IsNullOrWhiteSpace(modelo.NombreComercial) ? modelo.Proveedor.Trim() : modelo.NombreComercial.Trim(),
-                Nombres = string.IsNullOrWhiteSpace(modelo.Nombres) ? modelo.Proveedor.Trim() : modelo.Nombres.Trim(),
-                Apellidos = string.IsNullOrWhiteSpace(modelo.Apellidos) ? "." : modelo.Apellidos.Trim(),
+                Nombrerazonsocial = modelo.EsPersonaNatural == true ? null : modelo.Proveedor.Trim(),
+                Nombrecomercial = modelo.EsPersonaNatural == true ? null : string.IsNullOrWhiteSpace(modelo.NombreComercial) ? modelo.Proveedor.Trim() : modelo.NombreComercial.Trim(),
+                Nombres = modelo.EsPersonaNatural == false ? null : string.IsNullOrWhiteSpace(modelo.Nombres) ? modelo.Proveedor.Trim() : modelo.Nombres.Trim(),
+                Apellidos = modelo.EsPersonaNatural == false ? null : string.IsNullOrWhiteSpace(modelo.Apellidos) ? "." : modelo.Apellidos.Trim(),
                 Direccion = modelo.Direccion.Trim(),
                 Telefonoconvencional = modelo.Telefono.Trim(),
                 Correo = modelo.Correo.Trim(),
                 Referencia = modelo.Referencia.Trim(),
                 Oblgconta = modelo.ObligadoContabilidad,
-                TipoCliente = 2,
+                TipoCliente = await ResolverTipoClienteAsync(context, modelo.EsPersonaNatural),
                 Usuario = idUsuario,
                 Estado = true,
                 Fechaingreso = DateOnly.FromDateTime(DateTime.Today)
@@ -680,7 +680,7 @@ public sealed class FacturaCompraManualService
             {
                 ruc = ruc,
                 nombre = modelo.Proveedor.Trim(),
-                nombreComercial = string.IsNullOrWhiteSpace(modelo.NombreComercial) ? modelo.Proveedor.Trim() : modelo.NombreComercial.Trim(),
+                nombreComercial = modelo.EsPersonaNatural == true ? null : string.IsNullOrWhiteSpace(modelo.NombreComercial) ? modelo.Proveedor.Trim() : modelo.NombreComercial.Trim(),
                 direccion = string.IsNullOrWhiteSpace(modelo.Direccion) ? "." : modelo.Direccion.Trim(),
                 telefono = modelo.Telefono.Trim(),
                 telefonoMovil = modelo.Telefono.Trim(),
@@ -688,7 +688,7 @@ public sealed class FacturaCompraManualService
                 estado = true,
                 fechaActualizacion = DateTime.Now,
                 tipoIdentificacion = string.IsNullOrWhiteSpace(modelo.TipoIdentificacion) ? (ruc.Length == 13 ? "04" : "05") : modelo.TipoIdentificacion,
-                personaNatural = ruc.Length == 10 ? '1' : '0',
+                personaNatural = (modelo.EsPersonaNatural ?? (ruc.Length == 10)) ? '1' : '0',
                 obligado = string.Equals(modelo.ObligadoContabilidad, "SI", StringComparison.OrdinalIgnoreCase) ? '1' : '0',
                 formaPago = string.IsNullOrWhiteSpace(modelo.FormaPago) ? "20" : modelo.FormaPago,
                 plazoPago = modelo.EsCredito ? Math.Max(modelo.PlazoCredito, 1) : 0,
@@ -711,10 +711,10 @@ public sealed class FacturaCompraManualService
             {
                 Numeroidentificacion = ruc,
                 Tipoidentificacion = string.IsNullOrWhiteSpace(modelo.TipoIdentificacion) ? (ruc.Length == 13 ? "04" : "05") : modelo.TipoIdentificacion,
-                Nombrerazonsocial = modelo.Proveedor.Trim(),
-                Nombrecomercial = string.IsNullOrWhiteSpace(modelo.NombreComercial) ? modelo.Proveedor.Trim() : modelo.NombreComercial.Trim(),
-                Nombres = string.IsNullOrWhiteSpace(modelo.Nombres) ? modelo.Proveedor.Trim() : modelo.Nombres.Trim(),
-                Apellidos = string.IsNullOrWhiteSpace(modelo.Apellidos) ? "." : modelo.Apellidos.Trim(),
+                Nombrerazonsocial = modelo.EsPersonaNatural == true ? null : modelo.Proveedor.Trim(),
+                Nombrecomercial = modelo.EsPersonaNatural == true ? null : string.IsNullOrWhiteSpace(modelo.NombreComercial) ? modelo.Proveedor.Trim() : modelo.NombreComercial.Trim(),
+                Nombres = modelo.EsPersonaNatural == false ? null : string.IsNullOrWhiteSpace(modelo.Nombres) ? modelo.Proveedor.Trim() : modelo.Nombres.Trim(),
+                Apellidos = modelo.EsPersonaNatural == false ? null : string.IsNullOrWhiteSpace(modelo.Apellidos) ? "." : modelo.Apellidos.Trim(),
                 Direccion = modelo.Direccion.Trim(),
                 Telefonoconvencional = modelo.Telefono.Trim(),
                 Correo = modelo.Correo.Trim(),
@@ -722,7 +722,7 @@ public sealed class FacturaCompraManualService
                 Oblgconta = modelo.ObligadoContabilidad,
                 Idempresa = modelo.IdEmpresa is > 0 ? modelo.IdEmpresa : null,
                 Idsucursal = modelo.IdSucursal is > 0 ? modelo.IdSucursal : null,
-                TipoCliente = 2,
+                TipoCliente = await ResolverTipoClienteAsync(context, modelo.EsPersonaNatural),
                 Usuario = idUsuario,
                 Estado = true,
                 Retenciones = true,
@@ -733,6 +733,18 @@ public sealed class FacturaCompraManualService
         }
 
         return cliente;
+    }
+
+    private static async Task<int> ResolverTipoClienteAsync(AppDbContext context, bool? esNatural)
+    {
+        if (!esNatural.HasValue)
+            return 2;
+
+        var tipos = await context.Tipoclientes.AsNoTracking().OrderBy(x => x.TclCodigo).ToListAsync();
+        return tipos.FirstOrDefault(x => esNatural.Value
+            ? TipoClienteClasificacion.EsNatural(x.TclDescripcion)
+            : TipoClienteClasificacion.EsJuridica(x.TclDescripcion))?.TclCodigo
+            ?? throw new InvalidOperationException("El tipo de persona del proveedor no está configurado en el catálogo.");
     }
 
     private static string SoloDigitos(string? valor) => new((valor ?? "").Where(char.IsDigit).ToArray());

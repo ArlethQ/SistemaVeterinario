@@ -1479,6 +1479,7 @@
 @code {
 
     [Parameter] public Simetric.Models.Cliente? ClientePrefill { get; set; }
+    [Parameter] public bool? PersonaNaturalPrefill { get; set; }
     [Parameter] public EventCallback<string> OnClienteGuardado { get; set; }
 
 
@@ -3534,13 +3535,16 @@
             Correo = ClientePrefill.Correo?.Trim() ?? string.Empty,
             DiasCredito = ClientePrefill.DiasCredito ?? (EsModoProveedores ? 30 : null),
             Oblgconta = NormalizarObligadoContabilidad(ClientePrefill.Oblgconta),
-            TipoCliente = ClientePrefill.TipoCliente ?? 0,
+            TipoCliente = ClientePrefill.TipoCliente ?? (PersonaNaturalPrefill is bool esNatural
+                ? tiposCliente.FirstOrDefault(x => esNatural
+                    ? TipoClienteClasificacion.EsNatural(x.Descripcion)
+                    : TipoClienteClasificacion.EsJuridica(x.Descripcion))?.TclCodigo ?? 0
+                : 0),
             Estado = ClientePrefill.Estado ?? true,
             Observaciones = ClientePrefill.Observaciones?.Trim() ?? string.Empty,
             Pais = ClientePrefill.Pais ?? ecuadorPaisId,
             Provincia = ClientePrefill.Provincia,
             Ciudad = ClientePrefill.Ciudad,
-            EsTipoEmpresa = EsTipoClienteEmpresa(ClientePrefill.TipoCliente ?? 0),
             EsProveedor = EsModoProveedores
         };
 

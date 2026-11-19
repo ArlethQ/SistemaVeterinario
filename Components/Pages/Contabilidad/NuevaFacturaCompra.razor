@@ -218,13 +218,28 @@
         <div class="n-card-header"><h5><i class="bi bi-person-vcard me-2"></i> Información del proveedor / emisor</h5><small class="d-none d-sm-flex"><i class="bi bi-arrow-repeat me-1"></i> Los datos se actualizarán automáticamente</small></div>
         <div class="n-card-body n-client-card-body">
             <div class="row g-3 n-client-block n-client-main-grid">
+                <div class="col-lg-3 col-md-6">
+                    <label class="n-label" for="tipo-persona-proveedor">Tipo de persona</label>
+                    <div class="n-select-shell">
+                        <select id="tipo-persona-proveedor" class="n-select" @bind="TipoPersonaProveedor">
+                            <option value="natural">Persona natural</option>
+                            <option value="juridica">Persona jurídica (empresa)</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="col-lg-3 col-md-6"><label class="n-label">Tipo identificación</label><div class="n-select-shell"><select class="n-select" @bind="model.TipoIdentificacion"><option value="">-- Seleccione --</option><option value="04">RUC</option><option value="05">Cédula</option><option value="06">Pasaporte</option></select></div></div>
                 <div class="col-lg-3 col-md-6"><label class="n-label">Número de identificación *</label><div class="n-input-wrapper"><i class="bi bi-person-badge n-input-icon"></i><input class="n-input n-input-with-icon" @bind="model.RucProveedor" @bind:event="oninput" @bind:after="VerificarProveedorAsync" maxlength="13" /></div></div>
-                <div class="col-lg-3 col-md-6"><label class="n-label">Razón social *</label><input class="n-input" @bind="model.Proveedor" maxlength="150" /></div>
                 <div class="col-lg-3 col-md-6"><label class="n-label">Obligado a llevar contabilidad</label><div class="n-select-shell"><select class="n-select" @bind="model.ObligadoContabilidad"><option value="NO">No</option><option value="SI">Sí</option></select></div></div>
-                <div class="col-lg-3 col-md-6"><label class="n-label">Nombre comercial</label><input class="n-input" @bind="model.NombreComercial" maxlength="100" /></div>
-                <div class="col-lg-3 col-md-6"><label class="n-label">Nombres</label><input class="n-input" @bind="model.Nombres" maxlength="100" /></div>
-                <div class="col-lg-3 col-md-6"><label class="n-label">Apellidos</label><input class="n-input" @bind="model.Apellidos" maxlength="100" /></div>
+                @if (EsPersonaNatural)
+                {
+                    <div class="col-lg-3 col-md-6"><label class="n-label">Nombres</label><input class="n-input" @bind="model.Nombres" maxlength="100" /></div>
+                    <div class="col-lg-3 col-md-6"><label class="n-label">Apellidos</label><input class="n-input" @bind="model.Apellidos" maxlength="100" /></div>
+                }
+                else
+                {
+                    <div class="col-lg-3 col-md-6"><label class="n-label">Razón social *</label><input class="n-input" @bind="model.Proveedor" maxlength="150" /></div>
+                    <div class="col-lg-3 col-md-6"><label class="n-label">Nombre comercial</label><input class="n-input" @bind="model.NombreComercial" maxlength="100" /></div>
+                }
                 <div class="col-lg-3 col-md-6"><label class="n-label">Fecha de emisión *</label><input class="n-input" type="date" @bind="model.FechaEmision" /></div>
             </div>
 
@@ -329,6 +344,7 @@
     <div class="docs-client-crud-frame">
         <HosvetKardex.Web.Components.Pages.Contabilidad.Clientes ClientePrefill="@proveedorPrefill"
                                                                  EsModoProveedores="true"
+                                                                 PersonaNaturalPrefill="@EsPersonaNatural"
                                                                  OnClienteGuardado="ProveedorGuardadoAsync" />
     </div>
 </DocumentWorkspaceModal>
@@ -393,6 +409,7 @@
                 if (!string.IsNullOrWhiteSpace(model.RucProveedor) && model.RucProveedor.Trim() != filtro)
                 {
                     model.Proveedor = "";
+                    model.EsPersonaNatural = null;
                     model.NombreComercial = "";
                     model.Nombres = "";
                     model.Apellidos = "";
@@ -486,7 +503,13 @@
 
             model.RucProveedor = ruc;
             model.TipoIdentificacion = "04";
+            if (TipoClienteClasificacion.EsNatural(datos.TipoContribuyente))
+                model.EsPersonaNatural = true;
+            else if (TipoClienteClasificacion.EsJuridica(datos.TipoContribuyente))
+                model.EsPersonaNatural = false;
             model.Proveedor = datos.RazonSocial;
+            if (EsPersonaNatural && string.IsNullOrWhiteSpace(model.Nombres) && string.IsNullOrWhiteSpace(model.Apellidos))
+                model.Nombres = datos.RazonSocial;
             model.NombreComercial = datos.NombreComercial ?? datos.RazonSocial;
             model.ObligadoContabilidad = datos.ObligadoLlevarContabilidad ?? "NO";
             model.Direccion = datos.DireccionMatriz ?? datos.DireccionEstablecimiento ?? "";
@@ -513,7 +536,12 @@
         model.RucProveedor = proveedor.Identificacion;
         model.Proveedor = proveedor.RazonSocial;
         model.TipoIdentificacion = string.IsNullOrWhiteSpace(proveedor.TipoIdentificacion) ? model.TipoIdentificacion : proveedor.TipoIdentificacion;
-        model.NombreComercial = proveedor.RazonSocial;
+        model.EsPersonaNatural = proveedor.EsPersonaNatural;
+        model.NombreComercial = proveedor.NombreComercial;
+        model.Nombres = proveedor.Nombres;
+        model.Apellidos = proveedor.Apellidos;
+        if (EsPersonaNatural && string.IsNullOrWhiteSpace(model.Nombres) && string.IsNullOrWhiteSpace(model.Apellidos))
+            model.Nombres = proveedor.RazonSocial;
         model.Direccion = proveedor.Direccion;
         model.Telefono = string.IsNullOrWhiteSpace(proveedor.TelefonoMovil) ? proveedor.TelefonoFijo : proveedor.TelefonoMovil;
         model.Correo = proveedor.Correo;
@@ -690,6 +718,9 @@
         if (model.Detalles.Count == 0)
             model.Detalles.Add(new());
 
+        if (EsPersonaNatural)
+            model.Nombres = preview.RazonSocialProveedor;
+
         creditoSeleccionado = model.FormaPago == "19";
         model.PlazoCredito = creditoSeleccionado ? 30 : 0;
         proveedorBusqueda = model.Proveedor;
@@ -802,10 +833,10 @@
         {
             Numeroidentificacion = identificacion,
             Tipoidentificacion = EsRucCompleto(identificacion) ? "04" : "05",
-            Nombrerazonsocial = NombreProveedorFactura,
-            Nombrecomercial = model.NombreComercial,
-            Nombres = string.IsNullOrWhiteSpace(model.Nombres) ? model.Proveedor : model.Nombres,
-            Apellidos = model.Apellidos,
+            Nombrerazonsocial = EsPersonaNatural ? null : NombreProveedorFactura,
+            Nombrecomercial = EsPersonaNatural ? null : model.NombreComercial,
+            Nombres = EsPersonaNatural ? model.Nombres : null,
+            Apellidos = EsPersonaNatural ? model.Apellidos : null,
             Direccion = model.Direccion,
             Telefonoconvencional = model.Telefono,
             Correo = model.Correo,
@@ -841,7 +872,15 @@
         }
     }
 
-    private string NombreProveedorFactura => string.IsNullOrWhiteSpace(model.Proveedor)
+    private bool EsPersonaNatural => model.EsPersonaNatural ?? (model.TipoIdentificacion is "05" or "06");
+
+    private string TipoPersonaProveedor
+    {
+        get => EsPersonaNatural ? "natural" : "juridica";
+        set => model.EsPersonaNatural = value == "natural";
+    }
+
+    private string NombreProveedorFactura => EsPersonaNatural
         ? $"{model.Nombres.Trim()} {model.Apellidos.Trim()}".Trim()
         : model.Proveedor.Trim();
 
@@ -851,9 +890,12 @@
             return;
 
         guardando = true;
+        var razonSocial = model.Proveedor;
+        var personaNatural = model.EsPersonaNatural;
         try
         {
             model.Proveedor = NombreProveedorFactura;
+            model.EsPersonaNatural = EsPersonaNatural;
             var id = await FacturaCompraService.GuardarAsync(currentUserId, model, continuarConProveedor);
             await AlertService.ShowSuccessAsync($"Factura de compra guardada. Código interno: {id}");
             Navigation.NavigateTo(EContaxRoutes.CuentasPorPagar);
@@ -861,7 +903,12 @@
         catch (ProveedorCompraNoRegistradoException) { mostrarOpcionesProveedor = true; }
         catch (InvalidOperationException ex) { await AlertService.ShowErrorAsync(ex.Message); }
         catch (Exception ex) { error = $"No se pudo guardar la factura: {ex.Message}"; }
-        finally { guardando = false; }
+        finally
+        {
+            model.Proveedor = razonSocial;
+            model.EsPersonaNatural = personaNatural;
+            guardando = false;
+        }
     }
 
     private enum EstadoLoteXml

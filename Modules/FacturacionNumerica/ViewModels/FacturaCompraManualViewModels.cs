@@ -13,6 +13,7 @@ public sealed class FacturaCompraManualVM
     public string RucProveedor { get; set; } = "";
     public string Proveedor { get; set; } = "";
     public string TipoIdentificacion { get; set; } = "04";
+    public bool? EsPersonaNatural { get; set; }
     public string ObligadoContabilidad { get; set; } = "NO";
     public string NombreComercial { get; set; } = "";
     public string Nombres { get; set; } = "";

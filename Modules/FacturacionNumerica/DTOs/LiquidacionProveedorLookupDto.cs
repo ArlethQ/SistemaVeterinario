@@ -7,6 +7,10 @@ public class LiquidacionProveedorLookupDto
     public string Identificacion { get; set; } = "";
     public string TipoIdentificacion { get; set; } = "";
     public string RazonSocial { get; set; } = "";
+    public string NombreComercial { get; set; } = "";
+    public string Nombres { get; set; } = "";
+    public string Apellidos { get; set; } = "";
+    public bool? EsPersonaNatural { get; set; }
     public string Direccion { get; set; } = "";
     public string TelefonoFijo { get; set; } = "";
     public string TelefonoMovil { get; set; } = "";
