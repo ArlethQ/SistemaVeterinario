@@ -245,7 +245,13 @@ public sealed class EContaxRecepcionCompraService
             actor.IdEmpresa,
             recepcion.IdSucursal,
             recepcion.Detalles
-                .Select(x => (CodigoProducto: x.CodigoProducto, Cantidad: x.CantidadRecibida, CostoUnitarioSinImpuestos: x.CostoUnitario ?? costos.GetValueOrDefault(x.IdDetalleOrdenCompra), NumeroLote: x.NumeroLote, FechaVencimiento: x.FechaVencimiento))
+                .Select(x => (
+                    CodigoProducto: x.CodigoProducto,
+                    Cantidad: x.CantidadRecibida,
+                    CostoUnitarioSinImpuestos: x.CostoUnitario ?? costos.GetValueOrDefault(x.IdDetalleOrdenCompra),
+                    NumeroLote: x.NumeroLote,
+                    FechaVencimiento: x.FechaVencimiento,
+                    Observacion: !string.IsNullOrWhiteSpace(x.Observacion) ? x.Observacion : recepcion.Observacion))
                 .ToList(),
             recepcion.NumeroRecepcion);
         await ActualizarPreciosProveedorAsync(context, actor.IdEmpresa, orden.IdProveedorCliente, recepcion.Detalles, orden.Detalles);

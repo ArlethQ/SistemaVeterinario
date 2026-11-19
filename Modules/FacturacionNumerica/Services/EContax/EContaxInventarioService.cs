@@ -42,7 +42,9 @@ public sealed class EContaxInventarioService
                         (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
                         ((p.Idempresa == userContext.IdEmpresa && p.Idsucursal.HasValue && idsSucursal.Contains(p.Idsucursal.Value)) ||
                          context.EContaxProductosSucursales.Any(a => a.CodigoProducto == p.Codigo &&
-                             a.IdEmpresa == userContext.IdEmpresa && idsSucursal.Contains(a.IdSucursal))));
+                             a.IdEmpresa == userContext.IdEmpresa && idsSucursal.Contains(a.IdSucursal)) ||
+                         context.EContaxInventarioExistencias.Any(e => e.CodigoProducto == p.Codigo &&
+                             e.IdEmpresa == userContext.IdEmpresa && idsSucursal.Contains(e.IdSucursal))));
 
         if (!string.IsNullOrWhiteSpace(filtro))
         {
@@ -93,7 +95,8 @@ public sealed class EContaxInventarioService
         var items = productos
             .SelectMany(producto => sucursalesConsulta
                 .Where(sucursal => producto.Idsucursal == sucursal.IdSucursal ||
-                    asignaciones.Any(x => x.CodigoProducto == producto.Codigo && x.IdSucursal == sucursal.IdSucursal))
+                    asignaciones.Any(x => x.CodigoProducto == producto.Codigo && x.IdSucursal == sucursal.IdSucursal) ||
+                    existencias.Any(x => x.CodigoProducto == producto.Codigo && x.IdSucursal == sucursal.IdSucursal))
                 .Select(sucursal =>
                 {
                     var existencia = existencias.FirstOrDefault(x =>
@@ -121,8 +124,9 @@ public sealed class EContaxInventarioService
                         : lotePorVencer?.FechaVencimiento is { } fechaVencimiento && fechaVencimiento.Date <= fechaLimite7Dias
                             ? "VENCE_7"
                             : lotePorVencer is not null ? "VENCE_30" : null;
+                    int? idBodegaEfectivo = existencia?.IdBodega;
                     string? nombreBodega = null;
-                    if (existencia?.IdBodega is int idBod && bodegasPorId.TryGetValue(idBod, out var bodInfo))
+                    if (idBodegaEfectivo is int idBod && bodegasPorId.TryGetValue(idBod, out var bodInfo))
                     {
                         nombreBodega = string.IsNullOrWhiteSpace(bodInfo.Codigo) ? bodInfo.Nombre : $"{bodInfo.Nombre} ({bodInfo.Codigo})";
                     }
@@ -130,6 +134,13 @@ public sealed class EContaxInventarioService
                              !string.IsNullOrWhiteSpace(bodMov))
                     {
                         nombreBodega = bodMov;
+                        var bodMatch = bodegas.FirstOrDefault(b =>
+                            b.IdSucursal == sucursal.IdSucursal &&
+                            (string.Equals($"{b.Nombre} ({b.Codigo})", bodMov, StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(b.Nombre, bodMov, StringComparison.OrdinalIgnoreCase) ||
+                             (!string.IsNullOrWhiteSpace(b.Codigo) && bodMov.Contains($"({b.Codigo})", StringComparison.OrdinalIgnoreCase))));
+                        if (bodMatch is not null)
+                            idBodegaEfectivo = bodMatch.IdBodega;
                     }
 
                     return new EContaxInventarioItemDto
@@ -139,7 +150,7 @@ public sealed class EContaxInventarioService
                         NombreProducto = producto.Nombre,
                         IdSucursal = sucursal.IdSucursal,
                         NombreSucursal = nombresSucursal.GetValueOrDefault(sucursal.IdSucursal),
-                        IdBodega = existencia?.IdBodega,
+                        IdBodega = idBodegaEfectivo,
                         NombreBodega = nombreBodega,
                         UnidadMedida = string.IsNullOrWhiteSpace(producto.UnidadMedida) ? "UNIDAD" : producto.UnidadMedida.Trim().ToUpperInvariant(),
                         FactorConversion = producto.FactorConversionInventario <= 0 ? 1m : producto.FactorConversionInventario,
@@ -194,8 +205,11 @@ public sealed class EContaxInventarioService
         var userContext = await _tenant.GetContextAsync(context, userId);
         var sucursales = await _tenant.GetSucursalesEmpresaAsync(context, userContext.IdEmpresa);
         var producto = await context.Productos.AsNoTracking().FirstOrDefaultAsync(p =>
-            p.Codigo == codigoProducto && p.Idempresa == userContext.IdEmpresa && p.Estado == true &&
-            (p.Tipocompravena == null || p.Tipocompravena.ToUpper() != "SERVICIO"));
+            p.Codigo == codigoProducto && p.Estado != false &&
+            (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
+            (p.Idempresa == userContext.IdEmpresa ||
+             context.EContaxProductosSucursales.Any(a => a.CodigoProducto == p.Codigo && a.IdEmpresa == userContext.IdEmpresa) ||
+             context.EContaxInventarioExistencias.Any(e => e.CodigoProducto == p.Codigo && e.IdEmpresa == userContext.IdEmpresa)));
         if (producto is null)
             throw new InvalidOperationException("El producto no existe o no pertenece a la empresa.");
 
@@ -217,6 +231,8 @@ public sealed class EContaxInventarioService
         var sucursal = ResolverSucursalUnica(userContext, sucursales, sucursalId);
         var perteneceASucursal = producto.Idsucursal == sucursal.IdSucursal ||
             await context.EContaxProductosSucursales.AnyAsync(x =>
+                x.CodigoProducto == codigoProducto && x.IdEmpresa == userContext.IdEmpresa && x.IdSucursal == sucursal.IdSucursal) ||
+            await context.EContaxInventarioExistencias.AnyAsync(x =>
                 x.CodigoProducto == codigoProducto && x.IdEmpresa == userContext.IdEmpresa && x.IdSucursal == sucursal.IdSucursal);
         if (!perteneceASucursal)
             throw new InvalidOperationException("El producto no está asignado a la sucursal seleccionada.");
@@ -492,12 +508,27 @@ public sealed class EContaxInventarioService
             await context.SaveChangesAsync();
     }
 
-    public async Task RegistrarEntradaCompraAsync(
+    public Task RegistrarEntradaCompraAsync(
         AppDbContext context,
         int userId,
         int idEmpresa,
         int idSucursal,
         IReadOnlyCollection<(int CodigoProducto, decimal Cantidad, decimal CostoUnitarioSinImpuestos, string? NumeroLote, DateTime? FechaVencimiento)> items,
+        string? referencia) =>
+        RegistrarEntradaCompraAsync(
+            context,
+            userId,
+            idEmpresa,
+            idSucursal,
+            items.Select(x => (x.CodigoProducto, x.Cantidad, x.CostoUnitarioSinImpuestos, x.NumeroLote, x.FechaVencimiento, Observacion: (string?)null)).ToList(),
+            referencia);
+
+    public async Task RegistrarEntradaCompraAsync(
+        AppDbContext context,
+        int userId,
+        int idEmpresa,
+        int idSucursal,
+        IReadOnlyCollection<(int CodigoProducto, decimal Cantidad, decimal CostoUnitarioSinImpuestos, string? NumeroLote, DateTime? FechaVencimiento, string? Observacion)> items,
         string? referencia)
     {
         if (items.Any(x => x.CodigoProducto <= 0 || x.Cantidad < 0 || x.CostoUnitarioSinImpuestos < 0))
@@ -506,28 +537,67 @@ public sealed class EContaxInventarioService
             throw new InvalidOperationException("No se puede ingresar inventario con lotes vencidos o que vencen hoy.");
 
         var metodo = await ObtenerMetodoAsync(context, idEmpresa);
+        var bodegasSucursal = await context.EContaxBodegas.AsNoTracking()
+            .Where(b => b.IdEmpresa == idEmpresa && b.IdSucursal == idSucursal && b.Estado)
+            .OrderBy(b => b.IdBodega)
+            .ToListAsync();
+
         foreach (var grupo in items.Where(x => x.CodigoProducto > 0 && x.Cantidad > 0).GroupBy(x => x.CodigoProducto))
         {
             var producto = await context.Productos.FirstOrDefaultAsync(x =>
-                x.Codigo == grupo.Key && x.Idempresa == idEmpresa && x.Estado == true);
+                x.Codigo == grupo.Key && x.Estado != false);
             if (producto is null)
                 throw new InvalidOperationException($"El producto {grupo.Key} no existe o está inactivo en la empresa.");
-            if (string.Equals(producto.Tipocompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(producto.Tipocompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(producto.Tipocompravena, "S", StringComparison.OrdinalIgnoreCase))
                 continue;
+
+            producto.Idempresa ??= idEmpresa;
+            producto.Idsucursal ??= idSucursal;
+            producto.Estado ??= true;
+            producto.Inventario = true;
+
             if (producto.Idsucursal != idSucursal && !await context.EContaxProductosSucursales.AnyAsync(x =>
                     x.CodigoProducto == grupo.Key && x.IdEmpresa == idEmpresa && x.IdSucursal == idSucursal))
-                throw new InvalidOperationException($"El producto '{producto.Nombre}' no está asignado a la sucursal de la recepción.");
+            {
+                context.EContaxProductosSucursales.Add(new EContaxProductoSucursal
+                {
+                    CodigoProducto = grupo.Key,
+                    IdEmpresa = idEmpresa,
+                    IdSucursal = idSucursal
+                });
+            }
 
             var existencia = await ObtenerExistenciaAsync(context, idEmpresa, idSucursal, grupo.Key);
             var factor = ObtenerFactorConversion(producto.FactorConversionInventario);
             foreach (var item in grupo.Where(x => x.Cantidad > 0))
             {
+                var bodTexto = ExtraerTextoBodega(item.Observacion);
+                var bodegaSeleccionada = !string.IsNullOrWhiteSpace(bodTexto)
+                    ? bodegasSucursal.FirstOrDefault(b =>
+                        string.Equals($"{b.Nombre} ({b.Codigo})", bodTexto, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(b.Nombre, bodTexto, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrWhiteSpace(b.Codigo) && bodTexto.Contains($"({b.Codigo})", StringComparison.OrdinalIgnoreCase)))
+                    : null;
+                bodegaSeleccionada ??= bodegasSucursal.FirstOrDefault();
+
+                if (bodegaSeleccionada is not null)
+                    existencia.IdBodega = bodegaSeleccionada.IdBodega;
+
+                var etiquetaBodega = bodegaSeleccionada is not null
+                    ? $"Bodega: {bodegaSeleccionada.Nombre} ({bodegaSeleccionada.Codigo})"
+                    : (!string.IsNullOrWhiteSpace(bodTexto) ? $"Bodega: {bodTexto}" : null);
+
+                var observacionMovimiento = etiquetaBodega is not null
+                    ? $"Recepción de compra {referencia} · {etiquetaBodega}".Trim()
+                    : "Recepción de compra";
+
                 var cantidadBase = item.Cantidad * factor;
                 var costoBase = item.CostoUnitarioSinImpuestos / factor;
                 await ValidarEntradaConLoteAsync(context, existencia, cantidadBase, item.NumeroLote, item.FechaVencimiento);
                 AgregarEntrada(context, existencia, cantidadBase, costoBase, metodo, item.NumeroLote, item.FechaVencimiento);
                 context.EContaxInventarioMovimientos.Add(CrearMovimiento(
-                    existencia, userId, metodo, "ENTRADA", cantidadBase, "Recepción de compra", "RECEPCION", costoBase, referencia,
+                    existencia, userId, metodo, "ENTRADA", cantidadBase, observacionMovimiento, "RECEPCION", costoBase, referencia,
                     item.NumeroLote, item.FechaVencimiento));
             }
         }
@@ -1063,7 +1133,7 @@ public sealed class EContaxInventarioService
     {
         var existencia = await context.EContaxInventarioExistencias
             .FromSqlInterpolated($@"
-                SELECT [codigo_producto], [id_empresa], [id_sucursal], [stock_actual],
+                SELECT [codigo_producto], [id_empresa], [id_sucursal], [id_bodega], [stock_actual],
                        [stock_reservado], [stock_minimo], [stock_maximo], [costo_promedio], [fecha_actualizacion]
                 FROM [dbo].[ECONTAX_INVENTARIO_EXISTENCIA] WITH (UPDLOCK, HOLDLOCK)
                 WHERE [id_empresa] = {empresa}
@@ -1386,6 +1456,8 @@ public sealed class EContaxInventarioService
                     producto.Idempresa = userContext.IdEmpresa;
                 if (producto.Idsucursal is null)
                     producto.Idsucursal = sucursal.IdSucursal;
+                producto.Estado ??= true;
+                producto.Inventario = true;
 
                 bool yaAsignado = await context.EContaxProductosSucursales.AnyAsync(x =>
                     x.CodigoProducto == producto.Codigo && x.IdEmpresa == userContext.IdEmpresa && x.IdSucursal == sucursal.IdSucursal);
@@ -1481,6 +1553,12 @@ public sealed class EContaxInventarioService
         List<EContaxSucursalDto> sucursales,
         int? sucursalId)
     {
+        if (sucursalId is > 0)
+        {
+            var explicita = sucursales.FirstOrDefault(x => x.IdSucursal == sucursalId.Value);
+            if (explicita is not null)
+                return [explicita];
+        }
         if (!userContext.EsJefeEmpresa)
         {
             var propia = sucursales.FirstOrDefault(x => x.IdSucursal == userContext.IdSucursal);
@@ -1499,9 +1577,8 @@ public sealed class EContaxInventarioService
         List<EContaxSucursalDto> sucursales,
         int? sucursalId)
     {
-        if (!userContext.EsJefeEmpresa)
-            sucursalId = userContext.IdSucursal;
-        var sucursal = sucursales.FirstOrDefault(x => x.IdSucursal == (sucursalId ?? userContext.IdSucursal));
+        var objetivoId = sucursalId is > 0 ? sucursalId.Value : userContext.IdSucursal;
+        var sucursal = sucursales.FirstOrDefault(x => x.IdSucursal == objetivoId);
         return sucursal ?? throw new InvalidOperationException("La sucursal seleccionada no es válida.");
     }
 
@@ -1862,6 +1939,8 @@ public sealed class EContaxInventarioService
                     producto.Idempresa = userContext.IdEmpresa;
                 if (producto.Idsucursal is null)
                     producto.Idsucursal = sucursal.IdSucursal;
+                producto.Estado ??= true;
+                producto.Inventario = true;
 
                 bool yaAsignado = await context.EContaxProductosSucursales.AnyAsync(x =>
                     x.CodigoProducto == producto.Codigo && x.IdEmpresa == userContext.IdEmpresa && x.IdSucursal == sucursal.IdSucursal);
