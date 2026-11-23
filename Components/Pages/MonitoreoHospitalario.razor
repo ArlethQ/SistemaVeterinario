@@ -1,5 +1,6 @@
 @page "/hospitalizacion/monitoreo"
 @page "/hospitalizacion/monitoreo/{IdOrden:int}/{Nhcl:int}"
+@implements IDisposable
 @inject IKardexService KardexService
 @inject IHospitalizacionService HospService
 @inject IInventarioService InventarioService
@@ -233,53 +234,119 @@
 
             <!-- 2. REGISTRO DE MEDICAMENTOS DE MONITOREO (hvt_cabMonitoreoMedBC) -->
             <div class="card shadow-sm border-0 mb-3">
-                <div class="card-header bg-primary bg-opacity-10 py-1 px-3 fw-bold small text-primary">
-                    💊 2. REGISTRO DE MEDICAMENTOS E INSUMOS EN MONITOREO (CON DESCARGO DE STOCK)
+                <div class="card-header bg-primary bg-opacity-10 py-1 px-3 d-flex justify-content-between align-items-center small">
+                    <span class="fw-bold text-primary">💊 2. REGISTRO DE MEDICAMENTOS E INSUMOS EN MONITOREO (CON DESCARGO DE STOCK · @NombreSucursalActiva.ToUpperInvariant())</span>
+                    <span class="badge bg-primary-subtle text-primary border">@_catalogoStockSede.Count producto(s) con stock en @NombreSucursalActiva</span>
                 </div>
                 <div class="card-body p-2">
-                    <div class="row g-2 align-items-end mb-2 no-print small">
-                        <div class="col-md-3 position-relative">
-                            <label class="form-label mb-0 fw-semibold">Buscar en bodega:</label>
+                    <div class="row g-2 align-items-start mb-2 no-print small">
+                        <div class="col-md-5 position-relative">
+                            <label class="form-label mb-1 fw-semibold">Buscar y seleccionar producto en stock (@NombreSucursalActiva):</label>
                             <div class="input-group input-group-sm">
-                                <input type="text" class="form-control" autocomplete="off" placeholder="Buscar por nombre o código..."
-                                       @bind="_busquedaFarmaco" @bind:event="oninput" @bind:after="BuscarFarmacosAutoAsync"
+                                <input type="text"
+                                       class="form-control"
+                                       style="max-width: 190px;"
+                                       autocomplete="off"
+                                       placeholder="Filtrar nombre o código..."
+                                       @bind="_busquedaFarmaco"
+                                       @bind:event="oninput"
+                                       @bind:after="BuscarFarmacosAutoAsync"
                                        @onfocus="() => _mostrarSugerenciasFarmaco = !string.IsNullOrWhiteSpace(_busquedaFarmaco)"
                                        @onblur="CerrarSugerenciasFarmacoConRetrasoAsync" />
-                            </div>
-                            @if (_mostrarSugerenciasFarmaco && _farmacosBc.Count > 0 && !string.IsNullOrWhiteSpace(_busquedaFarmaco))
-                            {
-                                <div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index: 1050; max-height: 200px; overflow-y: auto;">
-                                    @foreach (var p in _farmacosBc)
+                                @if (!string.IsNullOrWhiteSpace(_busquedaFarmaco))
+                                {
+                                    <button type="button" class="btn btn-outline-secondary px-2" title="Limpiar filtro" @onclick="LimpiarFiltroFarmaco">×</button>
+                                }
+                                <select class="form-select"
+                                        value="@(_itemStockSeleccionado?.Id ?? string.Empty)"
+                                        @onchange="SeleccionarFarmacoPorId">
+                                    <option value="">-- Seleccione producto en stock (@FarmacosEnStockFiltrados.Count()) --</option>
+                                    @foreach (var p in FarmacosEnStockFiltrados)
                                     {
-                                        <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start"
+                                        <option value="@p.Id">@p.DisplayName (@p.Number) · Stock: @p.Available.ToString("0.##") @UnidadDeItem(p) · @p.Location</option>
+                                    }
+                                </select>
+                            </div>
+
+                            @if (_mostrarSugerenciasFarmaco && FarmacosEnStockFiltrados.Any() && !string.IsNullOrWhiteSpace(_busquedaFarmaco))
+                            {
+                                <div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index: 1050; max-height: 220px; overflow-y: auto;">
+                                    @foreach (var p in FarmacosEnStockFiltrados.Take(30))
+                                    {
+                                        <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start d-flex justify-content-between align-items-center gap-2"
                                                 @onmousedown="() => SeleccionarFarmacoDirecto(p)">
-                                            <strong>@p.DisplayName</strong> <small class="text-muted">(@p.Number | $@p.UnitPrice)</small>
+                                            <div>
+                                                <strong>@p.DisplayName</strong> <small class="text-muted">(@p.Number)</small>
+                                                <div class="text-muted" style="font-size:.73rem;"><i class="ri-store-2-line me-1"></i>Bodega(s): <strong>@p.Location</strong></div>
+                                            </div>
+                                            <span class="badge bg-success-subtle text-success border text-nowrap">
+                                                @p.Available.ToString("0.##") @UnidadDeItem(p)
+                                            </span>
                                         </button>
                                     }
                                 </div>
                             }
+
+                            @if (_itemStockSeleccionado is not null)
+                            {
+                                <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
+                                    <span class="badge bg-info-subtle text-dark border">
+                                        <i class="ri-store-2-line me-1"></i>Disponible en bodega(s): <strong>@_itemStockSeleccionado.Location</strong>
+                                    </span>
+                                    <span class="badge bg-success-subtle text-success border">
+                                        Stock en @NombreSucursalActiva: <strong>@FormatearResumenStock(_itemStockSeleccionado)</strong>
+                                    </span>
+                                    @if (_bodegasProductoSeleccionado.Count > 1)
+                                    {
+                                        <div class="d-inline-flex align-items-center gap-1">
+                                            <span class="text-muted">Descargar de:</span>
+                                            <select class="form-select form-select-sm py-0 px-2" style="width:auto;min-height:24px;font-size:.75rem;" @bind="_nuevoMed.Bodega">
+                                                @foreach (var b in _bodegasProductoSeleccionado)
+                                                {
+                                                    <option value="@b">@b</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else if (_catalogoStockSede.Count == 0)
+                            {
+                                <small class="text-warning-emphasis d-block mt-1">No hay productos con stock disponible en la sucursal <strong>@NombreSucursalActiva</strong>.</small>
+                            }
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label mb-0 fw-semibold">Producto Seleccionado:</label>
-                            <select class="form-select form-select-sm" @onchange="SeleccionarFarmacoBc">
-                                <option value="">-- Seleccione del resultado --</option>
-                                @foreach (var p in _farmacosBc)
-                                {
-                                    <option value="@p.Number">@p.DisplayName (@p.Number | $@p.UnitPrice)</option>
-                                }
-                            </select>
+
+                        <div class="col-md-2">
+                            <label class="form-label mb-1 fw-semibold">Indicaciones / Dosis:</label>
+                            <input type="text" class="form-control form-control-sm" @bind="_nuevoMed.Indicaciones" placeholder="Dosis o indicación..." />
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label mb-0 fw-semibold">Indicaciones / Dosis:</label>
-                            <input type="text" class="form-control form-control-sm" @bind="_nuevoMed.Indicaciones" />
+                            <label class="form-label mb-1 fw-semibold">Cant. @(FactorSeleccionado > 1m ? "(Paq./Unid.)" : $"({UnidadSeleccionada})"):</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" min="1"
+                                       class="form-control text-center fw-bold text-danger" @bind="_nuevoMed.Cantidad" />
+                                @if (FactorSeleccionado > 1m)
+                                {
+                                    <select class="form-select px-1"
+                                            style="max-width: 110px;"
+                                            value="@(_ingresarPorPaquete ? "paquete" : "unidad")"
+                                            @onchange='e => _ingresarPorPaquete = string.Equals(e.Value?.ToString(), "paquete", StringComparison.Ordinal)'>
+                                        <option value="unidad">@UnidadSeleccionada</option>
+                                        <option value="paquete">Paq. (×@FactorSeleccionado.ToString("G29"))</option>
+                                    </select>
+                                }
+                                else
+                                {
+                                    <span class="input-group-text">@UnidadSeleccionada</span>
+                                }
+                            </div>
+                            @if (_itemStockSeleccionado is not null && FactorSeleccionado > 1m && _ingresarPorPaquete)
+                            {
+                                <small class="text-primary d-block mt-1 fw-semibold">= @CantidadBaseDescargo @UnidadSeleccionada</small>
+                            }
                         </div>
                         <div class="col-md-1">
-                            <label class="form-label mb-0 fw-semibold">Cant.:</label>
-                            <input type="number" min="1"
-                                   class="form-control form-control-sm text-center fw-bold text-danger" @bind="_nuevoMed.Cantidad" />
-                        </div>
-                        <div class="col-md-1">
-                            <label class="form-label mb-0 fw-semibold">Vía:</label>
+                            <label class="form-label mb-1 fw-semibold">Vía:</label>
                             <select class="form-select form-select-sm" @bind="_nuevoMed.Via">
                                 @foreach (var v in _vias)
                                 {
@@ -288,7 +355,7 @@
                             </select>
                         </div>
                         <div class="col-md-1">
-                            <label class="form-label mb-0 fw-semibold">Iniciales:</label>
+                            <label class="form-label mb-1 fw-semibold">Iniciales:</label>
                             <select class="form-select form-select-sm" @bind="_nuevoMed.Iniciales">
                                 @foreach (var u in _funcionarios)
                                 {
@@ -296,7 +363,7 @@
                                 }
                             </select>
                         </div>
-                        <div class="col-md-1">
+                        <div class="col-md-1 pt-4">
                             <SaveButton class="btn btn-sm btn-success w-100 fw-semibold" OnClick="AgregarMedicamentoMonitoreoAsync" Disabled="@(_sheet.Cerrada || _guardandoMedicamento)">
                                 ➕ Añadir
                             </SaveButton>
@@ -310,6 +377,7 @@
                                     <th>ID</th>
                                     <th>Código</th>
                                     <th class="text-start">Producto</th>
+                                    <th>Bodega</th>
                                     <th>Cantidad</th>
                                     <th class="text-start">Indicaciones</th>
                                     <th>Vía</th>
@@ -323,7 +391,7 @@
                                 @if (_sheet.MedicamentosRegistrados.Count == 0)
                                 {
                                     <tr>
-                                        <td colspan="10" class="text-muted fst-italic">Sin medicamentos registrados en este monitoreo.</td>
+                                        <td colspan="11" class="text-muted fst-italic">Sin medicamentos registrados en este monitoreo.</td>
                                     </tr>
                                 }
                                 else
@@ -334,7 +402,8 @@
                                             <td>@m.Id</td>
                                             <td>@m.Codigo</td>
                                             <td class="text-start fw-semibold">@m.Producto</td>
-                                            <td class="fw-bold text-danger">@m.Cantidad</td>
+                                            <td><span class="badge bg-light text-dark border">@(string.IsNullOrWhiteSpace(m.Bodega) ? NombreSucursalActiva : m.Bodega)</span></td>
+                                            <td class="fw-bold text-danger">@m.Cantidad @(string.IsNullOrWhiteSpace(m.Medida) ? "" : m.Medida)</td>
                                             <td class="text-start">@m.Indicaciones</td>
                                             <td>@m.Via</td>
                                             <td>@m.Fecha</td>
@@ -351,7 +420,7 @@
                                         @if (!_sheet.Cerrada && _medicamentoEditado is { } edicion && edicion.Id == m.Id)
                                         {
                                             <tr class="no-print">
-                                                <td colspan="10" class="text-start">
+                                                <td colspan="11" class="text-start">
                                                     <fieldset class="row g-2 align-items-end p-2" disabled="@_guardandoMedicamento">
                                                         <legend class="fs-6 mb-1">Editar @m.Producto</legend>
                                                         <label class="col-sm-2">Cantidad<input type="number" min="1" class="form-control form-control-sm" @bind="edicion.Cantidad" /></label>
@@ -487,11 +556,33 @@
 
     private List<ViaAdministracionDto> _vias = [];
     private List<FuncionarioDto> _funcionarios = [];
+    private List<FarmacoStockDto> _catalogoStockSede = [];
     private List<FarmacoStockDto> _farmacosBc = [];
+    private FarmacoStockDto? _itemStockSeleccionado;
+    private List<string> _bodegasProductoSeleccionado = [];
+    private bool _ingresarPorPaquete;
+    private int _localidadCargadaStock;
     private string _busquedaFarmaco = string.Empty;
     private MonitoreoMedInputModel _nuevoMed = new();
     private MonitoreoMedicamentoDto? _medicamentoEditado;
     private bool _guardandoMedicamento;
+
+    private int SucursalActivaId => Session.Localidad > 0 ? Session.Localidad : (Session.CurrentUser?.IdLocalidad ?? 1);
+    private string NombreSucursalActiva => string.IsNullOrWhiteSpace(Session.LocalidadDescripcion) ? "Sucursal actual" : Session.LocalidadDescripcion;
+    private string UnidadSeleccionada => _itemStockSeleccionado is not null ? UnidadDeItem(_itemStockSeleccionado) : "UNIDAD";
+    private decimal FactorSeleccionado => _itemStockSeleccionado is { FactorConversion: > 1m } ? _itemStockSeleccionado.FactorConversion : 1m;
+    private int CantidadBaseDescargo => _ingresarPorPaquete && FactorSeleccionado > 1m
+        ? (int)Math.Ceiling(_nuevoMed.Cantidad * FactorSeleccionado)
+        : _nuevoMed.Cantidad;
+
+    private IEnumerable<FarmacoStockDto> FarmacosEnStockFiltrados =>
+        string.IsNullOrWhiteSpace(_busquedaFarmaco)
+            ? _catalogoStockSede
+            : _catalogoStockSede.Where(x =>
+                x.DisplayName.Contains(_busquedaFarmaco.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                x.Number.Contains(_busquedaFarmaco.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                x.Id.Contains(_busquedaFarmaco.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                x.Location.Contains(_busquedaFarmaco.Trim(), StringComparison.OrdinalIgnoreCase));
 
     private string _nuevaNotaChequeo = string.Empty;
     private TimeOnly _horaObs = TimeOnly.FromDateTime(DateTime.Now);
@@ -514,6 +605,28 @@
             }).ToList()
     };
 
+    protected override void OnInitialized()
+    {
+        Session.OnChange += OnSessionChanged;
+    }
+
+    public void Dispose()
+    {
+        Session.OnChange -= OnSessionChanged;
+    }
+
+    private void OnSessionChanged()
+    {
+        if (_localidadCargadaStock != SucursalActivaId)
+        {
+            _ = InvokeAsync(async () =>
+            {
+                await CargarCatalogoStockSedeAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _cargandoInicial = true;
@@ -521,7 +634,8 @@
         var tVias = KardexService.ObtenerViasAdministracionAsync();
         var tFunc = KardexService.ObtenerFuncionariosEnfermeriaAsync();
         var tOrd = KardexService.ObtenerOrdenesActivasAsync();
-        await Task.WhenAll(tVias, tFunc, tOrd);
+        var tStock = CargarCatalogoStockSedeAsync();
+        await Task.WhenAll(tVias, tFunc, tOrd, tStock);
 
         _vias = await tVias;
         _funcionarios = await tFunc;
@@ -644,42 +758,102 @@
         _mensajeAlerta = "La ficha de Monitoreo Hospitalario ha sido cerrada.";
     }
 
-    private async Task BuscarFarmacosAutoAsync()
+    private async Task CargarCatalogoStockSedeAsync()
     {
-        if (string.IsNullOrWhiteSpace(_busquedaFarmaco))
-        {
-            _farmacosBc = [];
-            _mostrarSugerenciasFarmaco = false;
-            return;
-        }
+        _localidadCargadaStock = SucursalActivaId;
         try
         {
-            _farmacosBc = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaFarmaco, Session.Localidad, Session.Apostrofe);
-            _mostrarSugerenciasFarmaco = _farmacosBc.Count > 0;
-            if (_farmacosBc.Count > 0)
+            _catalogoStockSede = await InventarioService.BuscarMedicamentosConStockAsync(
+                string.Empty,
+                SucursalActivaId,
+                Session.Apostrofe);
+            _farmacosBc = _catalogoStockSede;
+
+            if (_itemStockSeleccionado is not null)
             {
-                _mensajeAlerta = null;
+                var actualizado = _catalogoStockSede.FirstOrDefault(x => x.Id == _itemStockSeleccionado.Id);
+                if (actualizado is not null)
+                {
+                    AplicarSeleccionFarmaco(actualizado, conservarBusqueda: true);
+                }
+                else
+                {
+                    LimpiarSeleccionFarmaco();
+                }
             }
         }
         catch
         {
+            _catalogoStockSede = [];
             _farmacosBc = [];
-            _mostrarSugerenciasFarmaco = false;
         }
     }
 
-    private void SeleccionarFarmacoDirecto(FarmacoStockDto item)
+    private static string UnidadDeItem(FarmacoStockDto item) =>
+        string.IsNullOrWhiteSpace(item.BaseUnitOfMeasureCode) ? "UNIDAD" : item.BaseUnitOfMeasureCode.Trim().ToUpperInvariant();
+
+    private static string FormatearResumenStock(FarmacoStockDto item)
     {
+        var unidad = UnidadDeItem(item);
+        var baseTxt = $"{item.Available:0.##} {unidad}";
+        if (item.FactorConversion <= 1m) return baseTxt;
+        var paq = Math.Round(item.Available / item.FactorConversion, 2, MidpointRounding.AwayFromZero);
+        var paqTxt = paq == Math.Truncate(paq) ? paq.ToString("0") : paq.ToString("0.##");
+        return $"{baseTxt} ({paqTxt} paq. × {item.FactorConversion:G29} {unidad})";
+    }
+
+    private void LimpiarFiltroFarmaco()
+    {
+        _busquedaFarmaco = string.Empty;
         _mostrarSugerenciasFarmaco = false;
-        _busquedaFarmaco = item.DisplayName;
+    }
+
+    private void LimpiarSeleccionFarmaco()
+    {
+        _itemStockSeleccionado = null;
+        _bodegasProductoSeleccionado = [];
+        _ingresarPorPaquete = false;
+        _nuevoMed.CodigoProducto = string.Empty;
+        _nuevoMed.NombreProducto = string.Empty;
+        _nuevoMed.IdBC = string.Empty;
+        _nuevoMed.StockDisponible = 0;
+        _nuevoMed.Bodega = string.Empty;
+    }
+
+    private void AplicarSeleccionFarmaco(FarmacoStockDto item, bool conservarBusqueda = false)
+    {
+        _itemStockSeleccionado = item;
+        _mostrarSugerenciasFarmaco = false;
+        if (!conservarBusqueda)
+            _busquedaFarmaco = string.Empty;
+
+        _bodegasProductoSeleccionado = (item.Location ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         _nuevoMed.CodigoProducto = item.Number;
         _nuevoMed.NombreProducto = item.DisplayName;
         _nuevoMed.IdBC = item.Id;
         _nuevoMed.Iva = item.TaxGroupCode;
-        _nuevoMed.StockDisponible = item.Inventory;
+        _nuevoMed.StockDisponible = item.Available;
         _nuevoMed.PrecioUnitario = item.UnitPrice;
-        _nuevoMed.Medida = item.BaseUnitOfMeasureCode;
-        _nuevoMed.Bodega = item.Location;
+        _nuevoMed.Medida = UnidadDeItem(item);
+        _nuevoMed.Bodega = _bodegasProductoSeleccionado.FirstOrDefault() ?? item.Location ?? string.Empty;
+    }
+
+    private async Task BuscarFarmacosAutoAsync()
+    {
+        if (_catalogoStockSede.Count == 0 || _localidadCargadaStock != SucursalActivaId)
+            await CargarCatalogoStockSedeAsync();
+
+        _farmacosBc = FarmacosEnStockFiltrados.ToList();
+        _mostrarSugerenciasFarmaco = !string.IsNullOrWhiteSpace(_busquedaFarmaco) && _farmacosBc.Count > 0;
+    }
+
+    private void SeleccionarFarmacoDirecto(FarmacoStockDto item)
+    {
+        AplicarSeleccionFarmaco(item);
     }
 
     private async Task CerrarSugerenciasFarmacoConRetrasoAsync()
@@ -688,49 +862,52 @@
         _mostrarSugerenciasFarmaco = false;
     }
 
-    private async Task BuscarFarmacosBcAsync()
+    private void SeleccionarFarmacoPorId(ChangeEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(_busquedaFarmaco)) return;
-        try
-        {
-            _farmacosBc = await InventarioService.BuscarMedicamentosConStockAsync(_busquedaFarmaco, Session.Localidad, Session.Apostrofe);
-            _esError = _farmacosBc.Count == 0;
-            _mensajeAlerta = _farmacosBc.Count == 0 ? "No se encontraron productos activos con ese criterio." : null;
-        }
-        catch (Exception ex)
-        {
-            _farmacosBc = [];
-            _esError = true;
-            _mensajeAlerta = $"No se pudo consultar el catálogo de productos: {ex.Message}";
-        }
-    }
-
-    private void SeleccionarFarmacoBc(ChangeEventArgs e)
-    {
-        var num = e.Value?.ToString();
-        var item = _farmacosBc.FirstOrDefault(x => x.Number == num);
+        var id = e.Value?.ToString();
+        var item = _catalogoStockSede.FirstOrDefault(x => x.Id == id);
         if (item is not null)
         {
-            _nuevoMed.CodigoProducto = item.Number;
-            _nuevoMed.NombreProducto = item.DisplayName;
-            _nuevoMed.IdBC = item.Id;
-            _nuevoMed.Iva = item.TaxGroupCode;
-            _nuevoMed.StockDisponible = item.Inventory;
-            _nuevoMed.PrecioUnitario = item.UnitPrice;
-            _nuevoMed.Medida = item.BaseUnitOfMeasureCode;
-            _nuevoMed.Bodega = item.Location;
+            AplicarSeleccionFarmaco(item, conservarBusqueda: true);
+        }
+        else
+        {
+            LimpiarSeleccionFarmaco();
         }
     }
 
     private async Task AgregarMedicamentoMonitoreoAsync()
     {
         if (_sheet.Cerrada || _guardandoMedicamento) return;
-        if (_paciente is null || string.IsNullOrWhiteSpace(_nuevoMed.NombreProducto))
+        if (_paciente is null || _itemStockSeleccionado is null || string.IsNullOrWhiteSpace(_nuevoMed.NombreProducto))
         {
             _esError = true;
-            _mensajeAlerta = "Seleccione un paciente y un producto del catálogo.";
+            _mensajeAlerta = $"Seleccione un paciente y un producto con stock en {NombreSucursalActiva}.";
             return;
         }
+
+        var cantDescargo = CantidadBaseDescargo;
+        if (cantDescargo <= 0 || cantDescargo > _itemStockSeleccionado.Available)
+        {
+            _esError = true;
+            _mensajeAlerta = cantDescargo <= 0
+                ? "La cantidad debe ser mayor que cero."
+                : $"La cantidad solicitada ({cantDescargo} {UnidadSeleccionada}) supera el stock disponible en {NombreSucursalActiva} ({FormatearResumenStock(_itemStockSeleccionado)}).";
+            return;
+        }
+
+        var cantOriginal = _nuevoMed.Cantidad;
+        _nuevoMed.Cantidad = cantDescargo;
+        _nuevoMed.StockDisponible = _itemStockSeleccionado.Available;
+        if (_ingresarPorPaquete && FactorSeleccionado > 1m)
+        {
+            var tagPaq = $"[{cantOriginal} paq. × {FactorSeleccionado:G29} {UnidadSeleccionada}]";
+            if (string.IsNullOrWhiteSpace(_nuevoMed.Indicaciones))
+                _nuevoMed.Indicaciones = tagPaq;
+            else if (!_nuevoMed.Indicaciones.Contains(tagPaq, StringComparison.OrdinalIgnoreCase))
+                _nuevoMed.Indicaciones = $"{tagPaq} {_nuevoMed.Indicaciones.Trim()}";
+        }
+
         _nuevoMed.OrdenId = IdOrden;
         _nuevoMed.Nhcl = Nhcl;
         _nuevoMed.Funcionario = _funcionarios.FirstOrDefault(f => f.UserIniciales == _nuevoMed.Iniciales)?.UserNombre ?? _nuevoMed.Iniciales;
@@ -741,13 +918,15 @@
             var res = await HospService.RegistrarMedicamentoMonitoreoAsync(
                 _nuevoMed,
                 Session.IdUser,
-                Session.Localidad);
+                SucursalActivaId);
             _esError = !res.Exito;
             _mensajeAlerta = res.Mensaje;
             if (res.Exito)
             {
                 _nuevoMed.Indicaciones = string.Empty;
                 _nuevoMed.Cantidad = 1;
+                _ingresarPorPaquete = false;
+                await CargarCatalogoStockSedeAsync();
                 await CargarMonitoreoCompletoAsync(IdOrden, Nhcl, _sheet.Hoja);
             }
         }
@@ -807,6 +986,7 @@
             if (!_esError && IdOrden == orden && Nhcl == nhcl)
             {
                 if (_medicamentoEditado?.Id == id) _medicamentoEditado = null;
+                await CargarCatalogoStockSedeAsync();
                 await CargarMonitoreoCompletoAsync(orden, nhcl, hoja);
             }
         }

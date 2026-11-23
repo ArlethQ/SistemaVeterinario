@@ -36,27 +36,6 @@ public class InventarioService : IInventarioService
 
         try
         {
-            var productosEFact = await ObtenerCatalogoEFactCacheAsync();
-            resultados.AddRange(productosEFact
-                .Where(x => x.Estado == "A" &&
-                    !x.EsServicio &&
-                    x.Inventario &&
-                    (NormalizarTexto(x.Descripcion).Contains(terminoNorm) ||
-                     NormalizarTexto(x.Codigo).Contains(terminoNorm) ||
-                     x.Id.ToString().Contains(terminoNorm)))
-                .Take(40)
-                .Select(x => new FarmacoStockDto
-                {
-                    Number = string.IsNullOrWhiteSpace(x.Codigo) ? x.Id.ToString() : x.Codigo,
-                    DisplayName = x.Descripcion,
-                    Id = x.Id.ToString(),
-                    TaxGroupCode = x.CodigoImpuesto == "2" ? $"IVA{x.PorcentajeImpuesto}" : "IVA0",
-                    Inventory = 0,
-                    Available = 0,
-                    UnitPrice = x.Precio ?? 0,
-                    BaseUnitOfMeasureCode = string.IsNullOrWhiteSpace(x.UnidadMedida) ? "UND" : x.UnidadMedida,
-                    Location = "VETERINARIA"
-                }));
             const string sql = @"
                 SELECT
                     CAST(p.CODIGO AS VARCHAR(50)) AS Id,
@@ -68,7 +47,24 @@ public class InventarioService : IInventarioService
                     CAST(MAX(CASE WHEN ISNULL(p.VALOR_UNITARIO, 0) > 0 THEN p.VALOR_UNITARIO ELSE ISNULL(e.costo_promedio, 0) END) AS DECIMAL(18,4)) AS UnitPrice,
                     ISNULL(NULLIF(LTRIM(RTRIM(p.UNIDAD_MEDIDA)), ''), 'UNIDAD') AS BaseUnitOfMeasureCode,
                     CAST(CASE WHEN ISNULL(p.FACTOR_CONVERSION_INVENTARIO, 0) <= 0 THEN 1 ELSE p.FACTOR_CONVERSION_INVENTARIO END AS DECIMAL(18,4)) AS FactorConversion,
-                    ISNULL(NULLIF(MAX(CASE WHEN b.nombre IS NOT NULL THEN b.nombre + CASE WHEN ISNULL(b.codigo, '') <> '' THEN ' (' + b.codigo + ')' ELSE '' END ELSE '' END), ''), 'Sede actual') AS Location
+                    COALESCE(
+                        NULLIF(MAX(CASE WHEN b.nombre IS NOT NULL THEN b.nombre + CASE WHEN ISNULL(b.codigo, '') <> '' THEN ' (' + b.codigo + ')' ELSE '' END ELSE '' END), ''),
+                        (
+                            SELECT TOP 1
+                                LTRIM(RTRIM(REPLACE(SUBSTRING(m.observacion, CHARINDEX('Bodega:', m.observacion) + 7, 120), ']', '')))
+                            FROM dbo.ECONTAX_INVENTARIO_MOVIMIENTO m
+                            WHERE m.codigo_producto = p.CODIGO
+                              AND m.id_sucursal = @IdLocalidad
+                              AND m.observacion LIKE '%Bodega:%'
+                            ORDER BY m.id_movimiento DESC
+                        ),
+                        (
+                            SELECT STRING_AGG(bs.nombre + CASE WHEN ISNULL(bs.codigo, '') <> '' THEN ' (' + bs.codigo + ')' ELSE '' END, ', ')
+                            FROM dbo.ECONTAX_BODEGA bs
+                            WHERE bs.id_sucursal = @IdLocalidad AND bs.estado = 1
+                        ),
+                        'Bodega de la sucursal'
+                    ) AS Location
                 FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e
                 INNER JOIN dbo.PRODUCTO p ON p.CODIGO = e.codigo_producto
                 LEFT JOIN dbo.ECONTAX_BODEGA b ON b.id_bodega = e.id_bodega

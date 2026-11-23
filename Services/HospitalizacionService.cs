@@ -905,10 +905,11 @@ public class HospitalizacionService : IHospitalizacionService
 
             var tMeds = _db.QueryAsync<MonitoreoMedicamentoDto>(@"
                 SELECT id AS Id, ISNULL(ordenId, 0) AS OrdenId, ISNULL(nhcl, 0) AS Nhcl,
-                       ISNULL(proddescripcion, '') AS Producto, ISNULL(cantprod, 0) AS Cantidad,
+                       ISNULL(proddescripcion, '') AS Producto, CAST(ISNULL(cantprod, 0) AS INT) AS Cantidad,
                        ISNULL(indicacionesprod, '') AS Indicaciones, ISNULL(via, '') AS Via,
                        CONVERT(varchar(10), fecha, 120) AS Fecha, ISNULL(hora, '') AS Hora,
                        ISNULL(RTRIM(codigoprod), '') AS Codigo,
+                       ISNULL(med_bodega, '') AS Bodega, ISNULL(med_medida, '') AS Medida,
                        iniciales AS Iniciales, funcion AS Funcion
                 FROM hvt_cabMonitoreoMedBC
                 WHERE ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo'
@@ -1112,24 +1113,120 @@ public class HospitalizacionService : IHospitalizacionService
             return (false, "Seleccione un paciente y un producto válido.");
         if (input.Cantidad <= 0)
             return (false, "La cantidad debe ser mayor que cero.");
-        if (input.Cantidad > input.StockDisponible && input.StockDisponible > 0)
-            return (false, $"La cantidad ({input.Cantidad}) supera el stock disponible ({input.StockDisponible}).");
 
-        int idInserted = await _db.ExecuteScalarAsync<int>(@"
+        int sedeId = idLocalidad > 0 ? idLocalidad : 1;
+
+        const string sql = @"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            IF NOT EXISTS (SELECT 1 FROM vt_ordenAtencion WHERE ordenAten_id = @OrdenId AND ordenAten_nhcl = @Nhcl)
+               OR EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @OrdenId AND cierre = 'S')
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT -1;
+                RETURN;
+            END
+
+            DECLARE @CodProdInt INT = TRY_CAST(@IdBC AS INT);
+            IF @CodProdInt IS NULL OR @CodProdInt <= 0
+            BEGIN
+                SELECT TOP 1 @CodProdInt = p.CODIGO
+                FROM dbo.PRODUCTO p
+                WHERE p.CODIGO_PRINCIPAL = @CodigoProducto OR CAST(p.CODIGO AS VARCHAR(50)) = @CodigoProducto;
+            END
+
+            DECLARE @IdEmpresa INT = NULL;
+            DECLARE @StockActual DECIMAL(18,4) = 0;
+            DECLARE @StockReservado DECIMAL(18,4) = 0;
+            DECLARE @CostoPromedio DECIMAL(18,4) = 0;
+
+            IF @CodProdInt > 0
+            BEGIN
+                SELECT TOP 1
+                    @IdEmpresa = e.id_empresa,
+                    @StockActual = e.stock_actual,
+                    @StockReservado = ISNULL(e.stock_reservado, 0),
+                    @CostoPromedio = ISNULL(e.costo_promedio, 0)
+                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+                WHERE e.codigo_producto = @CodProdInt
+                  AND e.id_sucursal = @Localidad
+                ORDER BY e.stock_actual DESC;
+            END
+
+            IF @IdEmpresa IS NULL OR (@StockActual - @StockReservado) < @Cantidad
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT -2;
+                RETURN;
+            END
+
+            DECLARE @NuevoStock DECIMAL(18,4) = @StockActual - @Cantidad;
+
+            UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+            SET stock_actual = @NuevoStock,
+                fecha_actualizacion = SYSUTCDATETIME()
+            WHERE codigo_producto = @CodProdInt
+              AND id_sucursal = @Localidad
+              AND id_empresa = @IdEmpresa;
+
+            -- Descontar de lotes disponibles (FIFO) si existen
+            DECLARE @RestanteLote DECIMAL(18,4) = @Cantidad;
+            DECLARE @IdLote BIGINT, @DispLote DECIMAL(18,4), @TomarLote DECIMAL(18,4);
+            WHILE @RestanteLote > 0
+            BEGIN
+                SET @IdLote = NULL;
+                SELECT TOP 1 @IdLote = l.id_lote, @DispLote = l.cantidad_disponible
+                FROM dbo.ECONTAX_INVENTARIO_LOTE l WITH (UPDLOCK, HOLDLOCK)
+                WHERE l.codigo_producto = @CodProdInt
+                  AND l.id_sucursal = @Localidad
+                  AND l.id_empresa = @IdEmpresa
+                  AND l.cantidad_disponible > 0
+                ORDER BY ISNULL(l.fecha_vencimiento, '9999-12-31'), l.fecha_ingreso, l.id_lote;
+
+                IF @IdLote IS NULL BREAK;
+
+                SET @TomarLote = CASE WHEN @DispLote <= @RestanteLote THEN @DispLote ELSE @RestanteLote END;
+                UPDATE dbo.ECONTAX_INVENTARIO_LOTE
+                SET cantidad_disponible = cantidad_disponible - @TomarLote
+                WHERE id_lote = @IdLote;
+
+                SET @RestanteLote = @RestanteLote - @TomarLote;
+            END
+
+            -- Registrar movimiento de salida en Kardex de inventario
+            INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+            ) VALUES (
+                @CodProdInt, @IdEmpresa, @Localidad, 'SALIDA',
+                @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
+                'PROMEDIO', 'MONITOREO', 'ORDEN:' + CAST(@OrdenId AS VARCHAR(20)), @Usuario, SYSUTCDATETIME(),
+                'Descargo Monitoreo 24h Orden #' + CAST(@OrdenId AS VARCHAR(20)) + ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) +
+                CASE WHEN ISNULL(@Bodega, '') <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
+            );
+
+            DECLARE @OutTbl TABLE (Id INT);
             INSERT INTO hvt_cabMonitoreoMedBC (
                 ordenId, nhcl, hora, fecha, codigoprod, precioprod, stockprod,
                 indicacionesprod, cantprod, usuario, localidad, proddescripcion,
                 via, origen, iniciales, funcion, funcionario, estado, modulo,
                 med_iva, med_iddinamics, med_medida, med_bodega
             )
-            OUTPUT INSERTED.id
-            SELECT
-                @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProducto, @Precio, @Stock,
+            OUTPUT INSERTED.id INTO @OutTbl
+            VALUES (
+                @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProducto, @Precio, CAST(@NuevoStock AS INT),
                 @Indicaciones, @Cantidad, @Usuario, @Localidad, @Producto,
                 @Via, 'K', @Iniciales, @Funcion, @Funcionario, 'A', 'Monitoreo',
-                @Iva, @IdBC, @Medida, @Bodega
-            WHERE EXISTS (SELECT 1 FROM vt_ordenAtencion WHERE ordenAten_id = @OrdenId AND ordenAten_nhcl = @Nhcl)
-              AND NOT EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @OrdenId AND cierre = 'S')",
+                @Iva, CAST(@CodProdInt AS VARCHAR(50)), @Medida, @Bodega
+            );
+
+            COMMIT TRANSACTION;
+            SELECT TOP 1 Id FROM @OutTbl;";
+
+        int idInserted = await _db.ExecuteScalarAsync<int>(
+            sql,
             new
             {
                 input.OrdenId,
@@ -1138,11 +1235,10 @@ public class HospitalizacionService : IHospitalizacionService
                 Fecha = input.FechaAdministracion.Date,
                 input.CodigoProducto,
                 Precio = input.PrecioUnitario,
-                Stock = (int)input.StockDisponible,
                 Indicaciones = input.Indicaciones.Trim().ToUpperInvariant(),
                 input.Cantidad,
                 Usuario = idUsuario,
-                Localidad = idLocalidad,
+                Localidad = sedeId,
                 Producto = input.NombreProducto.Trim().ToUpperInvariant(),
                 input.Via,
                 input.Iniciales,
@@ -1154,9 +1250,13 @@ public class HospitalizacionService : IHospitalizacionService
                 input.Bodega
             });
 
-        return idInserted > 0
-            ? (true, "Medicamento de monitoreo registrado correctamente.")
-            : (false, "La orden no está disponible o el monitoreo está cerrado.");
+        if (idInserted == -2)
+            return (false, "Stock insuficiente en la sucursal actual para descargar la cantidad solicitada.");
+        if (idInserted <= 0)
+            return (false, "La orden no está disponible o el monitoreo está cerrado.");
+
+        _inventarioService.InvalidarCacheCatalogo();
+        return (true, $"Medicamento registrado y descargado del stock ({input.Cantidad} {input.Medida} · {input.Bodega}).");
     }
 
     public async Task<bool> ActualizarMedicamentoMonitoreoAsync(
@@ -1165,24 +1265,201 @@ public class HospitalizacionService : IHospitalizacionService
         if (cantidad <= 0) return false;
         await ValidarOrdenPacienteAsync(idOrden, nhcl);
 
-        return await _db.ExecuteAsync(@"
+        const string sql = @"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            IF EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @IdOrden AND cierre = 'S')
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 0;
+                RETURN;
+            END
+
+            DECLARE @CantAnterior DECIMAL(18,4), @CodProdInt INT, @CodProdStr VARCHAR(50), @Localidad INT, @Bodega VARCHAR(120);
+            SELECT TOP 1
+                @CantAnterior = ISNULL(cantprod, 0),
+                @CodProdInt = TRY_CAST(med_iddinamics AS INT),
+                @CodProdStr = codigoprod,
+                @Localidad = ISNULL(localidad, 1),
+                @Bodega = ISNULL(med_bodega, '')
+            FROM hvt_cabMonitoreoMedBC WITH (UPDLOCK, HOLDLOCK)
+            WHERE id = @Id AND ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo';
+
+            IF @CantAnterior IS NULL
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 0;
+                RETURN;
+            END
+
+            IF @CodProdInt IS NULL OR @CodProdInt <= 0
+            BEGIN
+                SELECT TOP 1 @CodProdInt = p.CODIGO
+                FROM dbo.PRODUCTO p
+                WHERE p.CODIGO_PRINCIPAL = @CodProdStr OR CAST(p.CODIGO AS VARCHAR(50)) = @CodProdStr;
+            END
+
+            DECLARE @Delta DECIMAL(18,4) = @Cantidad - @CantAnterior;
+            IF @Delta <> 0 AND @CodProdInt > 0
+            BEGIN
+                DECLARE @IdEmpresa INT, @StockActual DECIMAL(18,4), @StockReservado DECIMAL(18,4), @CostoPromedio DECIMAL(18,4);
+                SELECT TOP 1
+                    @IdEmpresa = e.id_empresa,
+                    @StockActual = e.stock_actual,
+                    @StockReservado = ISNULL(e.stock_reservado, 0),
+                    @CostoPromedio = ISNULL(e.costo_promedio, 0)
+                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+                WHERE e.codigo_producto = @CodProdInt AND e.id_sucursal = @Localidad;
+
+                IF @IdEmpresa IS NOT NULL
+                BEGIN
+                    IF @Delta > 0 AND (@StockActual - @StockReservado) < @Delta
+                    BEGIN
+                        ROLLBACK TRANSACTION;
+                        SELECT 0;
+                        RETURN;
+                    END
+
+                    DECLARE @NuevoStock DECIMAL(18,4) = CASE WHEN @StockActual - @Delta < 0 THEN 0 ELSE @StockActual - @Delta END;
+                    UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                    SET stock_actual = @NuevoStock,
+                        fecha_actualizacion = SYSUTCDATETIME()
+                    WHERE codigo_producto = @CodProdInt AND id_sucursal = @Localidad AND id_empresa = @IdEmpresa;
+
+                    INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                        codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                        cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                        metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                    ) VALUES (
+                        @CodProdInt, @IdEmpresa, @Localidad, CASE WHEN @Delta > 0 THEN 'SALIDA' ELSE 'ENTRADA' END,
+                        ABS(@Delta), @CostoPromedio, ROUND(ABS(@Delta) * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
+                        'PROMEDIO', 'MONITOREO', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), 1, SYSUTCDATETIME(),
+                        'Ajuste Monitoreo 24h Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                        CASE WHEN @Bodega <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
+                    );
+                END
+            END
+
             UPDATE hvt_cabMonitoreoMedBC
             SET cantprod = @Cantidad, indicacionesprod = @Indicaciones, via = @Via
-            WHERE id = @Id AND ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo'
-              AND (ISNULL(stockprod, 0) <= 0 OR @Cantidad <= stockprod)
-              AND NOT EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @IdOrden AND cierre = 'S')",
-            new { Id = idRegistro, IdOrden = idOrden, Nhcl = nhcl, Cantidad = cantidad,
-                Indicaciones = indicaciones.Trim().ToUpperInvariant(), Via = via.Trim() }) > 0;
+            WHERE id = @Id AND ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo';
+
+            COMMIT TRANSACTION;
+            SELECT 1;";
+
+        var ok = await _db.ExecuteScalarAsync<int>(
+            sql,
+            new
+            {
+                Id = idRegistro,
+                IdOrden = idOrden,
+                Nhcl = nhcl,
+                Cantidad = cantidad,
+                Indicaciones = indicaciones.Trim().ToUpperInvariant(),
+                Via = via.Trim()
+            }) > 0;
+
+        if (ok) _inventarioService.InvalidarCacheCatalogo();
+        return ok;
     }
 
     public async Task<bool> EliminarMedicamentoMonitoreoAsync(int idRegistro, int idOrden, int nhcl)
     {
         await ValidarOrdenPacienteAsync(idOrden, nhcl);
-        return await _db.ExecuteAsync(@"
+
+        const string sql = @"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            IF EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @IdOrden AND cierre = 'S')
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 0;
+                RETURN;
+            END
+
+            DECLARE @CantAnterior DECIMAL(18,4), @CodProdInt INT, @CodProdStr VARCHAR(50), @Localidad INT, @Bodega VARCHAR(120);
+            SELECT TOP 1
+                @CantAnterior = ISNULL(cantprod, 0),
+                @CodProdInt = TRY_CAST(med_iddinamics AS INT),
+                @CodProdStr = codigoprod,
+                @Localidad = ISNULL(localidad, 1),
+                @Bodega = ISNULL(med_bodega, '')
+            FROM hvt_cabMonitoreoMedBC WITH (UPDLOCK, HOLDLOCK)
+            WHERE id = @Id AND ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo';
+
+            IF @CantAnterior IS NULL
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 0;
+                RETURN;
+            END
+
+            IF @CodProdInt IS NULL OR @CodProdInt <= 0
+            BEGIN
+                SELECT TOP 1 @CodProdInt = p.CODIGO
+                FROM dbo.PRODUCTO p
+                WHERE p.CODIGO_PRINCIPAL = @CodProdStr OR CAST(p.CODIGO AS VARCHAR(50)) = @CodProdStr;
+            END
+
+            IF @CantAnterior > 0 AND @CodProdInt > 0
+            BEGIN
+                DECLARE @IdEmpresa INT, @StockActual DECIMAL(18,4), @CostoPromedio DECIMAL(18,4);
+                SELECT TOP 1
+                    @IdEmpresa = e.id_empresa,
+                    @StockActual = e.stock_actual,
+                    @CostoPromedio = ISNULL(e.costo_promedio, 0)
+                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+                WHERE e.codigo_producto = @CodProdInt AND e.id_sucursal = @Localidad;
+
+                IF @IdEmpresa IS NOT NULL
+                BEGIN
+                    DECLARE @NuevoStock DECIMAL(18,4) = @StockActual + @CantAnterior;
+                    UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                    SET stock_actual = @NuevoStock,
+                        fecha_actualizacion = SYSUTCDATETIME()
+                    WHERE codigo_producto = @CodProdInt AND id_sucursal = @Localidad AND id_empresa = @IdEmpresa;
+
+                    DECLARE @IdLoteReintegro BIGINT;
+                    SELECT TOP 1 @IdLoteReintegro = l.id_lote
+                    FROM dbo.ECONTAX_INVENTARIO_LOTE l WITH (UPDLOCK, HOLDLOCK)
+                    WHERE l.codigo_producto = @CodProdInt AND l.id_sucursal = @Localidad AND l.id_empresa = @IdEmpresa
+                    ORDER BY l.id_lote DESC;
+
+                    IF @IdLoteReintegro IS NOT NULL
+                    BEGIN
+                        UPDATE dbo.ECONTAX_INVENTARIO_LOTE
+                        SET cantidad_disponible = cantidad_disponible + @CantAnterior
+                        WHERE id_lote = @IdLoteReintegro;
+                    END
+
+                    INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                        codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                        cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                        metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                    ) VALUES (
+                        @CodProdInt, @IdEmpresa, @Localidad, 'ENTRADA',
+                        @CantAnterior, @CostoPromedio, ROUND(@CantAnterior * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
+                        'PROMEDIO', 'MONITOREO', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), 1, SYSUTCDATETIME(),
+                        'Reintegro por retiro en Monitoreo 24h Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                        CASE WHEN @Bodega <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
+                    );
+                END
+            END
+
             DELETE FROM hvt_cabMonitoreoMedBC
-            WHERE id = @Id AND ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo'
-              AND NOT EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @IdOrden AND cierre = 'S')",
+            WHERE id = @Id AND ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo';
+
+            COMMIT TRANSACTION;
+            SELECT 1;";
+
+        var ok = await _db.ExecuteScalarAsync<int>(
+            sql,
             new { Id = idRegistro, IdOrden = idOrden, Nhcl = nhcl }) > 0;
+
+        if (ok) _inventarioService.InvalidarCacheCatalogo();
+        return ok;
     }
 
     // ========================================================================
@@ -1421,6 +1698,7 @@ public class HospitalizacionService : IHospitalizacionService
                         SELECT 1 FROM qvt_calendario_cirugias WHERE nhcl = @Nhcl AND estado = 'A' AND fechacirugia >= CAST(GETDATE() AS date)))
                     OR EXISTS (SELECT 1 FROM qvt_preanestesia WHERE orden = @IdOrden)
                     OR EXISTS (SELECT 1 FROM qvt_verificacion WHERE fichamedr = @IdOrden)
+                    OR (OBJECT_ID('dbo.qvt_monitorizacion_anestesia', 'U') IS NOT NULL AND EXISTS (SELECT 1 FROM qvt_monitorizacion_anestesia WHERE id_orden = @IdOrden))
                     OR EXISTS (SELECT 1 FROM qvt_RegistroAnestesia WHERE idOrden = @IdOrden)
                     OR EXISTS (SELECT 1 FROM qvt_Protocolo WHERE idOrden = @IdOrden)
                     OR EXISTS (SELECT 1 FROM qvt_observaciones_recuperacion WHERE idOrden = @IdOrden AND estado = 'A')
