@@ -1180,15 +1180,14 @@
     private OrdenPacienteResumenDto? OrdenActualResumen => _historialOrdenes.FirstOrDefault(o => o.IdOrden == IdOrden);
     private int _ordenActualAsignadaA => OrdenActualResumen?.IdMedico ?? 0;
     private bool FichaCargada => Paciente != null && IdOrden > 0 && !CargandoInicial;
-    private bool PuedeHabilitarEdicionOrdenActual => FichaCargada && _estadoOrden is ("A" or "E" or "T") &&
-        (Session.TipoUser == 1 || (OrdenActualResumen is { } ord && ord.IdMedico == Session.IdUser && (_estadoOrden is ("A" or "E") || ord.EnVentanaEdicion24h)));
-    private bool FichaEditable => !SoloVer && FichaCargada &&
+    private bool PuedeHabilitarEdicionOrdenActual => FichaCargada && _estadoOrden != "I" &&
+        (Session.TipoUser == 1 || !_ordenActualCerrada || (OrdenActualResumen is { } ord && ord.IdMedico == Session.IdUser && ord.EnVentanaEdicion24h));
+    private bool FichaEditable => !SoloVer && FichaCargada && _estadoOrden != "I" &&
         (Session.TipoUser == 1
-            ? ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || _estadoOrden == "T")
-            : (OrdenActualResumen is { } ord
-                && ord.IdMedico == Session.IdUser
-                && (_estadoOrden is ("A" or "E") || ord.EnVentanaEdicion24h)
-                && ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || _estadoOrden == "T")));
+            ? true
+            : !_ordenActualCerrada
+                ? (OrdenActualResumen is null || OrdenActualResumen.IdMedico == 0 || OrdenActualResumen.IdMedico == Session.IdUser)
+                : (OrdenActualResumen is { } ord && ord.IdMedico == Session.IdUser && ord.EnVentanaEdicion24h));
     private DateTime? _inicioEsperaUtc;
     private DateTime? _finEsperaUtc;
     private DateTime? _inicioConsultaUtc;
@@ -1434,7 +1433,7 @@
         }
 
         var resumenActual = _historialOrdenes.FirstOrDefault(orden => orden.IdOrden == IdOrden);
-        _estadoOrden = resumenActual?.Estado.Trim().ToUpperInvariant();
+        _estadoOrden = (resumenActual?.Estado ?? "E").Trim().ToUpperInvariant();
         _ordenActualCerrada = _estadoOrden == "T";
         _inicioEsperaUtc = resumenActual?.InicioEsperaUtc;
         _finEsperaUtc = resumenActual?.FinEsperaUtc;
@@ -1461,14 +1460,16 @@
                     resumenActual.InicioConsultaUtc = inicioAtencionUtc;
                     resumenActual.FinEsperaUtc ??= inicioAtencionUtc;
                 }
+                foreach (var otra in _historialOrdenes.Where(o => o.IdOrden != IdOrden && o.Estado.Trim().Equals("E", StringComparison.OrdinalIgnoreCase)))
+                {
+                    otra.Estado = "A";
+                    otra.InicioConsultaUtc = null;
+                    otra.FinEsperaUtc = null;
+                }
                 if (_colaOrdenes is not null)
                 {
                     await _colaOrdenes.RefrescarAsync();
                 }
-            }
-            else
-            {
-                MensajeAlerta = "No se pudo iniciar la consulta de esta orden.";
             }
         }
 

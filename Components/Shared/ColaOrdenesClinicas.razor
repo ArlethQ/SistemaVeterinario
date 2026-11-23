@@ -1,5 +1,7 @@
 @implements IDisposable
 @inject IAdmisionFacturacionService AdmisionService
+@inject SessionStateService Session
+@inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject ILogger<ColaOrdenesClinicas> Logger
 
@@ -71,7 +73,29 @@
                                 <td>
                                     @if (orden.PuedeAbrirCola)
                                     {
-                                        <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(TextoAccion(orden)) <span class="visually-hidden">orden #@orden.IdOrden</span></a>
+                                        <div class="d-flex flex-wrap align-items-center gap-1">
+                                            <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(TextoAccion(orden)) <span class="visually-hidden">orden #@orden.IdOrden</span></a>
+                                            @if (!Triaje && !EstaEnEspera(orden))
+                                            {
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-warning text-dark"
+                                                        title="Regresar esta orden a En espera"
+                                                        disabled="@_procesandoCola"
+                                                        @onclick="() => PasarOrdenAEsperaAsync(orden)">
+                                                    En espera
+                                                </button>
+                                            }
+                                            @if (!Triaje)
+                                            {
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-danger"
+                                                        title="Eliminar / anular esta orden abierta de la cola"
+                                                        disabled="@_procesandoCola"
+                                                        @onclick="() => EliminarOrdenColaAsync(orden)">
+                                                    Eliminar
+                                                </button>
+                                            }
+                                        </div>
                                     }
                                     else
                                     {
@@ -151,6 +175,61 @@
 
     private bool _disposed;
     private bool _actualizando;
+    private bool _procesandoCola;
+
+    private async Task PasarOrdenAEsperaAsync(OrdenAtencionResumenDto orden)
+    {
+        if (_procesandoCola || _disposed) return;
+        _procesandoCola = true;
+        try
+        {
+            if (await AdmisionService.PasarOrdenAEsperaAsync(orden.IdOrden))
+            {
+                await ActualizarAsync(_cancelacion.Token, permitirSonido: false);
+                if (OrdenSeleccionada == orden.IdOrden)
+                {
+                    if (Session.OrdenActiva == orden.IdOrden)
+                        Session.LimpiarOrdenActiva();
+                    Nav.NavigateTo("/consulta/fichamedica");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se pudo pasar la orden {IdOrden} a espera.", orden.IdOrden);
+        }
+        finally
+        {
+            _procesandoCola = false;
+        }
+    }
+
+    private async Task EliminarOrdenColaAsync(OrdenAtencionResumenDto orden)
+    {
+        if (_procesandoCola || _disposed) return;
+        _procesandoCola = true;
+        try
+        {
+            if (await AdmisionService.AnularOrdenAsync(orden.IdOrden, Session.IdUser > 0 ? Session.IdUser : 1))
+            {
+                await ActualizarAsync(_cancelacion.Token, permitirSonido: false);
+                if (OrdenSeleccionada == orden.IdOrden)
+                {
+                    if (Session.OrdenActiva == orden.IdOrden)
+                        Session.LimpiarOrdenActiva();
+                    Nav.NavigateTo("/consulta/fichamedica");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se pudo eliminar/anular la orden {IdOrden} de la cola.", orden.IdOrden);
+        }
+        finally
+        {
+            _procesandoCola = false;
+        }
+    }
 
     public Task RefrescarAsync()
     {
