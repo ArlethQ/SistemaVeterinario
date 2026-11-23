@@ -98,15 +98,21 @@
     <!-- PESTAÑAS PRINCIPALES DEL MÓDULO -->
     <div class="d-flex flex-wrap gap-2 mb-3">
         <button type="button"
+                class="btn @(_tabActiva == "recetas" ? "btn-primary fw-bold shadow-sm" : "btn-outline-secondary bg-white")"
+                @onclick='() => _tabActiva = "recetas"'>
+            <i class="ri-file-list-3-line me-1"></i>1. Recetas SOAP (Consulta Externa)
+            <span class="badge @(_tabActiva == "recetas" ? "bg-white text-primary" : "bg-warning text-dark") ms-1">@TotalRecetasSoapPendientes</span>
+        </button>
+        <button type="button"
                 class="btn @(_tabActiva == "cola" ? "btn-primary fw-bold shadow-sm" : "btn-outline-secondary bg-white")"
                 @onclick='() => _tabActiva = "cola"'>
-            <i class="ri-list-check-2 me-1"></i>1. Cola de Despacho a Veterinarios
+            <i class="ri-list-check-2 me-1"></i>2. Cola Hospitalización / Quirófano
             <span class="badge @(_tabActiva == "cola" ? "bg-white text-primary" : "bg-warning text-dark") ms-1">@TotalPendientesCola</span>
         </button>
         <button type="button"
                 class="btn @(_tabActiva == "venta" ? "btn-primary fw-bold shadow-sm" : "btn-outline-secondary bg-white")"
                 @onclick='() => _tabActiva = "venta"'>
-            <i class="ri-shopping-bag-3-line me-1"></i>2. Venta Directa / Mostrador de Farmacia
+            <i class="ri-shopping-bag-3-line me-1"></i>3. Venta Directa / Mostrador
             @if (_lineasVenta.Count > 0)
             {
                 <span class="badge bg-danger ms-1">@_lineasVenta.Count en carrito</span>
@@ -115,12 +121,264 @@
         <button type="button"
                 class="btn @(_tabActiva == "stock" ? "btn-primary fw-bold shadow-sm" : "btn-outline-secondary bg-white")"
                 @onclick='() => _tabActiva = "stock"'>
-            <i class="ri-store-2-line me-1"></i>3. Stock Físico vs. Reservado en @NombreSucursalActiva
+            <i class="ri-store-2-line me-1"></i>4. Stock Físico vs. Reservado (@NombreSucursalActiva)
             <span class="badge @(_tabActiva == "stock" ? "bg-white text-primary" : "bg-secondary") ms-1">@_stockDetallado.Count</span>
         </button>
     </div>
 
-    @if (_tabActiva == "cola")
+    @if (_tabActiva == "recetas")
+    {
+        <!-- PESTAÑA 1: RECETAS SOAP (CONSULTA EXTERNA) -->
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-white py-3 px-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold mb-1">Buscar Receta emitida en SOAP (@NombreSucursalActiva):</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light"><i class="ri-search-line"></i></span>
+                            <input type="text" class="form-control" placeholder="Orden, NHCL, paciente, propietario, médico o medicamento recetado..."
+                                   @bind="_filtroRecetasSoap" @bind:event="oninput" />
+                            @if (!string.IsNullOrWhiteSpace(_filtroRecetasSoap))
+                            {
+                                <button type="button" class="btn btn-outline-secondary" @onclick="() => _filtroRecetasSoap = string.Empty">×</button>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <label class="form-label small fw-bold mb-1">Estado de la Receta:</label>
+                        <select class="form-select form-select-sm" @bind="_estadoFiltroRecetasSoap">
+                            <option value="PENDIENTE">Pendientes en cola (Por comprar / despachar)</option>
+                            <option value="PROCESADA">Procesadas / Completadas</option>
+                            <option value="TODOS">Todas las recetas</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2 text-end">
+                        <button type="button" class="btn btn-sm btn-outline-primary w-100" @onclick="CargarTodoAsync" disabled="@_cargando">
+                            <i class="ri-refresh-line me-1"></i>Refrescar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (_cargando)
+        {
+            <div class="card shadow-sm border-0 p-4 text-center text-primary">
+                <div><div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando recetas SOAP de @NombreSucursalActiva...</div>
+            </div>
+        }
+        else if (!RecetasSoapFiltradas.Any())
+        {
+            <div class="card shadow-sm border-0 p-5 text-center text-muted">
+                <i class="ri-file-list-3-line fs-2 d-block mb-1"></i>
+                No hay recetas SOAP para los filtros seleccionados en <strong>@NombreSucursalActiva</strong>.
+            </div>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-3">
+                @foreach (var rec in RecetasSoapFiltradas)
+                {
+                    <div @key="rec.IdOrden" class="card shadow-sm border-0 overflow-hidden">
+                        <div class="card-header bg-light-subtle py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
+                            <div>
+                                <span class="badge bg-primary me-1">Orden #@rec.IdOrden</span>
+                                <span class="badge bg-dark-subtle text-dark border me-2">NHCL #@rec.Nhcl</span>
+                                <strong class="text-dark">@rec.Paciente</strong>
+                                @if (!string.IsNullOrWhiteSpace(rec.Especie))
+                                {
+                                    <span class="text-muted small">(@rec.Especie)</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(rec.Propietario))
+                                {
+                                    <span class="text-muted small ms-2">· Tutor: <strong>@rec.Propietario</strong></span>
+                                }
+                                <span class="text-muted small ms-2">· Médico: <strong>@rec.Medico</strong> (@rec.Fecha.ToString("dd/MM/yyyy HH:mm"))</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                @if (rec.TienePendientes)
+                                {
+                                    <span class="badge bg-warning-subtle text-dark border"><i class="ri-time-line me-1"></i>En cola de Farmacia</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success-subtle text-success border"><i class="ri-checkbox-circle-line me-1"></i>Compra / Despacho completado</span>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover align-middle mb-0 small">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-3" style="width:70px;">¿Vender?</th>
+                                            <th>Medicamento Recetado (SOAP) / Producto de Inventario</th>
+                                            <th>Bodega (@NombreSucursalActiva)</th>
+                                            <th class="text-center">Recetado</th>
+                                            <th>Disponibilidad en Stock (@NombreSucursalActiva)</th>
+                                            <th class="text-center" style="width:140px;">Cant. a Vender</th>
+                                            <th class="text-end">P. Unit.</th>
+                                            <th class="text-end pe-3">Subtotal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var item in rec.Items)
+                                        {
+                                            <tr @key="item.Sec" class="@(!item.SeVende && item.EstaEnCola ? "table-secondary text-muted" : "")">
+                                                <td class="ps-3 text-center">
+                                                    @if (item.EstaEnCola)
+                                                    {
+                                                        <input type="checkbox"
+                                                               class="form-check-input"
+                                                               checked="@item.SeVende"
+                                                               @onchange="e => OnToggleSeVendeReceta(item, (bool)(e.Value ?? false))"
+                                                               disabled="@_procesando" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge @(item.Estado == "No Comprado" ? "bg-secondary" : "bg-success")">@item.Estado</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <div class="fw-bold text-dark">@item.NombreRecetado</div>
+                                                    @if (!string.IsNullOrWhiteSpace(item.Indicaciones))
+                                                    {
+                                                        <small class="text-muted d-block">Posología: @item.Indicaciones</small>
+                                                    }
+                                                    @if (item.EstaEnCola)
+                                                    {
+                                                        <div class="mt-1">
+                                                            <select class="form-select form-select-sm py-0"
+                                                                    style="font-size:.76rem;min-height:27px;max-width:390px;"
+                                                                    value="@item.CodigoProductoInt"
+                                                                    @onchange="e => OnCambiarProductoInventarioReceta(item, e.Value)"
+                                                                    disabled="@_procesando">
+                                                                <option value="0">-- Sin producto en stock vinculado (Vincular con stock de @NombreSucursalActiva) --</option>
+                                                                @foreach (var prodStock in _stockDetallado)
+                                                                {
+                                                                    <option value="@prodStock.CodigoProducto">@prodStock.NombreProducto (@prodStock.CodigoPrincipal) · Físico: @prodStock.StockFisico.ToString("0.##") @prodStock.UnidadMedida · @prodStock.Bodega</option>
+                                                                }
+                                                            </select>
+                                                        </div>
+                                                    }
+                                                    else if (!string.IsNullOrWhiteSpace(item.Observaciones))
+                                                    {
+                                                        <small class="text-success d-block">@item.Observaciones</small>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (item.TieneProductoEnCatalogo)
+                                                    {
+                                                        <span class="badge bg-info-subtle text-dark border"><i class="ri-store-2-line me-1"></i>@item.Bodega</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-secondary border">No en catálogo</span>
+                                                    }
+                                                </td>
+                                                <td class="text-center">
+                                                    <span class="fw-bold fs-6">@item.CantidadRecetada.ToString("0.##")</span>
+                                                    <small class="d-block text-muted">@item.UnidadMedida</small>
+                                                </td>
+                                                <td>
+                                                    @if (!item.TieneProductoEnCatalogo)
+                                                    {
+                                                        <span class="badge bg-danger-subtle text-danger border">
+                                                            <i class="ri-close-circle-line me-1"></i>No existe en inventario (elija equivalente o desmarque)
+                                                        </span>
+                                                    }
+                                                    else if (item.CubrePedidoCompleto)
+                                                    {
+                                                        <span class="badge bg-success-subtle text-success border">
+                                                            <i class="ri-checkbox-circle-line me-1"></i>Cubierto: hay @item.MaximoDisponibleParaEstaLinea.ToString("0.##") @item.UnidadMedida
+                                                        </span>
+                                                        <small class="d-block text-muted mt-1" style="font-size:.72rem;">
+                                                            Físico en sede: @item.StockFisicoSede.ToString("0.##") · Reservado para esta receta: @item.CantidadReservadaLinea.ToString("0.##")
+                                                        </small>
+                                                    }
+                                                    else if (item.StockParcial)
+                                                    {
+                                                        <span class="badge bg-warning-subtle text-dark border">
+                                                            <i class="ri-alert-line me-1"></i>Stock insuficiente: solo hay @item.MaximoDisponibleParaEstaLinea.ToString("0.##") de @item.CantidadRecetada.ToString("0.##") (faltan @item.FaltanteParaPedido.ToString("0.##"))
+                                                        </span>
+                                                        <small class="d-block text-muted mt-1" style="font-size:.72rem;">
+                                                            Reservado temporalmente: @item.CantidadReservadaLinea.ToString("0.##") @item.UnidadMedida
+                                                        </small>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-danger-subtle text-danger border">
+                                                            <i class="ri-error-warning-line me-1"></i>Sin stock disponible en @NombreSucursalActiva (0 @item.UnidadMedida)
+                                                        </span>
+                                                    }
+                                                </td>
+                                                <td class="text-center">
+                                                    @if (item.EstaEnCola)
+                                                    {
+                                                        <div class="input-group input-group-sm">
+                                                            <input type="number"
+                                                                   min="0"
+                                                                   max="@item.MaximoDisponibleParaEstaLinea"
+                                                                   step="1"
+                                                                   class="form-control text-center fw-bold @(item.SeVende ? "text-primary" : "text-muted")"
+                                                                   @bind="item.CantidadAVender"
+                                                                   disabled="@(!item.SeVende || !item.TieneProductoEnCatalogo || _procesando)" />
+                                                        </div>
+                                                        @if (item.SeVende && item.CantidadAVender < item.CantidadRecetada)
+                                                        {
+                                                            <small class="text-warning-emphasis d-block mt-1" style="font-size:.7rem;">
+                                                                Compra parcial (@item.CantidadAVender.ToString("0.##") de @item.CantidadRecetada.ToString("0.##"))
+                                                            </small>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        <strong class="text-success">@item.CantidadReservadaLinea.ToString("0.##") @item.UnidadMedida</strong>
+                                                        <small class="d-block text-muted">de @item.CantidadRecetada.ToString("0.##") recetado</small>
+                                                    }
+                                                </td>
+                                                <td class="text-end">$@item.PrecioUnitario.ToString("N2")</td>
+                                                <td class="text-end pe-3 fw-bold">$@item.SubtotalVenta.ToString("N2")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        @if (rec.TienePendientes)
+                        {
+                            <div class="card-footer bg-white py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                <div class="small text-muted">
+                                    <i class="ri-information-line text-primary me-1"></i>
+                                    <strong>Solo lo marcado y en la cantidad indicada se descargará del Kardex.</strong> Las unidades que el cliente no compre liberarán su reserva automáticamente.
+                                </div>
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <span class="fw-bold text-dark me-2">Total compra: <span class="text-primary fs-6">$@rec.TotalACobrar.ToString("N2")</span></span>
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-secondary"
+                                            title="Ajustar las unidades reservadas en cola según los cambios hechos arriba sin cerrar aún la compra"
+                                            @onclick="() => ActualizarReservaRecetaSoapAsync(rec)"
+                                            disabled="@_procesando">
+                                        <i class="ri-save-3-line me-1"></i>Ajustar reserva en cola
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-sm btn-success fw-bold"
+                                            title="Completar la venta/entrega: descarga del Kardex únicamente lo comprado y libera el resto de la reserva"
+                                            @onclick="() => CompletarVentaRecetaSoapAsync(rec)"
+                                            disabled="@_procesando">
+                                        <i class="ri-check-double-line me-1"></i>Completar Compra y Descargar lo Comprado
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+    else if (_tabActiva == "cola")
     {
         <!-- PESTAÑA 1: COLA DE DESPACHO CLÍNICO -->
         <div class="card shadow-sm border-0">
@@ -624,19 +882,22 @@
 </div>
 
 @code {
-    private string _tabActiva = "cola";
+    private string _tabActiva = "recetas";
     private bool _cargando = true;
     private bool _procesando;
     private string? _mensajeAlerta;
     private bool _esError;
     private int _localidadCargada;
 
+    private List<FarmaciaRecetaSoapOrdenDto> _recetasSoap = [];
     private List<FarmaciaOrdenColaDto> _colaCompleta = [];
     private List<FarmaciaStockSedeItemDto> _stockDetallado = [];
     private List<FarmacoStockDto> _catalogoDisponibleVenta = [];
     private List<FarmaciaVentaHistorialDto> _historialVentas = [];
     private List<OrdenActivaResumenDto> _ordenesActivas = [];
 
+    private string _filtroRecetasSoap = string.Empty;
+    private string _estadoFiltroRecetasSoap = "PENDIENTE";
     private string _filtroCola = string.Empty;
     private string _estadoFiltroCola = "PENDIENTE";
     private string _moduloFiltroCola = "TODOS";
@@ -660,9 +921,27 @@
     private int SucursalActivaId => Session.Localidad > 0 ? Session.Localidad : (Session.CurrentUser?.IdLocalidad ?? 1);
     private string NombreSucursalActiva => string.IsNullOrWhiteSpace(Session.LocalidadDescripcion) ? "Sucursal actual" : Session.LocalidadDescripcion;
 
-    private int TotalPendientesCola => _colaCompleta.Count(x => x.EstadoFarmacia == "PENDIENTE");
-    private int TotalEntregadosCola => _colaCompleta.Count(x => x.EstadoFarmacia == "ENTREGADO");
-    private decimal UnidadesReservadasCola => _colaCompleta.Where(x => x.EstadoFarmacia == "PENDIENTE").Sum(x => x.Cantidad);
+    private int TotalRecetasSoapPendientes => _recetasSoap.Count(x => x.TienePendientes);
+    private int TotalPendientesCola => _colaCompleta.Count(x => x.EstadoFarmacia == "PENDIENTE") + _recetasSoap.SelectMany(x => x.Items).Count(i => i.EstaEnCola);
+    private int TotalEntregadosCola => _colaCompleta.Count(x => x.EstadoFarmacia == "ENTREGADO") + _recetasSoap.SelectMany(x => x.Items).Count(i => !i.EstaEnCola && i.CantidadReservadaLinea > 0);
+    private decimal UnidadesReservadasCola =>
+        _colaCompleta.Where(x => x.EstadoFarmacia == "PENDIENTE").Sum(x => x.Cantidad) +
+        _recetasSoap.SelectMany(x => x.Items).Where(i => i.EstaEnCola).Sum(i => i.CantidadReservadaLinea);
+
+    private IEnumerable<FarmaciaRecetaSoapOrdenDto> RecetasSoapFiltradas =>
+        _recetasSoap.Where(o =>
+            (_estadoFiltroRecetasSoap == "TODOS" ||
+             (_estadoFiltroRecetasSoap == "PENDIENTE" && o.TienePendientes) ||
+             (_estadoFiltroRecetasSoap == "PROCESADA" && !o.TienePendientes)) &&
+            (string.IsNullOrWhiteSpace(_filtroRecetasSoap) ||
+             o.IdOrden.ToString().Contains(_filtroRecetasSoap.Trim()) ||
+             o.Nhcl.ToString().Contains(_filtroRecetasSoap.Trim()) ||
+             o.Paciente.Contains(_filtroRecetasSoap.Trim(), StringComparison.OrdinalIgnoreCase) ||
+             o.Propietario.Contains(_filtroRecetasSoap.Trim(), StringComparison.OrdinalIgnoreCase) ||
+             o.Medico.Contains(_filtroRecetasSoap.Trim(), StringComparison.OrdinalIgnoreCase) ||
+             o.Items.Any(i =>
+                 i.NombreRecetado.Contains(_filtroRecetasSoap.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                 i.CodigoPrincipal.Contains(_filtroRecetasSoap.Trim(), StringComparison.OrdinalIgnoreCase))));
 
     private string UnidadVentaSeleccionada => _productoVentaSeleccionado is not null ? UnidadDeItem(_productoVentaSeleccionado) : "UNIDAD";
     private decimal FactorVentaSeleccionado => _productoVentaSeleccionado is { FactorConversion: > 1m } ? _productoVentaSeleccionado.FactorConversion : 1m;
@@ -733,14 +1012,16 @@
         _localidadCargada = SucursalActivaId;
         try
         {
+            var tRecetas = FarmaciaService.ObtenerRecetasSoapColaAsync(SucursalActivaId, null, "TODOS");
             var tCola = FarmaciaService.ObtenerColaDespachoAsync(SucursalActivaId, null, "TODOS", null);
             var tStock = FarmaciaService.ObtenerStockSedeDetalladoAsync(SucursalActivaId);
             var tCat = InventarioService.BuscarMedicamentosConStockAsync(string.Empty, SucursalActivaId, Session.Apostrofe);
             var tVentas = FarmaciaService.ObtenerHistorialVentasAsync(SucursalActivaId);
             var tOrdenes = KardexService.ObtenerOrdenesActivasAsync();
 
-            await Task.WhenAll(tCola, tStock, tCat, tVentas, tOrdenes);
+            await Task.WhenAll(tRecetas, tCola, tStock, tCat, tVentas, tOrdenes);
 
+            _recetasSoap = await tRecetas;
             _colaCompleta = await tCola;
             _stockDetallado = await tStock;
             _catalogoDisponibleVenta = await tCat;
@@ -764,6 +1045,94 @@
         var paq = Math.Round(item.Available / item.FactorConversion, 2, MidpointRounding.AwayFromZero);
         var paqTxt = paq == Math.Truncate(paq) ? paq.ToString("0") : paq.ToString("0.##");
         return $"{baseTxt} ({paqTxt} paq. × {item.FactorConversion:G29} {unidad})";
+    }
+
+    private void OnToggleSeVendeReceta(FarmaciaRecetaSoapItemDto item, bool seVende)
+    {
+        item.SeVende = seVende;
+        if (!seVende)
+        {
+            item.CantidadAVender = 0m;
+        }
+        else if (item.CantidadAVender <= 0)
+        {
+            item.CantidadAVender = Math.Min(item.CantidadRecetada, item.MaximoDisponibleParaEstaLinea);
+        }
+    }
+
+    private void OnCambiarProductoInventarioReceta(FarmaciaRecetaSoapItemDto item, object? value)
+    {
+        int cod = int.TryParse(value?.ToString(), out var id) ? id : 0;
+        var prod = _stockDetallado.FirstOrDefault(x => x.CodigoProducto == cod);
+        if (prod is not null)
+        {
+            item.CodigoProductoInt = prod.CodigoProducto;
+            item.CodigoPrincipal = prod.CodigoPrincipal;
+            item.NombreProductoInventario = prod.NombreProducto;
+            item.Bodega = prod.Bodega;
+            item.UnidadMedida = prod.UnidadMedida;
+            item.FactorConversion = prod.FactorConversion;
+            item.PrecioUnitario = prod.PrecioUnitario;
+            item.StockFisicoSede = prod.StockFisico;
+            item.StockReservadoTotalSede = prod.StockReservado;
+            item.CantidadReservadaLinea = 0m;
+            var maxDisp = item.MaximoDisponibleParaEstaLinea;
+            item.SeVende = maxDisp > 0;
+            item.CantidadAVender = item.SeVende ? Math.Min(item.CantidadRecetada, maxDisp) : 0m;
+        }
+        else
+        {
+            item.CodigoProductoInt = 0;
+            item.CodigoPrincipal = string.Empty;
+            item.NombreProductoInventario = string.Empty;
+            item.StockFisicoSede = 0;
+            item.StockReservadoTotalSede = 0;
+            item.CantidadReservadaLinea = 0;
+            item.SeVende = false;
+            item.CantidadAVender = 0;
+        }
+    }
+
+    private async Task ActualizarReservaRecetaSoapAsync(FarmaciaRecetaSoapOrdenDto receta)
+    {
+        _procesando = true;
+        try
+        {
+            var res = await FarmaciaService.ActualizarReservaRecetaSoapAsync(
+                receta,
+                SucursalActivaId,
+                Session.IdUser);
+            _esError = !res.Exito;
+            _mensajeAlerta = res.Mensaje;
+            if (res.Exito)
+                await CargarTodoAsync();
+        }
+        finally
+        {
+            _procesando = false;
+        }
+    }
+
+    private async Task CompletarVentaRecetaSoapAsync(FarmaciaRecetaSoapOrdenDto receta)
+    {
+        _procesando = true;
+        try
+        {
+            var res = await FarmaciaService.CompletarVentaRecetaSoapAsync(
+                receta,
+                SucursalActivaId,
+                Session.IdUser,
+                Session.NombreUsuario,
+                Session.Iniciales);
+            _esError = !res.Exito;
+            _mensajeAlerta = res.Mensaje;
+            if (res.Exito)
+                await CargarTodoAsync();
+        }
+        finally
+        {
+            _procesando = false;
+        }
     }
 
     private async Task DespacharItemAsync(FarmaciaOrdenColaDto item)

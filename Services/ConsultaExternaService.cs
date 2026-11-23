@@ -1220,28 +1220,94 @@ public class ConsultaExternaService : IConsultaExternaService
             string.IsNullOrWhiteSpace(item.Descripcionamento) || string.IsNullOrWhiteSpace(item.Indicaciones))
             return false;
 
+        int sedeId = idLocalidad > 0 ? idLocalidad : 1;
+        int codInicial = int.TryParse(item.CodigoProd, out var cod) ? cod : 0;
+
         const string sql = @"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            DECLARE @CodProdInt INT = CASE WHEN @CodigoNum > 0 THEN @CodigoNum ELSE NULL END;
+            IF @CodProdInt IS NULL OR @CodProdInt <= 0
+            BEGIN
+                SELECT TOP 1 @CodProdInt = p.CODIGO
+                FROM dbo.PRODUCTO p
+                WHERE p.NOMBRE = LTRIM(RTRIM(@Descripcionamento))
+                   OR p.CODIGO_PRINCIPAL = LTRIM(RTRIM(@Descripcionamento));
+            END
+
+            DECLARE @ReservadoLinea DECIMAL(18,4) = 0;
+
+            IF @CodProdInt IS NOT NULL AND @CodProdInt > 0
+            BEGIN
+                DECLARE @IdEmpresa INT = NULL;
+                DECLARE @StockActual DECIMAL(18,4) = 0;
+                DECLARE @StockReservado DECIMAL(18,4) = 0;
+                DECLARE @CostoPromedio DECIMAL(18,4) = 0;
+
+                SELECT TOP 1
+                    @IdEmpresa = e.id_empresa,
+                    @StockActual = e.stock_actual,
+                    @StockReservado = ISNULL(e.stock_reservado, 0),
+                    @CostoPromedio = ISNULL(e.costo_promedio, 0)
+                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+                WHERE e.codigo_producto = @CodProdInt
+                  AND e.id_sucursal = @IdLocalidad
+                ORDER BY e.stock_actual DESC;
+
+                DECLARE @Disponible DECIMAL(18,4) = CASE WHEN @StockActual - @StockReservado > 0 THEN @StockActual - @StockReservado ELSE 0 END;
+                SET @ReservadoLinea = CASE WHEN @Disponible >= @Cantidad THEN @Cantidad ELSE @Disponible END;
+
+                IF @IdEmpresa IS NOT NULL AND @ReservadoLinea > 0
+                BEGIN
+                    UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                    SET stock_reservado = @StockReservado + @ReservadoLinea,
+                        fecha_actualizacion = SYSUTCDATETIME()
+                    WHERE codigo_producto = @CodProdInt
+                      AND id_sucursal = @IdLocalidad
+                      AND id_empresa = @IdEmpresa;
+
+                    INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                        codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                        cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                        metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                    ) VALUES (
+                        @CodProdInt, @IdEmpresa, @IdLocalidad, 'RESERVA',
+                        @ReservadoLinea, @CostoPromedio, ROUND(@ReservadoLinea * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
+                        'PROMEDIO', 'FARMACIA_RECETA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
+                        'Reserva temporal en cola por Receta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                        ' (Recetado: ' + CAST(@Cantidad AS VARCHAR(20)) + ', Reservado: ' + CAST(@ReservadoLinea AS VARCHAR(20)) + ')'
+                    );
+                END
+            END
+
             INSERT INTO vt_medicinas (
                 med_nhcl, med_idProdu, med_indicaciones, med_cantidad, med_id_orden,
                 med_otroMedicamento, med_estado, med_cantidad1, med_cantidadLetras,
-                med_fecha, med_tipo, med_observaciones
+                med_fecha, med_tipo, med_observaciones, med_utilizado
             ) VALUES (
-                @Nhcl, @CodigoNum, @Indicaciones, @Cantidad, @IdOrden,
-                @Descripcionamento, 'Por Entregar', @Cantidad, @CantidadLetras,
-                GETDATE(), @Tipo, @Observaciones
-            )";
+                @Nhcl, ISNULL(@CodProdInt, 0), @Indicaciones, @Cantidad, @IdOrden,
+                @Descripcionamento, 'Por Entregar', @ReservadoLinea, @CantidadLetras,
+                GETDATE(), @Tipo,
+                CASE WHEN ISNULL(@Observaciones, '') <> '' THEN @Observaciones ELSE 'En cola de Farmacia' END,
+                0
+            );
+
+            COMMIT TRANSACTION;";
 
         var filasAfectadas = await _db.ExecuteAsync(sql, new
         {
             item.Nhcl,
-            CodigoNum = int.TryParse(item.CodigoProd, out var cod) ? cod : 0,
+            CodigoNum = codInicial,
             item.Indicaciones,
             item.Cantidad,
             item.IdOrden,
             item.Descripcionamento,
             item.CantidadLetras,
             item.Tipo,
-            item.Observaciones
+            item.Observaciones,
+            IdUsuario = idUsuario > 0 ? idUsuario : 1,
+            IdLocalidad = sedeId
         });
 
         return filasAfectadas > 0;
@@ -1249,7 +1315,72 @@ public class ConsultaExternaService : IConsultaExternaService
 
     public async Task<bool> EliminarMedicamentoRecetaAsync(int sec)
     {
-        await _db.ExecuteAsync("DELETE FROM vt_medicinas WHERE sec = @Sec", new { Sec = sec });
+        const string sql = @"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            DECLARE @CodProdInt INT = 0;
+            DECLARE @CantReservada DECIMAL(18,4) = 0;
+            DECLARE @Estado VARCHAR(30) = '';
+            DECLARE @IdOrden INT = 0;
+            DECLARE @IdLocalidad INT = 1;
+
+            SELECT TOP 1
+                @CodProdInt = ISNULL(m.med_idProdu, 0),
+                @CantReservada = CAST(ISNULL(m.med_cantidad1, 0) AS DECIMAL(18,4)),
+                @Estado = ISNULL(m.med_estado, 'Por Entregar'),
+                @IdOrden = ISNULL(m.med_id_orden, 0),
+                @IdLocalidad = ISNULL(o.ordenAten_localidad, 1)
+            FROM dbo.vt_medicinas m WITH (UPDLOCK, HOLDLOCK)
+            LEFT JOIN dbo.vt_ordenAtencion o ON o.ordenAten_id = m.med_id_orden
+            WHERE m.sec = @Sec;
+
+            IF @Estado = 'Por Entregar' AND @CodProdInt > 0 AND @CantReservada > 0
+            BEGIN
+                DECLARE @IdEmpresa INT = NULL;
+                DECLARE @StockActual DECIMAL(18,4) = 0;
+                DECLARE @StockReservado DECIMAL(18,4) = 0;
+                DECLARE @CostoPromedio DECIMAL(18,4) = 0;
+                DECLARE @SucursalReserva INT = @IdLocalidad;
+
+                SELECT TOP 1
+                    @IdEmpresa = e.id_empresa,
+                    @SucursalReserva = e.id_sucursal,
+                    @StockActual = e.stock_actual,
+                    @StockReservado = ISNULL(e.stock_reservado, 0),
+                    @CostoPromedio = ISNULL(e.costo_promedio, 0)
+                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+                WHERE e.codigo_producto = @CodProdInt
+                  AND (e.id_sucursal = @IdLocalidad OR ISNULL(e.stock_reservado, 0) >= @CantReservada)
+                ORDER BY CASE WHEN e.id_sucursal = @IdLocalidad THEN 0 ELSE 1 END, ISNULL(e.stock_reservado, 0) DESC;
+
+                IF @IdEmpresa IS NOT NULL
+                BEGIN
+                    UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                    SET stock_reservado = CASE WHEN @StockReservado - @CantReservada < 0 THEN 0 ELSE @StockReservado - @CantReservada END,
+                        fecha_actualizacion = SYSUTCDATETIME()
+                    WHERE codigo_producto = @CodProdInt
+                      AND id_sucursal = @SucursalReserva
+                      AND id_empresa = @IdEmpresa;
+
+                    INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                        codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                        cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                        metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                    ) VALUES (
+                        @CodProdInt, @IdEmpresa, @SucursalReserva, 'RESERVA_LIBERADA',
+                        @CantReservada, @CostoPromedio, ROUND(@CantReservada * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
+                        'PROMEDIO', 'FARMACIA_RECETA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), 1, SYSUTCDATETIME(),
+                        'Liberación de reserva por eliminación en Receta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20))
+                    );
+                END
+            END
+
+            DELETE FROM vt_medicinas WHERE sec = @Sec;
+
+            COMMIT TRANSACTION;";
+
+        await _db.ExecuteAsync(sql, new { Sec = sec });
         return true;
     }
 
