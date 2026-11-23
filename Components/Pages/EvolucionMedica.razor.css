@@ -1,0 +1,93 @@
+.evolucion-view {
+    --evolucion-ink: #102952;
+    --evolucion-border: #c5d9ee;
+    min-width: 0;
+    color: var(--evolucion-ink);
+}
+
+.evolucion-hero {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    min-height: 92px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    background: linear-gradient(110deg, #f8fbff 30%, #e9f5ff 70%, #f5faff);
+}
+
+.evolucion-hero::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0 24% 0 44%;
+    opacity: .42;
+    background: url("/imagenes/dashboard-mascotas.png") center 20% / auto 175% no-repeat;
+    mask-image: linear-gradient(to right, transparent, #000 25% 74%, transparent);
+}
+
+.evolucion-heading { display: flex; align-items: center; gap: 12px; }
+.evolucion-heading > i { color: #074875; font-size: 2.65rem; line-height: 1; }
+.evolucion-heading h1 { margin: 0; font-size: clamp(1.24rem, 1.55vw, 1.65rem); font-weight: 800; }
+.evolucion-heading p { margin: 4px 0 0; color: #465970; font-size: .76rem; }
+
+.evolucion-panel {
+    min-width: 0;
+    border: 1px solid var(--evolucion-border);
+    border-radius: 12px;
+    background: linear-gradient(145deg, #fff, #f1f7fe);
+    box-shadow: 0 3px 8px #173b6712;
+}
+
+.evolucion-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    padding: 9px 13px;
+    margin-bottom: 12px;
+}
+.evolucion-toolbar > div { min-width: 0; max-width: 100%; }
+.evolucion-toolbar select { width: min(320px, 50vw); }
+.evolucion-view ::deep .buscador-orden-clinica .form-control { width: 74px !important; min-width: 58px !important; }
+
+.evolucion-patient {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 10px 14px;
+    margin-bottom: 12px;
+}
+.evolucion-patient > div { display: flex; align-items: center; min-width: 0; gap: 10px; padding: 2px 12px; overflow-wrap: anywhere; }
+.evolucion-patient > div + div { border-inline-start: 1px solid var(--evolucion-border); }
+.evolucion-patient > div > i { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 12px; background: #e4f4fd; color: #0574b7; }
+.evolucion-patient small { display: block; color: #465970; font-size: .72rem; }
+.evolucion-patient strong { font-size: .83rem; }
+.evolucion-name { color: #064ac1; }
+.evolucion-chip { display: inline-block; margin-inline-start: 4px; padding: 1px 8px; border-radius: 999px; background: #d4edff; color: #064c8c; font-size: .69rem; font-weight: 750; }
+
+.evolucion-section {
+    min-height: 38px;
+    padding: 8px 13px;
+    border-radius: 11px 11px 0 0;
+    background: #064369;
+    color: #fff;
+    font-size: .85rem;
+    font-weight: 800;
+}
+.evolucion-view .form-control, .evolucion-view .form-select { border-color: var(--evolucion-border); border-radius: 7px; }
+.evolucion-entry { border: 1px solid #d6e6f5; border-radius: 9px; background: #fff; }
+
+@media (max-width: 1050px) {
+    .evolucion-patient { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .evolucion-patient > div:nth-child(odd) { border-inline-start: 0; }
+}
+
+@media (max-width: 600px) {
+    .evolucion-hero::before { display: none; }
+    .evolucion-patient { grid-template-columns: minmax(0, 1fr); }
+    .evolucion-patient > div + div { border-inline-start: 0; border-top: 1px solid var(--evolucion-border); padding-top: 8px; }
+}

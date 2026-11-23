@@ -10,20 +10,25 @@
 
 <PageTitle>e-ForVets - Evoluciones Médicas y Órdenes Complementarias</PageTitle>
 
-<div class="container-fluid py-3">
-    <!-- Encabezado -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-white p-3 rounded shadow-sm border-start border-4 border-info">
-        <div>
-            <h4 class="mb-0 text-primary fw-bold">
-                <i class="bi bi-journal-plus me-2"></i>Hoja de Evolución Médica y Órdenes de Exámenes
-            </h4>
-            <small class="text-muted">Seguimiento clínico cronológico y solicitud de exámenes complementarios.</small>
+<div class="evolucion-view">
+    <header class="evolucion-hero">
+        <div class="evolucion-heading">
+            <i class="bi bi-journal-medical" aria-hidden="true"></i>
+            <div>
+                <h1>Evolución médica</h1>
+                <p>Seguimiento clínico y solicitud de exámenes complementarios.</p>
+            </div>
         </div>
-        <div class="d-flex flex-wrap gap-2 align-items-center mt-2 mt-xl-0">
+        <button type="button" class="app-doc-action app-doc-print" @onclick="ExportarPdfAsync">
+            <i class="bi bi-printer" aria-hidden="true"></i> Imprimir Evoluciones PDF
+        </button>
+    </header>
+
+    <div class="evolucion-panel evolucion-toolbar">
             <!-- Selector Dropbox de Órdenes -->
             <div class="d-flex align-items-center gap-1">
-                <label class="small fw-bold text-secondary text-nowrap mb-0">Órdenes:</label>
-                <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;"
+                <label for="evolucion-orden" class="small fw-bold text-nowrap mb-0">Órdenes:</label>
+                <select class="form-select form-select-sm" id="evolucion-orden"
                         value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
                     <option value="0">-- Seleccionar Orden --</option>
                     @foreach (var ord in _ordenesActivas)
@@ -41,10 +46,6 @@
                 <label class="form-check-label small fw-semibold" for="chkSoloOrden">Solo Orden #@IdOrden</label>
             </div>
 
-            <button class="btn btn-sm btn-outline-danger app-doc-action app-doc-print" @onclick="ExportarPdfAsync">
-                <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Evoluciones PDF
-            </button>
-        </div>
     </div>
 
     @if (!string.IsNullOrEmpty(MensajeAlerta))
@@ -65,36 +66,43 @@
 
     @if (Paciente != null)
     {
-        <div class="card shadow-sm border-0 mb-3 bg-info bg-opacity-10">
-            <div class="card-body py-2 px-3 small">
-                <div class="row align-items-center">
-                    <div class="col-md-4">
-                        <strong>Paciente:</strong> @Paciente.PacienteNombre (@Paciente.Especie - @Paciente.Raza)
-                        <span class="badge bg-dark ms-1">NHCL #@Paciente.Nhcl</span>
-                    </div>
-                    <div class="col-md-4">
-                        <strong>Propietario:</strong> @Paciente.PropietarioNombre
-                    </div>
-                    <div class="col-md-4 text-md-end">
-                        <strong>Médico Tratante:</strong> @Paciente.MedicoResponsable | <strong>Orden Activa:</strong> #@IdOrden
-                    </div>
+        <section class="evolucion-panel evolucion-patient" aria-label="Datos del paciente">
+            <div>
+                <i class="bi bi-clipboard" aria-hidden="true"></i>
+                <div><small>Orden / Historia (NHCL)</small><strong>#@IdOrden · @Paciente.Nhcl</strong></div>
+            </div>
+            <div>
+                <i class="bi bi-person" aria-hidden="true"></i>
+                <div><small>Propietario</small><strong>@Paciente.PropietarioNombre</strong></div>
+            </div>
+            <div>
+                <i class="bi bi-heart-pulse" aria-hidden="true"></i>
+                <div>
+                    <small>Paciente / Especie</small>
+                    <strong class="evolucion-name">@Paciente.PacienteNombre</strong>
+                    <span class="evolucion-chip">@Paciente.Especie</span>
+                    <small>@Paciente.Raza · Edad: @(Paciente.FechaNacimiento.HasValue ? Paciente.EdadTexto : "Sin registrar")</small>
                 </div>
             </div>
-        </div>
+            <div>
+                <i class="bi bi-person-badge" aria-hidden="true"></i>
+                <div><small>Médico tratante</small><strong>@Paciente.MedicoResponsable</strong></div>
+            </div>
+        </section>
     }
 
     <div class="row g-3">
         <!-- Columna Izquierda: Registro de Nueva Evolución y Solicitud de Exámenes -->
         <div class="col-lg-5">
-            <div class="card shadow-sm border-0 mb-3">
-                <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+            <div class="card evolucion-panel mb-3">
+                <div class="card-header evolucion-section d-flex flex-wrap gap-2 justify-content-between align-items-center">
                     <span>
                         <i class="bi bi-pencil-square me-1"></i>
                         @(EvolucionForm.IdEvolucion > 0 ? $"Editando Evolución #{EvolucionForm.IdEvolucion}" : "Nueva Nota de Evolución Médica")
                     </span>
                     @if (EvolucionForm.IdEvolucion > 0)
                     {
-                        <button class="btn btn-xs btn-outline-secondary py-0" @onclick="LimpiarFormulario">Nueva</button>
+                        <button class="btn btn-xs btn-light py-0" @onclick="LimpiarFormulario">Nueva</button>
                     }
                 </div>
                 <div class="card-body">
@@ -120,8 +128,8 @@
             </div>
 
             <!-- Solicitud de Exámenes Complementarios asociados a Evolución -->
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-white fw-bold text-primary">
+            <div class="card evolucion-panel">
+                <div class="card-header evolucion-section">
                     <i class="bi bi-eyedropper me-1"></i>Solicitar Laboratorio / Imagenología en Evolución
                 </div>
                 <div class="card-body">
@@ -178,8 +186,8 @@
 
         <!-- Columna Derecha: Línea de Tiempo de Evoluciones del Paciente -->
         <div class="col-lg-7">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+            <div class="card evolucion-panel h-100">
+                <div class="card-header evolucion-section d-flex flex-wrap gap-2 justify-content-between align-items-center">
                     <span><i class="bi bi-clock-history me-1"></i>Cronología de Evoluciones Médicas (@Evoluciones.Count)</span>
                     <span class="badge bg-secondary">NHCL #@Nhcl</span>
                 </div>
@@ -193,8 +201,8 @@
                     }
                     @foreach (var ev in Evoluciones)
                     {
-                        <div class="border rounded p-3 mb-3 shadow-xs bg-light bg-opacity-50">
-                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                        <div class="evolucion-entry p-3 mb-3">
+                            <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center border-bottom pb-2 mb-2">
                                 <div>
                                     <span class="badge bg-primary me-1">Evolución #@ev.IdEvolucion</span>
                                     <span class="badge bg-dark me-1">Orden #@ev.IdOrden</span>
