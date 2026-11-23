@@ -200,11 +200,7 @@ public class ConsultaExternaService : IConsultaExternaService
                     : "N";
 
                 string origenRaw = (pac.mas_origen?.ToString() ?? "M").Trim().ToUpperInvariant();
-                string tipoDesdePaciente = origenRaw == "M" ? "HDEV" : "TUERI";
-                if (existente == null || string.IsNullOrWhiteSpace(dto.MedTipo))
-                {
-                    dto.MedTipo = tipoDesdePaciente;
-                }
+                dto.MedTipo = origenRaw == "T" ? "TUERI" : "HDEV";
 
                 dto.ColorTriaje = colStr;
 
@@ -265,7 +261,6 @@ public class ConsultaExternaService : IConsultaExternaService
                 var previaMismoDia = await _db.QueryFirstOrDefaultAsync<dynamic>(sqlMismoDia, new { IdOrden = idOrden, Nhcl = nhcl, Hoy = DateTime.Today });
                 if (previaMismoDia != null)
                 {
-                    dto.MedTipo = previaMismoDia.MedTipo?.ToString() ?? dto.MedTipo;
                     dto.Peso = Convert.ToDecimal(previaMismoDia.Peso ?? 0);
                     dto.Temperatura = Convert.ToDecimal(previaMismoDia.Temperatura ?? 38.5m);
                     dto.FrecuenciaCardiaca = Convert.ToDecimal(previaMismoDia.FrecuenciaCardiaca ?? 90);
@@ -458,11 +453,11 @@ public class ConsultaExternaService : IConsultaExternaService
 
             dto.MedIdUser = idUsuario;
 
-            // Asegurar que MedNhcl, MedCliente y MedEspecie esten resueltos
-            if (dto.MedNhcl > 0 && (dto.MedCliente <= 0 || string.IsNullOrEmpty(dto.MedEspecie)))
+            // Asegurar que MedNhcl, MedCliente, MedEspecie y MedTipo esten resueltos desde vt_pacientes
+            if (dto.MedNhcl > 0)
             {
                 var pacInfo = await _db.QueryFirstOrDefaultAsync<dynamic>(@"
-                    SELECT p.mas_idcliente, e.especie_descripcion AS mas_especie, p.masyear, p.masmeses
+                    SELECT p.mas_idcliente, e.especie_descripcion AS mas_especie, p.masyear, p.masmeses, p.mas_origen
                     FROM vt_pacientes p
                     LEFT JOIN vt_especie e ON e.especie_id = p.mas_especie
                     WHERE p.mas_nhcl = @Nhcl", new { Nhcl = dto.MedNhcl });
@@ -473,6 +468,8 @@ public class ConsultaExternaService : IConsultaExternaService
                         dto.MedCliente = Convert.ToInt32(pacInfo.mas_idcliente);
                     if (string.IsNullOrEmpty(dto.MedEspecie) && pacInfo.mas_especie != null)
                         dto.MedEspecie = pacInfo.mas_especie.ToString();
+                    string origenPac = (pacInfo.mas_origen?.ToString() ?? "M").Trim().ToUpperInvariant();
+                    dto.MedTipo = origenPac == "T" ? "TUERI" : "HDEV";
                     string? strYear = pacInfo.masyear?.ToString();
                     if (dto.MedEdadAnios <= 0 && int.TryParse(strYear, out int anios))
                         dto.MedEdadAnios = anios;
