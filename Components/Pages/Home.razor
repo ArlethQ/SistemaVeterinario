@@ -7,250 +7,257 @@
 @inject Microsoft.EntityFrameworkCore.IDbContextFactory<Simetric.Data.AppDbContext> DbFactory
 @inject Simetric.Services.EmisorCertificadoValidator FirmaValidator
 
+@inject ILogger<Home> Logger
+
 <PageTitle>e-ForVets - Panel Principal</PageTitle>
 
-@if (!string.IsNullOrWhiteSpace(_mensajeAccesoRapido))
-{
-    <div class="alert alert-warning">@_mensajeAccesoRapido</div>
-}
-
-<!-- Welcome / Header Banner -->
-<div class="card shadow-sm border-0 mb-4 bg-primary text-white" style="border-radius: 14px; background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%) !important;">
-    <div class="card-body p-4">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <div>
-                <span class="badge bg-white text-primary fw-bold text-uppercase mb-2 px-3 py-1">Hospital Veterinario</span>
-                <h2 class="fw-bold mb-1">Panel Principal e-ForVets</h2>
-                <p class="mb-0 text-light opacity-90 small">
-                    <i class="fa fa-calendar me-1"></i> @DateTime.Today.ToString("dddd, dd 'de' MMMM 'de' yyyy", new System.Globalization.CultureInfo("es-EC"))
-                    &nbsp;|&nbsp; Sistema de Hospitalización, Quirófano, Kardex y Diagnóstico Veterinario
-                </p>
+<div class="vet-dashboard" aria-busy="@_cargando">
+    <div class="dashboard-top">
+        <section class="dashboard-hero">
+            <i class="bi bi-heart-pulse hero-decoration" aria-hidden="true"></i>
+            <div class="hero-copy">
+                <span>Bienvenido/a</span>
+                <h1>Panel Principal <strong>e-ForVets</strong></h1>
+                <p>Gestiona de forma integral la atención, hospitalización, quirófano, inventario y facturación veterinaria.</p>
             </div>
-            <div class="d-flex gap-2 flex-wrap">
-                @if (Puede("/admision/ordenes"))
-                {
-                    <a href="/admision/ordenes" class="btn btn-light text-primary fw-semibold shadow-sm">
-                        🛎️ Nueva Orden
-                    </a>
-                }
-                @if (Puede("/kardex/ordenes"))
-                {
-                    <a href="/kardex/ordenes" class="btn btn-outline-light fw-semibold">
-                        📋 Bandeja de Órdenes
-                    </a>
-                }
-                @if (Puede("/admision/citas"))
-                {
-                    <a href="/admision/citas" class="btn btn-outline-light fw-semibold">
-                        📅 Agenda de Citas
-                    </a>
-                }
-                @if (Puede("/admision/clientes-pacientes"))
-                {
-                    <a href="/admision/clientes-pacientes" class="btn btn-outline-light fw-semibold">
-                        🐾 Pacientes
-                    </a>
-                }
-            </div>
-        </div>
-    </div>
-</div>
+        </section>
 
-@if (_cargando)
-{
-    <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
-        <div class="spinner-border spinner-border-sm" role="status"></div>
-        <span class="fw-semibold small">Cargando métricas y panel principal...</span>
-    </div>
-}
-
-<!-- Tarjetas de Métricas / KPIs del Día -->
-<div class="row g-3 mb-4">
-    @if (Puede("contabilidad/compra-documentos"))
-    {
-        <div class="col-sm-6 col-lg-3">
-            <div class="card shadow-sm border-0 h-100 border-start border-danger border-4" style="border-radius: 12px;">
-                <div class="card-body p-3 d-flex flex-column justify-content-between">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="text-muted small text-uppercase fw-bold">Documentos disponibles</div>
-                            <h3 class="fw-bold text-danger mb-0">@_saldoDocumentos</h3>
-                        </div>
-                        <div class="fs-1 text-danger opacity-50">📄</div>
-                    </div>
-                    <div class="mt-3"><a href="/contabilidad/compra-documentos" class="text-danger text-decoration-none small fw-semibold">Recargar documentos &rarr;</a></div>
+        <section class="dashboard-panel shortcuts">
+            <header class="panel-heading">
+                <h2><i class="bi bi-rocket-takeoff-fill" aria-hidden="true"></i> Accesos Rápidos</h2>
+                <button class="panel-link" type="button" @onclick="() => _personalizando = !_personalizando" aria-expanded="@_personalizando.ToString().ToLowerInvariant()">
+                    <i class="bi bi-gear" aria-hidden="true"></i> Personalizar
+                </button>
+            </header>
+            @if (_personalizando)
+            {
+                <div class="shortcut-settings">
+                    @foreach (var acceso in Accesos.Where(a => Puede(a.Ruta)))
+                    {
+                        <label><input type="checkbox" checked="@(!_accesosOcultos.Contains(acceso.Ruta))" @onchange="() => AlternarAccesoAsync(acceso.Ruta)" /> @acceso.Nombre</label>
+                    }
                 </div>
+            }
+            <div class="shortcut-grid">
+                @foreach (var acceso in Accesos.Where(a => Puede(a.Ruta) && !_accesosOcultos.Contains(a.Ruta)))
+                {
+                    <a class="shortcut" href="@acceso.Ruta">
+                        <i class="bi @acceso.Icono" aria-hidden="true"></i><span>@acceso.Nombre</span>
+                    </a>
+                }
             </div>
-        </div>
+        </section>
+    </div>
+
+    @if (_cargando)
+    {
+        <span class="visually-hidden" role="status">Cargando indicadores del panel</span>
+    }
+    @if (_mensajeAccesoRapido.Length > 0)
+    {
+        <div class="alert alert-warning mb-0" role="status">@_mensajeAccesoRapido</div>
     }
 
-    @if (Puede("facturacion/configuracion/firma"))
+    <div class="dashboard-metrics">
+        @foreach (var indicador in Indicadores.Where(i => Puede(i.Ruta)))
+        {
+            <a class="dashboard-panel metric @indicador.Color" href="@indicador.Ruta">
+                <i class="bi @indicador.Icono metric-icon" aria-hidden="true"></i>
+                <span><b>@indicador.Nombre</b><strong>@(_cargando ? "…" : indicador.Valor)</strong></span>
+            </a>
+        }
+        @if (Puede("facturacion/configuracion/firma"))
+        {
+            <a class="dashboard-panel metric signature orange" href="/facturacion/configuracion/firma" title="@_firmaError">
+                <i class="bi bi-pen-fill metric-icon" aria-hidden="true"></i>
+                <span><b>Vigencia de Firma</b><strong>@(_cargando ? "…" : _firmaResumen)</strong>
+                    @if (_firmaExpiracion is DateTime fecha)
+                    {
+                        <small>Hasta @fecha.ToString("dd/MM/yyyy")</small>
+                    }
+                </span>
+                <i class="bi bi-chevron-right ms-auto" aria-hidden="true"></i>
+            </a>
+        }
+    </div>
+
+    <div class="dashboard-middle">
+        @if (Puede("kardex/ordenes"))
+        {
+            <section class="dashboard-panel">
+                <header class="panel-heading">
+                    <h2><i class="bi bi-activity" aria-hidden="true"></i> Atenciones por Área</h2>
+                    <select class="period-select" aria-label="Período de atenciones" @bind="_periodo">
+                        <option value="7">Últimos 7 días</option>
+                        <option value="14">Últimos 14 días</option>
+                        <option value="30">Últimos 30 días</option>
+                    </select>
+                </header>
+                @{
+                    var desde = _hoy.AddDays(1 - _periodo);
+                    var atenciones = _atenciones.Where(a => a.Fecha >= desde).ToList();
+                    var grupos = Areas.Select((area, index) => (area.Nombre, area.Color, Total: atenciones.Where(a => a.Area == index).Sum(a => a.Total))).ToList();
+                    var total = grupos.Sum(g => g.Total);
+                    var dias = Enumerable.Range(0, _periodo).Select(n => desde.AddDays(n))
+                        .Select(fecha => (Fecha: fecha, Total: atenciones.Where(a => a.Fecha == fecha).Sum(a => a.Total))).ToList();
+                    var paso = Math.Max(1, (int)Math.Ceiling(dias.Max(d => d.Total) / 4d));
+                    var porcentaje = 0d;
+                    var segmentos = new List<string>();
+                    foreach (var grupo in grupos)
+                    {
+                        var siguiente = porcentaje + (total == 0 ? 0 : 100d * grupo.Total / total);
+                        segmentos.Add($"{grupo.Color} {CssNumero(porcentaje)}% {CssNumero(siguiente)}%");
+                        porcentaje = siguiente;
+                    }
+                    var fondo = total == 0 ? "#e1edf9" : $"conic-gradient({string.Join(", ", segmentos)})";
+                }
+                @if (_errorAtenciones)
+                {
+                    <p class="dashboard-empty">No se pudieron consultar las atenciones.</p>
+                }
+                else
+                {
+                    <div class="chart-layout">
+                        <div class="chart-summary">
+                            <div class="chart-donut" style="--donut:@fondo">
+                                <div><strong>@total</strong><span>Atenciones<br />totales</span></div>
+                            </div>
+                            <ul class="chart-legend">
+                                @foreach (var grupo in grupos)
+                                {
+                                    <li><i style="background:@grupo.Color"></i><span>@grupo.Nombre</span><b>@(total == 0 ? "0%" : ((double)grupo.Total / total).ToString("P0"))</b></li>
+                                }
+                            </ul>
+                        </div>
+                        <div class="chart-series">
+                            <div class="chart-scale" aria-hidden="true">
+                                @for (var nivel = 4; nivel >= 0; nivel--)
+                                {
+                                    <span>@(nivel * paso)</span>
+                                }
+                            </div>
+                            <div class="chart-columns" style="--columns:@_periodo">
+                                @foreach (var dia in dias)
+                                {
+                                    <div class="chart-column" title="@($"{dia.Fecha:dd/MM/yyyy}: {dia.Total} atenciones")">
+                                        <div class="chart-bar" style="--height:@CssNumero(100d * dia.Total / (4 * paso))%"></div>
+                                        @if (_periodo == 7)
+                                        {
+                                            <span>@dia.Fecha.ToString("ddd", Ecuador).TrimEnd('.')</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </section>
+        }
+        @if (Puede("admision/citas"))
+        {
+            <section class="dashboard-panel">
+                <header class="panel-heading">
+                    <h2><i class="bi bi-calendar3" aria-hidden="true"></i> Agenda de Hoy</h2>
+                    <a class="panel-link" href="/admision/citas">Ver agenda completa <i class="bi bi-arrow-right"></i></a>
+                </header>
+                <div class="agenda-list">
+                    @foreach (var cita in _citasHoy.Take(3))
+                    {
+                        var (estado, tono) = EstadoCita(cita.CiEstadoCita);
+                        <div class="agenda-row @tono">
+                            <time>@cita.CiHora</time>
+                            <span class="pet-icon"><i class="bi bi-heart-fill" aria-hidden="true"></i></span>
+                            <span class="agenda-patient"><b>@cita.CiNombreMas</b><small>Prop. @cita.CiNombre</small></span>
+                            <span class="dashboard-pill blue"><i class="bi bi-heart-pulse"></i> @ServicioCita(cita)</span>
+                            <span class="dashboard-pill @tono">@estado</span>
+                        </div>
+                    }
+                    @if (_citasHoy.Count == 0 && !_cargando)
+                    {
+                        <p class="dashboard-empty">No hay citas agendadas para hoy.</p>
+                    }
+                </div>
+            </section>
+        }
+    </div>
+
+    <div class="dashboard-bottom">
+        @if (Puede("kardex/ordenes"))
+        {
+            <section class="dashboard-panel">
+                <header class="panel-heading">
+                    <h2><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i> Órdenes Recientes en Atención</h2>
+                    <a class="panel-link" href="/kardex/ordenes">Ver todas las órdenes <i class="bi bi-arrow-right"></i></a>
+                </header>
+                @if (_pacientesRecientes.Count > 0)
+                {
+                    <div class="table-responsive">
+                        <table class="dashboard-table">
+                            <thead><tr><th>N.º Orden</th><th>Paciente</th><th>Especie / Sexo</th><th>Propietario</th><th>Servicio</th><th>Estado</th><th><span class="visually-hidden">Ver orden</span></th></tr></thead>
+                            <tbody>
+                                @foreach (var paciente in _pacientesRecientes.Take(3))
+                                {
+                                    <tr>
+                                        <td><b>@paciente.OrdenAtencionId</b></td>
+                                        <td><span class="table-patient"><span class="pet-icon"><i class="bi bi-heart-fill"></i></span><b>@paciente.Paciente</b></span></td>
+                                        <td>@paciente.Especie / @paciente.Sexo</td>
+                                        <td>@paciente.Cliente</td>
+                                        <td>@(string.IsNullOrWhiteSpace(paciente.Especialidad) ? paciente.Etapa : paciente.Especialidad)</td>
+                                        <td><span class="dashboard-pill @(paciente.Estado == "E" ? "green" : "purple")">@EstadoOrden(paciente)</span></td>
+                                        <td><a class="order-link" href="@UrlOrden(paciente)" aria-label="@($"Ver orden {paciente.OrdenAtencionId}")"><i class="bi bi-eye"></i></a></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else if (!_cargando)
+                {
+                    <p class="dashboard-empty">No hay órdenes activas registradas.</p>
+                }
+            </section>
+        }
+
+        @if (PuedeAlguno("contabilidad/inventarios", "admision/citas"))
+        {
+            <section class="dashboard-panel">
+                <header class="panel-heading"><h2><i class="bi bi-bell-fill alert-bell" aria-hidden="true"></i> Recordatorios y Alertas</h2></header>
+                <div class="reminder-list">
+                    @foreach (var aviso in Alertas.Where(a => Puede(a.Ruta)))
+                    {
+                        <a class="reminder @aviso.Color" href="@aviso.Ruta">
+                            <i class="bi @aviso.Icono reminder-icon" aria-hidden="true"></i>
+                            <span><b>@aviso.Nombre</b><small>@aviso.Detalle</small></span>
+                            <i class="bi bi-chevron-right ms-auto" aria-hidden="true"></i>
+                        </a>
+                    }
+                </div>
+            </section>
+        }
+    </div>
+
+    @if (TieneAccesosDirectos || TieneModulosAdicionales)
     {
-        <div class="col-sm-6 col-lg-3">
-            <div class="card shadow-sm border-0 h-100 border-start @_firmaColor border-4" style="border-radius: 12px;">
-                <div class="card-body p-3 d-flex flex-column justify-content-between">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="text-muted small text-uppercase fw-bold">Vigencia de firma</div>
-                            <h5 class="fw-bold mb-0">@_firmaResumen</h5>
-                            @if (!string.IsNullOrWhiteSpace(_firmaError))
+        <details class="dashboard-panel extra-modules">
+            <summary>Más módulos y acceso por orden</summary>
+            @if (TieneAccesosDirectos)
+            {
+                <section class="direct-access" aria-labelledby="direct-access-title">
+                    <h2 id="direct-access-title"><i class="bi bi-lightning-charge" aria-hidden="true"></i> Acceso por orden</h2>
+                    <div class="direct-access-controls">
+                        <label>N.º de orden <input type="number" class="form-control" @bind="_ordenManual" /></label>
+                        <label>NHCL de la mascota <input type="number" class="form-control" @bind="_nhclManual" /></label>
+                        <div class="direct-access-buttons">
+                            @foreach (var accion in AccionesPorOrden.Where(a => Puede(a.Ruta)))
                             {
-                                <small class="text-warning-emphasis d-block mt-2" role="status">@_firmaError</small>
-                            }
-                            @if (_firmaExpiracion is not null)
-                            {
-                                <small class="text-muted">Hasta @_firmaExpiracion.Value.ToString("dd/MM/yyyy")</small>
+                                <button type="button" class="btn @accion.Modulo" @onclick="() => IrModuloManual(accion.Modulo)">
+                                    <i class="bi @accion.Icono" aria-hidden="true"></i> @accion.Nombre
+                                </button>
                             }
                         </div>
-                        <div class="fs-1 opacity-50">✍️</div>
                     </div>
-                    <div class="mt-3"><a href="/facturacion/configuracion/firma" class="text-decoration-none small fw-semibold">Ver firma electrónica &rarr;</a></div>
-                </div>
-            </div>
-        </div>
-    }
-
-    @if (Puede("kardex/ordenes"))
-    {
-        <div class="col-sm-6 col-lg-3">
-            <div class="card shadow-sm border-0 h-100 border-start border-primary border-4" style="border-radius: 12px;">
-                <div class="card-body p-3 d-flex flex-column justify-content-between">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="text-muted small text-uppercase fw-bold">Órdenes Activas</div>
-                            <h3 class="fw-bold text-primary mb-0">@_totalOrdenesActivas</h3>
-                        </div>
-                        <div class="fs-1 text-primary opacity-50">📋</div>
-                    </div>
-                    <div class="mt-3">
-                        <a href="/kardex/ordenes" class="text-primary text-decoration-none small fw-semibold">
-                            Ver bandeja de órdenes &rarr;
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-
-    @if (Puede("admision/citas"))
-    {
-        <div class="col-sm-6 col-lg-3">
-            <div class="card shadow-sm border-0 h-100 border-start border-info border-4" style="border-radius: 12px;">
-                <div class="card-body p-3 d-flex flex-column justify-content-between">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="text-muted small text-uppercase fw-bold">Citas de Hoy</div>
-                            <h3 class="fw-bold text-info mb-0">@_totalCitasHoy</h3>
-                        </div>
-                        <div class="fs-1 text-info opacity-50">📅</div>
-                    </div>
-                    <div class="mt-3">
-                        <a href="/admision/citas" class="text-info text-decoration-none small fw-semibold">
-                            Ver agenda del día &rarr;
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-
-    @if (Puede("hospitalizacion/ficha"))
-    {
-        <div class="col-sm-6 col-lg-3">
-            <div class="card shadow-sm border-0 h-100 border-start border-success border-4" style="border-radius: 12px;">
-                <div class="card-body p-3 d-flex flex-column justify-content-between">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="text-muted small text-uppercase fw-bold">Hospitalización 24h</div>
-                            <h3 class="fw-bold text-success mb-0">@_totalHospitalizados</h3>
-                        </div>
-                        <div class="fs-1 text-success opacity-50">🏥</div>
-                    </div>
-                    <div class="mt-3">
-                        <a href="/hospitalizacion/ficha" class="text-success text-decoration-none small fw-semibold">
-                            Ver fichas activas &rarr;
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-
-    @if (Puede("kardex/enfermeria"))
-    {
-        <div class="col-sm-6 col-lg-3">
-            <div class="card shadow-sm border-0 h-100 border-start border-warning border-4" style="border-radius: 12px;">
-                <div class="card-body p-3 d-flex flex-column justify-content-between">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="text-muted small text-uppercase fw-bold">Kardex y Enfermería</div>
-                            <h3 class="fw-bold text-warning text-dark mb-0">Activo</h3>
-                        </div>
-                        <div class="fs-1 text-warning opacity-50">💉</div>
-                    </div>
-                    <div class="mt-3">
-                        <a href="/kardex/enfermeria" class="text-warning text-dark text-decoration-none small fw-semibold">
-                            Abrir kardex rápido &rarr;
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-</div>
-
-<!-- Acceso Rápido por Orden / NHCL -->
-@if (TieneAccesosDirectos)
-{
-    <div class="card shadow-sm border-0 mb-4" style="border-radius: 12px; background-color: #f8fafc;">
-        <div class="card-body p-3">
-            <div class="row g-2 align-items-center">
-                <div class="col-md-3">
-                    <span class="fw-bold text-secondary small">⚡ Acceso Rápido Directo:</span>
-                    <div class="small text-muted">Ingrese Orden y NHCL para ir directo:</div>
-                </div>
-                <div class="col-md-2">
-                    <input type="number" class="form-control form-control-sm" placeholder="N° Orden" @bind="_ordenManual" />
-                </div>
-                <div class="col-md-2">
-                    <input type="number" class="form-control form-control-sm" placeholder="NHCL Mascota" @bind="_nhclManual" />
-                </div>
-                <div class="col-md-5 d-flex gap-1 flex-wrap">
-                    @if (Puede("kardex/enfermeria"))
-                    {
-                        <button class="btn btn-primary btn-sm" @onclick='() => IrModuloManual("kardex")'>
-                            💉 Kardex
-                        </button>
-                    }
-                    @if (Puede("kardex/signos"))
-                    {
-                        <button class="btn btn-outline-primary btn-sm" @onclick='() => IrModuloManual("signos")'>
-                            📈 Signos
-                        </button>
-                    }
-                    @if (Puede("hospitalizacion/ficha"))
-                    {
-                        <button class="btn btn-outline-success btn-sm" @onclick='() => IrModuloManual("ficha")'>
-                            🏥 Ficha 24h
-                        </button>
-                    }
-                    @if (Puede("quirofano/preanestesia"))
-                    {
-                        <button class="btn btn-outline-danger btn-sm" @onclick='() => IrModuloManual("preanestesia")'>
-                            🧪 Pre-Anest.
-                        </button>
-                    }
-                    @if (Puede("quirofano/anestesia"))
-                    {
-                        <button class="btn btn-outline-info btn-sm" @onclick='() => IrModuloManual("anestesia")'>
-                            🫁 Anestesia
-                        </button>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-}
+                </section>
+            }
 
 <!-- Módulos del Sistema (Estilo vt_principal / Tarjetas Modernas) -->
 <h5 class="fw-bold text-dark mb-3">Módulos y Servicios del Sistema</h5>
@@ -259,12 +266,12 @@
     @if (PuedeAlguno("/admision/clientes-pacientes", "/admision/ordenes", "/admision/citas"))
     {
         <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+            <div class="card module-card h-100">
                 <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
                     <div class="d-flex align-items-center gap-2">
-                        <span class="fs-4">🐾</span>
+                        <i class="bi bi-people module-icon" aria-hidden="true"></i>
                         <div>
-                            <h6 class="fw-bold mb-0 text-primary">Admisión y Recepción</h6>
+                            <h6 class="module-title">Admisión y Recepción</h6>
                             <small class="text-muted">Gestión de pacientes y citas</small>
                         </div>
                     </div>
@@ -274,27 +281,27 @@
                         @if (Puede("/admision/clientes-pacientes"))
                         {
                             <li>
-                                <a href="/admision/clientes-pacientes" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>👥 Registro de Clientes y Pacientes</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/admision/clientes-pacientes" class="module-link">
+                                    <span>Registro de Clientes y Pacientes</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/admision/ordenes"))
                         {
                             <li>
-                                <a href="/admision/ordenes" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>🛎️ Recepción y Nuevas Órdenes</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/admision/ordenes" class="module-link">
+                                    <span>Recepción y Nuevas Órdenes</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/admision/citas"))
                         {
                             <li>
-                                <a href="/admision/citas" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>📅 Agenda y Programación de Citas</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/admision/citas" class="module-link">
+                                    <span>Agenda y Programación de Citas</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
@@ -308,12 +315,12 @@
     @if (PuedeAlguno("/kardex/ordenes", "/kardex/enfermeria", "/kardex/signos"))
     {
         <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+            <div class="card module-card h-100">
                 <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
                     <div class="d-flex align-items-center gap-2">
-                        <span class="fs-4">💉</span>
+                        <i class="bi bi-journal-medical module-icon" aria-hidden="true"></i>
                         <div>
-                            <h6 class="fw-bold mb-0 text-primary">Kardex y Enfermería</h6>
+                            <h6 class="module-title">Kardex y Enfermería</h6>
                             <small class="text-muted">Administración de fármacos y signos</small>
                         </div>
                     </div>
@@ -323,27 +330,27 @@
                         @if (Puede("/kardex/ordenes"))
                         {
                             <li>
-                                <a href="/kardex/ordenes" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>📋 Bandeja de Órdenes Clínicas</span>
-                                    <span class="text-primary fw-bold">&rsaquo;</span>
+                                <a href="/kardex/ordenes" class="module-link">
+                                    <span>Bandeja de Órdenes Clínicas</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/kardex/enfermeria"))
                         {
                             <li>
-                                <a href="/kardex/enfermeria" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>💊 Sábana de Kardex (5 Días)</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/kardex/enfermeria" class="module-link">
+                                    <span>Sábana de Kardex (5 Días)</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/kardex/signos"))
                         {
                             <li>
-                                <a href="/kardex/signos" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>📈 Signos Vitales y Balance Hídrico</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/kardex/signos" class="module-link">
+                                    <span>Signos Vitales y Balance Hídrico</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
@@ -357,12 +364,12 @@
     @if (PuedeAlguno("/hospitalizacion/ficha", "/hospitalizacion/monitoreo"))
     {
         <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+            <div class="card module-card h-100">
                 <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
                     <div class="d-flex align-items-center gap-2">
-                        <span class="fs-4">🏥</span>
+                        <i class="bi bi-hospital module-icon" aria-hidden="true"></i>
                         <div>
-                            <h6 class="fw-bold mb-0 text-primary">Hospitalización 24h</h6>
+                            <h6 class="module-title">Hospitalización 24h</h6>
                             <small class="text-muted">Seguimiento y cuidados críticos</small>
                         </div>
                     </div>
@@ -372,18 +379,18 @@
                         @if (Puede("/hospitalizacion/ficha"))
                         {
                             <li>
-                                <a href="/hospitalizacion/ficha" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>📋 Ficha de Hospitalización 24 Horas</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/hospitalizacion/ficha" class="module-link">
+                                    <span>Ficha de Hospitalización 24 Horas</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/hospitalizacion/monitoreo"))
                         {
                             <li>
-                                <a href="/hospitalizacion/monitoreo" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>🩺 Monitoreo Clínico de Pacientes</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/hospitalizacion/monitoreo" class="module-link">
+                                    <span>Monitoreo Clínico de Pacientes</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
@@ -397,12 +404,12 @@
     @if (PuedeAlguno("/quirofano/preanestesia", "/quirofano/anestesia", "/quirofano/protocolo", "/quirofano/recuperacion"))
     {
         <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+            <div class="card module-card h-100">
                 <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
                     <div class="d-flex align-items-center gap-2">
-                        <span class="fs-4">🔪</span>
+                        <i class="bi bi-scissors module-icon" aria-hidden="true"></i>
                         <div>
-                            <h6 class="fw-bold mb-0 text-danger">Quirófano y Anestesia</h6>
+                            <h6 class="module-title">Quirófano y Anestesia</h6>
                             <small class="text-muted">Cirugía y cuidados anestésicos</small>
                         </div>
                     </div>
@@ -412,36 +419,36 @@
                         @if (Puede("/quirofano/preanestesia"))
                         {
                             <li>
-                                <a href="/quirofano/preanestesia" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>🧪 Pre-Anestesia y Evaluación ASA</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/quirofano/preanestesia" class="module-link">
+                                    <span>Pre-Anestesia y Evaluación ASA</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/quirofano/anestesia"))
                         {
                             <li>
-                                <a href="/quirofano/anestesia" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>🫁 Hoja de Anestesia Transoperatoria</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/quirofano/anestesia" class="module-link">
+                                    <span>Hoja de Anestesia Transoperatoria</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/quirofano/protocolo"))
                         {
                             <li>
-                                <a href="/quirofano/protocolo" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>📝 Protocolo y Reporte Quirúrgico</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/quirofano/protocolo" class="module-link">
+                                    <span>Protocolo y Reporte Quirúrgico</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/quirofano/recuperacion"))
                         {
                             <li>
-                                <a href="/quirofano/recuperacion" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>🛏️ Sala de Recuperación Post-Quirúrgica</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/quirofano/recuperacion" class="module-link">
+                                    <span>Sala de Recuperación Post-Quirúrgica</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
@@ -455,12 +462,12 @@
     @if (PuedeAlguno("/consulta/fichamedica", "/consulta/evoluciones", "/consulta/recetario", "/consulta/autorizaciones"))
     {
         <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+            <div class="card module-card h-100">
                 <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
                     <div class="d-flex align-items-center gap-2">
-                        <span class="fs-4">📋</span>
+                        <i class="bi bi-clipboard2-pulse module-icon" aria-hidden="true"></i>
                         <div>
-                            <h6 class="fw-bold mb-0 text-info">Atención Médica SOAP</h6>
+                            <h6 class="module-title">Atención Médica SOAP</h6>
                             <small class="text-muted">Historia clínica y prescripción</small>
                         </div>
                     </div>
@@ -470,36 +477,36 @@
                         @if (Puede("/consulta/fichamedica"))
                         {
                             <li>
-                                <a href="/consulta/fichamedica" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>🩺 Historia Clínica SOAP</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/consulta/fichamedica" class="module-link">
+                                    <span>Historia Clínica SOAP</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/consulta/evoluciones"))
                         {
                             <li>
-                                <a href="/consulta/evoluciones" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>📝 Notas de Evolución Médica</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/consulta/evoluciones" class="module-link">
+                                    <span>Notas de Evolución Médica</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/consulta/recetario"))
                         {
                             <li>
-                                <a href="/consulta/recetario" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>💊 Recetario Médico Electrónico</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/consulta/recetario" class="module-link">
+                                    <span>Recetario Médico Electrónico</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/consulta/autorizaciones"))
                         {
                             <li>
-                                <a href="/consulta/autorizaciones" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>📄 Consentimientos y Plan de Alta</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/consulta/autorizaciones" class="module-link">
+                                    <span>Consentimientos y Plan de Alta</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
@@ -513,12 +520,12 @@
     @if (PuedeAlguno("/diagnostico/laboratorio", "/diagnostico/imagenologia", "/diagnostico/bandeja", "/facturacion/proformas"))
     {
         <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+            <div class="card module-card h-100">
                 <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
                     <div class="d-flex align-items-center gap-2">
-                        <span class="fs-4">🔬</span>
+                        <i class="bi bi-capsule module-icon" aria-hidden="true"></i>
                         <div>
-                            <h6 class="fw-bold mb-0 text-success">Diagnóstico y Facturación</h6>
+                            <h6 class="module-title">Diagnóstico y Facturación</h6>
                             <small class="text-muted">Laboratorio, RX y proformas</small>
                         </div>
                     </div>
@@ -528,36 +535,36 @@
                         @if (Puede("/diagnostico/laboratorio"))
                         {
                             <li>
-                                <a href="/diagnostico/laboratorio" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>🧪 Órdenes de Laboratorio Clínico</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/diagnostico/laboratorio" class="module-link">
+                                    <span>Órdenes de Laboratorio Clínico</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/diagnostico/imagenologia"))
                         {
                             <li>
-                                <a href="/diagnostico/imagenologia" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>☢️ Órdenes de Rayos X y Ecografía</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/diagnostico/imagenologia" class="module-link">
+                                    <span>Órdenes de Rayos X y Ecografía</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/diagnostico/bandeja"))
                         {
                             <li>
-                                <a href="/diagnostico/bandeja" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>📥 Bandeja de Resultados e Informes</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/diagnostico/bandeja" class="module-link">
+                                    <span>Bandeja de Resultados e Informes</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
                         @if (Puede("/facturacion/proformas"))
                         {
                             <li>
-                                <a href="/facturacion/proformas" class="text-decoration-none d-flex justify-content-between align-items-center text-dark hover-link p-2 rounded bg-light">
-                                    <span>💳 Proformas</span>
-                                    <span class="text-muted">&rsaquo;</span>
+                                <a href="/facturacion/proformas" class="module-link">
+                                    <span>Proformas</span>
+                                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
                                 </a>
                             </li>
                         }
@@ -568,202 +575,6 @@
     }
 </div>
 
-<!-- Pacientes Recientes en Atención -->
-@if (Puede("kardex/ordenes"))
-{
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-            <h6 class="fw-bold text-dark mb-0">🐾 Pacientes Recientes en Atención</h6>
-            <a href="/kardex/ordenes" class="btn btn-outline-primary btn-sm">
-                Ver todas las órdenes en la Bandeja &rarr;
-            </a>
-        </div>
-        <div class="card-body p-0">
-            @if (_pacientesRecientes.Count == 0 && !_cargando)
-            {
-                <div class="p-3 text-muted small">No hay órdenes activas registradas en este momento.</div>
-            }
-            else
-            {
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>N° Orden</th>
-                                <th>NHCL</th>
-                                <th>Paciente</th>
-                                <th>Especie / Sexo</th>
-                                <th>Propietario</th>
-                                <th>Médico Asignado</th>
-                                <th class="text-end pe-3">Acceso Directo</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var p in _pacientesRecientes.Take(6))
-                            {
-                                <tr>
-                                    <td class="fw-bold">@p.OrdenAtencionId</td>
-                                    <td class="text-danger fw-bold">@p.Nhcl</td>
-                                    <td class="fw-semibold">@p.Paciente</td>
-                                    <td>@p.Especie (@p.Sexo)</td>
-                                    <td>@p.Cliente</td>
-                                    <td>
-                                        <div>@p.Medico</div>
-                                        <small class="text-muted">@p.Especialidad</small>
-                                    </td>
-                                    <td class="text-end pe-3">
-                                        <div class="btn-group btn-group-sm">
-                                            @if (Puede("/kardex/enfermeria"))
-                                            {
-                                                <a href="/kardex/enfermeria?orden=@p.OrdenAtencionId&nhcl=@p.Nhcl" class="btn btn-primary" title="Abrir Kardex">
-                                                    💉 Kardex
-                                                </a>
-                                            }
-                                            @if (Puede("/kardex/signos"))
-                                            {
-                                                <a href="/kardex/signos/@p.OrdenAtencionId/@p.Nhcl" class="btn btn-outline-primary" title="Ver Signos">
-                                                    📈 Signos
-                                                </a>
-                                            }
-                                            @if (Puede("/hospitalizacion/ficha"))
-                                            {
-                                                <a href="/hospitalizacion/ficha/@p.OrdenAtencionId/@p.Nhcl" class="btn btn-outline-success" title="Ficha Hospitalaria">
-                                                    🏥 Ficha
-                                                </a>
-                                            }
-                                        </div>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
-        </div>
-    </div>
-}
-
-@code {
-    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
-    private bool Puede(string ruta) => Permisos.Permite(ruta);
-    private bool PuedeAlguno(params string[] rutas) => rutas.Any(Puede);
-    private bool TieneAccesosDirectos => PuedeAlguno("kardex/enfermeria", "kardex/signos", "hospitalizacion/ficha", "quirofano/preanestesia", "quirofano/anestesia");
-
-    private bool _cargando;
-    private int _totalOrdenesActivas;
-    private int _totalCitasHoy;
-    private int _totalHospitalizados;
-    private int _saldoDocumentos;
-    private string _firmaResumen = "No configurada";
-    private string? _firmaError;
-    private string _firmaColor = "border-secondary";
-    private DateTime? _firmaExpiracion;
-    private int _ordenDefault;
-    private int _nhclDefault;
-    private int _ordenManual;
-    private int _nhclManual;
-    private string _mensajeAccesoRapido = string.Empty;
-    private List<OrdenActivaResumenDto> _pacientesRecientes = [];
-
-    protected override async Task OnInitializedAsync()
-    {
-        _cargando = true;
-        await Task.Yield();
-        try
-        {
-            var ordenesTask = PuedeAlguno("kardex/ordenes", "hospitalizacion/ficha")
-                ? KardexService.ObtenerOrdenesActivasAsync() : Task.FromResult(new List<OrdenActivaResumenDto>());
-            var citasTask = Puede("admision/citas")
-                ? AdmisionService.ObtenerCitasPorFechaAsync(DateTime.Today, DateTime.Today) : Task.FromResult(new List<CitaMedicaDto>());
-            var cuentaTask = PuedeAlguno("contabilidad/compra-documentos", "facturacion/configuracion/firma")
-                ? CargarIndicadoresFacturacionAsync() : Task.CompletedTask;
-
-            await Task.WhenAll(ordenesTask, citasTask, cuentaTask);
-
-            var ordenes = await ordenesTask;
-            if (Puede("kardex/ordenes"))
-                _pacientesRecientes = ordenes;
-            _totalOrdenesActivas = _pacientesRecientes.Count;
-
-            var citas = await citasTask;
-            _totalCitasHoy = citas.Count;
-
-            _totalHospitalizados = ordenes.Count(o => o.Etapa.Contains("Hosp", StringComparison.OrdinalIgnoreCase));
-
-            if (_pacientesRecientes.Count > 0)
-            {
-                _ordenDefault = _pacientesRecientes[0].OrdenAtencionId;
-                _nhclDefault = _pacientesRecientes[0].Nhcl;
-                _ordenManual = _ordenDefault;
-                _nhclManual = _nhclDefault;
-            }
-        }
-        catch (Exception)
-        {
-            _mensajeAccesoRapido = "No se pudieron cargar todos los indicadores del panel.";
-        }
-        finally
-        {
-            _cargando = false;
-        }
+        </details>
     }
-
-    private async Task CargarIndicadoresFacturacionAsync()
-    {
-        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
-        if (!int.TryParse(auth.User.FindFirst("IdUsuario")?.Value, out var usuarioId)) return;
-
-        await using var context = await DbFactory.CreateDbContextAsync();
-        var usuario = await context.Usuarios.AsNoTracking().FirstOrDefaultAsync(x => x.IdUsuario == usuarioId);
-        if (usuario is null) return;
-        if (usuario.estadoAsociado == true && usuario.idJefe is > 0)
-            usuario = await context.Usuarios.AsNoTracking().FirstOrDefaultAsync(x => x.IdUsuario == usuario.idJefe.Value) ?? usuario;
-
-        _saldoDocumentos = Math.Max(0, usuario.SaldoDocumentos);
-        if (!Puede("facturacion/configuracion/firma")) return;
-
-        var emisor = await context.Emisores.AsNoTracking()
-            .Where(x => x.IdUsuario == usuario.IdUsuario && x.Estado)
-            .OrderByDescending(x => x.Codigo)
-            .FirstOrDefaultAsync();
-        if (emisor is null) return;
-
-        var firma = await FirmaValidator.ValidarConApiAsync(emisor);
-        _firmaExpiracion = firma.FechaExpiracion;
-        _firmaError = firma.IsValid ? null : firma.Message;
-        _firmaResumen = firma.DiasRestantes switch
-        {
-            < 0 => "Caducada",
-            0 => "Vence hoy",
-            int dias => $"{dias} días restantes",
-            _ => firma.TieneConfiguracion ? "Validar vigencia" : "No configurada"
-        };
-        _firmaColor = firma.IsValid ? "border-success" : "border-warning";
-    }
-
-    private void IrModuloManual(string modulo)
-    {
-        var ord = _ordenManual > 0 ? _ordenManual : _ordenDefault;
-        var nhcl = _nhclManual > 0 ? _nhclManual : _nhclDefault;
-
-        if (ord <= 0 || nhcl <= 0)
-        {
-            _mensajeAccesoRapido = "Seleccione una orden real e ingrese su NHCL antes de abrir el módulo.";
-            return;
-        }
-
-        _mensajeAccesoRapido = string.Empty;
-
-        var url = modulo switch
-        {
-            "kardex" => $"/kardex/enfermeria?orden={ord}&nhcl={nhcl}",
-            "signos" => $"/kardex/signos/{ord}/{nhcl}",
-            "ficha" => $"/hospitalizacion/ficha/{ord}/{nhcl}",
-            "preanestesia" => $"/quirofano/preanestesia/{ord}/{nhcl}",
-            "anestesia" => $"/quirofano/anestesia/{ord}/{nhcl}",
-            _ => $"/kardex/enfermeria?orden={ord}&nhcl={nhcl}"
-        };
-
-        Nav.NavigateTo(url);
-    }
-}
+</div>
