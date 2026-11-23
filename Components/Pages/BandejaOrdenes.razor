@@ -11,35 +11,40 @@
 <PageTitle>e-ForVets - Bandeja de Órdenes de Hospitalización</PageTitle>
 
 <div class="container-fluid py-3 hosp-bandeja-page">
-    <div class="card shadow-sm border-0 mb-3 bg-white">
-        <div class="card-body py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <div class="d-flex align-items-center gap-2">
-                <span class="fs-4 text-primary"><i class="bi bi-hospital-fill"></i></span>
+    <header class="bandeja-hero">
+            <div class="d-flex align-items-center gap-3">
+                <span class="bandeja-hero-icon" aria-hidden="true"><i class="bi bi-hospital"></i></span>
                 <div>
-                    <h1 class="h5 mb-0 fw-bold text-dark">Bandeja de Órdenes — Hospitalización 24h</h1>
-                    <small class="text-muted">Pacientes derivados desde SOAP para hospitalización. Inicia su ingreso, asigna ubicación/jaula e indicaciones.</small>
+                    <h1 class="h5 mb-1 fw-bold">Bandeja de Órdenes — Hospitalización 24h</h1>
+                    <small>Pacientes derivados desde SOAP para hospitalización. Inicia su ingreso, asigna ubicación e indicaciones.</small>
                 </div>
             </div>
-            <div class="d-flex flex-wrap gap-2">
+            <nav class="bandeja-nav d-flex flex-wrap gap-2" aria-label="Navegación de hospitalización">
                 <a class="btn btn-sm btn-outline-secondary" href="/dashboard"><i class="bi bi-house-door-fill me-1"></i>Panel Principal</a>
                 @if (Permisos.Permite("/hospitalizacion/ficha"))
                 {
                     <a class="btn btn-sm btn-outline-primary" href="/hospitalizacion/ficha"><i class="bi bi-file-earmark-text me-1"></i>Ficha 24h</a>
                 }
-            </div>
-        </div>
-    </div>
+            </nav>
+    </header>
 
-    <section class="card shadow-sm border-0 mb-3" aria-label="Cola de ingreso">
-        <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center py-2">
+    <ul class="bandeja-estados" aria-label="Resumen de órdenes">
+        <li class="bandeja-estado pendientes"><i class="bi bi-clock" aria-hidden="true"></i><span>Pendientes <small>(cola de ingreso)</small></span><strong>@(PendientesIngreso.Count() - IngresosEnProceso)</strong></li>
+        <li class="bandeja-estado proceso"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>En proceso <small>(ingresando)</small></span><strong>@IngresosEnProceso</strong></li>
+        <li class="bandeja-estado hospital"><i class="bi bi-hospital" aria-hidden="true"></i><span>Hospitalizados</span><strong>@Hospitalizados.Count(x => x.RequiereHospitalizacion)</strong></li>
+        <li class="bandeja-estado cirugia"><i class="bi bi-scissors" aria-hidden="true"></i><span>Cirugía</span><strong>@Hospitalizados.Count(x => x.RequiereCirugia)</strong></li>
+    </ul>
+
+    <section class="card bandeja-lista" aria-label="Cola de ingreso">
+        <div class="card-header bandeja-lista-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-2">
-                <h2 class="h6 mb-0 fw-bold">Cola de ingreso (Pendientes)</h2>
+                <h2 class="h6 mb-0 fw-bold"><i class="bi bi-people-fill me-2" aria-hidden="true"></i>Cola de ingreso (Pendientes)</h2>
                 <span class="badge text-bg-warning">@PendientesIngreso.Count()</span>
             </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
-                <div class="input-group input-group-sm" style="width: 280px;">
+                <div class="input-group input-group-sm bandeja-busqueda">
                     <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                    <input class="form-control" autocomplete="off" @bind="_filtro" @bind:event="oninput" @bind:after="BuscarMientrasEscribeAsync" placeholder="Buscar paciente, tutor, orden o NHCL..." />
+                    <input class="form-control" autocomplete="off" aria-label="Buscar paciente, tutor, orden o NHCL" @bind="_filtro" @bind:event="oninput" @bind:after="BuscarMientrasEscribeAsync" placeholder="Buscar paciente, tutor, orden o NHCL…" />
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-primary" @onclick="CargarColaAsync" disabled="@_cargando">
                     <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
@@ -83,7 +88,7 @@
                                 var seleccionado = _ordenSeleccionada?.OrdenAtencionId == item.OrdenAtencionId;
                                 <tr class="@(seleccionado ? "table-primary" : null)">
                                     <td class="small text-nowrap">
-                                        @item.FechaOrden.ToString("dd/MM/yyyy")<br />
+                                        <i class="bi bi-calendar3 bandeja-dato-icon" aria-hidden="true"></i><strong>@item.FechaOrden.ToString("dd/MM/yyyy")</strong><br />
                                         <span class="text-muted">@item.FechaOrden.ToString("HH:mm")</span>
                                     </td>
                                     <td class="fw-semibold text-primary">#@item.OrdenAtencionId</td>
@@ -105,21 +110,21 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="small">@item.Especie</td>
-                                    <td class="small">@item.Cliente</td>
+                                    <td class="small text-nowrap"><i class="bi bi-grid-fill bandeja-dato-icon" aria-hidden="true"></i>@item.Especie</td>
+                                    <td class="small"><i class="bi bi-person bandeja-dato-icon" aria-hidden="true"></i>@item.Cliente</td>
                                     <td class="small">
-                                        <div>@item.Medico</div>
+                                        <div><i class="bi bi-person-badge bandeja-dato-icon" aria-hidden="true"></i>@item.Medico</div>
                                         <span class="text-muted">@item.Especialidad</span>
                                     </td>
                                     <td class="small">
                                         <span class="badge @ClaseTipoAtencion(item)">@item.TipoAtencionTexto</span>
                                     </td>
                                     <td>
-                                        <span class="badge text-bg-warning">Pendiente de ingreso</span>
+                                        <span class="badge bandeja-alerta">Pendiente de ingreso</span>
                                     </td>
                                     <td class="text-end text-nowrap">
-                                        <button type="button" class="btn btn-sm btn-primary" @onclick="() => SeleccionarParaIngresoAsync(item)">
-                                            Iniciar ingreso
+                                        <button type="button" class="btn btn-sm bandeja-iniciar" @onclick="() => SeleccionarParaIngresoAsync(item)">
+                                            Iniciar ingreso <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
                                         </button>
                                     </td>
                                 </tr>
@@ -131,7 +136,7 @@
         </div>
     </section>
 
-    @if (!string.IsNullOrWhiteSpace(_mensajeAlerta))
+    @if (_ordenSeleccionada is null && !string.IsNullOrWhiteSpace(_mensajeAlerta))
     {
         <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small shadow-sm" role="alert">
             <i class="bi @(_esError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@_mensajeAlerta
@@ -139,200 +144,8 @@
         </div>
     }
 
-    @if (_cargandoIngreso)
-    {
-        <div class="card shadow-sm border-0 py-5 text-center text-primary">
-            <div class="card-body">
-                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-                <span class="small fw-semibold">Cargando ficha de ingreso a hospitalización...</span>
-            </div>
-        </div>
-    }
-    else if (_ordenSeleccionada is null)
-    {
-        <div class="card shadow-sm border-0 py-5 text-center text-muted">
-            <div class="card-body">
-                <span class="fs-1 d-block mb-2 text-secondary">🐾</span>
-                <h5>Ningún paciente seleccionado para ingreso</h5>
-                <p class="small text-muted mb-0">
-                    Selecciona una orden en la cola superior y haz clic en <strong>Iniciar ingreso</strong>.
-                </p>
-            </div>
-        </div>
-    }
-    else
-    {
-        <section class="card shadow-sm border-0" aria-label="Ingreso del paciente">
-            <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
-                <div>
-                    <h3 class="h6 mb-0 fw-bold text-primary">
-                        <i class="bi bi-hospital me-1"></i>Ingreso — @_ordenSeleccionada.Paciente
-                        <span class="badge @ClaseTipoAtencion(_ordenSeleccionada) ms-1">@_ordenSeleccionada.TipoAtencionTexto</span>
-                    </h3>
-                    <small class="text-muted">
-                        Orden #@_ordenSeleccionada.OrdenAtencionId · NHCL #@_ordenSeleccionada.Nhcl · @_ordenSeleccionada.Especie · Tutor: @_ordenSeleccionada.Cliente · Médico: @_ordenSeleccionada.Medico
-                    </small>
-                </div>
-                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CerrarPanelIngreso">Cerrar</button>
-            </div>
-
-            <form class="card-body" @onsubmit="GuardarIngresoAsync" @onsubmit:preventDefault>
-                <div class="row g-3">
-                    @if (_ordenSeleccionada.RequiereHospitalizacion)
-                    {
-                        <div class="col-md-6">
-                            <label class="form-label small fw-semibold" for="selJaula">Ubicación / Jaula <span class="text-danger">*</span></label>
-                            <select id="selJaula" class="form-select form-select-sm" @bind="_ingreso.IdJaula">
-                                <option value="">-- Seleccionar jaula --</option>
-                                @foreach (var jaula in JaulasParaSeleccion)
-                                {
-                                    var etiqueta = string.IsNullOrWhiteSpace(jaula.Piso)
-                                        ? jaula.Codigo
-                                        : $"{jaula.Codigo} ({jaula.Piso} / {jaula.Consultorio})";
-                                    <option value="@jaula.Id">@etiqueta @(jaula.Ocupada && jaula.OrdenActual != _ordenSeleccionada.OrdenAtencionId ? "— Ocupada" : "")</option>
-                                }
-                            </select>
-                            @if (_jaulas.Count == 0)
-                            {
-                                <small class="text-muted d-block mt-1">
-                                    No hay jaulas registradas aún; cuando se cree el módulo de jaulas aparecerán aquí automáticamente.
-                                </small>
-                            }
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label small fw-semibold" for="txtUbicacionManual">Detalle / Referencia de ubicación (opcional)</label>
-                            <input id="txtUbicacionManual" class="form-control form-control-sm" @bind="_ingreso.UbicacionJaula"
-                                   placeholder="Ej. Área Caninos, Jaula J-01, Cuidados intensivos..." maxlength="150" />
-                        </div>
-
-                        <div class="col-12">
-                            <label class="form-label small fw-semibold" for="txtIndicaciones">Indicaciones de hospitalización</label>
-                            <textarea id="txtIndicaciones" class="form-control form-control-sm" rows="3" @bind="_ingreso.Indicaciones"
-                                      placeholder="Medicación inicial, frecuencia de controles, monitoreo requerido, alertas clínicas..."></textarea>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label small fw-semibold" for="txtHidratacion">Hidratación / Fluidoterapia</label>
-                            <textarea id="txtHidratacion" class="form-control form-control-sm" rows="3" @bind="_ingreso.HidratacionFluidoterapia"
-                                      placeholder="Solución, vía, velocidad de infusión (mL/h), suplementos..."></textarea>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label small fw-semibold" for="txtDieta">Dieta y cuidados</label>
-                            <textarea id="txtDieta" class="form-control form-control-sm" rows="3" @bind="_ingreso.DietaCuidados"
-                                      placeholder="Tipo de alimento, frecuencia, ayuno, cuidados de confort/aseo..."></textarea>
-                        </div>
-                    }
-
-                    @if (_ordenSeleccionada.RequiereCirugia)
-                    {
-                        <div class="col-12">
-                            <div class="border rounded p-3 bg-white">
-                                <h4 class="h6 mb-2 fw-bold text-primary">
-                                    <i class="bi bi-calendar2-check me-1"></i>Programación de Cirugía (Médico encargado, fecha y hora libre)
-                                </h4>
-                                <ProgramacionClinica @key="_ordenSeleccionada.OrdenAtencionId"
-                                                     ModoModal="true"
-                                                     IdOrden="@_ordenSeleccionada.OrdenAtencionId"
-                                                     Nhcl="@_ordenSeleccionada.Nhcl" />
-                            </div>
-                        </div>
-                    }
-
-                    @foreach (var doc in DocumentosIngresoVisibles)
-                    {
-                        <div class="col-12">
-                            <div class="border rounded p-3 bg-light">
-                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                                    <div>
-                                        <h4 class="h6 mb-1 fw-bold text-dark">
-                                            <i class="bi bi-file-earmark-check me-1 text-primary"></i>@doc.Titulo <span class="text-danger">*</span>
-                                            <span class="badge text-bg-dark ms-1">DEFAULT</span>
-                                        </h4>
-                                        <p class="small text-muted mb-0">
-                                            Documento oficial predeterminado del sistema (protegido contra eliminación). Puedes descargarlo/imprimirlo, editarlo o subir el escaneo firmado.
-                                        </p>
-                                    </div>
-                                    <div>
-                                        @if (!string.IsNullOrWhiteSpace(doc.Autorizacion?.ArchivoUrl))
-                                        {
-                                            <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Firmado / Escaneado adjunto</span>
-                                        }
-                                        else if (doc.Autorizacion?.AutorizacionId > 0)
-                                        {
-                                            <span class="badge text-bg-info"><i class="bi bi-file-earmark-text me-1"></i>Emitido (pendiente de firma)</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge text-bg-secondary">Listo para descargar / firmar</span>
-                                        }
-                                    </div>
-                                </div>
-
-                                <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
-                                    <button type="button" class="btn btn-sm btn-outline-dark" @onclick="() => ImprimirConsentimientoAsync(doc.Clave)" disabled="@_procesandoConsentimiento">
-                                        <i class="bi bi-printer-fill me-1"></i>Descargar / Imprimir PDF
-                                    </button>
-
-                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AbrirModalEditorConsentimientoAsync(doc.Clave)" disabled="@_procesandoConsentimiento">
-                                        <i class="bi bi-pencil-square me-1"></i>Editar documento
-                                    </button>
-
-                                    <label class="btn btn-sm btn-outline-success mb-0" style="cursor: pointer;">
-                                        <i class="bi bi-cloud-arrow-up-fill me-1"></i>@(string.IsNullOrWhiteSpace(doc.Autorizacion?.ArchivoUrl) ? "Subir firmado (PDF / Foto)" : "Reemplazar firmado")
-                                        <InputFile OnChange="@(e => SubirConsentimientoFirmadoAsync(e, doc.Clave))" accept="image/*,application/pdf,.doc,.docx" style="display: none;" />
-                                    </label>
-
-                                    @if (!string.IsNullOrWhiteSpace(doc.Autorizacion?.ArchivoUrl))
-                                    {
-                                        <a class="btn btn-sm btn-link text-decoration-none fw-semibold" href="@doc.Autorizacion.ArchivoUrl" target="_blank" rel="noopener">
-                                            <i class="bi bi-paperclip me-1"></i>Ver escaneo (@doc.Autorizacion.ArchivoNombre)
-                                        </a>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                    }
-                </div>
-
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 pt-3 border-top">
-                    <div class="d-flex flex-wrap gap-2">
-                        @if (_ordenSeleccionada.YaIngresado)
-                        {
-                            @if (Permisos.Permite("/hospitalizacion/ficha"))
-                            {
-                                <a class="btn btn-sm btn-outline-primary" href="/hospitalizacion/ficha/@_ordenSeleccionada.OrdenAtencionId/@_ordenSeleccionada.Nhcl">Ir a Ficha 24h</a>
-                            }
-                            @if (Permisos.Permite("/kardex/enfermeria"))
-                            {
-                                <a class="btn btn-sm btn-outline-primary" href="/kardex/enfermeria?orden=@_ordenSeleccionada.OrdenAtencionId&nhcl=@_ordenSeleccionada.Nhcl">Ir a Kardex</a>
-                            }
-                            @if (Permisos.Permite("/kardex/signos"))
-                            {
-                                <a class="btn btn-sm btn-outline-primary" href="/kardex/signos/@_ordenSeleccionada.OrdenAtencionId/@_ordenSeleccionada.Nhcl">Ir a Signos</a>
-                            }
-                        }
-                    </div>
-                    <button type="submit" class="btn btn-primary" disabled="@_guardando">
-                        @if (_guardando)
-                        {
-                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                            <span>Guardando...</span>
-                        }
-                        else
-                        {
-                            <i class="bi bi-check2-circle me-1"></i>
-                            <span>@(_ordenSeleccionada.YaIngresado ? "Actualizar ingreso" : "Guardar e iniciar ingreso")</span>
-                        }
-                    </button>
-                </div>
-            </form>
-        </section>
-    }
-
-    <section class="card shadow-sm border-0 mt-3" aria-label="Pacientes en hospitalización o cirugía">
-        <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center py-2">
+    <section class="card bandeja-lista bandeja-lista-ingresados" aria-label="Pacientes en hospitalización o cirugía">
+        <div class="card-header bandeja-lista-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-2">
                 <h2 class="h6 mb-0 fw-bold text-success"><i class="bi bi-hospital-fill me-1"></i>Pacientes en Hospitalización / Cirugía</h2>
                 <span class="badge text-bg-success">@Hospitalizados.Count()</span>
@@ -349,13 +162,13 @@
             }
             else
             {
-                <div class="table-responsive hosp-list-wrapper">
+                <div class="table-responsive">
                     <table class="table table-sm table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th scope="col">N° Orden</th>
-                                <th scope="col">NHCL</th>
                                 <th scope="col">Paciente</th>
+                                <th scope="col">Orden</th>
+                                <th scope="col">NHCL</th>
                                 <th scope="col">Propietario</th>
                                 <th scope="col">Médico / Especialidad</th>
                                 <th scope="col">Modalidad</th>
@@ -368,8 +181,6 @@
                             @foreach (var item in Hospitalizados)
                             {
                                 <tr>
-                                    <td><span class="fw-bold text-primary">#@item.OrdenAtencionId</span></td>
-                                    <td class="small">@item.Nhcl</td>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
                                             <span class="hosp-avatar">
@@ -388,9 +199,11 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="small">@item.Cliente</td>
+                                    <td><span class="fw-bold text-primary">#@item.OrdenAtencionId</span></td>
+                                    <td class="small">@item.Nhcl</td>
+                                    <td class="small"><i class="bi bi-person bandeja-dato-icon" aria-hidden="true"></i>@item.Cliente</td>
                                     <td class="small">
-                                        <div>@item.Medico</div>
+                                        <div><i class="bi bi-person-badge bandeja-dato-icon" aria-hidden="true"></i>@item.Medico</div>
                                         <span class="text-muted">@item.Especialidad</span>
                                     </td>
                                     <td class="small">
@@ -405,7 +218,7 @@
                                         }
                                         else if (!string.IsNullOrWhiteSpace(item.JaulaCodigo))
                                         {
-                                            <span class="badge text-bg-info">@item.JaulaCodigo</span>
+                                            <span class="badge bandeja-jaula">@item.JaulaCodigo</span>
                                         }
                                         else
                                         {
@@ -413,20 +226,17 @@
                                         }
                                     </td>
                                     <td class="small text-nowrap">
-                                        @item.FechaOrden.ToString("yyyy-MM-dd")<br />
+                                        <i class="bi bi-calendar3 bandeja-dato-icon" aria-hidden="true"></i>@item.FechaOrden.ToString("dd/MM/yyyy")<br />
                                         <span class="text-muted">@item.FechaOrden.ToString("HH:mm")</span>
                                     </td>
                                     <td class="text-center orders-actions-cell">
-                                        <div class="d-inline-flex flex-wrap align-items-center gap-1 justify-content-center">
+                                        <div class="bandeja-acciones">
                                             <button type="button" class="btn btn-sm btn-purple fw-semibold" @onclick="() => AbrirModalModulosAsync(item)">
                                                 <i class="bi bi-window-stack me-1"></i>Expediente / Módulos
                                             </button>
-                                            @if (item.RequiereHospitalizacion)
-                                            {
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => SeleccionarParaIngresoAsync(item)" title="Editar ingreso / jaula / consentimiento">
-                                                    <i class="bi bi-pencil-square"></i>
-                                                </button>
-                                            }
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => SeleccionarParaIngresoAsync(item)" aria-label="@($"Editar ingreso de {item.Paciente}")" title="Editar ingreso">
+                                                <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -439,18 +249,211 @@
     </section>
 </div>
 
+@if (_ordenSeleccionada is { } ordenIngreso)
+{
+    <dialog class="bandeja-dialog" @ref="_dialogIngreso" aria-labelledby="bandejaIngresoTitulo">
+        <header class="bandeja-dialog-header">
+            <span class="bandeja-hero-icon" aria-hidden="true"><i class="bi bi-hospital"></i></span>
+            <div class="flex-grow-1">
+                <h2 class="h5 fw-bold mb-1" id="bandejaIngresoTitulo">@(ordenIngreso.YaIngresado ? "Editar ingreso" : "Iniciar ingreso")</h2>
+                <div class="small">@ordenIngreso.Paciente · Orden #@ordenIngreso.OrdenAtencionId · NHCL #@ordenIngreso.Nhcl</div>
+            </div>
+            <button type="button" class="btn-close" autofocus aria-label="Cerrar" disabled="@IngresoOcupado" @onclick="CancelarIngresoAsync"></button>
+        </header>
+        <div class="ingreso-contexto">
+            <span class="badge @ClaseTipoAtencion(ordenIngreso)">@ordenIngreso.TipoAtencionTexto</span>
+            <span><i class="bi bi-person me-1" aria-hidden="true"></i>@ordenIngreso.Cliente</span>
+            <span><i class="bi bi-person-badge me-1" aria-hidden="true"></i>@ordenIngreso.Medico · @ordenIngreso.Especialidad</span>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_mensajeAlerta))
+        {
+            <div class="alert @(_esError ? "alert-danger" : "alert-success") mx-3 my-2 py-2 small" role="alert">@_mensajeAlerta</div>
+        }
+        @if (_cargandoIngreso)
+        {
+            <div class="p-4 d-flex align-items-center gap-2 text-primary" role="status">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Cargando ficha de ingreso...
+            </div>
+        }
+        else if (!_falloCargaIngreso)
+        {
+            <div class="ingreso-form">
+                <div class="ingreso-scroll">
+                    <div class="row g-3">
+                        @if (_ordenSeleccionada.RequiereHospitalizacion)
+                        {
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold" for="selJaula">Ubicación / Jaula <span class="text-danger">*</span></label>
+                                <select id="selJaula" class="form-select form-select-sm" @bind="_ingreso.IdJaula">
+                                    <option value="">-- Seleccionar jaula --</option>
+                                    @foreach (var jaula in JaulasParaSeleccion)
+                                    {
+                                        var etiqueta = string.IsNullOrWhiteSpace(jaula.Piso)
+                                            ? jaula.Codigo
+                                            : $"{jaula.Codigo} ({jaula.Piso} / {jaula.Consultorio})";
+                                        <option value="@jaula.Id">@etiqueta @(jaula.Ocupada && jaula.OrdenActual != _ordenSeleccionada.OrdenAtencionId ? "— Ocupada" : "")</option>
+                                    }
+                                </select>
+                                @if (_jaulas.Count == 0)
+                                {
+                                    <small class="text-muted d-block mt-1">
+                                        No hay jaulas registradas aún; cuando se cree el módulo de jaulas aparecerán aquí automáticamente.
+                                    </small>
+                                }
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold" for="txtUbicacionManual">Detalle / Referencia de ubicación (opcional)</label>
+                                <input id="txtUbicacionManual" class="form-control form-control-sm" @bind="_ingreso.UbicacionJaula"
+                                       placeholder="Ej. Área Caninos, Jaula J-01, Cuidados intensivos..." maxlength="150" />
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label small fw-semibold" for="txtIndicaciones">Indicaciones de hospitalización</label>
+                                <textarea id="txtIndicaciones" class="form-control form-control-sm" rows="3" @bind="_ingreso.Indicaciones"
+                                          placeholder="Medicación inicial, frecuencia de controles, monitoreo requerido, alertas clínicas..."></textarea>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold" for="txtHidratacion">Hidratación / Fluidoterapia</label>
+                                <textarea id="txtHidratacion" class="form-control form-control-sm" rows="3" @bind="_ingreso.HidratacionFluidoterapia"
+                                          placeholder="Solución, vía, velocidad de infusión (mL/h), suplementos..."></textarea>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold" for="txtDieta">Dieta y cuidados</label>
+                                <textarea id="txtDieta" class="form-control form-control-sm" rows="3" @bind="_ingreso.DietaCuidados"
+                                          placeholder="Tipo de alimento, frecuencia, ayuno, cuidados de confort/aseo..."></textarea>
+                            </div>
+                        }
+
+                        @if (_ordenSeleccionada.RequiereCirugia)
+                        {
+                            <div class="col-12">
+                                <div class="border rounded p-3 bg-white">
+                                    <h4 class="h6 mb-2 fw-bold text-primary">
+                                        <i class="bi bi-calendar2-check me-1"></i>Programación de Cirugía (Médico encargado, fecha y hora libre)
+                                    </h4>
+                                    <ProgramacionClinica @key="_ordenSeleccionada.OrdenAtencionId"
+                                                         ModoModal="true"
+                                                         IdOrden="@_ordenSeleccionada.OrdenAtencionId"
+                                                         Nhcl="@_ordenSeleccionada.Nhcl" />
+                                </div>
+                            </div>
+                        }
+
+                        @foreach (var doc in DocumentosIngresoVisibles)
+                        {
+                            <div class="col-12">
+                                <div class="border rounded p-3 bg-light">
+                                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                                        <div>
+                                            <h4 class="h6 mb-1 fw-bold text-dark">
+                                                <i class="bi bi-file-earmark-check me-1 text-primary"></i>@doc.Titulo <span class="text-danger">*</span>
+                                                <span class="badge text-bg-dark ms-1">DEFAULT</span>
+                                            </h4>
+                                            <p class="small text-muted mb-0">
+                                                Documento oficial predeterminado del sistema (protegido contra eliminación). Puedes descargarlo/imprimirlo, editarlo o subir el escaneo firmado.
+                                            </p>
+                                        </div>
+                                        <div>
+                                            @if (!string.IsNullOrWhiteSpace(doc.Autorizacion?.ArchivoUrl))
+                                            {
+                                                <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Firmado / Escaneado adjunto</span>
+                                            }
+                                            else if (doc.Autorizacion?.AutorizacionId > 0)
+                                            {
+                                                <span class="badge text-bg-info"><i class="bi bi-file-earmark-text me-1"></i>Emitido (pendiente de firma)</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge text-bg-secondary">Listo para descargar / firmar</span>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                                        <button type="button" class="btn btn-sm btn-outline-dark" @onclick="() => ImprimirConsentimientoAsync(doc.Clave)" disabled="@_procesandoConsentimiento">
+                                            <i class="bi bi-printer-fill me-1"></i>Descargar / Imprimir PDF
+                                        </button>
+
+                                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AbrirModalEditorConsentimientoAsync(doc.Clave)" disabled="@_procesandoConsentimiento">
+                                            <i class="bi bi-pencil-square me-1"></i>Editar documento
+                                        </button>
+
+                                        <label class="btn btn-sm btn-outline-success mb-0" style="cursor: pointer;">
+                                            <i class="bi bi-cloud-arrow-up-fill me-1"></i>@(string.IsNullOrWhiteSpace(doc.Autorizacion?.ArchivoUrl) ? "Subir firmado (PDF / Foto)" : "Reemplazar firmado")
+                                            <InputFile OnChange="@(e => SubirConsentimientoFirmadoAsync(e, doc.Clave))" accept="image/*,application/pdf,.doc,.docx" style="display: none;" />
+                                        </label>
+
+                                        @if (!string.IsNullOrWhiteSpace(doc.Autorizacion?.ArchivoUrl))
+                                        {
+                                            <a class="btn btn-sm btn-link text-decoration-none fw-semibold" href="@doc.Autorizacion.ArchivoUrl" target="_blank" rel="noopener">
+                                                <i class="bi bi-paperclip me-1"></i>Ver escaneo (@doc.Autorizacion.ArchivoNombre)
+                                            </a>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="ingreso-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="d-flex flex-wrap gap-2">
+                        @if (_ordenSeleccionada.YaIngresado)
+                        {
+                            @if (Permisos.Permite("/hospitalizacion/ficha"))
+                            {
+                                <a class="btn btn-sm btn-outline-primary" href="/hospitalizacion/ficha/@_ordenSeleccionada.OrdenAtencionId/@_ordenSeleccionada.Nhcl">Ir a Ficha 24h</a>
+                            }
+                            @if (Permisos.Permite("/kardex/enfermeria"))
+                            {
+                                <a class="btn btn-sm btn-outline-primary" href="/kardex/enfermeria?orden=@_ordenSeleccionada.OrdenAtencionId&nhcl=@_ordenSeleccionada.Nhcl">Ir a Kardex</a>
+                            }
+                            @if (Permisos.Permite("/kardex/signos"))
+                            {
+                                <a class="btn btn-sm btn-outline-primary" href="/kardex/signos/@_ordenSeleccionada.OrdenAtencionId/@_ordenSeleccionada.Nhcl">Ir a Signos</a>
+                            }
+                        }
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary" disabled="@IngresoOcupado" @onclick="CancelarIngresoAsync">Cancelar</button>
+                        <button type="button" class="btn btn-primary bandeja-confirmar" disabled="@IngresoOcupado" @onclick="GuardarIngresoAsync">
+                            @if (_guardando)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                <span>Guardando...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-check2-circle me-1"></i>
+                                <span>@(_ordenSeleccionada.YaIngresado ? "Actualizar ingreso" : "Guardar e iniciar ingreso")</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        }
+    </dialog>
+}
+
 @if (_mostrarModalConsentimiento && _ordenSeleccionada is not null)
 {
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.55);" role="dialog" aria-modal="true" aria-labelledby="modalConsentimientoTitulo">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <dialog class="bandeja-dialog bandeja-dialog-editor" @ref="_dialogConsentimiento" aria-labelledby="modalConsentimientoTitulo">
+        <div class="modal-dialog modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header py-2">
                     <h5 class="modal-title fw-bold" id="modalConsentimientoTitulo">
                         <i class="bi bi-file-earmark-richtext me-1 text-primary"></i>Editar Consentimiento de Hospitalización — @_ordenSeleccionada.Paciente
                     </h5>
-                    <button type="button" class="btn-close" @onclick="CerrarModalEditorConsentimiento" aria-label="Cerrar"></button>
+                    <button type="button" class="btn-close" autofocus disabled="@_procesandoConsentimiento" @onclick="CancelarConsentimientoAsync" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body">
+                    @if (!string.IsNullOrWhiteSpace(_mensajeAlerta))
+                    {
+                        <div class="alert @(_esError ? "alert-danger" : "alert-success") py-2 small" role="alert">@_mensajeAlerta</div>
+                    }
                     <div class="mb-2">
                         <label class="form-label small fw-semibold" for="txtTituloConsentimiento">Título del documento</label>
                         <input id="txtTituloConsentimiento" class="form-control form-control-sm" @bind="_tituloConsentimiento" maxlength="150" />
@@ -512,14 +515,14 @@
                     </div>
                 </div>
                 <div class="modal-footer py-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CerrarModalEditorConsentimiento">Cancelar</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelarConsentimientoAsync" disabled="@_procesandoConsentimiento">Cancelar</button>
                     <button type="button" class="btn btn-sm btn-primary" @onclick="GuardarConsentimientoDesdeModalAsync" disabled="@_procesandoConsentimiento">
                         <i class="bi bi-floppy-fill me-1"></i>Guardar documento
                     </button>
                 </div>
             </div>
         </div>
-    </div>
+    </dialog>
 }
 
 @if (_ordenModal is not null)
@@ -964,10 +967,6 @@
         color: #fff;
     }
 
-    .hosp-list-wrapper {
-        overflow: visible !important;
-    }
-
     .orders-actions-cell {
         overflow: visible !important;
     }
@@ -1315,6 +1314,8 @@
         _ordenes.Where(x => !x.YaIngresado);
     private IEnumerable<OrdenHospitalizacionColaDto> Hospitalizados =>
         _ordenes.Where(x => x.YaIngresado);
+    private int IngresosEnProceso => _ordenSeleccionada is { YaIngresado: false } orden &&
+        PendientesIngreso.Any(x => x.OrdenAtencionId == orden.OrdenAtencionId) ? 1 : 0;
 
     private sealed class DocIngresoEstado
     {
@@ -1353,6 +1354,11 @@
     private string _htmlConsentimiento = string.Empty;
     private bool _cargando;
     private bool _cargandoIngreso;
+    private bool _falloCargaIngreso;
+    private bool _abrirDialogIngreso;
+    private ElementReference _dialogIngreso;
+    private ElementReference _dialogConsentimiento;
+    private bool IngresoOcupado => _cargandoIngreso || _guardando || _procesandoConsentimiento;
     private bool _guardando;
     private bool _procesandoConsentimiento;
     private bool _mostrarModalConsentimiento;
@@ -1404,9 +1410,13 @@
 
     private async Task SeleccionarParaIngresoAsync(OrdenHospitalizacionColaDto item)
     {
+        if (_ordenSeleccionada is not null) return;
+
         _mensajeAlerta = null;
         _esError = false;
+        _falloCargaIngreso = false;
         _ordenSeleccionada = item;
+        _abrirDialogIngreso = true;
         _cargandoIngreso = true;
         try
         {
@@ -1416,6 +1426,7 @@
         }
         catch (Exception ex)
         {
+            _falloCargaIngreso = true;
             _esError = true;
             _mensajeAlerta = $"No se pudo cargar el ingreso: {ex.Message}";
         }
@@ -1425,8 +1436,17 @@
         }
     }
 
-    private void CerrarPanelIngreso()
+    private async Task CancelarIngresoAsync()
     {
+        if (IngresoOcupado) return;
+
+        _mensajeAlerta = null;
+        await CerrarPanelIngresoAsync();
+    }
+
+    private async Task CerrarPanelIngresoAsync()
+    {
+        await JS.InvokeVoidAsync("hosvetDialog.close", _dialogIngreso);
         _ordenSeleccionada = null;
         _ingreso = new();
         _htmlConsentimiento = string.Empty;
@@ -1587,9 +1607,16 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_abrirDialogIngreso && _ordenSeleccionada is not null)
+        {
+            _abrirDialogIngreso = false;
+            await JS.InvokeVoidAsync("hosvetDialog.open", _dialogIngreso);
+        }
+
         if (_inicializarEditorModal && _mostrarModalConsentimiento)
         {
             _inicializarEditorModal = false;
+            await JS.InvokeVoidAsync("hosvetDialog.open", _dialogConsentimiento);
             await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorConsentimientoHosp", _htmlConsentimiento);
         }
     }
@@ -1681,6 +1708,7 @@
     private void AbrirModalEditorConsentimientoAsync(string clave)
     {
         if (!_docsIngreso.TryGetValue(clave, out var doc)) return;
+        _mensajeAlerta = null;
         _claveDocEditando = clave;
         _tituloConsentimiento = doc.Titulo;
         _htmlConsentimiento = doc.Html;
@@ -1688,8 +1716,13 @@
         _inicializarEditorModal = true;
     }
 
-    private void CerrarModalEditorConsentimiento()
+    private Task CancelarConsentimientoAsync() => _procesandoConsentimiento
+        ? Task.CompletedTask
+        : CerrarModalEditorConsentimientoAsync();
+
+    private async Task CerrarModalEditorConsentimientoAsync()
     {
+        await JS.InvokeVoidAsync("hosvetDialog.close", _dialogConsentimiento);
         _mostrarModalConsentimiento = false;
         _inicializarEditorModal = false;
     }
@@ -1721,7 +1754,7 @@
                 await AsegurarAutorizacionGuardadaAsync(_claveDocEditando);
             }
 
-            _mostrarModalConsentimiento = false;
+            await CerrarModalEditorConsentimientoAsync();
             _mensajeAlerta = $"Documento '{doc.Titulo}' guardado correctamente.";
         }
         catch (Exception ex)
@@ -1830,7 +1863,7 @@
 
     private async Task GuardarIngresoAsync()
     {
-        if (_ordenSeleccionada is null) return;
+        if (_ordenSeleccionada is null || IngresoOcupado || _falloCargaIngreso) return;
 
         _mensajeAlerta = null;
         _esError = false;
@@ -1874,8 +1907,8 @@
             await HospService.GuardarIngresoHospitalizacionAsync(_ingreso, Session.IdUser);
             await Task.WhenAll(CargarColaAsync(), CargarJaulasAsync());
 
-            CerrarPanelIngreso();
-            _mensajeAlerta = $"Hospitalización iniciada/actualizada para {pacienteNombre} (Orden #{ordenId}).";
+            await CerrarPanelIngresoAsync();
+            _mensajeAlerta = $"Ingreso guardado para {pacienteNombre} (Orden #{ordenId}).";
         }
         catch (Exception ex)
         {

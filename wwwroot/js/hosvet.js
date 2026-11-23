@@ -1029,3 +1029,16 @@ window.hosvetDraft = {
         }
     }, true);
 })();
+window.hosvetDialog = {
+    open(dialog) {
+        if (!dialog || dialog.open) return;
+        dialog.oncancel = (event) => {
+            event.preventDefault();
+            dialog.querySelector(".btn-close")?.click();
+        };
+        dialog.showModal();
+    },
+    close(dialog) {
+        dialog?.close();
+    }
+};
