@@ -7,6 +7,7 @@
 @inject IGestionMigradaService GestionService
 @inject IConsultaExternaService ConsultaService
 @inject IInventarioService InventarioService
+@inject IFarmaciaService FarmaciaService
 @inject SessionStateService Session
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -330,7 +331,7 @@ else if (_paciente != null)
                     <div class="table-responsive" style="overflow: visible;">
                         <table class="table table-sm table-bordered align-middle mb-0 small">
                             <thead class="table-light">
-                                <tr><th>Fármaco (stock)</th><th style="width:17%;">Dosis</th><th style="width:14%;">Ruta</th><th style="width:15%;">Hora</th><th style="width:19%;">Efecto</th><th style="width:32px;" class="no-print"></th></tr>
+                                <tr><th>Fármaco (stock)</th><th style="width:15%;">Dosis</th><th style="width:13%;">Cant.</th><th style="width:12%;">Ruta</th><th style="width:13%;">Hora</th><th style="width:15%;">Efecto</th><th style="width:60px;" class="no-print text-center">Inv.</th></tr>
                             </thead>
                             <tbody>
                                 @for (int i = 0; i < _dto.Premedicacion.Count; i++)
@@ -342,7 +343,7 @@ else if (_paciente != null)
                                     <tr>
                                         <td class="position-relative">
                                             <input type="text" class="form-control form-control-sm border-0" autocomplete="off"
-                                                   placeholder="Buscar en stock..."
+                                                   placeholder="Buscar en stock..." disabled="@item.DescargadoInventario"
                                                    @bind="item.Farmaco" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync"
                                                    @onfocus="() => AbrirSugerenciasPremedAsync(idx)"
                                                    @onblur="CerrarSugerenciasPremedAsync" />
@@ -369,10 +370,21 @@ else if (_paciente != null)
                                             }
                                         </td>
                                         <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Dosis" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm border-0 text-center" disabled="@item.DescargadoInventario" @bind="item.CantidadDescarga" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="@(string.IsNullOrWhiteSpace(item.UnidadMedida) ? "0" : item.UnidadMedida)" /></td>
                                         <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Ruta" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="IM/IV" /></td>
                                         <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Hora" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="08:00" /></td>
                                         <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Efecto" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
-                                        <td class="text-center no-print">
+                                        <td class="text-center no-print text-nowrap">
+                                            @if (item.DescargadoInventario)
+                                            {
+                                                <span class="badge text-bg-success" title="Descargado del inventario"><i class="bi bi-check-lg"></i></span>
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(item.IdProductoStock))
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-success py-0 px-1 me-1" disabled="@_descargandoStock"
+                                                        title="Descargar del inventario (@item.UnidadMedida)"
+                                                        @onclick="() => DescargarPremedicacionAsync(idx)"><i class="bi bi-box-arrow-down"></i></button>
+                                            }
                                             <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" disabled="@(!puedeQuitar)"
                                                     title="@(puedeQuitar ? "Quitar fila vacía" : "Solo se pueden quitar filas vacías")"
                                                     @onclick="() => QuitarPremedicacionAsync(idx)">×</button>
@@ -396,7 +408,7 @@ else if (_paciente != null)
                     <div class="table-responsive mb-2" style="overflow: visible;">
                         <table class="table table-sm table-bordered align-middle mb-0 small">
                             <thead class="table-light">
-                                <tr><th>Fármaco (stock)</th><th style="width:20%;">Dosis</th><th style="width:17%;">Ruta</th><th style="width:17%;">Hora</th><th style="width:32px;" class="no-print"></th></tr>
+                                <tr><th>Fármaco (stock)</th><th style="width:17%;">Dosis</th><th style="width:14%;">Cant.</th><th style="width:14%;">Ruta</th><th style="width:14%;">Hora</th><th style="width:60px;" class="no-print text-center">Inv.</th></tr>
                             </thead>
                             <tbody>
                                 @for (int i = 0; i < _dto.Induccion.Count; i++)
@@ -408,7 +420,7 @@ else if (_paciente != null)
                                     <tr>
                                         <td class="position-relative">
                                             <input type="text" class="form-control form-control-sm border-0" autocomplete="off"
-                                                   placeholder="Buscar en stock..."
+                                                   placeholder="Buscar en stock..." disabled="@item.DescargadoInventario"
                                                    @bind="item.Farmaco" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync"
                                                    @onfocus="() => AbrirSugerenciasInducAsync(idx)"
                                                    @onblur="CerrarSugerenciasInducAsync" />
@@ -435,9 +447,20 @@ else if (_paciente != null)
                                             }
                                         </td>
                                         <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Dosis" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm border-0 text-center" disabled="@item.DescargadoInventario" @bind="item.CantidadDescarga" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="@(string.IsNullOrWhiteSpace(item.UnidadMedida) ? "0" : item.UnidadMedida)" /></td>
                                         <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Ruta" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="IV" /></td>
                                         <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Hora" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="08:15" /></td>
-                                        <td class="text-center no-print">
+                                        <td class="text-center no-print text-nowrap">
+                                            @if (item.DescargadoInventario)
+                                            {
+                                                <span class="badge text-bg-success" title="Descargado del inventario"><i class="bi bi-check-lg"></i></span>
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(item.IdProductoStock))
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-success py-0 px-1 me-1" disabled="@_descargandoStock"
+                                                        title="Descargar del inventario (@item.UnidadMedida)"
+                                                        @onclick="() => DescargarInduccionAsync(idx)"><i class="bi bi-box-arrow-down"></i></button>
+                                            }
                                             <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" disabled="@(!puedeQuitar)"
                                                     title="@(puedeQuitar ? "Quitar fila vacía" : "Solo se pueden quitar filas vacías")"
                                                     @onclick="() => QuitarInduccionAsync(idx)">×</button>
@@ -515,8 +538,12 @@ else if (_paciente != null)
                     <span><strong style="color:#ea580c;">▲</strong> ETCO₂</span>
                 </div>
             </div>
-            <div class="d-flex gap-2 no-print">
-                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AutollenarHoras5MinAsync">⏱ Autollenar +5 min</button>
+            <div class="d-flex flex-wrap align-items-center gap-2 no-print">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Intervalo de autollenado">
+                    <button type="button" class="btn btn-outline-primary px-2 fw-bold" @onclick="DisminuirPasoMinutosAsync" disabled="@(_pasoMinutos <= 5)" title="Restar 5 min (mínimo 5 min)">−</button>
+                    <button type="button" class="btn btn-outline-primary" @onclick="AutollenarHorasAsync" title="Autollenar horas cada @_pasoMinutos min">⏱ Autollenar +@_pasoMinutos min</button>
+                    <button type="button" class="btn btn-outline-primary px-2 fw-bold" @onclick="AumentarPasoMinutosAsync" disabled="@(_pasoMinutos >= 30)" title="Sumar 5 min (máximo 30 min)">+</button>
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AgregarIntervaloAsync">+ Columna</button>
             </div>
         </div>
@@ -623,8 +650,8 @@ else if (_paciente != null)
                             @for (int i = 0; i < _dto.Intervalos.Count; i++)
                             {
                                 var idx = i;
-                                <th class="@((idx + 1) % 3 == 0 ? "table-secondary" : "")">
-                                    <input type="text" class="form-control form-control-sm border-0 bg-transparent text-center fw-bold p-0" @bind="_dto.Intervalos[idx].Hora" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="@($"T{idx + 1}")" />
+                                <th class="text-center fw-bold @((idx + 1) % 3 == 0 ? "table-secondary" : "")" style="user-select:none;">
+                                    @(string.IsNullOrWhiteSpace(_dto.Intervalos[idx].Hora) ? $"T{idx + 1}" : _dto.Intervalos[idx].Hora)
                                 </th>
                             }
                         </tr>
@@ -658,12 +685,60 @@ else if (_paciente != null)
                 </div>
                 <div class="card-body small d-flex flex-column gap-3">
                     <div>
-                        <label class="form-label fw-semibold mb-1">Fluidos (mL/kg/h)</label>
-                        @foreach (var fl in _dto.Fluidos)
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-semibold mb-0">Fluidos (stock / mL/kg/h)</label>
+                            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 no-print" @onclick="AgregarFluidoAsync">+ Fila</button>
+                        </div>
+                        @for (int i = 0; i < _dto.Fluidos.Count; i++)
                         {
-                            <div class="input-group input-group-sm mb-1">
-                                <input type="text" class="form-control" @bind="fl.TipoFluido" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ej: Lactato Ringer" />
-                                <input type="text" class="form-control" style="max-width:95px;" @bind="fl.VelocidadMlKgH" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="mL/kg/h" />
+                            var idx = i;
+                            var fl = _dto.Fluidos[idx];
+                            var puedeQuitarFl = _dto.Fluidos.Count > 1 && EsFilaFluidoVacia(fl);
+                            var sugFl = _sugFluidoIdx == idx ? FiltrarStock(fl.TipoFluido) : [];
+                            <div class="input-group input-group-sm mb-1 position-relative">
+                                <input type="text" class="form-control" autocomplete="off" disabled="@fl.DescargadoInventario"
+                                       @bind="fl.TipoFluido" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync"
+                                       @onfocus="() => AbrirSugerenciasFluidoAsync(idx)"
+                                       @onblur="CerrarSugerenciasFluidoAsync"
+                                       placeholder="Buscar fluido en stock..." />
+                                <input type="text" class="form-control" style="max-width:74px;" @bind="fl.VelocidadMlKgH" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="mL/kg/h" title="Velocidad (mL/kg/h)" />
+                                <input type="number" step="0.01" min="0" class="form-control text-center" style="max-width:68px;" disabled="@fl.DescargadoInventario"
+                                       @bind="fl.CantidadDescarga" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync"
+                                       placeholder="@(string.IsNullOrWhiteSpace(fl.UnidadMedida) ? "Cant." : fl.UnidadMedida)" title="Cantidad a descargar del inventario" />
+                                @if (fl.DescargadoInventario)
+                                {
+                                    <span class="input-group-text bg-success text-white px-2" title="Descargado del inventario"><i class="bi bi-check-lg"></i></span>
+                                }
+                                else if (!string.IsNullOrWhiteSpace(fl.IdProductoStock))
+                                {
+                                    <button type="button" class="btn btn-outline-success px-2 no-print" disabled="@_descargandoStock"
+                                            title="Descargar del inventario (@fl.UnidadMedida)"
+                                            @onclick="() => DescargarFluidoAsync(idx)"><i class="bi bi-box-arrow-down"></i></button>
+                                }
+                                <button type="button" class="btn btn-outline-danger px-2 no-print" disabled="@(!puedeQuitarFl)"
+                                        title="@(puedeQuitarFl ? "Quitar fila vacía" : "Solo se pueden quitar filas vacías")"
+                                        @onclick="() => QuitarFluidoAsync(idx)">×</button>
+                                @if (_sugFluidoIdx == idx)
+                                {
+                                    <div class="list-group position-absolute start-0 top-100 bg-white border rounded shadow-sm mt-1 w-100" style="z-index:1060; max-height:190px; overflow-y:auto;">
+                                        @if (sugFl.Count == 0)
+                                        {
+                                            <div class="list-group-item py-1 px-2 text-muted small">Sin bienes en stock para "@fl.TipoFluido"</div>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var prod in sugFl)
+                                            {
+                                                var p = prod;
+                                                <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center gap-2 text-start"
+                                                        @onmousedown="() => SeleccionarStockFluidoAsync(idx, p)">
+                                                    <span class="text-truncate">@p.DisplayName</span>
+                                                    <span class="badge text-bg-success text-nowrap">@p.Available.ToString("N2") @p.BaseUnitOfMeasureCode</span>
+                                                </button>
+                                            }
+                                        }
+                                    </div>
+                                }
                             </div>
                         }
                     </div>
@@ -816,9 +891,12 @@ else if (_paciente != null)
     private bool _cambiandoProc;
     private string _procPendienteTexto = string.Empty;
     private int? _procPendienteId;
+    private int _pasoMinutos = 5;
     private int _localidadStockCargada;
     private int _sugPremedIdx = -1;
     private int _sugInducIdx = -1;
+    private int _sugFluidoIdx = -1;
+    private bool _descargandoStock;
     private PacienteHeaderDto? _paciente;
     private MonitorizacionAnestesiaDto _dto = new();
 
@@ -1128,7 +1206,18 @@ else if (_paciente != null)
     private async Task SetEspecieVolemiaAsync(string tipo) { _dto.EspecieVolemia = tipo; await GuardarBorradorAutoAsync(); }
     private async Task AgregarPremedicacionAsync() { _dto.Premedicacion.Add(new()); await GuardarBorradorAutoAsync(); }
     private async Task AgregarInduccionAsync() { _dto.Induccion.Add(new()); await GuardarBorradorAutoAsync(); }
-    private async Task AgregarIntervaloAsync() { _dto.Intervalos.Add(new()); await GuardarBorradorAutoAsync(); }
+    private async Task AgregarFluidoAsync() { _dto.Fluidos.Add(new()); await GuardarBorradorAutoAsync(); }
+    private async Task AgregarIntervaloAsync()
+    {
+        var nuevo = new IntervaloMonitorizacionAvaDto();
+        if (_dto.Intervalos.Count > 0 && TimeSpan.TryParse(_dto.Intervalos[^1].Hora, out var ultimaHora))
+        {
+            var sig = ultimaHora.Add(TimeSpan.FromMinutes(_pasoMinutos));
+            nuevo.Hora = $"{sig.Hours:D2}:{sig.Minutes:D2}";
+        }
+        _dto.Intervalos.Add(nuevo);
+        await GuardarBorradorAutoAsync();
+    }
 
     private static bool EsFilaPremedicacionVacia(FarmacoPremedicacionAvaDto x) =>
         string.IsNullOrWhiteSpace(x.Farmaco) && string.IsNullOrWhiteSpace(x.Dosis) &&
@@ -1157,10 +1246,25 @@ else if (_paciente != null)
         await GuardarBorradorAutoAsync();
     }
 
-    private async Task AsegurarCatalogoStockAsync()
+    private static bool EsFilaFluidoVacia(FluidoAnestesiaAvaDto x) =>
+        !x.DescargadoInventario &&
+        string.IsNullOrWhiteSpace(x.TipoFluido) &&
+        string.IsNullOrWhiteSpace(x.VelocidadMlKgH) &&
+        !x.CantidadDescarga.HasValue;
+
+    private async Task QuitarFluidoAsync(int idx)
+    {
+        if (_dto.Fluidos.Count <= 1 || idx < 0 || idx >= _dto.Fluidos.Count) return;
+        if (!EsFilaFluidoVacia(_dto.Fluidos[idx])) return;
+        _dto.Fluidos.RemoveAt(idx);
+        _sugFluidoIdx = -1;
+        await GuardarBorradorAutoAsync();
+    }
+
+    private async Task AsegurarCatalogoStockAsync(bool forzar = false)
     {
         var sede = Session.Localidad > 0 ? Session.Localidad : 1;
-        if (_catalogoStock.Count > 0 && _localidadStockCargada == sede) return;
+        if (!forzar && _catalogoStock.Count > 0 && _localidadStockCargada == sede) return;
         try
         {
             var lista = await InventarioService.BuscarMedicamentosConStockAsync(string.Empty, sede, Session.Apostrofe);
@@ -1187,7 +1291,14 @@ else if (_paciente != null)
     {
         if (idx >= 0 && idx < _dto.Premedicacion.Count)
         {
-            _dto.Premedicacion[idx].Farmaco = prod.DisplayName;
+            var it = _dto.Premedicacion[idx];
+            it.Farmaco = prod.DisplayName;
+            it.IdProductoStock = prod.Id;
+            it.CodigoProd = prod.Number;
+            it.Bodega = prod.Location;
+            it.UnidadMedida = prod.BaseUnitOfMeasureCode;
+            it.PrecioUnitario = prod.UnitPrice;
+            if (!it.CantidadDescarga.HasValue || it.CantidadDescarga <= 0) it.CantidadDescarga = 1m;
             _sugPremedIdx = -1;
             await GuardarBorradorAutoAsync();
         }
@@ -1199,9 +1310,167 @@ else if (_paciente != null)
     {
         if (idx >= 0 && idx < _dto.Induccion.Count)
         {
-            _dto.Induccion[idx].Farmaco = prod.DisplayName;
+            var it = _dto.Induccion[idx];
+            it.Farmaco = prod.DisplayName;
+            it.IdProductoStock = prod.Id;
+            it.CodigoProd = prod.Number;
+            it.Bodega = prod.Location;
+            it.UnidadMedida = prod.BaseUnitOfMeasureCode;
+            it.PrecioUnitario = prod.UnitPrice;
+            if (!it.CantidadDescarga.HasValue || it.CantidadDescarga <= 0) it.CantidadDescarga = 1m;
             _sugInducIdx = -1;
             await GuardarBorradorAutoAsync();
+        }
+    }
+
+    private async Task AbrirSugerenciasFluidoAsync(int idx) { await AsegurarCatalogoStockAsync(); _sugFluidoIdx = idx; }
+    private async Task CerrarSugerenciasFluidoAsync() { await Task.Delay(160); _sugFluidoIdx = -1; }
+    private async Task SeleccionarStockFluidoAsync(int idx, FarmacoStockDto prod)
+    {
+        if (idx >= 0 && idx < _dto.Fluidos.Count)
+        {
+            var fl = _dto.Fluidos[idx];
+            fl.TipoFluido = prod.DisplayName;
+            fl.IdProductoStock = prod.Id;
+            fl.CodigoProd = prod.Number;
+            fl.Bodega = prod.Location;
+            fl.UnidadMedida = prod.BaseUnitOfMeasureCode;
+            fl.PrecioUnitario = prod.UnitPrice;
+            if (!fl.CantidadDescarga.HasValue || fl.CantidadDescarga <= 0) fl.CantidadDescarga = 1m;
+            _sugFluidoIdx = -1;
+            await GuardarBorradorAutoAsync();
+        }
+    }
+
+    private async Task DescargarPremedicacionAsync(int idx)
+    {
+        if (idx < 0 || idx >= _dto.Premedicacion.Count) return;
+        var it = _dto.Premedicacion[idx];
+        var ok = await DescargarDeInventarioAsync(
+            it.IdProductoStock, it.CodigoProd, it.Farmaco, it.Bodega, it.UnidadMedida, it.PrecioUnitario,
+            it.CantidadDescarga, it.Ruta, it.Hora, "MonAnestesia-Premed", $"Dosis: {it.Dosis} · {it.Efecto}".Trim());
+        if (ok)
+        {
+            it.DescargadoInventario = true;
+            await GuardarBorradorAutoAsync();
+        }
+    }
+
+    private async Task DescargarInduccionAsync(int idx)
+    {
+        if (idx < 0 || idx >= _dto.Induccion.Count) return;
+        var it = _dto.Induccion[idx];
+        var ok = await DescargarDeInventarioAsync(
+            it.IdProductoStock, it.CodigoProd, it.Farmaco, it.Bodega, it.UnidadMedida, it.PrecioUnitario,
+            it.CantidadDescarga, it.Ruta, it.Hora, "MonAnestesia-Induc", $"Dosis: {it.Dosis}".Trim());
+        if (ok)
+        {
+            it.DescargadoInventario = true;
+            await GuardarBorradorAutoAsync();
+        }
+    }
+
+    private async Task DescargarFluidoAsync(int idx)
+    {
+        if (idx < 0 || idx >= _dto.Fluidos.Count) return;
+        var fl = _dto.Fluidos[idx];
+        var ok = await DescargarDeInventarioAsync(
+            fl.IdProductoStock, fl.CodigoProd, fl.TipoFluido, fl.Bodega, fl.UnidadMedida, fl.PrecioUnitario,
+            fl.CantidadDescarga, "IV", DateTime.Now.ToString("HH:mm"), "MonAnestesia-Fluidos", $"Velocidad: {fl.VelocidadMlKgH} mL/kg/h");
+        if (ok)
+        {
+            fl.DescargadoInventario = true;
+            await GuardarBorradorAutoAsync();
+        }
+    }
+
+    private async Task<bool> DescargarDeInventarioAsync(
+        string idProductoStock, string codigoProd, string nombreProd, string bodega, string unidad,
+        decimal precio, decimal? cantidad, string via, string hora, string modulo, string indicaciones)
+    {
+        if (_paciente == null || IdOrden <= 0 || Nhcl <= 0) return false;
+        if (string.IsNullOrWhiteSpace(idProductoStock) || string.IsNullOrWhiteSpace(codigoProd))
+        {
+            _esError = true;
+            _mensajeAlerta = "Seleccione primero un producto con stock disponible.";
+            return false;
+        }
+        var cant = cantidad ?? 0m;
+        if (cant <= 0m)
+        {
+            _esError = true;
+            _mensajeAlerta = "Ingrese una cantidad mayor a cero para descargar del inventario.";
+            return false;
+        }
+
+        _descargandoStock = true;
+        try
+        {
+            await AsegurarCatalogoStockAsync(forzar: true);
+            var itemStock = _catalogoStock.FirstOrDefault(x => x.Id == idProductoStock || x.Number == codigoProd);
+            if (itemStock == null || itemStock.Available < cant)
+            {
+                _esError = true;
+                var disp = itemStock?.Available ?? 0m;
+                _mensajeAlerta = $"Stock insuficiente para {nombreProd} (disponible: {disp:N2} {unidad}, solicitado: {cant:N2}).";
+                return false;
+            }
+
+            var sede = Session.Localidad > 0 ? Session.Localidad : 1;
+            var idUsuario = Session.CurrentUser?.IdUsuario ?? 1;
+            var prodQui = new ProductoQuirofanoDto
+            {
+                OrdenId = IdOrden,
+                Nhcl = Nhcl,
+                CodigoProd = codigoProd,
+                ProdDescripcion = nombreProd,
+                PrecioProd = precio,
+                StockProd = (int)Math.Ceiling(itemStock.Available),
+                CantProd = cant,
+                Via = string.IsNullOrWhiteSpace(via) ? "IV" : via,
+                Hora = string.IsNullOrWhiteSpace(hora) ? DateTime.Now.ToString("HH:mm") : hora,
+                IndicacionesProd = indicaciones,
+                Modulo = modulo,
+                MedBodega = string.IsNullOrWhiteSpace(bodega) ? itemStock.Location : bodega,
+                MedMedida = string.IsNullOrWhiteSpace(unidad) ? itemStock.BaseUnitOfMeasureCode : unidad,
+                Iniciales = Session.CurrentUser?.Iniciales ?? "AN",
+                Funcion = "Anestesiólogo",
+                Funcionario = Session.CurrentUser?.NombreCompleto ?? "Anestesiólogo"
+            };
+
+            var okQui = await QuirofanoService.AgregarProductoQuirofanoAsync(prodQui, idUsuario, sede, "QUI");
+            if (!okQui)
+            {
+                _esError = true;
+                _mensajeAlerta = $"No se pudo registrar {nombreProd} en el consumo de quirófano.";
+                return false;
+            }
+
+            await FarmaciaService.ReservarStockDirectoAsync(
+                idProductoStock,
+                codigoProd,
+                cant,
+                sede,
+                IdOrden,
+                Nhcl,
+                idUsuario,
+                modulo,
+                prodQui.MedBodega);
+
+            await AsegurarCatalogoStockAsync(forzar: true);
+            _esError = false;
+            _mensajeAlerta = $"{nombreProd} ({cant:0.##} {prodQui.MedMedida}) enviado a Farmacia y reservado del inventario.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al descargar del inventario: {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            _descargandoStock = false;
         }
     }
 
@@ -1313,7 +1582,21 @@ else if (_paciente != null)
         await GuardarBorradorAutoAsync();
     }
 
-    private async Task AutollenarHoras5MinAsync()
+    private async Task DisminuirPasoMinutosAsync()
+    {
+        if (_pasoMinutos <= 5) return;
+        _pasoMinutos = Math.Max(5, _pasoMinutos - 5);
+        await AutollenarHorasAsync();
+    }
+
+    private async Task AumentarPasoMinutosAsync()
+    {
+        if (_pasoMinutos >= 30) return;
+        _pasoMinutos = Math.Min(30, _pasoMinutos + 5);
+        await AutollenarHorasAsync();
+    }
+
+    private async Task AutollenarHorasAsync()
     {
         if (_dto.Intervalos.Count == 0) return;
         var baseHora = TimeSpan.TryParse(_dto.Intervalos[0].Hora, out var parsed)
@@ -1322,7 +1605,7 @@ else if (_paciente != null)
 
         for (int i = 0; i < _dto.Intervalos.Count; i++)
         {
-            var h = baseHora.Add(TimeSpan.FromMinutes(i * 5));
+            var h = baseHora.Add(TimeSpan.FromMinutes(i * _pasoMinutos));
             _dto.Intervalos[i].Hora = $"{h.Hours:D2}:{h.Minutes:D2}";
         }
         await GuardarBorradorAutoAsync();

@@ -554,6 +554,13 @@ public class FarmacoPremedicacionAvaDto
     public string Ruta { get; set; } = string.Empty;
     public string Hora { get; set; } = string.Empty;
     public string Efecto { get; set; } = string.Empty;
+    public string IdProductoStock { get; set; } = string.Empty;
+    public string CodigoProd { get; set; } = string.Empty;
+    public string Bodega { get; set; } = string.Empty;
+    public string UnidadMedida { get; set; } = string.Empty;
+    public decimal PrecioUnitario { get; set; }
+    public decimal? CantidadDescarga { get; set; }
+    public bool DescargadoInventario { get; set; }
 }
 
 public class FarmacoInduccionAvaDto
@@ -562,12 +569,26 @@ public class FarmacoInduccionAvaDto
     public string Dosis { get; set; } = string.Empty;
     public string Ruta { get; set; } = string.Empty;
     public string Hora { get; set; } = string.Empty;
+    public string IdProductoStock { get; set; } = string.Empty;
+    public string CodigoProd { get; set; } = string.Empty;
+    public string Bodega { get; set; } = string.Empty;
+    public string UnidadMedida { get; set; } = string.Empty;
+    public decimal PrecioUnitario { get; set; }
+    public decimal? CantidadDescarga { get; set; }
+    public bool DescargadoInventario { get; set; }
 }
 
 public class FluidoAnestesiaAvaDto
 {
     public string TipoFluido { get; set; } = string.Empty;
     public string VelocidadMlKgH { get; set; } = string.Empty;
+    public string IdProductoStock { get; set; } = string.Empty;
+    public string CodigoProd { get; set; } = string.Empty;
+    public string Bodega { get; set; } = string.Empty;
+    public string UnidadMedida { get; set; } = string.Empty;
+    public decimal PrecioUnitario { get; set; }
+    public decimal? CantidadDescarga { get; set; }
+    public bool DescargadoInventario { get; set; }
 }
 
 public class IntervaloMonitorizacionAvaDto
