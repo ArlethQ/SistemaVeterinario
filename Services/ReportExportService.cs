@@ -1438,12 +1438,11 @@ public class ReportExportService : IReportExportService
                         AddRow("Terapia Farmacológica Previa", pre.TerapiaAnterior);
                     });
 
-                    col.Item().PaddingTop(8).PaddingBottom(4).Text("3. MEDICACIÓN PRE-ANESTÉSICA ADMINISTRADA").Bold().FontColor(Colors.Blue.Darken3);
+                    col.Item().PaddingTop(8).PaddingBottom(4).Text("3. MEDICACIÓN PRE-ANESTÉSICA").Bold().FontColor(Colors.Blue.Darken3);
                     col.Item().Table(t =>
                     {
                         t.ColumnsDefinition(c =>
                         {
-                            c.RelativeColumn(1.2f);
                             c.RelativeColumn(3f);
                             c.RelativeColumn(1f);
                             c.RelativeColumn(1f);
@@ -1451,15 +1450,13 @@ public class ReportExportService : IReportExportService
                         });
                         t.Header(h =>
                         {
-                            h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).Text("Fecha/Hora").Bold();
                             h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).Text("Fármaco / Insumo").Bold();
                             h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).AlignCenter().Text("Cant.").Bold();
                             h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).AlignCenter().Text("Vía").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).Text("Dosis / Indicaciones").Bold();
+                            h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(3).Text("Observaciones / Indicaciones").Bold();
                         });
                         foreach (var m in premedicacion)
                         {
-                            t.Cell().Border(0.5f).Padding(2.5f).Text($"{m.Fecha:dd/MM} {m.Hora}");
                             t.Cell().Border(0.5f).Padding(2.5f).Text(m.ProdDescripcion);
                             t.Cell().Border(0.5f).Padding(2.5f).AlignCenter().Text($"{m.CantProd:N2}");
                             t.Cell().Border(0.5f).Padding(2.5f).AlignCenter().Text(m.Via);

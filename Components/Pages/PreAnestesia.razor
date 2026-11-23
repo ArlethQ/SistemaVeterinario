@@ -340,7 +340,7 @@ else
                             }
                         </div>
 
-                        <div class="col-6 col-md-3">
+                        <div class="col-6">
                             <label class="form-label mb-1">Vía</label>
                             <select class="form-select form-select-sm" @bind="nuevoProd.Via">
                                 @foreach (var v in catalogoVias)
@@ -349,31 +349,24 @@ else
                                 }
                             </select>
                         </div>
-                        <div class="col-6 col-md-3">
-                            <label class="form-label mb-1">Hora</label>
-                            <input type="time" class="form-control form-control-sm"
-                                   value="@nuevoProd.Hora"
-                                   @onchange="e => nuevoProd.Hora = e.Value?.ToString() ?? string.Empty" />
-                        </div>
                         <div class="col-12">
-                            <label class="form-label mb-1">Indicaciones / Dosis Pre-Anestésica</label>
+                            <label class="form-label mb-1">Observaciones / Indicaciones</label>
                             <div class="input-group input-group-sm">
-                                <input type="text" class="form-control" @bind="nuevoProd.IndicacionesProd" placeholder="Ej: 0.02 mg/kg IM 20 min antes de inducción" />
+                                <input type="text" class="form-control" @bind="nuevoProd.IndicacionesProd" placeholder="Ej.: administrar 30 min antes de la operación" />
                                 <SaveButton class="btn btn-primary" OnClick="AgregarProductoPreAnestesiaAsync">Agregar</SaveButton>
                             </div>
                         </div>
                     </div>
 
-                    <h6 class="small fw-bold text-secondary mb-2">Fármacos Administrados en Pre-Anestesia (@listaPremedicacion.Count)</h6>
+                    <h6 class="small fw-bold text-secondary mb-2">Medicamentos de preanestesia (@listaPremedicacion.Count)</h6>
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered align-middle mb-0 small">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Hora</th>
                                     <th>Fármaco</th>
                                     <th class="text-center">Cant.</th>
                                     <th class="text-center">Vía</th>
-                                    <th>Dosis / Indicación</th>
+                                    <th>Observaciones / Indicaciones</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -381,7 +374,7 @@ else
                                 @if (!listaPremedicacion.Any())
                                 {
                                     <tr>
-                                        <td colspan="6" class="text-center text-muted py-3">Sin pre-medicación registrada para esta orden.</td>
+                                        <td colspan="5" class="text-center text-muted py-3">Sin pre-medicación registrada para esta orden.</td>
                                     </tr>
                                 }
                                 else
@@ -389,7 +382,6 @@ else
                                     @foreach (var p in listaPremedicacion)
                                     {
                                         <tr>
-                                            <td>@p.Hora</td>
                                             <td class="fw-semibold">@p.ProdDescripcion</td>
                                             <td class="text-center">@p.CantProd.ToString("N1")</td>
                                             <td class="text-center"><span class="badge bg-info text-dark">@p.Via</span></td>

@@ -78,6 +78,8 @@ public sealed class EContaxRecepcionCompraService
                 IdOrdenCompra = x.recepcion.IdOrdenCompra,
                 NumeroOrden = x.orden.NumeroOrden,
                 NombreProveedor = x.orden.NombreProveedor,
+                NumeroFacturaProveedor = x.recepcion.NumeroFacturaProveedor ?? x.orden.NumeroFacturaProveedor,
+                ClaveAccesoProveedor = x.recepcion.ClaveAccesoProveedor ?? x.orden.ClaveAccesoProveedor,
                 FechaRecepcion = x.recepcion.FechaRecepcion,
                 Estado = x.recepcion.Estado,
                 TotalRecibido = x.recepcion.Detalles.Sum(d => d.CantidadRecibida),
@@ -221,6 +223,10 @@ public sealed class EContaxRecepcionCompraService
 
         var orden = await ObtenerOrdenAsync(context, actor, recepcion.IdOrdenCompra);
         ValidarOrdenRecepcionable(orden);
+        if (await EContaxInventarioService.ComprasConOrden(context, actor.IdEmpresa, recepcion.IdSucursal, recepcion.IdOrdenCompra)
+            .AnyAsync(compra => compra.Inventario == true))
+            throw new InvalidOperationException("La factura vinculada a esta orden ya ingresó al inventario como compra directa.");
+
         var recibidas = await ObtenerCantidadesRecibidasAsync(context, actor, recepcion.IdOrdenCompra, id);
         var totalActual = recepcion.Detalles.Sum(x => x.CantidadRecibida);
         if (totalActual <= 0)
@@ -415,6 +421,9 @@ public sealed class EContaxRecepcionCompraService
         NumeroOrden = orden.NumeroOrden,
         NombreProveedor = orden.NombreProveedor,
         Estado = orden.Estado,
+        FechaEmision = orden.FechaEmision,
+        NumeroFacturaProveedor = orden.NumeroFacturaProveedor,
+        ClaveAccesoProveedor = orden.ClaveAccesoProveedor,
         Detalles = orden.Detalles.Select(x => new EContaxRecepcionOrdenDetalleDto
         {
             IdDetalleOrdenCompra = x.IdDetalle,

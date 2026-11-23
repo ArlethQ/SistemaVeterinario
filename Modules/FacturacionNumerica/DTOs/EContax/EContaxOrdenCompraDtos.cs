@@ -87,14 +87,14 @@ public class EContaxRecepcionCompraListaDto
     public string Estado { get; set; } = string.Empty;
     public decimal TotalRecibido { get; set; }
     public int Lineas { get; set; }
+    public string? NumeroFacturaProveedor { get; set; }
+    public string? ClaveAccesoProveedor { get; set; }
 }
 
 public sealed class EContaxRecepcionCompraDto : EContaxRecepcionCompraListaDto
 {
     public int IdSucursal { get; set; }
     public string? Observacion { get; set; }
-    public string? NumeroFacturaProveedor { get; set; }
-    public string? ClaveAccesoProveedor { get; set; }
     public List<EContaxRecepcionCompraDetalleDto> Detalles { get; set; } = new();
 }
 
@@ -120,6 +120,9 @@ public sealed class EContaxRecepcionCompraDetalleDto
 
 public sealed class EContaxRecepcionOrdenDto
 {
+    public DateTime FechaEmision { get; set; }
+    public string? NumeroFacturaProveedor { get; set; }
+    public string? ClaveAccesoProveedor { get; set; }
     public int IdOrdenCompra { get; set; }
     public string NumeroOrden { get; set; } = string.Empty;
     public string NombreProveedor { get; set; } = string.Empty;

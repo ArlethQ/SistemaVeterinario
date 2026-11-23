@@ -263,7 +263,7 @@
         </div>
         <div class="purchase-hero-actions">
             <button class="purchase-secondary-btn" type="button" @onclick='() => NavManager.NavigateTo("/contabilidad/compras/ordenes")'><i class="ri-file-list-3-line"></i><span>Órdenes</span></button>
-            <button class="purchase-primary-btn" type="button" @onclick="AbrirNuevaAsync" disabled="@cargando"><i class="ri-add-line"></i><span>Nueva recepción</span></button>
+            <button class="purchase-primary-btn" type="button" @onclick="() => AbrirNuevaAsync()" disabled="@cargando"><i class="ri-add-line"></i><span>Nueva recepción</span></button>
         </div>
     </header>
 
@@ -276,10 +276,9 @@
     </nav>
 
     <section class="purchase-kpis" aria-label="Resumen de recepciones">
-        <article class="purchase-kpi"><span><i class="ri-draft-line"></i>Por homologar</span><strong>@comprasPendientes.Count</strong><small>Facturas pendientes de ingreso</small></article>
-        <article class="purchase-kpi purchase-kpi-success"><span><i class="ri-checkbox-circle-line"></i>Ingresadas / Completas</span><strong>@(TotalCompletas + comprasIngresadas.Count)</strong><small>@comprasIngresadas.Count factura(s) · @TotalCompletas orden(es)</small></article>
-        <article class="purchase-kpi purchase-kpi-info"><span><i class="ri-pie-chart-line"></i>Borradores / Parciales</span><strong>@(TotalBorradores + TotalParciales)</strong><small>Órdenes pendientes o parciales</small></article>
-        <article class="purchase-kpi purchase-kpi-total"><span><i class="ri-inbox-line"></i>Unidades recibidas</span><strong>@((TotalRecibido + comprasIngresadas.Sum(x => x.TotalCantidad)).ToString("0.####"))</strong><small>@(recepciones.Count + comprasIngresadas.Count) ingreso(s)</small></article>
+        <article class="purchase-kpi"><span>Órdenes por recibir</span><strong>@ordenesDisponibles.Count</strong></article>
+        <article class="purchase-kpi"><span>Compras por homologar</span><strong>@comprasPendientes.Count</strong></article>
+        <article class="purchase-kpi purchase-kpi-success"><span>Compras ingresadas</span><strong>@comprasIngresadas.Count</strong></article>
     </section>
 
     @if (!mostrarEditor && !string.IsNullOrWhiteSpace(error))
@@ -292,12 +291,21 @@
             <div class="row g-2 align-items-end">
                 <div class="col-md-6 col-lg-5">
                     <label class="form-label">Buscar</label>
-                    <input class="form-control" @bind="filtro" @bind:event="oninput" placeholder="Recepción, orden o proveedor" />
+                    <input class="form-control" @bind="filtro" @bind:event="oninput" @bind:after="ReiniciarPaginacion" placeholder="Recepción, orden, factura o proveedor" />
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label for="origen-recepcion" class="form-label">Origen</label>
+                    <select id="origen-recepcion" class="form-select" @bind="origenFiltro" @bind:after="ReiniciarPaginacion">
+                        <option value="">Todos</option>
+                        <option value="Orden">Órdenes</option>
+                        <option value="Compra">Compras</option>
+                    </select>
                 </div>
                 <div class="col-md-3 col-lg-2">
                     <label class="form-label">Estado</label>
-                    <select class="form-select" @bind="estadoFiltro">
+                    <select class="form-select" @bind="estadoFiltro" @bind:after="ReiniciarPaginacion">
                         <option value="">Todos</option>
+                        <option value="PENDIENTE">Pendiente</option>
                         <option value="BORRADOR">Borrador</option>
                         <option value="RECIBIDA_PARCIAL">Recibida parcial</option>
                         <option value="RECIBIDA_COMPLETA">Recibida completa</option>
@@ -306,11 +314,11 @@
                 </div>
                 <div class="col-md-3 col-lg-2">
                     <label class="form-label">Desde</label>
-                    <input class="form-control" type="date" @bind="fechaDesde" />
+                    <input class="form-control" type="date" @bind="fechaDesde" @bind:after="ReiniciarPaginacion" />
                 </div>
                 <div class="col-md-3 col-lg-2">
                     <label class="form-label">Hasta</label>
-                    <input class="form-control" type="date" @bind="fechaHasta" />
+                    <input class="form-control" type="date" @bind="fechaHasta" @bind:after="ReiniciarPaginacion" />
                 </div>
                 <div class="col-md-3 col-lg-2">
                     <label class="form-label">Ordenar por</label>
@@ -328,230 +336,134 @@
                     </button>
                 </div>
                 <div class="col-md-3 col-lg-2">
-                    <button class="purchase-primary-btn purchase-filter-btn" type="button" @onclick="ExportarExcelAsync" disabled="@(cargando || recepciones.Count == 0)"><i class="ri-file-excel-2-line"></i><span>Excel</span></button>
+                    <button class="purchase-primary-btn purchase-filter-btn" type="button" @onclick="ExportarExcelAsync" disabled="@(cargando || ObtenerListado().Count == 0)"><i class="ri-file-excel-2-line"></i><span>Excel</span></button>
                 </div>
             </div>
         </div>
     </div>
 
-    <ul class="nav nav-pills gap-2 mb-3" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button type="button"
-                    class="btn @(tabActiva == "pendientes" ? "btn-primary" : "btn-outline-secondary") d-inline-flex align-items-center gap-2"
-                    @onclick='() => tabActiva = "pendientes"'>
-                <i class="ri-links-line"></i>
-                <span>Facturas por homologar</span>
-                <span class="badge @(tabActiva == "pendientes" ? "bg-white text-primary" : "bg-secondary-subtle text-dark")">@ComprasPendientesFiltradas.Count()</span>
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button type="button"
-                    class="btn @(tabActiva == "registradas" ? "btn-primary" : "btn-outline-secondary") d-inline-flex align-items-center gap-2"
-                    @onclick='() => tabActiva = "registradas"'>
-                <i class="ri-inbox-archive-line"></i>
-                <span>Recepciones registradas</span>
-                <span class="badge @(tabActiva == "registradas" ? "bg-white text-primary" : "bg-secondary-subtle text-dark")">@(recepciones.Count + ComprasIngresadasFiltradas.Count())</span>
-            </button>
-        </li>
-    </ul>
-
-    @if (tabActiva == "pendientes")
+    @if (!string.IsNullOrWhiteSpace(mensajeHomologacion))
     {
-        <div class="card shadow-sm purchase-table-card">
-            <div class="purchase-table-heading">
-                <div>
-                    <span>COMPRAS REGISTRADAS · SUCURSAL @NombreSucursalActiva.ToUpperInvariant() · PENDIENTES DE INGRESO</span>
-                    <h2>Facturas por homologar</h2>
-                </div>
-                <span class="purchase-count">@ComprasPendientesFiltradas.Count() pendiente@(ComprasPendientesFiltradas.Count() == 1 ? string.Empty : "s")</span>
-            </div>
-            <div class="px-3 pt-2 pb-2 border-bottom bg-light-subtle">
-                <input class="form-control form-control-sm" @bind="filtroComprasPendientes" @bind:event="oninput" placeholder="Buscar factura, proveedor o RUC..." />
-            </div>
-            @if (!string.IsNullOrWhiteSpace(mensajeHomologacion))
-            {
-                <div class="alert alert-success m-3 mb-0 py-2" role="alert">@mensajeHomologacion</div>
-            }
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0 purchase-data-table">
-                    <thead>
-                        <tr><th>Factura</th><th>Fecha</th><th>Proveedor</th><th>RUC</th><th class="text-center">Ítems</th><th class="text-end">Total</th><th class="text-end">Acción</th></tr>
-                    </thead>
-                    <tbody>
-                        @if (cargandoComprasPendientes)
-                        {
-                            <tr><td colspan="7"><div class="purchase-table-state"><i class="ri-loader-4-line"></i><span>Cargando compras pendientes...</span></div></td></tr>
-                        }
-                        else if (!ComprasPendientesFiltradas.Any())
-                        {
-                            <tr><td colspan="7"><div class="purchase-table-state is-empty"><i class="ri-checkbox-circle-line"></i><span>No hay compras registradas pendientes de ingreso en @NombreSucursalActiva.</span></div></td></tr>
-                        }
-                        else
-                        {
-                            @foreach (var compra in ComprasPendientesFiltradas)
-                            {
-                                <tr @key="compra.CodFactura">
-                                    <td>
-                                        <strong class="font-monospace">@compra.NumeroDocumento</strong>
-                                        @if (facturasConBorrador.Contains(compra.CodFactura))
-                                        {
-                                            <span class="badge bg-warning-subtle text-dark border ms-1" title="Tienes cambios guardados en borrador"><i class="ri-draft-line me-1"></i>Borrador</span>
-                                        }
-                                    </td>
-                                    <td>@(compra.FechaEmision?.ToString("dd/MM/yyyy") ?? "—")</td>
-                                    <td>@compra.Proveedor</td>
-                                    <td class="font-monospace">@compra.RucProveedor</td>
-                                    <td class="text-center"><span class="badge bg-light text-dark border">@compra.Detalles.Count ítem(s)</span></td>
-                                    <td class="text-end fw-semibold">$@compra.ValorTotal.ToString("N2")</td>
-                                    <td class="text-end text-nowrap">
-                                        <button class="purchase-table-btn is-primary" type="button" @onclick="() => AbrirHomologacionAsync(compra)">
-                                            <i class="ri-links-line"></i><span>Homologar e ingresar</span>
-                                        </button>
-                                    </td>
-                                </tr>
-                            }
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        <div class="alert alert-success" role="status">@mensajeHomologacion</div>
     }
-    else
-    {
-        <div class="card shadow-sm purchase-table-card mb-3">
-            <div class="purchase-table-heading">
-                <div>
-                    <span>FACTURAS HOMOLOGADAS · INGRESADAS A INVENTARIO (@NombreSucursalActiva.ToUpperInvariant())</span>
-                    <h2>Compras ingresadas a inventario</h2>
-                </div>
-                <span class="purchase-count">@ComprasIngresadasFiltradas.Count() ingreso@(ComprasIngresadasFiltradas.Count() == 1 ? string.Empty : "s")</span>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0 purchase-data-table">
-                    <thead>
-                        <tr><th>Factura</th><th>Proveedor</th><th>Fecha</th><th>Bodega(s)</th><th class="text-end">Cant.</th><th class="text-end">Total</th><th>Estado</th><th class="text-end">Detalle</th></tr>
-                    </thead>
-                    <tbody>
-                        @if (cargandoComprasPendientes)
-                        {
-                            <tr><td colspan="8"><div class="purchase-table-state"><i class="ri-loader-4-line"></i><span>Cargando compras ingresadas...</span></div></td></tr>
-                        }
-                        else if (!ComprasIngresadasFiltradas.Any())
-                        {
-                            <tr><td colspan="8"><div class="purchase-table-state is-empty"><i class="ri-inbox-line"></i><span>Aún no hay facturas homologadas e ingresadas para los filtros actuales.</span></div></td></tr>
-                        }
-                        else
-                        {
-                            @foreach (var compIng in ComprasIngresadasFiltradas)
-                            {
-                                <tr @key="compIng.CodFactura">
-                                    <td><strong class="font-monospace">@compIng.NumeroDocumento</strong></td>
-                                    <td>
-                                        <div>@compIng.Proveedor</div>
-                                        <small class="text-muted font-monospace">@compIng.RucProveedor</small>
-                                    </td>
-                                    <td>@(compIng.FechaEmision?.ToString("dd/MM/yyyy") ?? "—")</td>
-                                    <td><span class="badge bg-info-subtle text-info-emphasis border">@compIng.BodegaResumen</span></td>
-                                    <td class="text-end">@compIng.TotalCantidad.ToString("0.####")</td>
-                                    <td class="text-end fw-semibold">$@compIng.ValorTotal.ToString("N2")</td>
-                                    <td><span class="badge text-bg-success">Ingresada</span></td>
-                                    <td class="text-end">
-                                        <button type="button" class="purchase-table-btn is-primary" @onclick="() => ToggleDetalleCompraIngresada(compIng.CodFactura)">
-                                            <i class="ri-eye-line"></i><span>@(compraIngresadaExpandidaId == compIng.CodFactura ? "Ocultar" : "Ver detalle")</span>
-                                        </button>
-                                    </td>
-                                </tr>
-                                @if (compraIngresadaExpandidaId == compIng.CodFactura)
-                                {
-                                    <tr>
-                                        <td colspan="8" class="bg-light p-3">
-                                            <div class="table-responsive">
-                                                <table class="table table-sm mb-0 bg-white border rounded">
-                                                    <thead class="table-light">
-                                                        <tr><th>Ítem factura</th><th>Producto homologado en inventario</th><th>Bodega</th><th class="text-end">Cant.</th><th class="text-end">Costo unit.</th><th class="text-end">Total</th></tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        @foreach (var det in compIng.Detalles)
-                                                        {
-                                                            <tr @key="det.CodLinea">
-                                                                <td>@det.DescripcionFactura</td>
-                                                                <td>@det.ProductoInventario</td>
-                                                                <td>@(string.IsNullOrWhiteSpace(det.Bodega) ? "—" : det.Bodega)</td>
-                                                                <td class="text-end">@det.Cantidad.ToString("0.####")</td>
-                                                                <td class="text-end">$@det.PrecioUnitario.ToString("N4")</td>
-                                                                <td class="text-end">$@det.ValorTotal.ToString("N2")</td>
-                                                            </tr>
-                                                        }
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
 
-        <div class="card shadow-sm purchase-table-card">
-            <div class="purchase-table-heading"><div><span>TRAZABILIDAD DE ÓRDENES DE COMPRA</span><h2>Recepciones de órdenes registradas</h2></div><span class="purchase-count">@recepciones.Count registro@(recepciones.Count == 1 ? string.Empty : "s")</span></div>
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0 purchase-data-table">
-                    <thead>
-                        <tr><th>Recepción</th><th>Orden</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th class="text-end">Cantidad</th><th class="text-end">Acciones</th></tr>
-                    </thead>
-                    <tbody>
-                        @if (cargando)
+    @{
+        var listado = ObtenerListado();
+        var totalPaginas = Math.Max(1, (listado.Count + RegistrosPorPagina - 1) / RegistrosPorPagina);
+        var pagina = Math.Min(paginaActual, totalPaginas);
+        var inicio = (pagina - 1) * RegistrosPorPagina;
+    }
+    <div class="card shadow-sm purchase-table-card">
+        <div class="purchase-table-heading">
+            <h2>Órdenes y compras</h2>
+            <span class="purchase-count">@listado.Count registro(s)</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 purchase-data-table">
+                <thead>
+                    <tr><th>Origen</th><th>Documento</th><th>Proveedor</th><th>Fecha</th><th>Estado</th><th class="text-end">Recibido</th><th class="text-end">Acciones</th></tr>
+                </thead>
+                <tbody>
+                    @if (cargando || listado.Count == 0)
+                    {
+                        <tr><td colspan="7" class="text-center py-4">@(cargando ? "Cargando recepciones..." : "No hay registros para los filtros seleccionados.")</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var fila in listado.Skip(inicio).Take(RegistrosPorPagina))
                         {
-                            <tr><td colspan="7"><div class="purchase-table-state" aria-live="polite"><i class="ri-loader-4-line"></i><span>Cargando recepciones...</span></div></td></tr>
-                        }
-                        else if (recepciones.Count == 0)
-                        {
-                            <tr><td colspan="7"><div class="purchase-table-state is-empty" aria-live="polite"><i class="ri-inbox-line"></i><span>No hay recepciones de órdenes para los filtros seleccionados.</span></div></td></tr>
-                        }
-                        else
-                        {
-                            @foreach (var recepcion in RecepcionesPagina)
+                            <tr @key="(fila.Origen, fila.Id)">
+                                <td><span class="badge bg-light text-dark border">@fila.Origen</span></td>
+                                <td>
+                                    <strong>@fila.Documento</strong>
+                                    @foreach (var factura in fila.Facturas)
+                                    {
+                                        <small class="d-block text-muted">Factura @factura</small>
+                                    }
+                                    @foreach (var clave in fila.Claves)
+                                    {
+                                        <small class="d-block text-muted text-break">Clave @clave</small>
+                                    }
+                                    @if (fila.Pendiente is { } compra && facturasConBorrador.Contains(compra.CodFactura))
+                                    {
+                                        <small class="d-block text-warning-emphasis">Homologación en borrador</small>
+                                    }
+                                </td>
+                                <td>@fila.Proveedor</td>
+                                <td>@(fila.Fecha?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                <td><span class="badge @ClaseEstado(fila.Estado)">@TextoEstado(fila.Estado)</span></td>
+                                <td class="text-end">@fila.Recibido.ToString("0.####")</td>
+                                <td class="text-end">
+                                    <div class="purchase-table-actions flex-wrap">
+                                        @if (fila.Orden is { } orden && fila.Recepciones.All(r => r.Estado != Borrador))
+                                        {
+                                            <button class="purchase-table-btn is-primary" type="button" @onclick="() => AbrirNuevaAsync(orden.IdOrdenCompra)">Recibir orden</button>
+                                        }
+                                        @if (fila.Pendiente is { } pendiente)
+                                        {
+                                            <button class="purchase-table-btn is-primary" type="button" @onclick="() => AbrirHomologacionAsync(pendiente)">Homologar e ingresar</button>
+                                        }
+                                        @if (fila.Ingresada is { } ingresada)
+                                        {
+                                            <button class="purchase-table-btn is-primary" type="button" @onclick="() => ToggleDetalleCompraIngresada(ingresada.CodFactura)">
+                                                @(compraIngresadaExpandidaId == ingresada.CodFactura ? "Ocultar" : "Ver detalle")
+                                            </button>
+                                        }
+                                    </div>
+                                    @foreach (var recepcion in fila.Recepciones)
+                                    {
+                                        <div class="purchase-table-actions flex-wrap mt-1" @key="recepcion.IdRecepcion">
+                                            <button class="purchase-table-btn is-primary" type="button" @onclick="() => EditarAsync(recepcion.IdRecepcion)">
+                                                <i class="ri-eye-line"></i><span>@recepcion.NumeroRecepcion · @TextoEstado(recepcion.Estado)</span>
+                                            </button>
+                                            @if (recepcion.Estado == Borrador)
+                                            {
+                                                <button class="purchase-table-btn is-success" type="button" @onclick="() => ConfirmarAsync(recepcion.IdRecepcion)">Confirmar</button>
+                                            }
+                                            @if (recepcion.Estado != "ANULADA")
+                                            {
+                                                <button class="purchase-table-btn is-danger" type="button" @onclick="() => AnularAsync(recepcion.IdRecepcion)">Anular</button>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                            @if (fila.Ingresada is { } detalleCompra && compraIngresadaExpandidaId == detalleCompra.CodFactura)
                             {
-                                <tr @key="recepcion.IdRecepcion">
-                                    <td><strong>@recepcion.NumeroRecepcion</strong><small class="d-block text-muted">@recepcion.Lineas línea(s)</small></td>
-                                    <td>@recepcion.NumeroOrden</td>
-                                    <td>@recepcion.NombreProveedor</td>
-                                    <td>@recepcion.FechaRecepcion.ToString("dd/MM/yyyy")</td>
-                                    <td><span class="badge @ClaseEstado(recepcion.Estado)">@TextoEstado(recepcion.Estado)</span></td>
-                                    <td class="text-end">@recepcion.TotalRecibido.ToString("0.####")</td>
-                                    <td class="text-end text-nowrap"><div class="purchase-table-actions">
-                                        <button class="purchase-table-btn is-primary" type="button" @onclick="() => EditarAsync(recepcion.IdRecepcion)"><i class="ri-eye-line"></i><span>Ver / editar</span></button>
-                                        @if (recepcion.Estado == "BORRADOR")
-                                        {
-                                            <button class="purchase-table-btn is-success" type="button" @onclick="() => ConfirmarAsync(recepcion.IdRecepcion)"><i class="ri-checkbox-circle-line"></i><span>Confirmar</span></button>
-                                        }
-                                        @if (recepcion.Estado is "BORRADOR" or "RECIBIDA_PARCIAL" or "RECIBIDA_COMPLETA")
-                                        {
-                                            <button class="purchase-table-btn is-danger" type="button" @onclick="() => AnularAsync(recepcion.IdRecepcion)"><i class="ri-close-circle-line"></i><span>Anular</span></button>
-                                        }
-                                    </div></td>
+                                <tr>
+                                    <td colspan="7" class="bg-light p-3">
+                                        <table class="table table-sm mb-0 bg-white">
+                                            <thead><tr><th>Ítem de factura</th><th>Producto de inventario</th><th>Bodega</th><th>Cantidad</th><th>Costo unitario</th><th>Total</th></tr></thead>
+                                            <tbody>
+                                                @foreach (var detalle in detalleCompra.Detalles)
+                                                {
+                                                    <tr @key="detalle.CodLinea">
+                                                        <td>@detalle.DescripcionFactura</td><td>@detalle.ProductoInventario</td><td>@detalle.Bodega</td>
+                                                        <td>@detalle.Cantidad.ToString("0.####")</td><td>$@detalle.PrecioUnitario.ToString("N4")</td><td>$@detalle.ValorTotal.ToString("N2")</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </td>
                                 </tr>
                             }
                         }
-                    </tbody>
-                </table>
-            </div>
-            @if (!cargando && recepciones.Count > 0)
-            {
-                <div class="purchase-pagination" aria-label="Paginación de recepciones">
-                    <span>Mostrando @PrimerRegistroPagina–@UltimoRegistroPagina de @recepciones.Count</span>
-                    <div class="purchase-pagination-actions">
-                        <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(-1)" disabled="@(PaginaActualSegura == 1)"><i class="ri-arrow-left-s-line"></i><span>Anterior</span></button>
-                        <strong>Página @PaginaActualSegura de @TotalPaginas</strong>
-                        <button type="button" class="purchase-table-btn is-neutral" @onclick="() => CambiarPagina(1)" disabled="@(PaginaActualSegura == TotalPaginas)"><span>Siguiente</span><i class="ri-arrow-right-s-line"></i></button>
-                    </div>
-                </div>
-            }
+                    }
+                </tbody>
+            </table>
         </div>
-    }
+        @if (totalPaginas > 1)
+        {
+            <div class="purchase-pagination" aria-label="Paginación de recepciones">
+                <span>Mostrando @(inicio + 1)–@Math.Min(inicio + RegistrosPorPagina, listado.Count) de @listado.Count</span>
+                <div class="purchase-pagination-actions">
+                    <button type="button" class="purchase-table-btn is-neutral" @onclick="() => paginaActual = pagina - 1" disabled="@(pagina == 1)">Anterior</button>
+                    <strong>Página @pagina de @totalPaginas</strong>
+                    <button type="button" class="purchase-table-btn is-neutral" @onclick="() => paginaActual = pagina + 1" disabled="@(pagina == totalPaginas)">Siguiente</button>
+                </div>
+            </div>
+        }
+    </div>
 </div>
 
 @if (mostrarHomologacion && compraSeleccionadaHomologar is not null)
@@ -1063,10 +975,8 @@
     private readonly List<EContaxInventarioService.CompraIngresadaRecepcionDto> comprasIngresadas = new();
     private List<EContaxBodegaDto> bodegasSucursal = new();
     private List<EContaxProductoParaStockDto> productosInventario = new();
-    private string tabActiva = "pendientes";
+    private string origenFiltro = string.Empty;
     private int? compraIngresadaExpandidaId;
-    private string filtroComprasPendientes = string.Empty;
-    private bool cargandoComprasPendientes;
     private bool mostrarHomologacion;
     private bool cargandoHomologacion;
     private bool guardandoHomologacion;
@@ -1102,23 +1012,76 @@
     private const int RegistrosPorPagina = 10;
     private bool PuedeEditar => editor.Id == 0 || editor.Estado == Borrador;
     private string FechaMinimaLote => DateTime.Today.AddDays(1).ToString("yyyy-MM-dd");
-    private int TotalBorradores => recepciones.Count(x => x.Estado == "BORRADOR");
-    private int TotalCompletas => recepciones.Count(x => x.Estado == "RECIBIDA_COMPLETA");
-    private int TotalParciales => recepciones.Count(x => x.Estado == "RECIBIDA_PARCIAL");
-    private decimal TotalRecibido => recepciones.Sum(x => x.TotalRecibido);
-    private IEnumerable<EContaxRecepcionCompraListaDto> RecepcionesOrdenadas => ordenListado switch
+    private sealed record FilaRecepcion(string Origen, int Id, string Documento, string Proveedor, string Ruc,
+        DateTime? Fecha, string Estado, decimal Recibido)
     {
-        "fecha-asc" => recepciones.OrderBy(x => x.FechaRecepcion).ThenBy(x => x.NumeroRecepcion),
-        "cantidad-desc" => recepciones.OrderByDescending(x => x.TotalRecibido).ThenByDescending(x => x.FechaRecepcion),
-        "cantidad-asc" => recepciones.OrderBy(x => x.TotalRecibido).ThenByDescending(x => x.FechaRecepcion),
-        "estado" => recepciones.OrderBy(x => x.Estado).ThenByDescending(x => x.FechaRecepcion),
-        _ => recepciones.OrderByDescending(x => x.FechaRecepcion).ThenByDescending(x => x.IdRecepcion)
-    };
-    private int TotalPaginas => Math.Max(1, (int)Math.Ceiling(recepciones.Count / (double)RegistrosPorPagina));
-    private int PaginaActualSegura => Math.Min(paginaActual, TotalPaginas);
-    private IEnumerable<EContaxRecepcionCompraListaDto> RecepcionesPagina => RecepcionesOrdenadas.Skip((PaginaActualSegura - 1) * RegistrosPorPagina).Take(RegistrosPorPagina);
-    private int PrimerRegistroPagina => recepciones.Count == 0 ? 0 : ((PaginaActualSegura - 1) * RegistrosPorPagina) + 1;
-    private int UltimoRegistroPagina => Math.Min(PaginaActualSegura * RegistrosPorPagina, recepciones.Count);
+        public string[] Facturas { get; init; } = [];
+        public string[] Claves { get; init; } = [];
+        public EContaxRecepcionCompraListaDto[] Recepciones { get; init; } = [];
+        public EContaxRecepcionOrdenDto? Orden { get; init; }
+        public EContaxInventarioService.CompraPendienteRecepcionDto? Pendiente { get; init; }
+        public EContaxInventarioService.CompraIngresadaRecepcionDto? Ingresada { get; init; }
+    }
+
+    private List<FilaRecepcion> ObtenerListado()
+    {
+        var listado = new List<FilaRecepcion>();
+        var ordenes = ordenesDisponibles.ToDictionary(o => o.IdOrdenCompra);
+        foreach (var grupo in recepciones.ToLookup(r => r.IdOrdenCompra))
+        {
+            ordenes.Remove(grupo.Key, out var orden);
+            var registros = grupo.OrderByDescending(r => r.FechaRecepcion).ThenByDescending(r => r.IdRecepcion).ToArray();
+            var ultima = registros[0];
+            var confirmadas = registros.Where(r => r.Estado is "RECIBIDA_COMPLETA" or "RECIBIDA_PARCIAL").ToArray();
+            var estado = confirmadas.FirstOrDefault()?.Estado
+                ?? (registros.Any(r => r.Estado == Borrador) ? Borrador : orden is null ? "ANULADA" : "PENDIENTE");
+
+            listado.Add(new("Orden", grupo.Key, ultima.NumeroOrden, ultima.NombreProveedor, "",
+                ultima.FechaRecepcion, estado, confirmadas.Sum(r => r.TotalRecibido))
+            {
+                Orden = orden,
+                Recepciones = registros,
+                Facturas = ReferenciasFactura(registros.Select(r => r.NumeroFacturaProveedor).Append(orden?.NumeroFacturaProveedor)),
+                Claves = ReferenciasFactura(registros.Where(r => string.IsNullOrWhiteSpace(r.NumeroFacturaProveedor))
+                    .Select(r => r.ClaveAccesoProveedor).Append(string.IsNullOrWhiteSpace(orden?.NumeroFacturaProveedor) ? orden?.ClaveAccesoProveedor : null))
+            });
+        }
+
+        listado.AddRange(ordenes.Values.Select(o => new FilaRecepcion("Orden", o.IdOrdenCompra, o.NumeroOrden,
+            o.NombreProveedor, "", o.FechaEmision, "PENDIENTE", 0)
+        {
+            Orden = o,
+            Facturas = ReferenciasFactura([o.NumeroFacturaProveedor]),
+            Claves = string.IsNullOrWhiteSpace(o.NumeroFacturaProveedor) ? ReferenciasFactura([o.ClaveAccesoProveedor]) : []
+        }));
+        listado.AddRange(comprasPendientes.Select(c => new FilaRecepcion("Compra", c.CodFactura, c.NumeroDocumento,
+            c.Proveedor, c.RucProveedor, c.FechaEmision, "PENDIENTE", 0) { Pendiente = c }));
+        listado.AddRange(comprasIngresadas.Select(c => new FilaRecepcion("Compra", c.CodFactura, c.NumeroDocumento,
+            c.Proveedor, c.RucProveedor, c.FechaEmision, "RECIBIDA_COMPLETA", c.TotalCantidad) { Ingresada = c }));
+
+        var texto = filtro.Trim();
+        bool Coincide(string? valor) => valor?.Contains(texto, StringComparison.OrdinalIgnoreCase) == true;
+        var filtradas = listado.Where(f =>
+            (origenFiltro.Length == 0 || f.Origen == origenFiltro) &&
+            (estadoFiltro.Length == 0 || f.Estado == estadoFiltro || f.Recepciones.Any(r => r.Estado == estadoFiltro)) &&
+            (!fechaDesde.HasValue || f.Fecha?.Date >= fechaDesde.Value.Date) &&
+            (!fechaHasta.HasValue || f.Fecha?.Date <= fechaHasta.Value.Date) &&
+            (texto.Length == 0 || Coincide(f.Documento) || Coincide(f.Proveedor) || Coincide(f.Ruc) ||
+                Coincide(f.Ingresada?.BodegaResumen) || f.Facturas.Any(Coincide) || f.Claves.Any(Coincide) || f.Recepciones.Any(r => Coincide(r.NumeroRecepcion))));
+
+        return (ordenListado switch
+        {
+            "fecha-asc" => filtradas.OrderBy(f => f.Fecha),
+            "cantidad-desc" => filtradas.OrderByDescending(f => f.Recibido),
+            "cantidad-asc" => filtradas.OrderBy(f => f.Recibido),
+            "estado" => filtradas.OrderBy(f => TextoEstado(f.Estado)),
+            _ => filtradas.OrderByDescending(f => f.Fecha)
+        }).ThenBy(f => f.Documento).ToList();
+    }
+
+    private static string[] ReferenciasFactura(IEnumerable<string?> referencias) =>
+        referencias.OfType<string>().Where(n => !string.IsNullOrWhiteSpace(n)).Distinct().ToArray();
+
     private bool TieneCambiosSinGuardar => mostrarEditor && editorSnapshot is not null && editorSnapshot != JsonSerializer.Serialize(editor);
     private bool MostrarErrorOrden => mostrarErrores && editor.IdOrdenCompra <= 0;
     private bool MostrarErrorFecha => mostrarErrores && editor.FechaRecepcion == default;
@@ -1147,7 +1110,6 @@
         }
 
         cargando = true;
-        cargandoComprasPendientes = true;
         error = null;
         paginaActual = 1;
         recepciones.Clear();
@@ -1155,8 +1117,7 @@
         comprasIngresadas.Clear();
         try
         {
-            var url = $"{ApiUrl}?userId={usuarioId}&search={Uri.EscapeDataString(filtro)}&estado={Uri.EscapeDataString(estadoFiltro)}" +
-                $"&fechaDesde={Uri.EscapeDataString(fechaDesde?.ToString("yyyy-MM-dd") ?? string.Empty)}&fechaHasta={Uri.EscapeDataString(fechaHasta?.ToString("yyyy-MM-dd") ?? string.Empty)}" +
+            var url = $"{ApiUrl}?userId={usuarioId}" +
                 (SucursalActivaId is > 0 ? $"&sucursalId={SucursalActivaId.Value}" : string.Empty);
 
             var tRecepciones = Http.GetFromJsonAsync<List<EContaxRecepcionCompraListaDto>>(url);
@@ -1164,7 +1125,8 @@
             var tIngresadas = InventarioService.ListarComprasIngresadasRecepcionAsync(usuarioId, SucursalActivaId);
             var tBodegas = CargarBodegasSucursalActivaAsync();
 
-            await Task.WhenAll(tRecepciones, tPendientes, tIngresadas, tBodegas);
+            var tOrdenes = CargarOrdenesDisponiblesAsync();
+            await Task.WhenAll(tRecepciones, tPendientes, tIngresadas, tBodegas, tOrdenes);
 
             recepciones.Clear();
             recepciones.AddRange(await tRecepciones ?? new());
@@ -1178,7 +1140,6 @@
         finally
         {
             cargando = false;
-            cargandoComprasPendientes = false;
         }
 
         if (jsDisponible)
@@ -1194,23 +1155,6 @@
             StateHasChanged();
         }
     }
-
-    private IEnumerable<EContaxInventarioService.CompraPendienteRecepcionDto> ComprasPendientesFiltradas =>
-        comprasPendientes.Where(c =>
-            string.IsNullOrWhiteSpace(filtroComprasPendientes) ||
-            c.NumeroDocumento.Contains(filtroComprasPendientes.Trim(), StringComparison.OrdinalIgnoreCase) ||
-            c.Proveedor.Contains(filtroComprasPendientes.Trim(), StringComparison.OrdinalIgnoreCase) ||
-            c.RucProveedor.Contains(filtroComprasPendientes.Trim(), StringComparison.OrdinalIgnoreCase));
-
-    private IEnumerable<EContaxInventarioService.CompraIngresadaRecepcionDto> ComprasIngresadasFiltradas =>
-        comprasIngresadas.Where(c =>
-            (string.IsNullOrWhiteSpace(filtro) ||
-             c.NumeroDocumento.Contains(filtro.Trim(), StringComparison.OrdinalIgnoreCase) ||
-             c.Proveedor.Contains(filtro.Trim(), StringComparison.OrdinalIgnoreCase) ||
-             c.RucProveedor.Contains(filtro.Trim(), StringComparison.OrdinalIgnoreCase) ||
-             c.BodegaResumen.Contains(filtro.Trim(), StringComparison.OrdinalIgnoreCase)) &&
-            (!fechaDesde.HasValue || (c.FechaEmision.HasValue && c.FechaEmision.Value.Date >= fechaDesde.Value.Date)) &&
-            (!fechaHasta.HasValue || (c.FechaEmision.HasValue && c.FechaEmision.Value.Date <= fechaHasta.Value.Date)));
 
     private void ToggleDetalleCompraIngresada(int codFactura)
     {
@@ -1612,40 +1556,23 @@
 
     private async Task ExportarExcelAsync()
     {
-        await CargarAsync();
-        if (recepciones.Count == 0)
+        var listado = ObtenerListado();
+        if (listado.Count == 0)
             return;
 
-        var resumen = (IReadOnlyList<IReadOnlyList<string>>)[
-            ["Filtro de texto", string.IsNullOrWhiteSpace(filtro) ? "Todos" : filtro],
-            ["Estado", string.IsNullOrWhiteSpace(estadoFiltro) ? "Todos" : TextoEstado(estadoFiltro)],
-            ["Fecha desde", fechaDesde?.ToString("dd/MM/yyyy") ?? "Todas"],
-            ["Fecha hasta", fechaHasta?.ToString("dd/MM/yyyy") ?? "Todas"],
-            ["Registros", recepciones.Count.ToString("N0")],
-            ["Borradores", TotalBorradores.ToString("N0")],
-            ["Completas", TotalCompletas.ToString("N0")],
-            ["Parciales", TotalParciales.ToString("N0")],
-            ["Cantidad recibida", TotalRecibido.ToString("N4")]
-        ];
-        var rows = recepciones.Select(x => (IReadOnlyList<string>)[
-            x.NumeroRecepcion,
-            x.NumeroOrden,
-            x.NombreProveedor,
-            x.FechaRecepcion.ToString("dd/MM/yyyy"),
-            TextoEstado(x.Estado),
-            x.TotalRecibido.ToString("N4"),
-            x.Lineas.ToString()
+        var rows = listado.Select(x => (IReadOnlyList<string>)[
+            x.Origen, x.Documento, string.Join(", ", x.Facturas.Concat(x.Claves)), x.Proveedor,
+            x.Fecha?.ToString("dd/MM/yyyy") ?? "", TextoEstado(x.Estado), x.Recibido.ToString("N4")
         ]).ToList();
         var archivo = ExcelExportService.Create(
             $"recepciones_compra_{DateTime.Now:yyyyMMdd_HHmm}.xlsx",
-            new ExcelSheetData("Resumen", ["Indicador", "Valor"], resumen),
-            new ExcelSheetData("Recepciones", ["Recepción", "Orden", "Proveedor", "Fecha", "Estado", "Cantidad recibida", "Líneas"], rows));
+            new ExcelSheetData("Recepciones", ["Origen", "Documento", "Facturas vinculadas", "Proveedor", "Fecha", "Estado", "Cantidad recibida"], rows));
         await using var stream = new MemoryStream(archivo.Content);
         using var streamRef = new DotNetStreamReference(stream);
         await JS.InvokeVoidAsync("downloadFileFromStream", archivo.FileName, streamRef);
     }
 
-    private async Task AbrirNuevaAsync()
+    private async Task AbrirNuevaAsync(int? idOrden = null)
     {
         error = null;
         editor = new EditorModel { FechaRecepcion = DateTime.Today };
@@ -1656,7 +1583,15 @@
         {
             await CargarBodegasSucursalActivaAsync();
             editorBodegaGeneralId = bodegasSucursal.FirstOrDefault()?.IdBodega ?? 0;
-            await CargarOrdenesDisponiblesAsync();
+            if (ordenesDisponibles.Count == 0)
+                throw new InvalidOperationException("No hay órdenes con cantidades pendientes en la sucursal actual.");
+            if (idOrden.HasValue)
+            {
+                editor.IdOrdenCompra = idOrden.Value;
+                await CargarOrdenSeleccionadaAsync();
+                if (error is not null)
+                    return;
+            }
             editorSnapshot = JsonSerializer.Serialize(editor);
             mostrarEditor = true;
         }
@@ -1675,8 +1610,6 @@
             var resultado = await Http.GetFromJsonAsync<List<EContaxRecepcionOrdenDto>>(url) ?? new();
             ordenesDisponibles.Clear();
             ordenesDisponibles.AddRange(resultado);
-            if (ordenesDisponibles.Count == 0)
-                throw new InvalidOperationException("No hay órdenes aprobadas o enviadas con cantidades pendientes en la sucursal actual.");
         }
         catch (Exception ex)
         {
@@ -1702,6 +1635,8 @@
                 return;
             editor.NumeroOrden = orden.NumeroOrden;
             editor.NombreProveedor = orden.NombreProveedor;
+            editor.NumeroFacturaProveedor = orden.NumeroFacturaProveedor;
+            editor.ClaveAccesoProveedor = orden.ClaveAccesoProveedor;
             editor.Detalles = orden.Detalles.Select(x => new EditorDetail
             {
                 IdDetalleOrdenCompra = x.IdDetalleOrdenCompra,
@@ -1921,7 +1856,6 @@
     };
 
     private void ReiniciarPaginacion() => paginaActual = 1;
-    private void CambiarPagina(int delta) => paginaActual = Math.Clamp(PaginaActualSegura + delta, 1, TotalPaginas);
     private static string TextoVariacionCosto(EditorDetail linea) =>
         linea.CostoUnitario.HasValue && linea.PrecioUnitarioOrden > 0
             ? $"{(linea.CostoUnitario.Value - linea.PrecioUnitarioOrden) / linea.PrecioUnitarioOrden:P2}"
@@ -1945,6 +1879,7 @@
 
     private static string TextoEstado(string estado) => estado switch
     {
+        "PENDIENTE" => "Pendiente",
         "BORRADOR" => "Borrador",
         "RECIBIDA_PARCIAL" => "Recibida parcial",
         "RECIBIDA_COMPLETA" => "Recibida completa",

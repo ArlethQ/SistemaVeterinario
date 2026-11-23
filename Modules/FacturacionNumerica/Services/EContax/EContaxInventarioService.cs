@@ -1582,6 +1582,38 @@ public sealed class EContaxInventarioService
         return sucursal ?? throw new InvalidOperationException("La sucursal seleccionada no es válida.");
     }
 
+    internal static IQueryable<ComprasFactura> ComprasConOrden(AppDbContext context, int empresa, int? sucursal, int? ordenId = null)
+    {
+        var ordenes = context.EContaxOrdenesCompra.Where(o => o.IdEmpresa == empresa && o.Estado != "CANCELADA" &&
+            (!sucursal.HasValue || o.IdSucursal == sucursal.Value) &&
+            (!ordenId.HasValue || o.IdOrdenCompra == ordenId.Value));
+
+        var referencias = ordenes.Select(o => new
+        {
+            o.IdProveedorCliente,
+            o.IdSucursal,
+            Numero = o.NumeroFacturaProveedor,
+            Clave = o.ClaveAccesoProveedor
+        }).Concat(
+            from orden in ordenes
+            join recepcion in context.EContaxRecepcionesCompra on orden.IdOrdenCompra equals recepcion.IdOrdenCompra
+            where recepcion.IdEmpresa == empresa && recepcion.Estado != "ANULADA"
+            select new
+            {
+                orden.IdProveedorCliente,
+                orden.IdSucursal,
+                Numero = recepcion.NumeroFacturaProveedor,
+                Clave = recepcion.ClaveAccesoProveedor
+            });
+
+        return context.ComprasFacturas.Where(compra => compra.Estado == true &&
+            (compra.IdEmpresa == null || compra.IdEmpresa == empresa) &&
+            referencias.Any(r => (compra.IdSucursal == null || compra.IdSucursal == r.IdSucursal) &&
+                ((r.Clave != null && r.Clave != "" && (r.Clave == compra.CodClave || r.Clave == compra.NumAutorizacion)) ||
+                 (compra.CodClientes == r.IdProveedorCliente && r.Numero != null && r.Numero != "" &&
+                  r.Numero.Replace("-", "") == ((compra.Serie ?? "") + (compra.NumFactura ?? "")).Replace("-", "")))));
+    }
+
     public async Task<List<CompraPendienteRecepcionDto>> ListarComprasPendientesRecepcionAsync(int userId, int? sucursalId = null)
     {
         await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.ComprasRecepciones, EContaxAccion.Ver);
@@ -1607,6 +1639,10 @@ public sealed class EContaxInventarioService
             query = query.Where(c => c.IdSucursal == userContext.IdSucursal.Value || c.IdSucursal == null);
         else if (sucursalId is > 0)
             query = query.Where(c => c.IdSucursal == sucursalId.Value || c.IdSucursal == null);
+
+        var vinculadas = ComprasConOrden(context, userContext.IdEmpresa,
+            userContext.EsJefeEmpresa ? sucursalId : userContext.IdSucursal ?? sucursalId);
+        query = query.Where(c => !vinculadas.Any(v => v.CodFactura == c.CodFactura));
 
         var cabeceras = await (
             from c in query
@@ -1852,6 +1888,9 @@ public sealed class EContaxInventarioService
                 throw new InvalidOperationException("No se encontró la compra registrada.");
             if (compra.Inventario == true)
                 throw new InvalidOperationException("Esta compra ya fue ingresada a recepción/inventario.");
+
+            if (await ComprasConOrden(context, userContext.IdEmpresa, sucursal.IdSucursal).AnyAsync(c => c.CodFactura == codFactura))
+                throw new InvalidOperationException("La factura está vinculada a una orden de compra. Registra el ingreso desde la orden.");
 
             var detallesDb = await context.ComprasDetalleFac
                 .Where(x => x.CodFactura == codFactura)
