@@ -104,6 +104,7 @@
                                 <th class="text-end">Subtotal</th>
                                 <th class="text-end">IVA</th>
                                 <th class="text-end">Total</th>
+                                <th>¿Es deducible?</th>
                                 <th>Estado</th>
                                 <th style="width:48px;"></th>
                             </tr>
@@ -127,6 +128,15 @@
                                     <td class="text-end small">$@item.Subtotal.ToString("N2")</td>
                                     <td class="text-end small">$@item.Iva.ToString("N2")</td>
                                     <td class="text-end fw-semibold small">$@item.Total.ToString("N2")</td>
+                                    <td>
+                                        <InputSelect class="form-select form-select-sm" @bind-Value="item.EsDeducible"
+                                                     aria-label="@($"¿Es deducible la factura {item.NumeroFactura}?")"
+                                                     disabled="@(!item.PuedeImportar || importandoLoteXml)">
+                                            <option value="">Seleccione</option>
+                                            <option value="true">Sí</option>
+                                            <option value="false">No</option>
+                                        </InputSelect>
+                                    </td>
                                     <td>
                                         @switch (item.Estado)
                                         {
@@ -333,6 +343,16 @@
             {
                 <div class="alert alert-warning border-0 rounded-3 mt-4 mb-0"><i class="bi bi-wallet2 me-2"></i>Esta factura se agregará a cuentas por pagar con vencimiento a @Math.Max(model.PlazoCredito, 1) días.</div>
             }
+            <div class="col-lg-3 col-md-6 mb-3">
+                <label class="n-label" for="compra-es-deducible">¿Es deducible? *</label>
+                <div class="n-select-shell">
+                    <InputSelect id="compra-es-deducible" class="n-select" @bind-Value="model.EsDeducible" disabled="@guardando" required>
+                        <option value="">Seleccione</option>
+                        <option value="true">Sí</option>
+                        <option value="false">No</option>
+                    </InputSelect>
+                </div>
+            </div>
             <div class="n-detail-actions-row"><a class="n-btn-link" href="@EContaxRoutes.CuentasPorPagar">Cancelar / volver</a><button type="button" class="n-btn-primary" @onclick="GuardarAsync" disabled="@guardando"><i class="bi bi-check2-circle fs-5 me-2"></i>@(guardando ? "Guardando..." : "Guardar factura de compra")</button></div>
         </div>
     </div>
@@ -736,6 +756,13 @@
         if (seleccionados.Count == 0)
             return;
 
+        if (seleccionados.Any(x => !x.EsDeducible.HasValue))
+        {
+            mensajeLote = "Selecciona si cada factura marcada es deducible.";
+            loteEsError = true;
+            return;
+        }
+
         importandoLoteXml = true;
         mensajeLote = "";
         loteEsError = false;
@@ -752,7 +779,8 @@
                     var (codFactura, duplicada) = await FacturaCompraService.ImportarFacturaXmlEContaxAsync(
                         currentUserId,
                         item.Preview!,
-                        idSucursal: Session.Localidad > 0 ? Session.Localidad : null);
+                        idSucursal: Session.Localidad > 0 ? Session.Localidad : null,
+                        esDeducible: item.EsDeducible);
                     item.Seleccionado = false;
                     if (duplicada)
                     {
@@ -906,11 +934,6 @@
             var id = await FacturaCompraService.GuardarAsync(currentUserId, model, continuarConProveedor);
             await AlertService.ShowSuccessAsync($"Factura de compra guardada. Código interno: {id}");
             Navigation.NavigateTo(EContaxRoutes.CuentasPorPagar);
-            await FacturaCompraService.GuardarAsync(currentUserId, model, continuarConProveedor);
-            LimpiarFormulario();
-            error = null;
-            await AlertService.ShowSuccessAsync("Factura de compra guardada correctamente.");
-
         }
         catch (ProveedorCompraNoRegistradoException) { mostrarOpcionesProveedor = true; }
         catch (InvalidOperationException ex) { await AlertService.ShowErrorAsync(ex.Message); }
@@ -944,6 +967,7 @@
         public decimal Iva { get; set; }
         public decimal Total { get; set; }
         public bool Seleccionado { get; set; }
+        public bool? EsDeducible { get; set; }
         public EstadoLoteXml Estado { get; set; } = EstadoLoteXml.Listo;
         public string DetalleEstado { get; set; } = "";
         public CompraXmlPreviewDto? Preview { get; set; }

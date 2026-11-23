@@ -10,6 +10,9 @@ public class ComprasFactura
     [Column("codFactura")]
     public int CodFactura { get; set; }
 
+    [Column("esDeducible")]
+    public bool? EsDeducible { get; set; }
+
     [Column("codClave")]
     public string? CodClave { get; set; }
 

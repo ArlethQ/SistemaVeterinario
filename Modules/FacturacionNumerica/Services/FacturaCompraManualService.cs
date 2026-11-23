@@ -17,6 +17,9 @@ public sealed class FacturaCompraManualService
 
     public async Task<int> GuardarAsync(int idUsuario, FacturaCompraManualVM modelo, bool registrarProveedor = false)
     {
+        if (!modelo.EsDeducible.HasValue)
+            throw new InvalidOperationException("Selecciona si la factura de compra es deducible.");
+
         if (string.IsNullOrWhiteSpace(modelo.RucProveedor) || string.IsNullOrWhiteSpace(modelo.Proveedor))
             throw new InvalidOperationException("Selecciona un proveedor del CRUD de proveedores.");
         if (modelo.FechaEmision == default || modelo.FechaEmision.Date > DateTime.Today)
@@ -122,6 +125,7 @@ public sealed class FacturaCompraManualService
             FechaVence = esCredito ? modelo.FechaEmision.Date.AddDays(Math.Max(modelo.PlazoCredito, 1)) : modelo.FechaEmision.Date,
             Usuario = idUsuario,
             Autorizado = "1",
+            EsDeducible = modelo.EsDeducible,
             Mensaje = string.IsNullOrWhiteSpace(modelo.Observacion)
                 ? "Factura de compra registrada manualmente; no se envía al SRI."
                 : modelo.Observacion.Trim(),
@@ -375,6 +379,7 @@ public sealed class FacturaCompraManualService
             FechaVence = esCredito ? modelo.FechaEmision.Date.AddDays(Math.Max(modelo.PlazoCredito, 1)) : modelo.FechaEmision.Date,
             Usuario = idUsuario,
             Autorizado = "1",
+            EsDeducible = modelo.EsDeducible,
             Mensaje = string.IsNullOrWhiteSpace(modelo.Observacion)
                 ? "Factura de compra registrada en E-Contax."
                 : modelo.Observacion.Trim(),
@@ -426,7 +431,8 @@ public sealed class FacturaCompraManualService
         int idUsuario,
         CompraXmlPreviewDto preview,
         int? idEmpresa = null,
-        int? idSucursal = null)
+        int? idSucursal = null,
+        bool? esDeducible = null)
     {
         if (preview == null)
             throw new InvalidOperationException("No hay datos del XML para importar.");
@@ -459,6 +465,7 @@ public sealed class FacturaCompraManualService
 
         var vm = new FacturaCompraManualVM
         {
+            EsDeducible = esDeducible,
             Serie = serieDigitos,
             NumeroFactura = numeroNormalizado,
             NumeroAutorizacion = preview.NumeroAutorizacion,

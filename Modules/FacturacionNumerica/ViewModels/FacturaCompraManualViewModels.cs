@@ -3,6 +3,7 @@ namespace Simetric.ViewModels;
 public sealed class FacturaCompraManualVM
 {
     public int? CodCliente { get; set; }
+    public bool? EsDeducible { get; set; }
     public string Serie { get; set; } = "";
     public string NumeroFactura { get; set; } = "";
     public string NumeroAutorizacion { get; set; } = "";
