@@ -615,7 +615,7 @@
                                     </div>
                                 }
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <label class="form-label small fw-semibold">Cant. y Presentación</label>
                                 <div class="input-group input-group-sm">
                                     <input type="number" min="1" step="1" class="form-control" style="max-width: 72px;" onkeydown="return event.key !== '-'"
@@ -623,12 +623,8 @@
                                     <select class="form-select"
                                             @bind="_modoDespachoReceta"
                                             @bind:after="ActualizarCantidadLetras">
-                                        <option value="UNIDAD">Por unidad (@UnidadProductoReceta)</option>
-                                        <option value="PAQUETE">@(FactorProductoReceta > 1m ? $"Por paquete (×{FactorProductoReceta:G29} {UnidadProductoReceta})" : "Por paquete / caja")</option>
-                                        <option value="PASTILLA">Pastilla(s) / Tableta(s)</option>
-                                        <option value="JARABE">Jarabe / Frasco</option>
-                                        <option value="AMPOLLA">Ampolla(s) / Vial</option>
-                                        <option value="SOBRE">Sobre(s)</option>
+                                        <option value="UNIDAD">@UnidadProductoReceta</option>
+                                        <option value="PAQUETE">@(FactorProductoReceta > 1m ? $"Paquete (×{FactorProductoReceta:G29} {UnidadProductoReceta})" : "Paquete")</option>
                                     </select>
                                 </div>
                                 @if (_modoDespachoReceta == "PAQUETE" && FactorProductoReceta > 1m)
@@ -638,16 +634,9 @@
                                     </small>
                                 }
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-md-3">
                                 <label class="form-label small fw-semibold">En Letras</label>
                                 <input type="text" class="form-control form-control-sm" @bind="NuevoMedicamento.CantidadLetras" />
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label small fw-semibold">Tipo</label>
-                                <select class="form-select form-select-sm" @bind="NuevoMedicamento.Tipo">
-                                    <option value="M">Receta (M)</option>
-                                    <option value="I">Insumo (I)</option>
-                                </select>
                             </div>
                             <div class="col-md-9">
                                 <label class="form-label small fw-semibold">Indicaciones Posológicas (Dosis, Frecuencia y Duración) *</label>
@@ -1990,6 +1979,7 @@
     private void SeleccionarMedicamento(CatalogoOperativoDto prod)
     {
         _productoRecetaSeleccionado = prod;
+        _modoDespachoReceta = "UNIDAD";
         NuevoMedicamento.CodigoProd = prod.Id.ToString();
         NuevoMedicamento.Descripcionamento = prod.Descripcion;
         NuevoMedicamento.Precio = prod.Precio ?? 0m;
@@ -2024,14 +2014,6 @@
                 $"{NumeroALetras(cantidad, femenino: false, apocoparUno: true)} {(cantidad == 1 ? "PAQUETE" : "PAQUETES")} ({(int)Math.Round(cantidad * factorConversion)} {PluralizarUnidad(unidadProducto, (int)Math.Round(cantidad * factorConversion))})",
             "PAQUETE" =>
                 $"{NumeroALetras(cantidad, femenino: false, apocoparUno: true)} {(cantidad == 1 ? "PAQUETE" : "PAQUETES")}",
-            "PASTILLA" =>
-                $"{NumeroALetras(cantidad, femenino: true, apocoparUno: false)} {(cantidad == 1 ? "PASTILLA" : "PASTILLAS")}",
-            "JARABE" =>
-                $"{NumeroALetras(cantidad, femenino: false, apocoparUno: true)} {(cantidad == 1 ? "JARABE" : "JARABES")}",
-            "AMPOLLA" =>
-                $"{NumeroALetras(cantidad, femenino: true, apocoparUno: false)} {(cantidad == 1 ? "AMPOLLA" : "AMPOLLAS")}",
-            "SOBRE" =>
-                $"{NumeroALetras(cantidad, femenino: false, apocoparUno: true)} {(cantidad == 1 ? "SOBRE" : "SOBRES")}",
             _ => FormatearPorUnidadBase(cantidad, unidadProducto)
         };
     }
@@ -2188,6 +2170,7 @@
             }
 
             NuevoMedicamento.Cantidad = CantidadBaseRecetaCalculada;
+            NuevoMedicamento.Tipo = "M";
             NuevoMedicamento.IdOrden = ordenTarget;
             NuevoMedicamento.Nhcl = nhclTarget;
             int idUser = Session.CurrentUser?.UserNumero ?? 1;
