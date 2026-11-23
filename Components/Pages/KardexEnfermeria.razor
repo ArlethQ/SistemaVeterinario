@@ -5,82 +5,68 @@
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject NavigationManager Nav
-@inject IJSRuntime JS
+@inject IJSRuntime JS
+
+<div class="kardex-view @(ModoModal ? "kardex-embedded" : "")">
+@if (!ModoModal)
+{
+    <PageTitle>e-ForVets - Kardex de Enfermería</PageTitle>
+}
+
+<header class="kardex-hero">
+    <div class="kardex-heading">
+        <i class="bi bi-prescription2" aria-hidden="true"></i>
+        <div>
+            <h1>Kardex de Enfermería</h1>
+            <p>Administración de Medicamentos</p>
+            @if (ModoModal)
+            {
+                <small>Orden #@Orden · NHCL #@Nhcl</small>
+            }
+            else
+            {
+                <small>Registro de administración de medicamentos, control de stock e impresión de sábana de 5 días.</small>
+            }
+        </div>
+    </div>
+    <div class="kardex-actions">
+        <button type="button" class="kardex-button kardex-pdf" @onclick="DescargarPdfAsync" disabled="@_exportando">
+            <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Descargar PDF
+        </button>
+        <button type="button" class="kardex-button kardex-excel" @onclick="DescargarExcelAsync" disabled="@_exportando">
+            <i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Exportar Excel
+        </button>
+        <button type="button" class="kardex-button" @onclick="ImprimirVistaAsync">
+            <i class="bi bi-printer" aria-hidden="true"></i> Imprimir Sábana
+        </button>
+    </div>
+</header>
 
 @if (!ModoModal)
 {
-<PageTitle>e-ForVets - Kardex de Enfermería (Administración de Medicamentos)</PageTitle>
-
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-    <div>
-        <h4 class="fw-bold text-primary mb-0">KARDEX DE ENFERMERÍA — ADMINISTRACIÓN DE MEDICAMENTOS</h4>
-        <small class="text-muted">Registro de administración de medicamentos, control de stock e impresión de sábana de 5 días.</small>
-    </div>
-    <div class="d-flex gap-2">
-        <button class="btn btn-danger btn-sm fw-semibold" @onclick="DescargarPdfAsync" disabled="@_exportando">
-            📄 Descargar PDF
-        </button>
-        <button class="btn btn-success btn-sm fw-semibold" @onclick="DescargarExcelAsync" disabled="@_exportando">
-            📊 Exportar Excel
-        </button>
-        <button class="btn btn-outline-secondary btn-sm fw-semibold" @onclick="ImprimirVistaAsync">
-            🖨️ Imprimir Sábana
-        </button>
-    </div>
-</div>
-
-<!-- CABECERA DEL PACIENTE Y ORDEN -->
-<div class="card shadow-sm border-primary mb-3">
-    <div class="card-body py-2 px-3 bg-light">
-        <div class="row g-2 align-items-center">
-            <div class="col-md-4">
-                <label class="small text-muted fw-bold d-block">Orden / Historia (NHCL):</label>
-                <BuscadorOrdenClinica @bind-Orden="Orden" @bind-Nhcl="Nhcl" OnBuscar="CargarDatosPacienteYKardexAsync" />
-            </div>
-            <div class="col-md-3">
-                <span class="small text-muted fw-bold d-block">Propietario (Cliente):</span>
-                <span class="fw-semibold">@_paciente.ClienteNombre</span>
-            </div>
-            <div class="col-md-3">
-                <span class="small text-muted fw-bold d-block">Paciente / Especie:</span>
-                <span class="fw-bold text-primary">@_paciente.PacienteNombre</span>
-                <span class="badge bg-info text-dark ms-1">@_paciente.Especie</span>
-            </div>
-            <div class="col-md-2">
-                <span class="small text-muted fw-bold d-block">Sexo / Estado:</span>
-                <span class="fw-semibold">@_paciente.Sexo</span>
-                @if (_paciente.Cierre == "S")
-                {
-                    <span class="badge bg-danger ms-1">Ficha Cerrada</span>
-                }
-            </div>
-        </div>
-    </div>
-</div>
-}
-else
-{
-    <!-- Barra superior compacta en modo modal -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <span class="fs-5 text-primary">📋</span>
-            <div>
-                <h6 class="mb-0 fw-bold text-dark">Kardex de Enfermería — Administración de Medicamentos</h6>
-                <small class="text-muted" style="font-size: 0.75rem;">Orden #@Orden | NHCL #@Nhcl</small>
-            </div>
-        </div>
-        <div class="d-flex gap-2">
-            <button class="btn btn-danger btn-sm fw-semibold" @onclick="DescargarPdfAsync" disabled="@_exportando" title="Descargar Kardex en PDF">
-                📄 PDF
-            </button>
-            <button class="btn btn-success btn-sm fw-semibold" @onclick="DescargarExcelAsync" disabled="@_exportando" title="Exportar Kardex a Excel">
-                📊 Excel
-            </button>
-            <button class="btn btn-outline-secondary btn-sm fw-semibold" @onclick="ImprimirVistaAsync" title="Imprimir Sábana de 5 Días">
-                🖨️ Imprimir
-            </button>
-        </div>
-    </div>
+    <section class="kardex-patient kardex-panel" aria-label="Datos de la orden y del paciente">
+        <div><i class="bi bi-clipboard" aria-hidden="true"></i><div>
+            <span>Orden / Historia (NHCL)</span>
+            <BuscadorOrdenClinica @bind-Orden="Orden" @bind-Nhcl="Nhcl" OnBuscar="CargarDatosPacienteYKardexAsync" />
+        </div></div>
+        <div><i class="bi bi-person" aria-hidden="true"></i><div>
+            <span>Propietario (Cliente)</span><strong>@_paciente.ClienteNombre</strong>
+        </div></div>
+        <div><i class="bi bi-heart-pulse" aria-hidden="true"></i><div>
+            <span>Paciente / Especie</span><strong class="kardex-patient-name">@_paciente.PacienteNombre</strong>
+            @if (!string.IsNullOrWhiteSpace(_paciente.Especie))
+            {
+                <span class="kardex-chip">@_paciente.Especie</span>
+            }
+        </div></div>
+        <div><i class="bi bi-gender-ambiguous" aria-hidden="true"></i><div>
+            <span>Sexo / Estado</span><strong>@_paciente.Sexo</strong>
+            @if (_paciente.Cierre == "S")
+            {
+                <span class="badge bg-danger ms-1">Ficha Cerrada</span>
+            }
+        </div></div>
+    </section>
 }
 
 @if (!string.IsNullOrWhiteSpace(_alertaMensaje))
@@ -100,15 +86,15 @@ else
 }
 
 <!-- PESTAÑAS: 1. INGRESOS Y REGISTRO | 2. SÁBANA DE IMPRESIÓN 5 DÍAS -->
-<ul class="nav nav-tabs mb-3">
+<ul class="nav nav-tabs kardex-tabs">
     <li class="nav-item">
         <button class="nav-link @(_tabActiva == 0 ? "active fw-bold" : "")" @onclick="() => CambiarTabAsync(0)">
-            1. Ingresos y Administración de Medicamentos (@_registros.Count)
+            <i class="bi bi-capsule" aria-hidden="true"></i> 1. Ingresos y Administración de Medicamentos (@_registros.Count)
         </button>
     </li>
     <li class="nav-item">
         <button class="nav-link @(_tabActiva == 1 ? "active fw-bold" : "")" @onclick="() => CambiarTabAsync(1)">
-            2. Sábana Kardex 5 Días / Vista de Impresión (@_sabana.Count fármacos)
+            <i class="bi bi-calendar3" aria-hidden="true"></i> 2. Sábana Kardex 5 Días / Vista de Impresión (@_sabana.Count fármacos)
         </button>
     </li>
 </ul>
@@ -116,9 +102,9 @@ else
 @if (_tabActiva == 0)
 {
     <!-- BUSCADOR DE FÁRMACOS / STOCK LOCAL -->
-    <div class="card shadow-sm border-0 mb-3">
-        <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
-            <span class="fw-bold small">BÚSQUEDA DE FÁRMACOS Y CONTROL DE STOCK (BODEGA)</span>
+    <div class="kardex-panel kardex-pharmacy">
+        <div class="kardex-section-heading kardex-section-dark">
+            <h2><i class="bi bi-box-seam" aria-hidden="true"></i> Búsqueda de Fármacos y Control de Stock (Bodega)</h2>
             @if (!string.IsNullOrWhiteSpace(_formInput.CodigoProd))
             {
                 <span class="badge bg-warning text-dark">
@@ -126,29 +112,29 @@ else
                 </span>
             }
         </div>
-        <div class="card-body">
-            <div class="row g-2 align-items-center mb-3">
-                <div class="col-md-6">
-                    <div class="input-group">
+        <div class="kardex-body">
+            <div class="kardex-search-row">
+                <div class="kardex-search">
+                    <div class="input-group"><span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
                         <input class="form-control" autocomplete="off" @bind="_textoBusquedaProd" @bind:event="oninput" @bind:after="BuscarMedicamentosAutoAsync" @onkeydown="OnBusquedaProdKeyDown"
-                               placeholder="Ingrese descripción o código del fármaco..." />
+                               aria-label="Buscar fármacos" placeholder="Ingrese descripción o código del fármaco..." />
                     </div>
                 </div>
-                <div class="col-md-6 text-end small text-muted">
-                    Consulta el inventario disponible en bodega descontando reservas activas.
+                <div class="kardex-stock-note">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i> Consulta el inventario disponible en bodega descontando reservas activas.
                 </div>
             </div>
 
             <!-- MODAL / PANEL DESPLEGABLE DE RESULTADOS DE FARMACIA -->
             @if (_mostrarModalProductos)
             {
-                <div class="border rounded p-2 mb-3 bg-light shadow-sm">
+                <div class="kardex-results">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <strong class="text-primary small">Resultados de Catálogo / Bodega (@_productosEncontrados.Count registros)</strong>
-                        <button class="btn btn-sm btn-outline-secondary py-0" @onclick="() => _mostrarModalProductos = false">Cerrar ✕</button>
+                        <button class="kardex-button kardex-compact" @onclick="() => _mostrarModalProductos = false">Cerrar <i class="bi bi-x-lg" aria-hidden="true"></i></button>
                     </div>
-                    <div class="table-responsive" style="max-height: 240px;">
-                        <table class="table table-sm table-hover table-bordered bg-white mb-0 small align-middle">
+                    <div class="table-responsive kardex-results-scroll">
+                        <table class="table table-sm table-hover table-bordered kardex-table mb-0 align-middle">
                             <thead class="table-secondary">
                                 <tr>
                                     <th>Acción</th>
@@ -166,20 +152,20 @@ else
                                 {
                                     <tr>
                                         <td class="text-center">
-                                            <button type="button" class="btn btn-sm @(prod.Inventory <= 0 ? "btn-warning" : "btn-success") py-0 px-2"                                                    disabled="@(prod.Inventory <= 0)"                                                    title="@(prod.Inventory <= 0 ? "Producto sin stock disponible" : "Seleccionar producto")"
+                                            <button type="button" class="kardex-button kardex-compact kardex-select"                                                    disabled="@(prod.Inventory <= 0)"                                                    title="@(prod.Inventory <= 0 ? "Producto sin stock disponible" : "Seleccionar producto")"
                                                     @onclick="() => SeleccionarProducto(prod)">
-                                                Seleccionar
+                                                <i class="bi bi-check2" aria-hidden="true"></i> Seleccionar
                                             </button>
                                         </td>
                                         <td class="fw-bold">@prod.Number</td>
                                         <td>@prod.DisplayName</td>
-                                        <td class="text-end fw-bold @(prod.Inventory > 0 ? "text-danger" : "text-muted")">
-                                            @prod.Inventory.ToString("N2")
+                                        <td class="text-end">
+                                            <span class="kardex-chip @(prod.Inventory <= 0 ? "kardex-no-stock" : "")">@prod.Inventory.ToString("N2")</span>
                                         </td>
                                         <td class="text-end">@prod.UnitPrice.ToString("C2")</td>
                                         <td>@prod.BaseUnitOfMeasureCode</td>
                                         <td>@prod.TaxGroupCode</td>
-                                        <td class="text-primary fw-semibold">@prod.Location</td>
+                                        <td><span class="kardex-chip">@prod.Location</span></td>
                                     </tr>
                                 }
                             </tbody>
@@ -192,7 +178,7 @@ else
             <SaveForm Model="_formInput" OnValidSubmit="GuardarAdministracionAsync">
                 <DataAnnotationsValidator />
 
-                <div class="row g-2 align-items-end">
+                <div class="row g-2 align-items-start kardex-form">
                     <div class="col-md-3">
                         <label class="form-label small fw-bold mb-1">Producto Seleccionado:</label>
                         <InputText class="form-control form-control-sm" @bind-Value="_formInput.ProdDescripcion" placeholder="Seleccione o escriba producto" />
@@ -257,12 +243,12 @@ else
                         <ValidationMessage For="@(() => _formInput.Funcion)" class="text-danger small" />
                     </div>
 
-                    <div class="col-md-5 mt-2 d-flex gap-2 justify-content-end">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="LimpiarFormulario">
-                            Limpiar
+                    <div class="col-md-5 mt-2 d-flex flex-wrap gap-2 justify-content-end align-self-end">
+                        <button type="button" class="kardex-button" @onclick="LimpiarFormulario">
+                            <i class="bi bi-eraser" aria-hidden="true"></i> Limpiar
                         </button>
-                        <SaveButton Type="submit" class="btn btn-sm btn-primary fw-bold px-4" Disabled="@_guardando">
-                            @(_guardando ? "Guardando..." : "➕ Añadir al Kardex")
+                        <SaveButton Type="submit" class="kardex-button kardex-add" Disabled="@_guardando">
+                            <i class="bi bi-plus-lg" aria-hidden="true"></i> @(_guardando ? "Guardando..." : "Añadir al Kardex")
                         </SaveButton>
                     </div>
                 </div>
@@ -271,13 +257,13 @@ else
     </div>
 
     <!-- GRILLA REACTIVA DE MEDICAMENTOS APLICADOS (Reemplaza a telerik:RadGrid grdMedicinas) -->
-    <div class="card shadow-sm border-0">
-        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
-            <span class="fw-bold text-secondary small">REGISTROS DE MEDICACIÓN APLICADOS EN LA ORDEN #@Orden</span>
-            <input class="form-control form-control-sm w-25" @bind="_filtroTabla" @bind:event="oninput" placeholder="Filtrar en tabla..." />
+    <div class="kardex-panel kardex-records">
+        <div class="kardex-section-heading">
+            <h2><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i> Registros de Medicación Aplicados en la Orden #@Orden</h2>
+            <input class="form-control form-control-sm kardex-filter" aria-label="Filtrar registros de medicación" @bind="_filtroTabla" @bind:event="oninput" placeholder="Filtrar en tabla..." />
         </div>
         <div class="table-responsive">
-            <table class="table table-sm table-hover table-bordered align-middle mb-0 small">
+            <table class="table table-sm table-hover table-bordered kardex-table align-middle mb-0">
                 <thead class="table-primary text-center">
                     <tr>
                         <th>ID</th>
@@ -298,8 +284,8 @@ else
                     @if (RegistrosFiltrados.Count == 0)
                     {
                         <tr>
-                            <td colspan="12" class="text-center text-muted py-3">
-                                No existen registros de medicación para esta orden.
+                            <td colspan="12" class="kardex-empty">
+                                <i class="bi bi-clipboard2-plus" aria-hidden="true"></i> No existen registros de medicación para esta orden.
                             </td>
                         </tr>
                     }
@@ -323,10 +309,10 @@ else
                                 </td>
                                 <td class="text-center">@reg.Bodega</td>
                                 <td class="text-center">
-                                    <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                                    <button type="button" class="kardex-button kardex-compact kardex-delete" aria-label="Eliminar registro"
                                             title="Eliminar registro y liberar reserva"
                                             @onclick="() => EliminarRegistroAsync(reg)">
-                                        🗑️
+                                        <i class="bi bi-trash3" aria-hidden="true"></i>
                                     </button>
                                 </td>
                             </tr>
@@ -342,7 +328,7 @@ else
     <!-- SÁBANA DE KARDEX DE 5 DÍAS (Reemplaza a GridView1 y GridView2..6 de vt_EnfermeriaKardex.aspx) -->
     <div class="card shadow-sm border-0" id="sabana-kardex-print">
         <div class="card-body">
-            <div class="row mb-2 border-bottom pb-2">
+            <div class="row mb-2 border-bottom pb-2 @(ModoModal ? "" : "d-none d-print-flex")">
                 <div class="col-4"><strong>Orden:</strong> @Orden</div>
                 <div class="col-4"><strong>N° Historia (NHCL):</strong> <span class="text-danger fw-bold">@Nhcl</span></div>
                 <div class="col-4"><strong>Fecha Impresión:</strong> @DateTime.Now.ToString("yyyy-MM-dd HH:mm")</div>
@@ -431,6 +417,8 @@ else
         </div>
     </div>
 }
+
+</div>
 
 @code {
     [Parameter]
