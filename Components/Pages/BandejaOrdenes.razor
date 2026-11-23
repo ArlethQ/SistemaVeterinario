@@ -849,29 +849,48 @@
                     <PreAnestesia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                   IdOrden="@_ordenModal.OrdenAtencionId"
                                   Nhcl="@_ordenModal.Nhcl"
+                                  IdCirugia="@_idCirugiaActivaModal"
+                                  OnCirugiaCambiada="id => _idCirugiaActivaModal = id"
                                   OnGuardado="RefrescarEstadoBloqueosModalAsync" />
                     break;
                 case "pausaseguridad":
                     <PausaSeguridad @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                     IdOrden="@_ordenModal.OrdenAtencionId"
                                     Nhcl="@_ordenModal.Nhcl"
+                                    IdCirugia="@_idCirugiaActivaModal"
+                                    OnCirugiaCambiada="id => _idCirugiaActivaModal = id"
                                     ModoModal="true"
                                     OnGuardado="RefrescarEstadoBloqueosModalAsync" />
                     break;
                 case "anestesia":
                     <HojaAnestesia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                    IdOrden="@_ordenModal.OrdenAtencionId"
-                                   Nhcl="@_ordenModal.Nhcl" />
+                                   Nhcl="@_ordenModal.Nhcl"
+                                   IdCirugia="@_idCirugiaActivaModal"
+                                   OnCirugiaCambiada="id => _idCirugiaActivaModal = id" />
+                    break;
+                case "monanestesia":
+                    <MonitorizacionAnestesia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                                             IdOrden="@_ordenModal.OrdenAtencionId"
+                                             Nhcl="@_ordenModal.Nhcl"
+                                             IdCirugia="@_idCirugiaActivaModal"
+                                             OnCirugiaCambiada="id => _idCirugiaActivaModal = id"
+                                             ModoModal="true"
+                                             OnGuardado="RefrescarEstadoBloqueosModalAsync" />
                     break;
                 case "protocolo":
                     <ProtocoloQuirurgico @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                          IdOrden="@_ordenModal.OrdenAtencionId"
-                                         Nhcl="@_ordenModal.Nhcl" />
+                                         Nhcl="@_ordenModal.Nhcl"
+                                         IdCirugia="@_idCirugiaActivaModal"
+                                         OnCirugiaCambiada="id => _idCirugiaActivaModal = id" />
                     break;
                 case "recuperacion":
                     <SalaRecuperacion @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
                                       IdOrden="@_ordenModal.OrdenAtencionId"
-                                      Nhcl="@_ordenModal.Nhcl" />
+                                      Nhcl="@_ordenModal.Nhcl"
+                                      IdCirugia="@_idCirugiaActivaModal"
+                                      OnCirugiaCambiada="id => _idCirugiaActivaModal = id" />
                     break;
                 case "evoluciones":
                     <EvolucionMedica @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
@@ -1255,6 +1274,7 @@
         ("preanestesia", "bi-clipboard2-pulse", "Preanestesia", "/quirofano/preanestesia", "CIRUGÍA"),
         ("pausaseguridad", "bi-shield-check", "Pausa de seguridad", "/quirofano/pausa-seguridad", "CIRUGÍA"),
         ("anestesia", "bi-lungs", "Anestesia", "/quirofano/anestesia", "CIRUGÍA"),
+        ("monanestesia", "bi-heart-pulse-fill", "Monitorización de anestesia", "/quirofano/anestesia", "CIRUGÍA"),
         ("protocolo", "bi-scissors", "Protocolo quirúrgico", "/quirofano/protocolo", "CIRUGÍA"),
         ("recuperacion", "bi-hospital", "Recuperación", "/quirofano/recuperacion", "CIRUGÍA"),
         ("recetario", "bi-capsule", "Recetario", "/consulta/recetario", "ALTA Y RECETARIO"),
@@ -1267,6 +1287,7 @@
     private OrdenHospitalizacionColaDto? _ordenSeleccionada;
     private OrdenHospitalizacionColaDto? _ordenModal;
     private string _pestanaModuloActiva = "resumen";
+    private int _idCirugiaActivaModal;
     private IngresoHospitalizacionDto _ingreso = new();
     private PacienteHeaderDto? _resumenCabecera;
     private IngresoHospitalizacionDto? _resumenIngreso;
@@ -1276,7 +1297,7 @@
 
     private static readonly HashSet<string> PestanasCirugia =
     [
-        "cirugia", "preanestesia", "pausaseguridad", "anestesia", "protocolo", "recuperacion"
+        "cirugia", "preanestesia", "pausaseguridad", "anestesia", "monanestesia", "protocolo", "recuperacion"
     ];
 
     private static readonly HashSet<string> PestanasHospitalizacion =

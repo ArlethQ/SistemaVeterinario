@@ -82,6 +82,11 @@
 }
 else if (paciente != null)
 {
+    <SelectorCirugiaOperacion Cirugias="_cirugiasOrden"
+                              IdCirugiaSeleccionada="_idCirugiaActiva"
+                              ModuloClave="pausa"
+                              OnCirugiaCambiada="CambiarCirugiaActivaAsync" />
+
     <!-- Cabecera del Paciente -->
     <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
         <div class="card-body py-2 px-3">
@@ -345,12 +350,16 @@ else if (paciente != null)
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
+    [Parameter] public int IdCirugia { get; set; }
     [Parameter] public bool ModoModal { get; set; }
     [Parameter] public EventCallback OnGuardado { get; set; }
+    [Parameter] public EventCallback<int> OnCirugiaCambiada { get; set; }
 
     private int ordenInput;
     private int nhclInput;
     private List<OrdenActivaResumenDto> ordenesActivas = new();
+    private List<CirugiaOperacionResumenDto> _cirugiasOrden = [];
+    private int _idCirugiaActiva;
     private PacienteHeaderDto? paciente;
     private PausaSeguridadDto pausaDto = new();
 
@@ -362,7 +371,7 @@ else if (paciente != null)
     private string mensajeAlerta = string.Empty;
     private bool esError;
 
-    private string ClaveBorrador => $"hosvet_draft_pausa_{IdOrden}";
+    private string ClaveBorrador => $"hosvet_draft_pausa_{IdOrden}_{_idCirugiaActiva}";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -479,7 +488,13 @@ else if (paciente != null)
             nhclInput = Nhcl;
             ordenInput = IdOrden;
             Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
-            pausaDto = await QuirofanoService.ObtenerPausaSeguridadAsync(IdOrden, Nhcl);
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
+            if (IdCirugia > 0 && _cirugiasOrden.Any(c => c.IdCirugia == IdCirugia))
+                _idCirugiaActiva = IdCirugia;
+            else if (_idCirugiaActiva <= 0 || !_cirugiasOrden.Any(c => c.IdCirugia == _idCirugiaActiva))
+                _idCirugiaActiva = _cirugiasOrden.FirstOrDefault()?.IdCirugia ?? 0;
+
+            pausaDto = await QuirofanoService.ObtenerPausaSeguridadAsync(IdOrden, Nhcl, _idCirugiaActiva);
             _jsonInicial = JsonSerializer.Serialize(pausaDto);
             _borradorRecuperado = false;
             _borradorPendienteRestaurar = true;
@@ -537,11 +552,21 @@ else if (paciente != null)
         catch { }
     }
 
+    private async Task CambiarCirugiaActivaAsync(int nuevoIdCirugia)
+    {
+        _idCirugiaActiva = nuevoIdCirugia;
+        IdCirugia = nuevoIdCirugia;
+        mensajeAlerta = string.Empty;
+        if (OnCirugiaCambiada.HasDelegate)
+            await OnCirugiaCambiada.InvokeAsync(nuevoIdCirugia);
+        await CargarDatosAsync(navegar: false);
+    }
+
     private async Task DescartarBorradorAsync()
     {
         try { await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador); } catch { }
         _borradorRecuperado = false;
-        pausaDto = await QuirofanoService.ObtenerPausaSeguridadAsync(IdOrden, Nhcl);
+        pausaDto = await QuirofanoService.ObtenerPausaSeguridadAsync(IdOrden, Nhcl, _idCirugiaActiva);
         _jsonInicial = JsonSerializer.Serialize(pausaDto);
     }
 
@@ -550,6 +575,7 @@ else if (paciente != null)
         if (paciente == null) return;
         guardando = true;
         pausaDto.IdOrden = IdOrden;
+        pausaDto.IdCirugia = _idCirugiaActiva;
         pausaDto.Nhcl = Nhcl;
 
         var result = await QuirofanoService.GuardarPausaSeguridadAsync(
@@ -567,6 +593,7 @@ else if (paciente != null)
             _jsonInicial = JsonSerializer.Serialize(pausaDto);
             _borradorRecuperado = false;
             try { await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador); } catch { }
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
             if (OnGuardado.HasDelegate)
                 await OnGuardado.InvokeAsync();
         }

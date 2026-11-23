@@ -1,0 +1,107 @@
+@using HosvetKardex.Web.Models
+
+<div class="alert @(Cirugias.Count > 0 ? "alert-light border border-primary-subtle" : "alert-secondary border") py-2 px-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2 shadow-sm">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <span class="fw-semibold text-primary small">
+            <i class="bi bi-scissors me-1"></i>Operación vinculada:
+        </span>
+
+        @if (Cirugias.Count == 0)
+        {
+            <span class="text-muted small">Sin cirugía programada aún <span class="badge text-bg-secondary ms-1">Registro general de la orden</span></span>
+        }
+        else if (Cirugias.Count == 1)
+        {
+            var cir = Cirugias[0];
+            <span class="fw-bold text-dark small">@cir.Procedimiento</span>
+            <span class="badge text-bg-light border text-secondary">
+                <i class="bi bi-calendar3 me-1"></i>@cir.Fecha.ToString("dd/MM/yyyy") · @cir.HoraInicio–@cir.HoraFin
+            </span>
+            @if (!string.IsNullOrWhiteSpace(cir.Medico))
+            {
+                <span class="badge text-bg-light border text-dark">
+                    <i class="bi bi-person-badge me-1"></i>@cir.Medico
+                </span>
+            }
+            @if (!string.IsNullOrWhiteSpace(cir.Anestesiologo))
+            {
+                <span class="badge text-bg-info text-dark">
+                    <i class="bi bi-heart-pulse me-1"></i>Anest: @cir.Anestesiologo
+                </span>
+            }
+        }
+        else
+        {
+            <div class="d-flex flex-wrap align-items-center gap-1">
+                @for (int i = 0; i < Cirugias.Count; i++)
+                {
+                    var cir = Cirugias[i];
+                    var idx = i + 1;
+                    var activa = cir.IdCirugia == IdCirugiaSeleccionada;
+                    var tieneHoja = TieneRegistroEnModulo(cir);
+                    <button type="button"
+                            class="btn btn-sm @(activa ? "btn-primary" : "btn-outline-primary") py-1 px-2 d-inline-flex align-items-center gap-1"
+                            @onclick="() => SeleccionarAsync(cir.IdCirugia)">
+                        <span>#@idx · @(string.IsNullOrWhiteSpace(cir.Procedimiento) ? $"Cirugía {cir.IdCirugia}" : cir.Procedimiento)</span>
+                        <span class="opacity-75 small">(@cir.Fecha.ToString("dd/MM") @cir.HoraInicio)</span>
+                        @if (tieneHoja)
+                        {
+                            <i class="bi bi-check-circle-fill @(activa ? "text-white" : "text-success")" title="Hoja guardada"></i>
+                        }
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (CirugiaActiva is not null)
+    {
+        <div class="d-flex flex-wrap align-items-center gap-2 small">
+            @if (Cirugias.Count > 1 && !string.IsNullOrWhiteSpace(CirugiaActiva.Medico))
+            {
+                <span class="text-muted">
+                    <i class="bi bi-person-badge me-1"></i>@CirugiaActiva.Medico
+                    @if (!string.IsNullOrWhiteSpace(CirugiaActiva.Anestesiologo))
+                    {
+                        <span> · Anest: @CirugiaActiva.Anestesiologo</span>
+                    }
+                </span>
+            }
+            @if (TieneRegistroEnModulo(CirugiaActiva))
+            {
+                <span class="badge text-bg-success"><i class="bi bi-check-lg me-1"></i>Hoja guardada</span>
+            }
+            else
+            {
+                <span class="badge text-bg-warning text-dark"><i class="bi bi-file-earmark-plus me-1"></i>Nueva hoja</span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<CirugiaOperacionResumenDto> Cirugias { get; set; } = [];
+    [Parameter] public int IdCirugiaSeleccionada { get; set; }
+    [Parameter] public EventCallback<int> OnCirugiaCambiada { get; set; }
+    [Parameter] public string ModuloClave { get; set; } = "";
+
+    private CirugiaOperacionResumenDto? CirugiaActiva =>
+        Cirugias.FirstOrDefault(c => c.IdCirugia == IdCirugiaSeleccionada);
+
+    private bool TieneRegistroEnModulo(CirugiaOperacionResumenDto cir) => ModuloClave switch
+    {
+        "monanestesia" => cir.TieneMonAnestesia,
+        "pausa" => cir.TienePausa,
+        "protocolo" => cir.TieneProtocolo,
+        "preanestesia" => cir.TienePreAnestesia,
+        "anestesia" => cir.TieneAnestesia,
+        "recuperacion" => cir.TieneRecuperacion,
+        _ => false
+    };
+
+    private async Task SeleccionarAsync(int idCirugia)
+    {
+        if (idCirugia == IdCirugiaSeleccionada) return;
+        await OnCirugiaCambiada.InvokeAsync(idCirugia);
+    }
+}

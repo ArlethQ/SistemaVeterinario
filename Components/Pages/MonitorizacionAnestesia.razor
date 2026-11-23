@@ -1,0 +1,1367 @@
+@page "/quirofano/monitorizacion-anestesia"
+@page "/quirofano/monitorizacion-anestesia/{IdOrden:int}/{Nhcl:int}"
+@using System.Globalization
+@using System.Text.Json
+@inject IKardexService KardexService
+@inject IQuirofanoService QuirofanoService
+@inject IGestionMigradaService GestionService
+@inject IConsultaExternaService ConsultaService
+@inject IInventarioService InventarioService
+@inject SessionStateService Session
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Monitorización de Anestesia - e-ForVets</PageTitle>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2 no-print">
+    <div>
+        <h4 class="mb-0 fw-bold text-primary">Monitorización de Anestesia</h4>
+        <small class="text-muted">Evaluación preanestésica, chequeo de equipo, fármacos y monitoreo intra/postoperatorio.</small>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        @if (!ModoModal)
+        {
+            <div class="d-flex align-items-center gap-1">
+                <label class="small fw-bold text-secondary text-nowrap mb-0">Órdenes:</label>
+                <select class="form-select form-select-sm" style="min-width: 260px; max-width: 340px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+                    <option value="0">-- Seleccionar Orden Activa --</option>
+                    @foreach (var ord in _ordenesActivas)
+                    {
+                        <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
+                    }
+                </select>
+            </div>
+            <BuscadorOrdenClinica @bind-Orden="_ordenInput" @bind-Nhcl="_nhclInput" OnBuscar="CargarPorInputAsync" />
+        }
+
+        @if (_paciente != null)
+        {
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ImprimirHojaAsync">
+                <i class="bi bi-printer me-1"></i>Imprimir
+            </button>
+            <SaveButton class="btn btn-sm btn-success fw-semibold" OnClick="GuardarAsync" Disabled="@_guardando">
+                @(_guardando ? "Guardando..." : "Guardar Monitorización")
+            </SaveButton>
+        }
+    </div>
+</div>
+
+@if (_borradorRecuperado)
+{
+    <div class="alert alert-warning d-flex flex-wrap justify-content-between align-items-center py-2 px-3 mb-3 small no-print" role="alert">
+        <span>📝 <strong>Borrador recuperado automáticamente.</strong> Presiona <strong>Guardar Monitorización</strong> para confirmarlo en el sistema.</span>
+        <button type="button" class="btn btn-sm btn-outline-dark py-0" @onclick="DescartarBorradorAsync">Descartar borrador</button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_mensajeAlerta))
+{
+    <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small mb-3 no-print" role="alert">
+        @_mensajeAlerta
+        <button type="button" class="btn-close py-2" @onclick="() => _mensajeAlerta = string.Empty"></button>
+    </div>
+}
+
+@if (_cargandoInicial)
+{
+    <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span class="fw-semibold small">Cargando hoja de monitorización de anestesia...</span>
+    </div>
+}
+else if (_paciente != null)
+{
+    <SelectorCirugiaOperacion Cirugias="_cirugiasOrden"
+                              IdCirugiaSeleccionada="_idCirugiaActiva"
+                              ModuloClave="monanestesia"
+                              OnCirugiaCambiada="CambiarCirugiaActivaAsync" />
+
+    <!-- Cabecera del Paciente (mismo estilo de Hoja de Anestesia) -->
+    <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
+        <div class="card-body py-2 px-3">
+            <div class="row g-2 align-items-center small">
+                <div class="col-md-3">
+                    <span class="text-muted">Orden / NHCL:</span>
+                    <strong class="ms-1 text-primary">#@_paciente.OrdenAtencionId / @_paciente.Nhcl</strong>
+                    <span class="badge bg-primary ms-2">ASA @_dto.ClasificacionAsa@(_dto.EsEmergenciaAsa ? "E" : "")</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Paciente:</span>
+                    <strong class="ms-1">@_paciente.PacienteNombre</strong> (@_paciente.Especie · @_paciente.Raza)
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Nacimiento / Sexo:</span>
+                    <strong class="ms-1">@(_dto.FechaNacimiento?.ToString("dd/MM/yyyy") ?? "Sin registro")</strong> · @_paciente.Sexo
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted">Propietario:</span>
+                    <strong class="ms-1">@_paciente.PropietarioNombre</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. IDENTIFICACIÓN, CONSENTIMIENTO Y PROCEDIMIENTO -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h6 class="mb-0 fw-bold text-primary"><i class="bi bi-clipboard2-pulse me-2"></i>1. Datos del Procedimiento y Paciente</h6>
+            <div class="d-flex flex-wrap align-items-center gap-3 small">
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="chkConsentAnest" @bind="_dto.ConsentimientoFirmado" @bind:after="GuardarBorradorAutoAsync" />
+                    <label class="form-check-label fw-semibold" for="chkConsentAnest">Consentimiento informado firmado</label>
+                </div>
+                <div class="d-flex align-items-center gap-1">
+                    <span class="text-muted">Fecha:</span>
+                    <input type="date" class="form-control form-control-sm" style="width:140px;" @bind="_dto.FechaConsentimiento" @bind:after="GuardarBorradorAutoAsync" />
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-2 small">
+                <div class="col-md-4 position-relative">
+                    <label class="form-label mb-1 fw-semibold">
+                        Procedimiento principal
+                        @if (_procDesdeProgramacion)
+                        {
+                            <span class="badge text-bg-light border text-primary fw-normal ms-1">desde Programación</span>
+                        }
+                    </label>
+                    <input type="text" class="form-control form-control-sm" autocomplete="off"
+                           @bind="_dto.Procedimiento" @bind:event="oninput" @bind:after="OnProcPrincipalInputAsync"
+                           @onfocus="AbrirSugerenciasProcPrincipalAsync" @onblur="CerrarSugerenciasProcPrincipalAsync"
+                           placeholder="Se toma de Programación o busque servicio..." />
+                    @if (_mostrarSugProcPrincipal)
+                    {
+                        <div class="list-group position-absolute start-0 end-0 bg-white border rounded shadow-sm mt-1" style="z-index:1060; max-height:190px; overflow-y:auto;">
+                            @if (_sugerenciasServicios.Count == 0)
+                            {
+                                <div class="list-group-item py-1 px-2 text-muted small">Sin servicios coincidentes</div>
+                            }
+                            else
+                            {
+                                @foreach (var srv in _sugerenciasServicios)
+                                {
+                                    var s = srv;
+                                    <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start"
+                                            @onmousedown="() => SeleccionarProcPrincipalAsync(s)">@s.Descripcion</button>
+                                }
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label mb-1 fw-semibold">Veterinario responsable</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_dto.VeterinarioResponsable" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Dr(a)..." />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label mb-1 fw-semibold">Anestesista / Anestesiólogo</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_dto.Anestesista" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Se autocompleta si fue asignado en programación..." />
+                </div>
+                <div class="col-md-4 position-relative">
+                    <label class="form-label mb-1 fw-semibold">Procedimiento(s) adicional(es) <small class="text-muted fw-normal">(Servicios)</small></label>
+                    <input type="text" class="form-control form-control-sm" autocomplete="off"
+                           @bind="_dto.ProcedimientosAdicionales" @bind:event="oninput" @bind:after="OnProcAdicionalInputAsync"
+                           @onfocus="AbrirSugerenciasProcAdicionalAsync" @onblur="CerrarSugerenciasProcAdicionalAsync"
+                           placeholder="Escriba para buscar servicio en PRODUCTO..." />
+                    @if (_mostrarSugProcAdicional)
+                    {
+                        <div class="list-group position-absolute start-0 end-0 bg-white border rounded shadow-sm mt-1" style="z-index:1060; max-height:190px; overflow-y:auto;">
+                            @if (_sugerenciasServicios.Count == 0)
+                            {
+                                <div class="list-group-item py-1 px-2 text-muted small">Sin servicios coincidentes</div>
+                            }
+                            else
+                            {
+                                @foreach (var srv in _sugerenciasServicios)
+                                {
+                                    var s = srv;
+                                    <button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start"
+                                            @onmousedown="() => SeleccionarProcAdicionalAsync(s)">@s.Descripcion</button>
+                                }
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1 fw-semibold">Posición del paciente</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_dto.PosicionPaciente" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Decúbito dorsal, lateral..." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold">
+                        Peso (kg)
+                        @if (_datosDesdeSoap)
+                        {
+                            <span class="badge text-bg-light border text-muted fw-normal" title="Autocompletado desde Triaje / SOAP (editable)">SOAP</span>
+                        }
+                    </label>
+                    <input type="number" step="0.01" min="0" class="form-control form-control-sm" @bind="_dto.PesoKg" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ej: 12.5" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold">Fecha nacimiento</label>
+                    <input type="date" class="form-control form-control-sm" @bind="_dto.FechaNacimiento" @bind:after="GuardarBorradorAutoAsync" />
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label mb-1 fw-semibold">CC (/9)</label>
+                    <input type="number" min="1" max="9" class="form-control form-control-sm" @bind="_dto.CondicionCorporal" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="5" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. EVALUACIÓN PREANESTÉSICA -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h6 class="mb-0 fw-bold text-primary"><i class="bi bi-heart-pulse me-2"></i>2. Evaluación Preanestésica y Clasificación ASA</h6>
+            <div class="d-flex flex-wrap align-items-center gap-2 small">
+                <span class="fw-semibold text-muted">Clasificación ASA:</span>
+                <div class="btn-group btn-group-sm">
+                    @foreach (var nivel in new[] { "I", "II", "III", "IV", "V" })
+                    {
+                        var n = nivel;
+                        <button type="button" class="btn @(_dto.ClasificacionAsa == n ? "btn-primary fw-bold" : "btn-outline-primary")" @onclick="() => SetAsaAsync(n)">@n</button>
+                    }
+                    <button type="button" class="btn @(_dto.EsEmergenciaAsa ? "btn-danger fw-bold" : "btn-outline-danger")" title="Emergencia (E)" @onclick="ToggleEmergenciaAsaAsync">E</button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 small">
+                <div class="col-md-6">
+                    <label class="form-label mb-1 fw-semibold">Historia / Problema actual</label>
+                    <textarea class="form-control form-control-sm" rows="2" @bind="_dto.HistoriaProblemaActual" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Antecedentes clínicos relevantes, ayuno, hallazgos previos..."></textarea>
+                </div>
+                <div class="col-md-6">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-1 gap-2">
+                        <label class="form-label mb-0 fw-semibold">Examen clínico</label>
+                        <div class="d-flex gap-2">
+                            <div class="input-group input-group-sm" style="width:110px;">
+                                <span class="input-group-text">T°C</span>
+                                <input type="text" class="form-control" @bind="_dto.ExamenTemp" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="38.5" />
+                            </div>
+                            <div class="input-group input-group-sm" style="width:115px;">
+                                <span class="input-group-text">P/m</span>
+                                <input type="text" class="form-control" @bind="_dto.ExamenPulso" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="90" />
+                            </div>
+                            <div class="input-group input-group-sm" style="width:115px;">
+                                <span class="input-group-text">R/m</span>
+                                <input type="text" class="form-control" @bind="_dto.ExamenResp" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="24" />
+                            </div>
+                        </div>
+                    </div>
+                    <textarea class="form-control form-control-sm" rows="2" @bind="_dto.ExamenClinicoNotas" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Auscultación cardiopulmonar, mucosas, TRC, hidratación..."></textarea>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label mb-1 fw-semibold">Talla / ubicación del catéter IV</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_dto.TallaUbicacionCateter" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ej: 22G Cefálica Der." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold">Fecha catéter</label>
+                    <input type="date" class="form-control form-control-sm" @bind="_dto.FechaCateter" @bind:after="GuardarBorradorAutoAsync" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1 fw-semibold">Temperamento</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_dto.Temperamento" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Dócil, nervioso, agresivo..." />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1 fw-semibold">Alergias / reacciones</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_dto.AlergiasReacciones" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ninguna conocida / especificar..." />
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label mb-1 fw-semibold">Medicación actual</label>
+                    <textarea class="form-control form-control-sm" rows="2" @bind="_dto.MedicacionActual" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Fármacos que recibe actualmente..."></textarea>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label mb-1 fw-semibold">Pruebas de diagnóstico</label>
+                    <textarea class="form-control form-control-sm" rows="2" @bind="_dto.PruebasDiagnostico" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Hemograma, bioquímica, RX, ECG..."></textarea>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label mb-1 fw-semibold text-danger">Riesgos críticos</label>
+                    <textarea class="form-control form-control-sm border-danger-subtle" rows="2" @bind="_dto.RiesgosCriticos" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Vía aérea difícil, hipotermia, hemorragia, cardiopatía..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. CHECKLIST PRE-INDUCCIÓN -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white py-2">
+            <h6 class="mb-0 fw-bold text-primary"><i class="bi bi-check2-square me-2"></i>3. Verificación de Circuito Respiratorio y Material</h6>
+        </div>
+        <div class="card-body py-2 small">
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <div class="p-2 rounded bg-light border">
+                        <div class="fw-bold text-primary mb-2">¿Circuito respiratorio listo?</div>
+                        <div class="row g-2">
+                            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="chkMaq" @bind="_dto.CheckMaquinaAnestesia" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkMaq">Chequeo diario máquina de anestesia</label></div></div>
+                            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="chkO2" @bind="_dto.CheckO2Listo" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkO2">O₂ listo para usar</label></div></div>
+                            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="chkFug" @bind="_dto.CheckPruebaFugas" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkFug">Prueba de fugas</label></div></div>
+                            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="chkApl" @bind="_dto.CheckValvulaApl" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkApl">Válvula APL abierta</label></div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-2 rounded bg-light border">
+                        <div class="fw-bold text-primary mb-2">¿Resto de material listo?</div>
+                        <div class="row g-2">
+                            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="chkMon" @bind="_dto.CheckMonitorizacion" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkMon">Monitorización lista</label></div></div>
+                            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="chkCal" @bind="_dto.CheckCalentamiento" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkCal">Sistema de calentamiento</label></div></div>
+                            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="chkInt" @bind="_dto.CheckIntubacion" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkInt">Material para intubación listo</label></div></div>
+                            <div class="col-sm-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="chkEme" @bind="_dto.CheckEmergencia" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkEme">Equipo de emergencia listo</label></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. FÁRMACOS DE PREMEDICACIÓN, INDUCCIÓN Y COADYUVANTES -->
+    <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-primary">4. Fármacos de Premedicación</h6>
+                    <button type="button" class="btn btn-sm btn-outline-primary py-0 no-print" @onclick="AgregarPremedicacionAsync">+ Fila</button>
+                </div>
+                <div class="card-body p-2">
+                    <div class="table-responsive" style="overflow: visible;">
+                        <table class="table table-sm table-bordered align-middle mb-0 small">
+                            <thead class="table-light">
+                                <tr><th>Fármaco (stock)</th><th style="width:17%;">Dosis</th><th style="width:14%;">Ruta</th><th style="width:15%;">Hora</th><th style="width:19%;">Efecto</th><th style="width:32px;" class="no-print"></th></tr>
+                            </thead>
+                            <tbody>
+                                @for (int i = 0; i < _dto.Premedicacion.Count; i++)
+                                {
+                                    var idx = i;
+                                    var item = _dto.Premedicacion[idx];
+                                    var puedeQuitar = _dto.Premedicacion.Count > 1 && EsFilaPremedicacionVacia(item);
+                                    var sugerencias = _sugPremedIdx == idx ? FiltrarStock(item.Farmaco) : [];
+                                    <tr>
+                                        <td class="position-relative">
+                                            <input type="text" class="form-control form-control-sm border-0" autocomplete="off"
+                                                   placeholder="Buscar en stock..."
+                                                   @bind="item.Farmaco" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync"
+                                                   @onfocus="() => AbrirSugerenciasPremedAsync(idx)"
+                                                   @onblur="CerrarSugerenciasPremedAsync" />
+                                            @if (_sugPremedIdx == idx)
+                                            {
+                                                <div class="list-group position-absolute start-0 bg-white border rounded shadow-sm mt-1" style="z-index:1060; min-width:260px; max-height:190px; overflow-y:auto;">
+                                                    @if (sugerencias.Count == 0)
+                                                    {
+                                                        <div class="list-group-item py-1 px-2 text-muted small">Sin bienes en stock para "@item.Farmaco"</div>
+                                                    }
+                                                    else
+                                                    {
+                                                        @foreach (var prod in sugerencias)
+                                                        {
+                                                            var p = prod;
+                                                            <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center gap-2 text-start"
+                                                                    @onmousedown="() => SeleccionarStockPremedAsync(idx, p)">
+                                                                <span class="text-truncate">@p.DisplayName</span>
+                                                                <span class="badge text-bg-success text-nowrap">@p.Available.ToString("N2") @p.BaseUnitOfMeasureCode</span>
+                                                            </button>
+                                                        }
+                                                    }
+                                                </div>
+                                            }
+                                        </td>
+                                        <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Dosis" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                        <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Ruta" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="IM/IV" /></td>
+                                        <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Hora" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="08:00" /></td>
+                                        <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Efecto" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                        <td class="text-center no-print">
+                                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" disabled="@(!puedeQuitar)"
+                                                    title="@(puedeQuitar ? "Quitar fila vacía" : "Solo se pueden quitar filas vacías")"
+                                                    @onclick="() => QuitarPremedicacionAsync(idx)">×</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-primary">Fármacos de Inducción y Vía Aérea</h6>
+                    <button type="button" class="btn btn-sm btn-outline-primary py-0 no-print" @onclick="AgregarInduccionAsync">+ Fila</button>
+                </div>
+                <div class="card-body p-2">
+                    <div class="table-responsive mb-2" style="overflow: visible;">
+                        <table class="table table-sm table-bordered align-middle mb-0 small">
+                            <thead class="table-light">
+                                <tr><th>Fármaco (stock)</th><th style="width:20%;">Dosis</th><th style="width:17%;">Ruta</th><th style="width:17%;">Hora</th><th style="width:32px;" class="no-print"></th></tr>
+                            </thead>
+                            <tbody>
+                                @for (int i = 0; i < _dto.Induccion.Count; i++)
+                                {
+                                    var idx = i;
+                                    var item = _dto.Induccion[idx];
+                                    var puedeQuitar = _dto.Induccion.Count > 1 && EsFilaInduccionVacia(item);
+                                    var sugerencias = _sugInducIdx == idx ? FiltrarStock(item.Farmaco) : [];
+                                    <tr>
+                                        <td class="position-relative">
+                                            <input type="text" class="form-control form-control-sm border-0" autocomplete="off"
+                                                   placeholder="Buscar en stock..."
+                                                   @bind="item.Farmaco" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync"
+                                                   @onfocus="() => AbrirSugerenciasInducAsync(idx)"
+                                                   @onblur="CerrarSugerenciasInducAsync" />
+                                            @if (_sugInducIdx == idx)
+                                            {
+                                                <div class="list-group position-absolute start-0 bg-white border rounded shadow-sm mt-1" style="z-index:1060; min-width:260px; max-height:190px; overflow-y:auto;">
+                                                    @if (sugerencias.Count == 0)
+                                                    {
+                                                        <div class="list-group-item py-1 px-2 text-muted small">Sin bienes en stock para "@item.Farmaco"</div>
+                                                    }
+                                                    else
+                                                    {
+                                                        @foreach (var prod in sugerencias)
+                                                        {
+                                                            var p = prod;
+                                                            <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center gap-2 text-start"
+                                                                    @onmousedown="() => SeleccionarStockInducAsync(idx, p)">
+                                                                <span class="text-truncate">@p.DisplayName</span>
+                                                                <span class="badge text-bg-success text-nowrap">@p.Available.ToString("N2") @p.BaseUnitOfMeasureCode</span>
+                                                            </button>
+                                                        }
+                                                    }
+                                                </div>
+                                            }
+                                        </td>
+                                        <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Dosis" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                        <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Ruta" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="IV" /></td>
+                                        <td><input type="text" class="form-control form-control-sm border-0" @bind="item.Hora" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="08:15" /></td>
+                                        <td class="text-center no-print">
+                                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" disabled="@(!puedeQuitar)"
+                                                    title="@(puedeQuitar ? "Quitar fila vacía" : "Solo se pueden quitar filas vacías")"
+                                                    @onclick="() => QuitarInduccionAsync(idx)">×</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="row g-2 align-items-center small px-1">
+                        <div class="col-sm-7">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">Tubo endotraqueal</span>
+                                <input type="text" class="form-control" @bind="_dto.TamanoTuboEndotraqueal" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ej: 6.5 mm" />
+                            </div>
+                        </div>
+                        <div class="col-sm-5 d-flex align-items-center justify-content-end gap-2">
+                            <span class="fw-semibold text-muted">Balón inflado:</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn @(_dto.BalonInflado == "Y" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => SetBalonAsync("Y")'>Sí</button>
+                                <button type="button" class="btn @(_dto.BalonInflado == "N" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => SetBalonAsync("N")'>No</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Antibióticos / AINEs / Bloqueo locoregional -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2 small">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-4">
+                    <div class="input-group input-group-sm">
+                        <div class="input-group-text">
+                            <input class="form-check-input mt-0 me-1" type="checkbox" id="chkAtb" @bind="_dto.UsaAntibioticos" @bind:after="GuardarBorradorAutoAsync" />
+                            <label class="mb-0" for="chkAtb">Antibióticos</label>
+                        </div>
+                        <input type="text" class="form-control" @bind="_dto.DetalleAntibioticos" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Fármaco, dosis, hora..." />
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="input-group input-group-sm">
+                        <div class="input-group-text">
+                            <input class="form-check-input mt-0 me-1" type="checkbox" id="chkAine" @bind="_dto.UsaAines" @bind:after="GuardarBorradorAutoAsync" />
+                            <label class="mb-0" for="chkAine">AINEs</label>
+                        </div>
+                        <input type="text" class="form-control" @bind="_dto.DetalleAines" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Fármaco, dosis, hora..." />
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Bloqueo locoregional</span>
+                        <input type="text" class="form-control" @bind="_dto.BloqueoLocoregional" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Tipo / fármaco / dosis..." />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. MONITORIZACIÓN INTRAOPERATORIA (GRÁFICO + TABLA) -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h6 class="mb-0 fw-bold text-primary"><i class="bi bi-activity me-2"></i>5. Curva y Registro de Monitorización Intraoperatoria</h6>
+                <div class="d-flex flex-wrap gap-3 small text-muted mt-1">
+                    <span><strong style="color:#dc2626;">●</strong> FC/PR</span>
+                    <span><strong style="color:#2563eb;">◦</strong> FR</span>
+                    <span><strong style="color:#0f766e;">Ø</strong> VM</span>
+                    <span><strong style="color:#15803d;">˅</strong> PAS</span>
+                    <span><strong style="color:#0369a1;">–</strong> PAM</span>
+                    <span><strong style="color:#16a34a;">˄</strong> PAD</span>
+                    <span><strong style="color:#7c3aed;">◎</strong> Doppler</span>
+                    <span><strong style="color:#ea580c;">▲</strong> ETCO₂</span>
+                </div>
+            </div>
+            <div class="d-flex gap-2 no-print">
+                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AutollenarHoras5MinAsync">⏱ Autollenar +5 min</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AgregarIntervaloAsync">+ Columna</button>
+            </div>
+        </div>
+        <div class="card-body p-2">
+            <!-- Gráfico SVG simétrico (escala AVA equidistante) -->
+            <div class="overflow-x-auto border rounded bg-white p-2 mb-2">
+                @{
+                    var cols = _dto.Intervalos.Count;
+                    var leftPad = 46;
+                    var rightPad = 14;
+                    var topPad = 14;
+                    var bottomPad = 24;
+                    var rowH = 18;
+                    var numBands = EscalaAva.Length - 1; // 15 bandas iguales (200..0)
+                    var chartH = numBands * rowH;
+                    var svgH = topPad + chartH + bottomPad;
+                    var colW = 72;
+                    var svgW = leftPad + (cols * colW) + rightPad;
+                }
+                <svg viewBox="0 0 @svgW @svgH" style="width:100%; min-width:@(svgW)px; height:auto; display:block;">
+                    <!-- Fondo sutil de columnas agrupadas cada 3 -->
+                    @for (int i = 0; i < cols; i++)
+                    {
+                        if ((i + 1) % 3 == 0)
+                        {
+                            var rx = leftPad + i * colW;
+                            <rect x="@rx" y="@topPad" width="@colW" height="@chartH" fill="#f8fafc" />
+                        }
+                    }
+
+                    <!-- Líneas horizontales simétricas (una por cada nivel + sublíneas medias) -->
+                    @for (int b = 0; b < EscalaAva.Length; b++)
+                    {
+                        var y = topPad + b * rowH;
+                        var tick = EscalaAva[b];
+                        <line x1="@leftPad" y1="@y" x2="@(svgW - rightPad)" y2="@y" stroke="@(b == 0 || b == EscalaAva.Length - 1 ? "#1e3a5f" : "#94a3b8")" stroke-width="@(b == 0 || b == EscalaAva.Length - 1 ? "1.6" : "0.9")" />
+                        if (tick > 0)
+                        {
+                            @((MarkupString)$"<text x=\"{leftPad - 7}\" y=\"{y + 3}\" text-anchor=\"end\" font-size=\"10\" fill=\"#1e3a5f\" font-weight=\"600\">{tick}</text>")
+                        }
+                        if (b < EscalaAva.Length - 1)
+                        {
+                            var yMid = y + rowH / 2.0;
+                            <line x1="@leftPad" y1="@F(yMid)" x2="@(svgW - rightPad)" y2="@F(yMid)" stroke="#e2e8f0" stroke-width="0.6" />
+                        }
+                    }
+
+                    <!-- Líneas verticales simétricas (gruesa cada 3 columnas como AVA) -->
+                    @for (int i = 0; i <= cols; i++)
+                    {
+                        var x = leftPad + i * colW;
+                        var esGrupo = i == 0 || i == cols || i % 3 == 0;
+                        <line x1="@x" y1="@topPad" x2="@x" y2="@(topPad + chartH)" stroke="@(esGrupo ? "#1e3a5f" : "#cbd5e1")" stroke-width="@(esGrupo ? "1.6" : "0.8")" />
+                    }
+
+                    <!-- Etiquetas de hora abajo -->
+                    @for (int i = 0; i < cols; i++)
+                    {
+                        var cx = leftPad + i * colW + colW / 2.0;
+                        var labelHora = System.Net.WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(_dto.Intervalos[i].Hora) ? $"T{i + 1}" : _dto.Intervalos[i].Hora);
+                        @((MarkupString)$"<text x=\"{F(cx)}\" y=\"{svgH - 6}\" text-anchor=\"middle\" font-size=\"10\" fill=\"#1e3a5f\" font-weight=\"700\">{labelHora}</text>")
+                    }
+
+                    @{
+                        var ptsFc = BuildPolylinePoints(i => _dto.Intervalos[i].Fc, leftPad, colW, topPad, rowH);
+                        var ptsFr = BuildPolylinePoints(i => _dto.Intervalos[i].Fr, leftPad, colW, topPad, rowH);
+                        var ptsPam = BuildPolylinePoints(i => _dto.Intervalos[i].Pam, leftPad, colW, topPad, rowH);
+                    }
+                    @if (!string.IsNullOrEmpty(ptsFc)) { <polyline points="@ptsFc" fill="none" stroke="#dc2626" stroke-width="1.8" /> }
+                    @if (!string.IsNullOrEmpty(ptsFr)) { <polyline points="@ptsFr" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-dasharray="4,2" /> }
+                    @if (!string.IsNullOrEmpty(ptsPam)) { <polyline points="@ptsPam" fill="none" stroke="#0369a1" stroke-width="1.5" /> }
+
+                    @for (int i = 0; i < cols; i++)
+                    {
+                        var it = _dto.Intervalos[i];
+                        var cx = leftPad + i * colW + colW / 2.0;
+                        if (it.Fc.HasValue) { <circle cx="@F(cx)" cy="@F(MapY(it.Fc.Value, topPad, rowH))" r="4" fill="#dc2626" /> }
+                        if (it.Fr.HasValue) { <circle cx="@F(cx)" cy="@F(MapY(it.Fr.Value, topPad, rowH))" r="4" fill="#fff" stroke="#2563eb" stroke-width="1.8" /> }
+                        if (it.VentilacionMecanica.HasValue) { @((MarkupString)$"<text x=\"{F(cx)}\" y=\"{F(MapY(it.VentilacionMecanica.Value, topPad, rowH) + 4)}\" text-anchor=\"middle\" font-size=\"12\" fill=\"#0f766e\" font-weight=\"bold\">Ø</text>") }
+                        if (it.Pas.HasValue) { @((MarkupString)$"<text x=\"{F(cx)}\" y=\"{F(MapY(it.Pas.Value, topPad, rowH) + 4)}\" text-anchor=\"middle\" font-size=\"12\" fill=\"#15803d\" font-weight=\"bold\">˅</text>") }
+                        if (it.Pam.HasValue) { var y = MapY(it.Pam.Value, topPad, rowH); <line x1="@F(cx - 6)" y1="@F(y)" x2="@F(cx + 6)" y2="@F(y)" stroke="#0369a1" stroke-width="2.2" /> }
+                        if (it.Pad.HasValue) { @((MarkupString)$"<text x=\"{F(cx)}\" y=\"{F(MapY(it.Pad.Value, topPad, rowH) + 4)}\" text-anchor=\"middle\" font-size=\"12\" fill=\"#16a34a\" font-weight=\"bold\">˄</text>") }
+                        if (it.Doppler.HasValue)
+                        {
+                            var y = MapY(it.Doppler.Value, topPad, rowH);
+                            <circle cx="@F(cx)" cy="@F(y)" r="4.5" fill="none" stroke="#7c3aed" stroke-width="1.5" />
+                            <circle cx="@F(cx)" cy="@F(y)" r="1.6" fill="#7c3aed" />
+                        }
+                        if (it.Etco2.HasValue)
+                        {
+                            var y = MapY(it.Etco2.Value, topPad, rowH);
+                            @((MarkupString)$"<polygon points=\"{F(cx)},{F(y - 4.5)} {F(cx - 4.5)},{F(y + 3.5)} {F(cx + 4.5)},{F(y + 3.5)}\" fill=\"#ea580c\" />")
+                        }
+                    }
+                </svg>
+            </div>
+
+            <!-- Tabla de intervalos -->
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0 small mon-grid-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="mon-sticky-col">Parámetro / Hora</th>
+                            @for (int i = 0; i < _dto.Intervalos.Count; i++)
+                            {
+                                var idx = i;
+                                <th class="@((idx + 1) % 3 == 0 ? "table-secondary" : "")">
+                                    <input type="text" class="form-control form-control-sm border-0 bg-transparent text-center fw-bold p-0" @bind="_dto.Intervalos[idx].Hora" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="@($"T{idx + 1}")" />
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="mon-sticky-col"><strong style="color:#dc2626;">●</strong> FC / PR (lpm)</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="number" min="0" max="250" class="mon-grid-input" @bind="_dto.Intervalos[idx].Fc" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col"><strong style="color:#2563eb;">◦</strong> FR (rpm)</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="number" min="0" max="250" class="mon-grid-input" @bind="_dto.Intervalos[idx].Fr" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col"><strong style="color:#0f766e;">Ø</strong> Ventilación mecánica (rpm)</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="number" min="0" max="250" class="mon-grid-input" @bind="_dto.Intervalos[idx].VentilacionMecanica" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col"><strong style="color:#15803d;">˅</strong> PAS (mmHg)</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="number" min="0" max="250" class="mon-grid-input" @bind="_dto.Intervalos[idx].Pas" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col"><strong style="color:#0369a1;">–</strong> PAM (mmHg)</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="number" min="0" max="250" class="mon-grid-input" @bind="_dto.Intervalos[idx].Pam" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col"><strong style="color:#16a34a;">˄</strong> PAD (mmHg)</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="number" min="0" max="250" class="mon-grid-input" @bind="_dto.Intervalos[idx].Pad" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col"><strong style="color:#7c3aed;">◎</strong> Doppler (mmHg)</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="number" min="0" max="250" class="mon-grid-input" @bind="_dto.Intervalos[idx].Doppler" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col fw-semibold">Isofluorano / Sevofluorano %</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="text" class="mon-grid-input" @bind="_dto.Intervalos[idx].AgenteVolatilPct" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col fw-semibold">O₂ / aire (L/min)</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="text" class="mon-grid-input" @bind="_dto.Intervalos[idx].O2AireLmin" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col fw-semibold">% SpO₂</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="number" class="mon-grid-input" @bind="_dto.Intervalos[idx].Spo2" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col fw-semibold"><strong style="color:#ea580c;">▲</strong> ETCO₂ (mmHg)</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="number" class="mon-grid-input" @bind="_dto.Intervalos[idx].Etco2" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col fw-semibold">Temperatura (°C)</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="@((idx + 1) % 3 == 0 ? "bg-light" : "")"><input type="number" step="0.1" class="mon-grid-input" @bind="_dto.Intervalos[idx].Temperatura" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                        <tr><td class="mon-sticky-col fw-semibold">Lubricación ocular</td>@for (int i = 0; i < _dto.Intervalos.Count; i++) { var idx = i; <td class="text-center @((idx + 1) % 3 == 0 ? "bg-light" : "")"><input class="form-check-input" type="checkbox" @bind="_dto.Intervalos[idx].LubricacionOcular" @bind:after="GuardarBorradorAutoAsync" /></td> }</tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. FLUIDOS, CONTEO QUIRÚRGICO, PÉRDIDAS SANGUÍNEAS Y POSTOPERATORIO -->
+    <div class="row g-3 mb-3">
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-2">
+                    <h6 class="mb-0 fw-bold text-primary">Fluidos y Conteo Quirúrgico</h6>
+                </div>
+                <div class="card-body small d-flex flex-column gap-3">
+                    <div>
+                        <label class="form-label fw-semibold mb-1">Fluidos (mL/kg/h)</label>
+                        @foreach (var fl in _dto.Fluidos)
+                        {
+                            <div class="input-group input-group-sm mb-1">
+                                <input type="text" class="form-control" @bind="fl.TipoFluido" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ej: Lactato Ringer" />
+                                <input type="text" class="form-control" style="max-width:95px;" @bind="fl.VelocidadMlKgH" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="mL/kg/h" />
+                            </div>
+                        }
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold mb-1">Conteo de material</label>
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light"><tr><th>Elemento</th><th class="text-center" style="width:75px;">Dentro</th><th class="text-center" style="width:75px;">Fuera</th></tr></thead>
+                            <tbody>
+                                <tr class="@(_dto.GasasDentro != _dto.GasasFuera ? "table-danger" : "")">
+                                    <td>Gasas</td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center" @bind="_dto.GasasDentro" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center" @bind="_dto.GasasFuera" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                </tr>
+                                <tr class="@(_dto.PunzantesDentro != _dto.PunzantesFuera ? "table-danger" : "")">
+                                    <td>Objetos punzantes</td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center" @bind="_dto.PunzantesDentro" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center" @bind="_dto.PunzantesFuera" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                </tr>
+                                <tr class="@(_dto.GasasFaringeDentro != _dto.GasasFaringeFuera ? "table-danger" : "")">
+                                    <td>Gasas en faringe</td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center" @bind="_dto.GasasFaringeDentro" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                    <td><input type="number" min="0" class="form-control form-control-sm text-center" @bind="_dto.GasasFaringeFuera" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-2">
+                    <h6 class="mb-0 fw-bold text-primary">Pérdidas Sanguíneas y Notas</h6>
+                </div>
+                <div class="card-body small d-flex flex-column gap-2">
+                    <div class="btn-group btn-group-sm w-100">
+                        <button type="button" class="btn @(_dto.EspecieVolemia == "PERRO" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => SetEspecieVolemiaAsync("PERRO")'>Perro (90 mL/kg)</button>
+                        <button type="button" class="btn @(_dto.EspecieVolemia == "GATO" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => SetEspecieVolemiaAsync("GATO")'>Gato (60 mL/kg)</button>
+                    </div>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Pérdidas (mL)</span>
+                        <input type="number" step="0.5" min="0" class="form-control @ClaseAlertaPerdida" @bind="_dto.PerdidasSanguineasMl" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="0" />
+                    </div>
+                    <div class="d-flex justify-content-between bg-light rounded border px-2 py-1">
+                        <span>10%: <strong>@(VolemiaTotalMl > 0 ? $"{VolemiaTotalMl * 0.10m:N1} mL" : "-")</strong></span>
+                        <span class="text-warning-emphasis">20%: <strong>@(VolemiaTotalMl > 0 ? $"{VolemiaTotalMl * 0.20m:N1} mL" : "-")</strong></span>
+                        <span class="text-danger">30%: <strong>@(VolemiaTotalMl > 0 ? $"{VolemiaTotalMl * 0.30m:N1} mL" : "-")</strong></span>
+                    </div>
+                    <div class="mt-1">
+                        <label class="form-label fw-semibold mb-1">Notas intraoperatorias</label>
+                        <textarea class="form-control form-control-sm" rows="4" @bind="_dto.Notas" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Eventos intraoperatorios, bolos analgésicos, incidencias..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-2">
+                    <h6 class="mb-0 fw-bold text-success">Postoperatorio</h6>
+                </div>
+                <div class="card-body small d-flex flex-column gap-2">
+                    <div class="row g-1">
+                        <div class="col-4"><div class="input-group input-group-sm"><span class="input-group-text">T°C</span><input type="text" class="form-control" @bind="_dto.PostTemp" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></div></div>
+                        <div class="col-4"><div class="input-group input-group-sm"><span class="input-group-text">P/m</span><input type="text" class="form-control" @bind="_dto.PostPulso" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></div></div>
+                        <div class="col-4"><div class="input-group input-group-sm"><span class="input-group-text">R/m</span><input type="text" class="form-control" @bind="_dto.PostResp" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" /></div></div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold mb-1">Observaciones postoperatorias</label>
+                        <textarea class="form-control form-control-sm" rows="2" @bind="_dto.PostoperatorioNotas" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Extubación, dolor, recuperación..."></textarea>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold mb-1">Fármacos antagonistas</label>
+                        <input type="text" class="form-control form-control-sm" @bind="_dto.FarmacosAntagonistas" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Atipamezol, naloxona, flumazenilo..." />
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold mb-1">Muestras de laboratorio</label>
+                        <input type="text" class="form-control form-control-sm" @bind="_dto.MuestrasLaboratorio" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Biopsia, histopatología, cultivo..." />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .mon-grid-table th, .mon-grid-table td { min-width: 58px; padding: 3px 4px; }
+    .mon-sticky-col { position: sticky; left: 0; background: #f8fafc !important; z-index: 2; min-width: 185px !important; white-space: nowrap; }
+    .mon-grid-input { width: 100%; min-width: 48px; border: none; background: transparent; text-align: center; font-size: 12px; padding: 1px 2px; }
+    .mon-grid-input:focus { outline: 2px solid #93c5fd; border-radius: 3px; background: #fff; }
+    @@media print { .no-print { display: none !important; } }
+</style>
+
+@if (_mostrarModalCambioProc)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(15,23,42,0.5); z-index: 1085;" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-warning-subtle py-2 px-3">
+                    <h6 class="modal-title fw-bold text-dark mb-0">
+                        <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Cambiar procedimiento principal
+                    </h6>
+                    <button type="button" class="btn-close btn-sm" @onclick="CancelarCambioProcAsync" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body py-3 px-3 small">
+                    <p class="mb-2">¿Está seguro que desea cambiar el procedimiento principal de esta operación?</p>
+                    <div class="bg-light border rounded p-2 mb-2">
+                        <div class="text-muted">Actual: <strong class="text-dark">@_procProgramadoOriginal</strong></div>
+                        <div class="text-primary mt-1">Nuevo: <strong>@_procPendienteTexto</strong></div>
+                    </div>
+                    <p class="text-muted mb-0" style="font-size:12px;">
+                        Este cambio se reflejará en <strong>Programación de cirugía</strong>, <strong>Protocolo quirúrgico</strong> y en todas las pestañas vinculadas a esta operación.
+                    </p>
+                </div>
+                <div class="modal-footer py-2 px-3 bg-light">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelarCambioProcAsync" disabled="@_cambiandoProc">Cancelar</button>
+                    <button type="button" class="btn btn-sm btn-primary fw-semibold" @onclick="ConfirmarCambioProcAsync" disabled="@_cambiandoProc">
+                        @(_cambiandoProc ? "Actualizando..." : "Sí, cambiar en todos lados")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+    [Parameter] public int IdCirugia { get; set; }
+    [Parameter] public bool ModoModal { get; set; }
+    [Parameter] public EventCallback OnGuardado { get; set; }
+    [Parameter] public EventCallback<int> OnCirugiaCambiada { get; set; }
+
+    private static readonly int[] EscalaAva = [200, 180, 160, 140, 120, 100, 80, 60, 40, 20, 10, 8, 6, 4, 2, 0];
+
+    private int _ordenInput;
+    private int _nhclInput;
+    private List<OrdenActivaResumenDto> _ordenesActivas = [];
+    private List<CirugiaOperacionResumenDto> _cirugiasOrden = [];
+    private int _idCirugiaActiva;
+    private List<FarmacoStockDto> _catalogoStock = [];
+    private List<SelectorClinicoDto> _sugerenciasServicios = [];
+    private bool _mostrarSugProcPrincipal;
+    private bool _mostrarSugProcAdicional;
+    private bool _procDesdeProgramacion;
+    private string _procProgramadoOriginal = string.Empty;
+    private bool _datosDesdeSoap;
+    private bool _mostrarModalCambioProc;
+    private bool _cambiandoProc;
+    private string _procPendienteTexto = string.Empty;
+    private int? _procPendienteId;
+    private int _localidadStockCargada;
+    private int _sugPremedIdx = -1;
+    private int _sugInducIdx = -1;
+    private PacienteHeaderDto? _paciente;
+    private MonitorizacionAnestesiaDto _dto = new();
+
+    private bool _cargandoInicial = true;
+    private bool _guardando;
+    private bool _borradorRecuperado;
+    private bool _borradorPendienteRestaurar;
+    private string _jsonInicial = string.Empty;
+    private string _mensajeAlerta = string.Empty;
+    private bool _esError;
+
+    private string ClaveBorrador => $"hosvet_draft_monanest_{IdOrden}_{_idCirugiaActiva}";
+
+    private decimal VolemiaTotalMl =>
+        (_dto.PesoKg ?? 0m) > 0m
+            ? _dto.PesoKg!.Value * (_dto.EspecieVolemia == "GATO" ? 60m : 90m)
+            : 0m;
+
+    private string ClaseAlertaPerdida =>
+        VolemiaTotalMl > 0 && _dto.PerdidasSanguineasMl is > 0
+            ? (_dto.PerdidasSanguineasMl.Value >= VolemiaTotalMl * 0.20m
+                ? "border-danger bg-danger-subtle fw-bold"
+                : _dto.PerdidasSanguineasMl.Value >= VolemiaTotalMl * 0.10m
+                    ? "border-warning bg-warning-subtle fw-bold"
+                    : "")
+            : "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _cargandoInicial = true;
+        await Task.Yield();
+
+        var cargarOrdenesPrimero = !ModoModal && IdOrden <= 0 && Session.OrdenActiva is not > 0;
+        if (cargarOrdenesPrimero)
+            _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+
+        if (IdOrden <= 0 && Session.OrdenActiva is > 0)
+        {
+            IdOrden = Session.OrdenActiva.Value;
+            Nhcl = Session.NhclActivo ?? 0;
+        }
+        else if (!ModoModal && IdOrden <= 0 && _ordenesActivas.Count > 0)
+        {
+            IdOrden = _ordenesActivas[0].IdOrdenAtencion;
+            Nhcl = _ordenesActivas[0].Nhcl;
+        }
+
+        if (IdOrden > 0)
+        {
+            _ordenInput = IdOrden;
+            _nhclInput = Nhcl;
+            await CargarDatosAsync(navegar: false);
+        }
+
+        _cargandoInicial = false;
+
+        if (!ModoModal && !cargarOrdenesPrimero)
+        {
+            StateHasChanged();
+            _ordenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_borradorPendienteRestaurar && _paciente != null)
+        {
+            _borradorPendienteRestaurar = false;
+            await IntentarRestaurarBorradorAsync();
+        }
+    }
+
+    private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var selOrden) && selOrden > 0)
+        {
+            _mensajeAlerta = string.Empty;
+            _esError = false;
+            var ord = _ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == selOrden);
+            IdOrden = selOrden;
+            Nhcl = ord?.Nhcl ?? 0;
+            _ordenInput = IdOrden;
+            _nhclInput = Nhcl;
+            await CargarDatosAsync();
+        }
+    }
+
+    private async Task CargarPorInputAsync()
+    {
+        _mensajeAlerta = string.Empty;
+        _esError = false;
+        if (_ordenInput > 0)
+        {
+            IdOrden = _ordenInput;
+            var match = _ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == IdOrden);
+            if (match != null) { Nhcl = match.Nhcl; _nhclInput = Nhcl; }
+        }
+        else if (_nhclInput > 0)
+        {
+            Nhcl = _nhclInput;
+            var match = _ordenesActivas.FirstOrDefault(x => x.Nhcl == Nhcl);
+            if (match != null) { IdOrden = match.IdOrdenAtencion; _ordenInput = IdOrden; }
+        }
+        if (IdOrden <= 0 && Nhcl <= 0) return;
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync(bool navegar = true)
+    {
+        var p = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
+        if (p == null)
+        {
+            _paciente = null;
+            _esError = true;
+            _mensajeAlerta = $"No se encontró la Orden #{IdOrden}.";
+            return;
+        }
+
+        Nhcl = p.Nhcl;
+        _nhclInput = Nhcl;
+        _ordenInput = IdOrden;
+        Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
+
+        _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
+        if (IdCirugia > 0 && _cirugiasOrden.Any(c => c.IdCirugia == IdCirugia))
+            _idCirugiaActiva = IdCirugia;
+        else if (_idCirugiaActiva <= 0 || !_cirugiasOrden.Any(c => c.IdCirugia == _idCirugiaActiva))
+            _idCirugiaActiva = _cirugiasOrden.FirstOrDefault()?.IdCirugia ?? 0;
+
+        var loaded = await QuirofanoService.ObtenerMonitorizacionAnestesiaAsync(IdOrden, Nhcl, _idCirugiaActiva);
+
+        // Autocompletar datos ya guardados del paciente y de la cirugía programada (si aplica)
+        if (!loaded.FechaNacimiento.HasValue && p.FechaNacimiento.HasValue)
+            loaded.FechaNacimiento = p.FechaNacimiento.Value.Date;
+
+        if (loaded.Id == 0)
+        {
+            if (string.IsNullOrWhiteSpace(loaded.Sexo) && !string.IsNullOrWhiteSpace(p.Sexo))
+                loaded.Sexo = p.Sexo.Trim().StartsWith("H", StringComparison.OrdinalIgnoreCase) || p.Sexo.Trim().StartsWith("F", StringComparison.OrdinalIgnoreCase) ? "F" : "M";
+            if (!string.IsNullOrWhiteSpace(p.Especie) && (p.Especie.Contains("FELIN", StringComparison.OrdinalIgnoreCase) || p.Especie.Contains("GATO", StringComparison.OrdinalIgnoreCase)))
+                loaded.EspecieVolemia = "GATO";
+        }
+
+        _procDesdeProgramacion = false;
+        _procProgramadoOriginal = string.Empty;
+        _datosDesdeSoap = false;
+
+        var cirugiaActiva = _cirugiasOrden.FirstOrDefault(c => c.IdCirugia == _idCirugiaActiva);
+        if (cirugiaActiva != null)
+        {
+            if (!string.IsNullOrWhiteSpace(cirugiaActiva.Procedimiento))
+                _procProgramadoOriginal = cirugiaActiva.Procedimiento.Trim();
+            if (string.IsNullOrWhiteSpace(loaded.Procedimiento) && !string.IsNullOrWhiteSpace(_procProgramadoOriginal))
+            {
+                loaded.Procedimiento = _procProgramadoOriginal;
+                _procDesdeProgramacion = true;
+            }
+            if (string.IsNullOrWhiteSpace(loaded.VeterinarioResponsable) && !string.IsNullOrWhiteSpace(cirugiaActiva.Medico))
+                loaded.VeterinarioResponsable = cirugiaActiva.Medico;
+            if (string.IsNullOrWhiteSpace(loaded.Anestesista) && !string.IsNullOrWhiteSpace(cirugiaActiva.Anestesiologo))
+                loaded.Anestesista = cirugiaActiva.Anestesiologo;
+        }
+
+        // Autocompletar peso y signos/datos del último SOAP / Triaje (editables)
+        try
+        {
+            var soap = await ConsultaService.ObtenerFichaMedicaAsync(IdOrden, Nhcl);
+            if (soap != null && soap.Sec > 0)
+            {
+                if ((!loaded.PesoKg.HasValue || loaded.PesoKg <= 0) && soap.Peso > 0)
+                {
+                    loaded.PesoKg = soap.Peso;
+                    _datosDesdeSoap = true;
+                }
+                if (!loaded.CondicionCorporal.HasValue && soap.IndiceCondicionCorporal > 0)
+                    loaded.CondicionCorporal = soap.IndiceCondicionCorporal;
+                if (string.IsNullOrWhiteSpace(loaded.Temperamento) && !string.IsNullOrWhiteSpace(soap.Temperamento))
+                    loaded.Temperamento = soap.Temperamento.Trim();
+                if (string.IsNullOrWhiteSpace(loaded.ExamenTemp) && soap.Temperatura > 0)
+                    loaded.ExamenTemp = soap.Temperatura.ToString("0.0", CultureInfo.InvariantCulture);
+                if (string.IsNullOrWhiteSpace(loaded.ExamenPulso) && soap.FrecuenciaCardiaca > 0)
+                    loaded.ExamenPulso = soap.FrecuenciaCardiaca.ToString(CultureInfo.InvariantCulture);
+                if (string.IsNullOrWhiteSpace(loaded.ExamenResp) && soap.FrecuenciaRespiratoria > 0)
+                    loaded.ExamenResp = soap.FrecuenciaRespiratoria.ToString(CultureInfo.InvariantCulture);
+                if (string.IsNullOrWhiteSpace(loaded.HistoriaProblemaActual))
+                {
+                    var partes = new[] { soap.MedMotivo?.Trim(), soap.MedAnamnesis?.Trim() }.Where(s => !string.IsNullOrWhiteSpace(s));
+                    loaded.HistoriaProblemaActual = string.Join(" — ", partes);
+                }
+                if (string.IsNullOrWhiteSpace(loaded.ExamenClinicoNotas))
+                {
+                    var notas = new List<string>();
+                    if (!string.IsNullOrWhiteSpace(soap.Mucosas)) notas.Add($"Mucosas: {soap.Mucosas.Trim()}");
+                    if (soap.TiempoLlenadoCapilar > 0) notas.Add($"TRC: {soap.TiempoLlenadoCapilar}s");
+                    if (soap.Deshidratacion > 0) notas.Add($"Deshidratación: {soap.Deshidratacion}%");
+                    if (!string.IsNullOrWhiteSpace(soap.Auscultacion)) notas.Add($"Auscultación: {soap.Auscultacion.Trim()}");
+                    loaded.ExamenClinicoNotas = string.Join(" · ", notas);
+                }
+                if (string.IsNullOrWhiteSpace(loaded.MedicacionActual) && !string.IsNullOrWhiteSpace(soap.Tratamiento))
+                    loaded.MedicacionActual = soap.Tratamiento.Trim();
+            }
+        }
+        catch { }
+
+        if (string.IsNullOrWhiteSpace(loaded.VeterinarioResponsable) && !string.IsNullOrWhiteSpace(p.MedicoResponsable))
+            loaded.VeterinarioResponsable = p.MedicoResponsable;
+
+        _dto = loaded;
+        _jsonInicial = JsonSerializer.Serialize(_dto);
+        _borradorRecuperado = false;
+        _borradorPendienteRestaurar = true;
+        _paciente = p;
+
+        var ruta = $"/quirofano/monitorizacion-anestesia/{IdOrden}/{Nhcl}";
+        if (!ModoModal && navegar && Nav.Uri != Nav.ToAbsoluteUri(ruta).AbsoluteUri)
+            Nav.NavigateTo(ruta);
+    }
+
+    private async Task CambiarCirugiaActivaAsync(int nuevoIdCirugia)
+    {
+        _idCirugiaActiva = nuevoIdCirugia;
+        IdCirugia = nuevoIdCirugia;
+        _mensajeAlerta = string.Empty;
+        if (OnCirugiaCambiada.HasDelegate)
+            await OnCirugiaCambiada.InvokeAsync(nuevoIdCirugia);
+        await CargarDatosAsync(navegar: false);
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (_paciente == null) return;
+        _guardando = true;
+        _dto.IdOrden = IdOrden;
+        _dto.IdCirugia = _idCirugiaActiva;
+        _dto.Nhcl = Nhcl;
+
+        var res = await QuirofanoService.GuardarMonitorizacionAnestesiaAsync(
+            _dto,
+            Session.CurrentUser?.IdUsuario ?? 1,
+            Session.Localidad > 0 ? Session.Localidad : 1);
+
+        _guardando = false;
+        _esError = !res.Ok;
+        _mensajeAlerta = res.Ok
+            ? "Hoja de Monitorización de Anestesia guardada correctamente."
+            : $"Error al guardar: {res.Mensaje}";
+
+        if (res.Ok)
+        {
+            _jsonInicial = JsonSerializer.Serialize(_dto);
+            _borradorRecuperado = false;
+            try { await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador); } catch { }
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
+            if (OnGuardado.HasDelegate)
+                await OnGuardado.InvokeAsync();
+        }
+    }
+
+    private async Task GuardarBorradorAutoAsync()
+    {
+        if (IdOrden <= 0 || _paciente == null) return;
+        try
+        {
+            var json = JsonSerializer.Serialize(_dto);
+            if (json == _jsonInicial)
+            {
+                await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador);
+                return;
+            }
+            await JS.InvokeVoidAsync("hosvetDraft.save", ClaveBorrador, json);
+        }
+        catch { }
+    }
+
+    private async Task IntentarRestaurarBorradorAsync()
+    {
+        if (IdOrden <= 0) return;
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("hosvetDraft.load", ClaveBorrador);
+            if (string.IsNullOrWhiteSpace(json)) return;
+            var borrador = JsonSerializer.Deserialize<MonitorizacionAnestesiaDto>(json);
+            if (borrador == null) return;
+            if (JsonSerializer.Serialize(borrador) == _jsonInicial)
+            {
+                await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador);
+                _borradorRecuperado = false;
+                return;
+            }
+            _dto = borrador;
+            _borradorRecuperado = true;
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    private async Task DescartarBorradorAsync()
+    {
+        try { await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador); } catch { }
+        _borradorRecuperado = false;
+        await CargarDatosAsync(navegar: false);
+    }
+
+    private async Task SetBalonAsync(string val) { _dto.BalonInflado = _dto.BalonInflado == val ? "" : val; await GuardarBorradorAutoAsync(); }
+    private async Task SetAsaAsync(string nivel) { _dto.ClasificacionAsa = nivel; await GuardarBorradorAutoAsync(); }
+    private async Task ToggleEmergenciaAsaAsync() { _dto.EsEmergenciaAsa = !_dto.EsEmergenciaAsa; await GuardarBorradorAutoAsync(); }
+    private async Task SetEspecieVolemiaAsync(string tipo) { _dto.EspecieVolemia = tipo; await GuardarBorradorAutoAsync(); }
+    private async Task AgregarPremedicacionAsync() { _dto.Premedicacion.Add(new()); await GuardarBorradorAutoAsync(); }
+    private async Task AgregarInduccionAsync() { _dto.Induccion.Add(new()); await GuardarBorradorAutoAsync(); }
+    private async Task AgregarIntervaloAsync() { _dto.Intervalos.Add(new()); await GuardarBorradorAutoAsync(); }
+
+    private static bool EsFilaPremedicacionVacia(FarmacoPremedicacionAvaDto x) =>
+        string.IsNullOrWhiteSpace(x.Farmaco) && string.IsNullOrWhiteSpace(x.Dosis) &&
+        string.IsNullOrWhiteSpace(x.Ruta) && string.IsNullOrWhiteSpace(x.Hora) &&
+        string.IsNullOrWhiteSpace(x.Efecto);
+
+    private static bool EsFilaInduccionVacia(FarmacoInduccionAvaDto x) =>
+        string.IsNullOrWhiteSpace(x.Farmaco) && string.IsNullOrWhiteSpace(x.Dosis) &&
+        string.IsNullOrWhiteSpace(x.Ruta) && string.IsNullOrWhiteSpace(x.Hora);
+
+    private async Task QuitarPremedicacionAsync(int idx)
+    {
+        if (_dto.Premedicacion.Count <= 1 || idx < 0 || idx >= _dto.Premedicacion.Count) return;
+        if (!EsFilaPremedicacionVacia(_dto.Premedicacion[idx])) return;
+        _dto.Premedicacion.RemoveAt(idx);
+        _sugPremedIdx = -1;
+        await GuardarBorradorAutoAsync();
+    }
+
+    private async Task QuitarInduccionAsync(int idx)
+    {
+        if (_dto.Induccion.Count <= 1 || idx < 0 || idx >= _dto.Induccion.Count) return;
+        if (!EsFilaInduccionVacia(_dto.Induccion[idx])) return;
+        _dto.Induccion.RemoveAt(idx);
+        _sugInducIdx = -1;
+        await GuardarBorradorAutoAsync();
+    }
+
+    private async Task AsegurarCatalogoStockAsync()
+    {
+        var sede = Session.Localidad > 0 ? Session.Localidad : 1;
+        if (_catalogoStock.Count > 0 && _localidadStockCargada == sede) return;
+        try
+        {
+            var lista = await InventarioService.BuscarMedicamentosConStockAsync(string.Empty, sede, Session.Apostrofe);
+            _catalogoStock = lista.Where(x => x.Available > 0).OrderBy(x => x.DisplayName).ToList();
+            _localidadStockCargada = sede;
+        }
+        catch { }
+    }
+
+    private List<FarmacoStockDto> FiltrarStock(string? texto)
+    {
+        var t = (texto ?? string.Empty).Trim();
+        IEnumerable<FarmacoStockDto> q = _catalogoStock;
+        if (!string.IsNullOrWhiteSpace(t))
+            q = q.Where(x =>
+                x.DisplayName.Contains(t, StringComparison.OrdinalIgnoreCase) ||
+                x.Number.Contains(t, StringComparison.OrdinalIgnoreCase));
+        return q.Take(12).ToList();
+    }
+
+    private async Task AbrirSugerenciasPremedAsync(int idx) { await AsegurarCatalogoStockAsync(); _sugPremedIdx = idx; }
+    private async Task CerrarSugerenciasPremedAsync() { await Task.Delay(160); _sugPremedIdx = -1; }
+    private async Task SeleccionarStockPremedAsync(int idx, FarmacoStockDto prod)
+    {
+        if (idx >= 0 && idx < _dto.Premedicacion.Count)
+        {
+            _dto.Premedicacion[idx].Farmaco = prod.DisplayName;
+            _sugPremedIdx = -1;
+            await GuardarBorradorAutoAsync();
+        }
+    }
+
+    private async Task AbrirSugerenciasInducAsync(int idx) { await AsegurarCatalogoStockAsync(); _sugInducIdx = idx; }
+    private async Task CerrarSugerenciasInducAsync() { await Task.Delay(160); _sugInducIdx = -1; }
+    private async Task SeleccionarStockInducAsync(int idx, FarmacoStockDto prod)
+    {
+        if (idx >= 0 && idx < _dto.Induccion.Count)
+        {
+            _dto.Induccion[idx].Farmaco = prod.DisplayName;
+            _sugInducIdx = -1;
+            await GuardarBorradorAutoAsync();
+        }
+    }
+
+    private async Task BuscarServiciosAsync(string? texto)
+    {
+        try
+        {
+            var filtro = (texto ?? string.Empty).Trim();
+            var idxComa = filtro.LastIndexOf(',');
+            if (idxComa >= 0) filtro = filtro[(idxComa + 1)..].Trim();
+            _sugerenciasServicios = (await GestionService.BuscarProcedimientosAsync(filtro)).Take(15).ToList();
+        }
+        catch { _sugerenciasServicios = []; }
+    }
+
+    private async Task AbrirSugerenciasProcPrincipalAsync() { await BuscarServiciosAsync(_dto.Procedimiento); _mostrarSugProcPrincipal = true; }
+    private async Task OnProcPrincipalInputAsync() { _procDesdeProgramacion = false; await BuscarServiciosAsync(_dto.Procedimiento); _mostrarSugProcPrincipal = true; await GuardarBorradorAutoAsync(); }
+    private async Task CerrarSugerenciasProcPrincipalAsync()
+    {
+        await Task.Delay(180);
+        _mostrarSugProcPrincipal = false;
+        if (_mostrarModalCambioProc) return;
+        var actual = (_dto.Procedimiento ?? string.Empty).Trim();
+        if (_idCirugiaActiva > 0 && !string.IsNullOrWhiteSpace(_procProgramadoOriginal) &&
+            !string.IsNullOrWhiteSpace(actual) &&
+            !string.Equals(actual, _procProgramadoOriginal.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            _procPendienteTexto = actual;
+            _procPendienteId = null;
+            _mostrarModalCambioProc = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SeleccionarProcPrincipalAsync(SelectorClinicoDto s)
+    {
+        _mostrarSugProcPrincipal = false;
+        var nuevo = (s.Descripcion ?? string.Empty).Trim();
+        if (_idCirugiaActiva > 0 && !string.IsNullOrWhiteSpace(_procProgramadoOriginal) &&
+            !string.Equals(nuevo, _procProgramadoOriginal.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            _dto.Procedimiento = nuevo;
+            _procPendienteTexto = nuevo;
+            _procPendienteId = s.Id > 0 ? s.Id : null;
+            _mostrarModalCambioProc = true;
+            return;
+        }
+        _dto.Procedimiento = nuevo;
+        _procDesdeProgramacion = string.Equals(nuevo, _procProgramadoOriginal.Trim(), StringComparison.OrdinalIgnoreCase);
+        await GuardarBorradorAutoAsync();
+    }
+
+    private async Task CancelarCambioProcAsync()
+    {
+        _mostrarModalCambioProc = false;
+        _procPendienteTexto = string.Empty;
+        _procPendienteId = null;
+        if (!string.IsNullOrWhiteSpace(_procProgramadoOriginal))
+        {
+            _dto.Procedimiento = _procProgramadoOriginal;
+            _procDesdeProgramacion = true;
+            await GuardarBorradorAutoAsync();
+        }
+    }
+
+    private async Task ConfirmarCambioProcAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_procPendienteTexto)) { _mostrarModalCambioProc = false; return; }
+        _cambiandoProc = true;
+        var ok = await QuirofanoService.ActualizarProcedimientoCirugiaAsync(
+            IdOrden,
+            _idCirugiaActiva,
+            _procPendienteId,
+            _procPendienteTexto,
+            Session.CurrentUser?.IdUsuario ?? 1);
+        _cambiandoProc = false;
+        _mostrarModalCambioProc = false;
+
+        if (ok)
+        {
+            _dto.Procedimiento = _procPendienteTexto;
+            _procProgramadoOriginal = _procPendienteTexto;
+            _procDesdeProgramacion = true;
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
+            _esError = false;
+            _mensajeAlerta = $"Procedimiento actualizado a \"{_procPendienteTexto}\" en toda la operación.";
+            await GuardarBorradorAutoAsync();
+            if (OnGuardado.HasDelegate)
+                await OnGuardado.InvokeAsync();
+        }
+        else
+        {
+            _esError = true;
+            _mensajeAlerta = "No se pudo actualizar el procedimiento en la programación de cirugía.";
+        }
+    }
+
+    private async Task AbrirSugerenciasProcAdicionalAsync() { await BuscarServiciosAsync(_dto.ProcedimientosAdicionales); _mostrarSugProcAdicional = true; }
+    private async Task OnProcAdicionalInputAsync() { await BuscarServiciosAsync(_dto.ProcedimientosAdicionales); _mostrarSugProcAdicional = true; await GuardarBorradorAutoAsync(); }
+    private async Task CerrarSugerenciasProcAdicionalAsync() { await Task.Delay(160); _mostrarSugProcAdicional = false; }
+    private async Task SeleccionarProcAdicionalAsync(SelectorClinicoDto s)
+    {
+        var actual = (_dto.ProcedimientosAdicionales ?? string.Empty).Trim();
+        var idxComa = actual.LastIndexOf(',');
+        _dto.ProcedimientosAdicionales = idxComa >= 0
+            ? $"{actual[..(idxComa + 1)].Trim()} {s.Descripcion}"
+            : s.Descripcion;
+        _mostrarSugProcAdicional = false;
+        await GuardarBorradorAutoAsync();
+    }
+
+    private async Task AutollenarHoras5MinAsync()
+    {
+        if (_dto.Intervalos.Count == 0) return;
+        var baseHora = TimeSpan.TryParse(_dto.Intervalos[0].Hora, out var parsed)
+            ? parsed
+            : new TimeSpan(DateTime.Now.Hour, (DateTime.Now.Minute / 5) * 5, 0);
+
+        for (int i = 0; i < _dto.Intervalos.Count; i++)
+        {
+            var h = baseHora.Add(TimeSpan.FromMinutes(i * 5));
+            _dto.Intervalos[i].Hora = $"{h.Hours:D2}:{h.Minutes:D2}";
+        }
+        await GuardarBorradorAutoAsync();
+    }
+
+    private async Task ImprimirHojaAsync()
+    {
+        try { await JS.InvokeVoidAsync("print"); } catch { }
+    }
+
+    private static double MapY(decimal valor, int topPad, int rowH)
+    {
+        var v = Math.Clamp((double)valor, 0.0, 200.0);
+        for (int i = 0; i < EscalaAva.Length - 1; i++)
+        {
+            double hi = EscalaAva[i];
+            double lo = EscalaAva[i + 1];
+            if (v <= hi && v >= lo)
+            {
+                double frac = (hi - v) / (hi - lo);
+                return topPad + (i + frac) * rowH;
+            }
+        }
+        return topPad + (EscalaAva.Length - 1) * rowH;
+    }
+
+    private string BuildPolylinePoints(Func<int, decimal?> selector, int leftPad, int colW, int topPad, int rowH)
+    {
+        var pts = new List<string>();
+        for (int i = 0; i < _dto.Intervalos.Count; i++)
+        {
+            var v = selector(i);
+            if (!v.HasValue) continue;
+            var cx = leftPad + i * colW + colW / 2.0;
+            var y = MapY(v.Value, topPad, rowH);
+            pts.Add($"{F(cx)},{F(y)}");
+        }
+        return pts.Count >= 2 ? string.Join(" ", pts) : string.Empty;
+    }
+
+    private static string F(double v) => v.ToString("0.0", CultureInfo.InvariantCulture);
+}

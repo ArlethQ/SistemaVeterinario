@@ -80,6 +80,13 @@ else
     {
         <div class="alert alert-info shadow-sm">Vista previa de la Hoja de Anestesia. Seleccione un paciente para habilitar el ingreso y guardado de información.</div>
     }
+    else
+    {
+        <SelectorCirugiaOperacion Cirugias="_cirugiasOrden"
+                                  IdCirugiaSeleccionada="_idCirugiaActiva"
+                                  ModuloClave="anestesia"
+                                  OnCirugiaCambiada="CambiarCirugiaActivaAsync" />
+    }
     <fieldset disabled="@(paciente is null)" class="m-0 p-0 border-0">
     <!-- Cabecera del Paciente y Tiempos Anestésicos -->
     <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
@@ -564,10 +571,14 @@ else
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
+    [Parameter] public int IdCirugia { get; set; }
+    [Parameter] public EventCallback<int> OnCirugiaCambiada { get; set; }
 
     private int ordenInput;
     private int nhclInput;
     private List<OrdenActivaResumenDto> ordenesActivas = new();
+    private List<CirugiaOperacionResumenDto> _cirugiasOrden = [];
+    private int _idCirugiaActiva;
 
     private void SeleccionarTab(int t)
     {
@@ -667,7 +678,13 @@ else
         {
             Nhcl = p.Nhcl;
             Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
-            var h = await QuirofanoService.ObtenerHojaAnestesiaAsync(IdOrden, Nhcl, numForm);
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
+            if (IdCirugia > 0 && _cirugiasOrden.Any(c => c.IdCirugia == IdCirugia))
+                _idCirugiaActiva = IdCirugia;
+            else if (_idCirugiaActiva <= 0 || !_cirugiasOrden.Any(c => c.IdCirugia == _idCirugiaActiva))
+                _idCirugiaActiva = _cirugiasOrden.FirstOrDefault()?.IdCirugia ?? 0;
+
+            var h = await QuirofanoService.ObtenerHojaAnestesiaAsync(IdOrden, Nhcl, numForm, _idCirugiaActiva);
             if (string.IsNullOrWhiteSpace(h.Firma))
                 h.Firma = Session.CurrentUser?.NombreCompleto ?? string.Empty;
             hoja = h;
@@ -719,11 +736,21 @@ else
         return string.Join(" ", pts);
     }
 
+    private async Task CambiarCirugiaActivaAsync(int nuevoIdCirugia)
+    {
+        _idCirugiaActiva = nuevoIdCirugia;
+        IdCirugia = nuevoIdCirugia;
+        if (OnCirugiaCambiada.HasDelegate)
+            await OnCirugiaCambiada.InvokeAsync(nuevoIdCirugia);
+        await CargarDatosAsync(hoja.NumFormulario);
+    }
+
     private async Task GuardarHojaAsync()
     {
         if (paciente == null) return;
         guardando = true;
         hoja.IdOrden = IdOrden;
+        hoja.IdCirugia = _idCirugiaActiva;
         hoja.Nhcl = Nhcl;
         hoja.Sexo = paciente.Sexo;
 
@@ -737,6 +764,8 @@ else
         mensajeAlerta = ok
             ? $"Hoja de Anestesia #{hoja.NumFormulario} guardada exitosamente en SQL Server."
             : "Error al guardar la Hoja de Anestesia.";
+        if (ok)
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
     }
 
     private async Task ExportarPdfAsync()

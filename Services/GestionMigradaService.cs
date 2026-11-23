@@ -419,11 +419,29 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     }
     public async Task<bool> DesactivarExcepcionAsync(int id,int idUsuario){var ok=await db.ExecuteAsync("UPDATE vt_calendarizacionHorariosMedicos SET cal_estado='I' WHERE cal_id=@Id",new{Id=id})>0;if(ok)await db.RegistrarBitacoraAsync($"Desactiva excepción de horario {id}",idUsuario);return ok;}
 
+    private async Task AsegurarColumnasAnestesiologoCirugiaAsync()
+    {
+        const string ddl = @"
+            IF OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH('dbo.qvt_calendario_cirugias', 'codanestesiologo') IS NULL
+                    ALTER TABLE dbo.qvt_calendario_cirugias ADD codanestesiologo INT NULL;
+                IF COL_LENGTH('dbo.qvt_calendario_cirugias', 'nomanestesiologo') IS NULL
+                    ALTER TABLE dbo.qvt_calendario_cirugias ADD nomanestesiologo NVARCHAR(150) NULL;
+                IF COL_LENGTH('dbo.qvt_calendario_cirugias', 'id_orden') IS NULL
+                    ALTER TABLE dbo.qvt_calendario_cirugias ADD id_orden INT NULL;
+            END";
+        await db.ExecuteAsync(ddl);
+    }
+
     public async Task<List<CirugiaProgramadaDto>> ObtenerCirugiasAsync(DateTime desde,DateTime hasta)
     {
         await VerificarColumnasAsync("qvt_calendario_cirugias", "sec", "codmed", "nhcl", "codprocedimiento", "fechacirugia", "horainicio", "horafinalizacion", "localidad", "estado");
+        await AsegurarColumnasAnestesiologoCirugiaAsync();
         return (await db.QueryAsync<CirugiaProgramadaDto>(@"
-        SELECT sec Id,codmed IdMedico,RTRIM(ISNULL(nommedico,'')) Medico,nhcl Nhcl,RTRIM(ISNULL(nompaciente,'')) Paciente,
+        SELECT sec Id,id_orden IdOrden,codmed IdMedico,RTRIM(ISNULL(nommedico,'')) Medico,
+        codanestesiologo IdAnestesiologo,RTRIM(ISNULL(nomanestesiologo,'')) Anestesiologo,
+        nhcl Nhcl,RTRIM(ISNULL(nompaciente,'')) Paciente,
         codprocedimiento IdProcedimiento,RTRIM(ISNULL(nomprocedimiento,'')) Procedimiento,fechacirugia Fecha,RTRIM(horainicio) HoraInicio,
         RTRIM(horafinalizacion) HoraFin,localidad IdLocalidad,estado Estado FROM qvt_calendario_cirugias
         WHERE fechacirugia>=@Desde AND fechacirugia<DATEADD(day,1,@Hasta) ORDER BY fechacirugia,horainicio",new{Desde=desde.Date,Hasta=hasta.Date})).ToList();
@@ -432,14 +450,45 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     public async Task<bool> GuardarCirugiaAsync(CirugiaProgramadaDto x,int idUsuario)
     {
         await VerificarColumnasAsync("qvt_calendario_cirugias", "sec", "codmed", "nhcl", "codprocedimiento", "idcliente", "fechacirugia", "horainicio", "horafinalizacion", "usering", "localidad", "nommedico", "nompaciente", "nomprocedimiento", "estado");
+        await AsegurarColumnasAnestesiologoCirugiaAsync();
         if(x.IdMedico<=0||x.Nhcl<=0||x.IdProcedimiento<=0||x.IdLocalidad<=0||x.Fecha.Date<DateTime.Today||!HoraValida(x.HoraInicio,x.HoraFin))return false;
         if(x.Fecha.Date==DateTime.Today&&TimeSpan.TryParse(x.HoraInicio,out var horaInicioTs)&&horaInicioTs<DateTime.Now.TimeOfDay)return false;
-        var conflicto=await db.QueryFirstOrDefaultAsync<int>(@"SELECT COUNT(1) FROM qvt_calendario_cirugias WHERE estado='A' AND sec<>@Id AND CAST(fechacirugia AS date)=CAST(@Fecha AS date) AND (codmed=@IdMedico OR localidad=@IdLocalidad) AND CAST(horainicio AS time)<CAST(@HoraFin AS time) AND CAST(horafinalizacion AS time)>CAST(@HoraInicio AS time)",x);
-        var bloqueo=await db.QueryFirstOrDefaultAsync<int>(@"SELECT COUNT(1) FROM vt_calendarizacionHorariosMedicos WHERE cal_estado='A' AND cal_idMedico=@IdMedico AND cal_localidad=@IdLocalidad AND CAST(cal_fecha AS date)=CAST(@Fecha AS date) AND TRY_CONVERT(time,cal_desde)<TRY_CONVERT(time,@HoraFin) AND TRY_CONVERT(time,CASE WHEN cal_hasta='24:00' THEN '23:59:59' ELSE cal_hasta END)>TRY_CONVERT(time,@HoraInicio)",x);
-        var citaConflicto=await db.QueryFirstOrDefaultAsync<int>(@"SELECT COUNT(1) FROM vt_citas WHERE ISNULL(ci_estado,'A')<>'I' AND ISNULL(ci_estadocita,'')<>'X' AND ci_usuario=@IdMedico AND ci_localidad=@IdLocalidad AND CAST(ci_fecha AS date)=CAST(@Fecha AS date) AND TRY_CONVERT(time,ci_hora) IS NOT NULL AND DATEADD(minute,30,TRY_CONVERT(time,ci_hora))>TRY_CONVERT(time,@HoraInicio) AND TRY_CONVERT(time,ci_hora)<TRY_CONVERT(time,@HoraFin)",x);
-        if(conflicto>0||bloqueo>0||citaConflicto>0)return false;
-        var sql=x.Id>0?@"UPDATE q SET codmed=@IdMedico,nhcl=@Nhcl,codprocedimiento=@IdProcedimiento,fechacirugia=@Fecha,horainicio=@HoraInicio,horafinalizacion=@HoraFin,localidad=@IdLocalidad,nommedico=u.user_nombre,nompaciente=p.mas_nombre,nomprocedimiento=RTRIM(ISNULL(pr.NOMBRE,'')),idcliente=p.mas_idcliente FROM qvt_calendario_cirugias q INNER JOIN vt_usuarios u ON u.user_numero=@IdMedico INNER JOIN vt_pacientes p ON p.mas_nhcl=@Nhcl INNER JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO=@IdProcedimiento WHERE q.sec=@Id":@"INSERT INTO qvt_calendario_cirugias(codmed,nhcl,codprocedimiento,idcliente,fechacirugia,horainicio,horafinalizacion,usering,localidad,nommedico,nompaciente,nomprocedimiento,estado) SELECT @IdMedico,@Nhcl,@IdProcedimiento,p.mas_idcliente,@Fecha,@HoraInicio,@HoraFin,@Usuario,@IdLocalidad,u.user_nombre,p.mas_nombre,RTRIM(ISNULL(pr.NOMBRE,'')),'A' FROM vt_pacientes p CROSS JOIN vt_usuarios u CROSS JOIN VeterinariaFacturacion.dbo.PRODUCTO pr WHERE p.mas_nhcl=@Nhcl AND u.user_numero=@IdMedico AND pr.CODIGO=@IdProcedimiento";
-        var ok=await db.ExecuteAsync(sql,new{x.Id,x.IdMedico,x.Nhcl,x.IdProcedimiento,x.Fecha,x.HoraInicio,x.HoraFin,x.IdLocalidad,Usuario=idUsuario})>0;if(ok)await db.RegistrarBitacoraAsync($"Programación de cirugía NHCL {x.Nhcl}",idUsuario);return ok;
+        int? idAnest = x.IdAnestesiologo is > 0 ? x.IdAnestesiologo : null;
+        if (idAnest == x.IdMedico) idAnest = null;
+        var pCheck = new { x.Id, x.IdMedico, IdAnestesiologo = idAnest ?? 0, x.IdLocalidad, x.Fecha, x.HoraInicio, x.HoraFin };
+        var conflicto = await db.QueryFirstOrDefaultAsync<int>(@"
+            SELECT COUNT(1) FROM qvt_calendario_cirugias
+            WHERE estado='A' AND sec<>@Id AND CAST(fechacirugia AS date)=CAST(@Fecha AS date)
+              AND (
+                  codmed=@IdMedico OR ISNULL(codanestesiologo,0)=@IdMedico
+                  OR (@IdAnestesiologo>0 AND (codmed=@IdAnestesiologo OR ISNULL(codanestesiologo,0)=@IdAnestesiologo))
+                  OR localidad=@IdLocalidad
+              )
+              AND CAST(horainicio AS time)<CAST(@HoraFin AS time)
+              AND CAST(horafinalizacion AS time)>CAST(@HoraInicio AS time)", pCheck);
+        var bloqueo = await db.QueryFirstOrDefaultAsync<int>(@"
+            SELECT COUNT(1) FROM vt_calendarizacionHorariosMedicos
+            WHERE cal_estado='A'
+              AND (cal_idMedico=@IdMedico OR (@IdAnestesiologo>0 AND cal_idMedico=@IdAnestesiologo))
+              AND cal_localidad=@IdLocalidad
+              AND CAST(cal_fecha AS date)=CAST(@Fecha AS date)
+              AND TRY_CONVERT(time,cal_desde)<TRY_CONVERT(time,@HoraFin)
+              AND TRY_CONVERT(time,CASE WHEN cal_hasta='24:00' THEN '23:59:59' ELSE cal_hasta END)>TRY_CONVERT(time,@HoraInicio)", pCheck);
+        var citaConflicto = await db.QueryFirstOrDefaultAsync<int>(@"
+            SELECT COUNT(1) FROM vt_citas
+            WHERE ISNULL(ci_estado,'A')<>'I' AND ISNULL(ci_estadocita,'')<>'X'
+              AND (ci_usuario=@IdMedico OR (@IdAnestesiologo>0 AND ci_usuario=@IdAnestesiologo))
+              AND ci_localidad=@IdLocalidad
+              AND CAST(ci_fecha AS date)=CAST(@Fecha AS date)
+              AND TRY_CONVERT(time,ci_hora) IS NOT NULL
+              AND DATEADD(minute,30,TRY_CONVERT(time,ci_hora))>TRY_CONVERT(time,@HoraInicio)
+              AND TRY_CONVERT(time,ci_hora)<TRY_CONVERT(time,@HoraFin)", pCheck);
+        if (conflicto > 0 || bloqueo > 0 || citaConflicto > 0) return false;
+        string? nomAnest = null;
+        if (idAnest.HasValue)
+            nomAnest = await db.QueryFirstOrDefaultAsync<string>("SELECT RTRIM(ISNULL(user_nombre,'')) FROM vt_usuarios WHERE user_numero=@Id", new { Id = idAnest.Value });
+        var sql=x.Id>0?@"UPDATE q SET id_orden=@IdOrden,codmed=@IdMedico,codanestesiologo=@IdAnestesiologo,nomanestesiologo=@NomAnestesiologo,nhcl=@Nhcl,codprocedimiento=@IdProcedimiento,fechacirugia=@Fecha,horainicio=@HoraInicio,horafinalizacion=@HoraFin,localidad=@IdLocalidad,nommedico=u.user_nombre,nompaciente=p.mas_nombre,nomprocedimiento=RTRIM(ISNULL(pr.NOMBRE,'')),idcliente=p.mas_idcliente FROM qvt_calendario_cirugias q INNER JOIN vt_usuarios u ON u.user_numero=@IdMedico INNER JOIN vt_pacientes p ON p.mas_nhcl=@Nhcl INNER JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO=@IdProcedimiento WHERE q.sec=@Id":@"INSERT INTO qvt_calendario_cirugias(id_orden,codmed,codanestesiologo,nomanestesiologo,nhcl,codprocedimiento,idcliente,fechacirugia,horainicio,horafinalizacion,usering,localidad,nommedico,nompaciente,nomprocedimiento,estado) SELECT @IdOrden,@IdMedico,@IdAnestesiologo,@NomAnestesiologo,@Nhcl,@IdProcedimiento,p.mas_idcliente,@Fecha,@HoraInicio,@HoraFin,@Usuario,@IdLocalidad,u.user_nombre,p.mas_nombre,RTRIM(ISNULL(pr.NOMBRE,'')),'A' FROM vt_pacientes p CROSS JOIN vt_usuarios u CROSS JOIN VeterinariaFacturacion.dbo.PRODUCTO pr WHERE p.mas_nhcl=@Nhcl AND u.user_numero=@IdMedico AND pr.CODIGO=@IdProcedimiento";
+        var ok=await db.ExecuteAsync(sql,new{x.Id,IdOrden=x.IdOrden is > 0 ? x.IdOrden : null,x.IdMedico,IdAnestesiologo=idAnest,NomAnestesiologo=nomAnest,x.Nhcl,x.IdProcedimiento,x.Fecha,x.HoraInicio,x.HoraFin,x.IdLocalidad,Usuario=idUsuario})>0;if(ok)await db.RegistrarBitacoraAsync($"Programación de cirugía NHCL {x.Nhcl}",idUsuario);return ok;
     }
     public async Task<bool> CancelarCirugiaAsync(int id,int idUsuario){var ok=await db.ExecuteAsync("UPDATE qvt_calendario_cirugias SET estado='I',fechaelimina=GETDATE(),quienelimina=@Usuario WHERE sec=@Id AND estado='A'",new{Id=id,Usuario=idUsuario})>0;if(ok)await db.RegistrarBitacoraAsync($"Cancela cirugía programada {id}",idUsuario);return ok;}
 

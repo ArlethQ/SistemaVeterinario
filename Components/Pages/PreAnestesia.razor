@@ -74,6 +74,13 @@ else
     {
         <div class="alert alert-info shadow-sm">Vista previa de la evaluación pre-anestésica. Seleccione un paciente para habilitar el formulario.</div>
     }
+    else
+    {
+        <SelectorCirugiaOperacion Cirugias="_cirugiasOrden"
+                                  IdCirugiaSeleccionada="_idCirugiaActiva"
+                                  ModuloClave="preanestesia"
+                                  OnCirugiaCambiada="CambiarCirugiaActivaAsync" />
+    }
     <fieldset disabled="@(paciente is null)" class="m-0 p-0 border-0">
     <!-- Cabecera del Paciente -->
     <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
@@ -411,11 +418,15 @@ else
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
+    [Parameter] public int IdCirugia { get; set; }
     [Parameter] public EventCallback OnGuardado { get; set; }
+    [Parameter] public EventCallback<int> OnCirugiaCambiada { get; set; }
 
     private int ordenInput;
     private int nhclInput;
     private List<OrdenActivaResumenDto> ordenesActivas = new();
+    private List<CirugiaOperacionResumenDto> _cirugiasOrden = [];
+    private int _idCirugiaActiva;
     private PacienteHeaderDto? paciente;
     private PacienteHeaderDto pacienteVista => paciente ?? new();
     private PreAnestesiaDto preDto = new();
@@ -557,7 +568,13 @@ else
         {
             Nhcl = p.Nhcl;
             Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
-            var tPre = QuirofanoService.ObtenerPreAnestesiaAsync(IdOrden, Nhcl);
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
+            if (IdCirugia > 0 && _cirugiasOrden.Any(c => c.IdCirugia == IdCirugia))
+                _idCirugiaActiva = IdCirugia;
+            else if (_idCirugiaActiva <= 0 || !_cirugiasOrden.Any(c => c.IdCirugia == _idCirugiaActiva))
+                _idCirugiaActiva = _cirugiasOrden.FirstOrDefault()?.IdCirugia ?? 0;
+
+            var tPre = QuirofanoService.ObtenerPreAnestesiaAsync(IdOrden, Nhcl, _idCirugiaActiva);
             var tProd = QuirofanoService.ObtenerProductosQuirofanoAsync(IdOrden, "PreAnestesia");
             await Task.WhenAll(tPre, tProd);
 
@@ -576,11 +593,21 @@ else
         }
     }
 
+    private async Task CambiarCirugiaActivaAsync(int nuevoIdCirugia)
+    {
+        _idCirugiaActiva = nuevoIdCirugia;
+        IdCirugia = nuevoIdCirugia;
+        if (OnCirugiaCambiada.HasDelegate)
+            await OnCirugiaCambiada.InvokeAsync(nuevoIdCirugia);
+        await CargarDatosAsync();
+    }
+
     private async Task GuardarPreAnestesiaAsync()
     {
         if (paciente == null) return;
         guardando = true;
         preDto.Orden = IdOrden;
+        preDto.IdCirugia = _idCirugiaActiva;
         preDto.Nhcl = Nhcl;
 
         var ok = await QuirofanoService.GuardarPreAnestesiaAsync(
@@ -593,8 +620,12 @@ else
         mensajeAlerta = ok
             ? $"Evaluación Pre-Anestésica (ASA {preDto.Riesgo}) guardada exitosamente."
             : "Ocurrió un error al guardar la Evaluación Pre-Anestésica.";
-        if (ok && OnGuardado.HasDelegate)
-            await OnGuardado.InvokeAsync();
+        if (ok)
+        {
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
+            if (OnGuardado.HasDelegate)
+                await OnGuardado.InvokeAsync();
+        }
     }
 
     private async Task CargarCatalogoStockSedeAsync()

@@ -6,18 +6,18 @@ namespace HosvetKardex.Web.Services;
 public interface IQuirofanoService
 {
     // 1. Pre-Anestesia (qvt_preanestesia + qvt_productosUtilizados)
-    Task<PreAnestesiaDto> ObtenerPreAnestesiaAsync(int idOrden, int nhcl);
+    Task<PreAnestesiaDto> ObtenerPreAnestesiaAsync(int idOrden, int nhcl, int idCirugia = 0);
     Task<bool> GuardarPreAnestesiaAsync(PreAnestesiaDto dto, int idUsuario, string nombreUsuario);
     Task<List<ProductoQuirofanoDto>> ObtenerProductosQuirofanoAsync(int idOrden, string modulo);
     Task<bool> AgregarProductoQuirofanoAsync(ProductoQuirofanoDto prod, int idUsuario, int idLocalidad, string origReserva = "QUI");
     Task<bool> EliminarProductoQuirofanoAsync(int idProducto, string codigoProd, int idOrden, string origReserva = "QUI");
 
     // 2. Hoja de Anestesia Intraoperatoria (qvt_RegistroAnestesia + 10 tablas vinculadas)
-    Task<HojaAnestesiaCompletaDto> ObtenerHojaAnestesiaAsync(int idOrden, int nhcl, int numFormulario = 1);
+    Task<HojaAnestesiaCompletaDto> ObtenerHojaAnestesiaAsync(int idOrden, int nhcl, int numFormulario = 1, int idCirugia = 0);
     Task<bool> GuardarHojaAnestesiaAsync(HojaAnestesiaCompletaDto dto, int idUsuario, string nombreUsuario);
 
     // 3. Protocolo Quirúrgico, Equipo y Chequeo de Cirugía (qvt_Protocolo + qvt_ingresocirugia + qvt_team)
-    Task<ProtocoloQuirurgicoCompletoDto> ObtenerProtocoloQuirurgicoAsync(int idOrden, int nhcl);
+    Task<ProtocoloQuirurgicoCompletoDto> ObtenerProtocoloQuirurgicoAsync(int idOrden, int nhcl, int idCirugia = 0);
     Task<(bool Ok, string? Mensaje)> GuardarProtocoloQuirurgicoAsync(ProtocoloQuirurgicoCompletoDto dto, int idUsuario, string nombreUsuario);
     Task<bool> AgregarMiembroEquipoAsync(MiembroEquipoQuirurgicoDto miembro);
     Task<bool> EliminarMiembroEquipoAsync(int sec);
@@ -29,13 +29,21 @@ public interface IQuirofanoService
 
     // 4. Sala de Recuperación y Post-Operatorio (qvt_recuperacion + qvt_post_operatorio + qvt_ingliqadm + qvt_observaciones_recuperacion)
     // 5. Pausa de Seguridad / Lista de Chequeo Quirúrgico OMS (vt_ControlIngreso + qvt_verificacion)
-    Task<PausaSeguridadDto> ObtenerPausaSeguridadAsync(int idOrden, int nhcl);
+    Task<PausaSeguridadDto> ObtenerPausaSeguridadAsync(int idOrden, int nhcl, int idCirugia = 0);
     Task<(bool Ok, string? Mensaje)> GuardarPausaSeguridadAsync(PausaSeguridadDto dto, int idUsuario, int idLocalidad);
+
+    // 6. Hoja de Monitorización de Anestesia Unificada (Modelo AVA - qvt_monitorizacion_anestesia)
+    Task<MonitorizacionAnestesiaDto> ObtenerMonitorizacionAnestesiaAsync(int idOrden, int nhcl, int idCirugia = 0);
+    Task<(bool Ok, string? Mensaje)> GuardarMonitorizacionAnestesiaAsync(MonitorizacionAnestesiaDto dto, int idUsuario, int idLocalidad);
+
+    // 7. Resumen de cirugías programadas vinculadas a una orden/paciente (soporte multi-cirugía por orden)
+    Task<List<CirugiaOperacionResumenDto>> ObtenerResumenCirugiasOrdenAsync(int idOrden, int nhcl);
+    Task<bool> ActualizarProcedimientoCirugiaAsync(int idOrden, int idCirugia, int? idProcedimiento, string nuevoProcedimiento, int idUsuario);
 
     Task<List<RecuperacionSignoVitalDto>> ObtenerSignosRecuperacionAsync(int idOrden);
     Task<bool> GuardarSignoRecuperacionAsync(RecuperacionSignoVitalDto signo, int idLocalidad);
     Task<bool> EliminarSignoRecuperacionAsync(int id);
-    Task<PostOperatorioChecklistDto> ObtenerPostOperatorioChecklistAsync(int idOrden, int nhcl);
+    Task<PostOperatorioChecklistDto> ObtenerPostOperatorioChecklistAsync(int idOrden, int nhcl, int idCirugia = 0);
     Task<bool> GuardarPostOperatorioChecklistAsync(PostOperatorioChecklistDto dto, int idUsuario, int idLocalidad);
     Task<List<LiquidoRecuperacionDto>> ObtenerLiquidosRecuperacionAsync(int idOrden, string tipo);
     Task<bool> AgregarLiquidoRecuperacionAsync(LiquidoRecuperacionDto dto, int idUsuario, int idLocalidad);
@@ -61,15 +69,143 @@ public class QuirofanoService : IQuirofanoService
         _logger = logger;
     }
 
+    private async Task AsegurarColumnaCirugiaAsync(string tabla)
+    {
+        var ddl = $@"
+            IF OBJECT_ID('dbo.{tabla}', 'U') IS NOT NULL
+               AND COL_LENGTH('dbo.{tabla}', 'id_cirugia') IS NULL
+                ALTER TABLE dbo.{tabla} ADD id_cirugia INT NOT NULL CONSTRAINT DF_{tabla}_id_cirugia DEFAULT (0);";
+        await _db.ExecuteAsync(ddl);
+    }
+
+    public async Task<List<CirugiaOperacionResumenDto>> ObtenerResumenCirugiasOrdenAsync(int idOrden, int nhcl)
+    {
+        var lista = new List<CirugiaOperacionResumenDto>();
+        if (idOrden <= 0 && nhcl <= 0) return lista;
+        try
+        {
+            var tieneTabla = await _db.ExecuteScalarAsync<int>("SELECT CASE WHEN OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL THEN 1 ELSE 0 END");
+            if (tieneTabla == 0) return lista;
+
+            await _db.ExecuteAsync(@"
+                IF COL_LENGTH('dbo.qvt_calendario_cirugias', 'codanestesiologo') IS NULL
+                    ALTER TABLE dbo.qvt_calendario_cirugias ADD codanestesiologo INT NULL;
+                IF COL_LENGTH('dbo.qvt_calendario_cirugias', 'nomanestesiologo') IS NULL
+                    ALTER TABLE dbo.qvt_calendario_cirugias ADD nomanestesiologo NVARCHAR(150) NULL;
+                IF COL_LENGTH('dbo.qvt_calendario_cirugias', 'id_orden') IS NULL
+                    ALTER TABLE dbo.qvt_calendario_cirugias ADD id_orden INT NULL;");
+
+            await AsegurarTablaMonitorizacionAnestesiaAsync();
+            await AsegurarColumnaCirugiaAsync("qvt_verificacion");
+            await AsegurarColumnaCirugiaAsync("qvt_Protocolo");
+            await AsegurarColumnaCirugiaAsync("qvt_preanestesia");
+            await AsegurarColumnaCirugiaAsync("qvt_RegistroAnestesia");
+            await AsegurarColumnaCirugiaAsync("qvt_post_operatorio");
+
+            const string sql = @"
+                SELECT
+                    c.sec AS IdCirugia,
+                    c.id_orden AS IdOrden,
+                    c.nhcl AS Nhcl,
+                    RTRIM(ISNULL(c.nomprocedimiento, '')) AS Procedimiento,
+                    c.fechacirugia AS Fecha,
+                    RTRIM(ISNULL(c.horainicio, '')) AS HoraInicio,
+                    RTRIM(ISNULL(c.horafinalizacion, '')) AS HoraFin,
+                    RTRIM(ISNULL(c.nommedico, '')) AS Medico,
+                    RTRIM(ISNULL(c.nomanestesiologo, '')) AS Anestesiologo,
+                    CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.qvt_monitorizacion_anestesia m WHERE m.id_orden = @IdOrden AND ISNULL(m.id_cirugia, 0) = c.sec) THEN 1 ELSE 0 END AS BIT) AS TieneMonAnestesia,
+                    CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.qvt_verificacion v WHERE v.fichamedr = @IdOrden AND ISNULL(v.id_cirugia, 0) = c.sec) THEN 1 ELSE 0 END AS BIT) AS TienePausa,
+                    CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.qvt_Protocolo p WHERE p.idOrden = @IdOrden AND ISNULL(p.id_cirugia, 0) = c.sec) THEN 1 ELSE 0 END AS BIT) AS TieneProtocolo,
+                    CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.qvt_preanestesia pr WHERE pr.orden = @IdOrden AND ISNULL(pr.id_cirugia, 0) = c.sec) THEN 1 ELSE 0 END AS BIT) AS TienePreAnestesia,
+                    CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.qvt_RegistroAnestesia a WHERE a.idOrden = @IdOrden AND ISNULL(a.id_cirugia, 0) = c.sec) THEN 1 ELSE 0 END AS BIT) AS TieneAnestesia,
+                    CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.qvt_post_operatorio po WHERE po.idOrden = @IdOrden AND ISNULL(po.id_cirugia, 0) = c.sec) THEN 1 ELSE 0 END AS BIT) AS TieneRecuperacion
+                FROM dbo.qvt_calendario_cirugias c
+                WHERE ISNULL(c.estado, 'A') = 'A'
+                  AND (
+                      (@IdOrden > 0 AND c.id_orden = @IdOrden)
+                      OR (c.nhcl = @Nhcl AND (c.id_orden IS NULL OR c.id_orden = 0 OR @IdOrden = 0))
+                  )
+                ORDER BY c.fechacirugia ASC, c.horainicio ASC, c.sec ASC";
+
+            lista = (await _db.QueryAsync<CirugiaOperacionResumenDto>(sql, new { IdOrden = idOrden, Nhcl = nhcl })).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error al obtener resumen de cirugías para Orden {IdOrden}", idOrden);
+        }
+        return lista;
+    }
+
+    public async Task<bool> ActualizarProcedimientoCirugiaAsync(
+        int idOrden, int idCirugia, int? idProcedimiento, string nuevoProcedimiento, int idUsuario)
+    {
+        var proc = (nuevoProcedimiento ?? string.Empty).Trim();
+        if (idCirugia <= 0 || string.IsNullOrWhiteSpace(proc)) return false;
+
+        try
+        {
+            var sqlCal = idProcedimiento is > 0
+                ? "UPDATE dbo.qvt_calendario_cirugias SET nomprocedimiento = @Proc, codprocedimiento = @IdProc WHERE sec = @IdCirugia"
+                : "UPDATE dbo.qvt_calendario_cirugias SET nomprocedimiento = @Proc WHERE sec = @IdCirugia";
+
+            await _db.ExecuteAsync(sqlCal, new
+            {
+                Proc = Truncate(proc, 250),
+                IdProc = idProcedimiento ?? 0,
+                IdCirugia = idCirugia
+            });
+
+            if (idOrden > 0)
+            {
+                await AsegurarColumnaCirugiaAsync("qvt_Protocolo");
+                await _db.ExecuteAsync(
+                    "UPDATE dbo.qvt_Protocolo SET principal = @Proc WHERE idOrden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia",
+                    new { Proc = Truncate(proc, 250), IdOrden = idOrden, IdCirugia = idCirugia });
+
+                await AsegurarTablaMonitorizacionAnestesiaAsync();
+                var row = await _db.QueryFirstOrDefaultAsync<(int Id, string DatosJson)?>(
+                    "SELECT TOP 1 id, datos_json FROM dbo.qvt_monitorizacion_anestesia WHERE id_orden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia",
+                    new { IdOrden = idOrden, IdCirugia = idCirugia });
+                if (row.HasValue && !string.IsNullOrWhiteSpace(row.Value.DatosJson))
+                {
+                    var loaded = System.Text.Json.JsonSerializer.Deserialize<MonitorizacionAnestesiaDto>(row.Value.DatosJson);
+                    if (loaded != null)
+                    {
+                        loaded.Procedimiento = proc;
+                        var jsonActualizado = System.Text.Json.JsonSerializer.Serialize(loaded);
+                        await _db.ExecuteAsync(
+                            "UPDATE dbo.qvt_monitorizacion_anestesia SET procedimiento = @Proc, datos_json = @Json, fecha_actualizacion = GETDATE() WHERE id = @Id",
+                            new { Proc = Truncate(proc, 300), Json = jsonActualizado, Id = row.Value.Id });
+                    }
+                }
+            }
+
+            try
+            {
+                await _db.RegistrarBitacoraAsync($"Procedimiento de cirugía #{idCirugia} actualizado a '{Truncate(proc, 120)}'", idUsuario);
+            }
+            catch { }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar procedimiento de cirugía {IdCirugia}", idCirugia);
+            return false;
+        }
+    }
+
     // ========================================================================
     // 1. EVALUACIÓN PRE-ANESTÉSICA (Reemplaza vt_PreAnestesia.aspx.vb)
     // ========================================================================
-    public async Task<PreAnestesiaDto> ObtenerPreAnestesiaAsync(int idOrden, int nhcl)
+    public async Task<PreAnestesiaDto> ObtenerPreAnestesiaAsync(int idOrden, int nhcl, int idCirugia = 0)
     {
+        await AsegurarColumnaCirugiaAsync("qvt_preanestesia");
         const string sql = @"
             SELECT TOP 1
                 idPreAnestesico AS IdPreAnestesico,
                 ISNULL(orden, @IdOrden) AS Orden,
+                ISNULL(id_cirugia, @IdCirugia) AS IdCirugia,
                 ISNULL(nhcl, @Nhcl) AS Nhcl,
                 ISNULL(iduser, 0) AS IdUser,
                 ISNULL(fechaingreso, GETDATE()) AS FechaIngreso,
@@ -104,17 +240,17 @@ public class QuirofanoService : IQuirofanoService
                 ISNULL(rperiniales, 0) AS Rperiniales,
                 ISNULL(firma, '') AS Firma
             FROM qvt_preanestesia
-            WHERE orden = @IdOrden
+            WHERE orden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia
             ORDER BY idPreAnestesico DESC";
 
         try
         {
-            var dto = await _db.QueryFirstOrDefaultAsync<PreAnestesiaDto>(sql, new { IdOrden = idOrden, Nhcl = nhcl });
-            return dto ?? new PreAnestesiaDto { Orden = idOrden, Nhcl = nhcl };
+            var dto = await _db.QueryFirstOrDefaultAsync<PreAnestesiaDto>(sql, new { IdOrden = idOrden, Nhcl = nhcl, IdCirugia = idCirugia });
+            return dto ?? new PreAnestesiaDto { Orden = idOrden, Nhcl = nhcl, IdCirugia = idCirugia };
         }
         catch
         {
-            return new PreAnestesiaDto { Orden = idOrden, Nhcl = nhcl };
+            return new PreAnestesiaDto { Orden = idOrden, Nhcl = nhcl, IdCirugia = idCirugia };
         }
     }
 
@@ -122,13 +258,14 @@ public class QuirofanoService : IQuirofanoService
     {
         try
         {
+            await AsegurarColumnaCirugiaAsync("qvt_preanestesia");
             dto.IdUser = idUsuario;
             if (string.IsNullOrWhiteSpace(dto.Firma))
                 dto.Firma = nombreUsuario;
 
             var existeId = await _db.ExecuteScalarAsync<int?>(
-                "SELECT TOP 1 idPreAnestesico FROM qvt_preanestesia WHERE orden = @Orden",
-                new { dto.Orden });
+                "SELECT TOP 1 idPreAnestesico FROM qvt_preanestesia WHERE orden = @Orden AND ISNULL(id_cirugia, 0) = @IdCirugia",
+                new { dto.Orden, dto.IdCirugia });
 
             if (existeId.HasValue && existeId.Value > 0)
             {
@@ -145,7 +282,7 @@ public class QuirofanoService : IQuirofanoService
                         rintradural = @Rintradural, rextradural = @Rextradural, rcuello = @Rcuello,
                         rextratoraxica = @Rextratoraxica, rintratoraxica = @Rintratoraxica, rabdomen = @Rabdomen,
                         rextremidades = @Rextremidades, robstetricas = @Robstetricas, rperiniales = @Rperiniales,
-                        firma = @Firma, iduser = @IdUser
+                        firma = @Firma, iduser = @IdUser, id_cirugia = @IdCirugia
                     WHERE idPreAnestesico = @IdPreAnestesico";
 
                 dto.IdPreAnestesico = existeId.Value;
@@ -155,14 +292,14 @@ public class QuirofanoService : IQuirofanoService
             {
                 const string sqlInsert = @"
                     INSERT INTO qvt_preanestesia (
-                        orden, nhcl, iduser, fechaingreso, riesgo, Ebueno, Edeprimido, Einsuficiente,
+                        orden, id_cirugia, nhcl, iduser, fechaingreso, riesgo, Ebueno, Edeprimido, Einsuficiente,
                         InformacionEspecial, GrupoSanguineo, uroanalisis, hematologico, quimicasanguinea,
                         sistemarespiratorio, sistemacirculatorio, sistemanervioso, sistemasotros,
                         anestesiasanteriores, terapiaanterior, ultimaingestion, horadolor,
                         rcabeza, rsentidos, rendoscopias, rintradural, rextradural, rcuello,
                         rextratoraxica, rintratoraxica, rabdomen, rextremidades, robstetricas, rperiniales, firma
                     ) VALUES (
-                        @Orden, @Nhcl, @IdUser, GETDATE(), @Riesgo, @Ebueno, @Edeprimido, @Einsuficiente,
+                        @Orden, @IdCirugia, @Nhcl, @IdUser, GETDATE(), @Riesgo, @Ebueno, @Edeprimido, @Einsuficiente,
                         @InformacionEspecial, @GrupoSanguineo, @Uroanalisis, @Hematologico, @QuimicaSanguinea,
                         @SistemaRespiratorio, @SistemaCirculatorio, @SistemaNervioso, @SistemasOtros,
                         @AnestesiasAnteriores, @TerapiaAnterior, @UltimaIngestion, @HoraDolor,
@@ -292,11 +429,12 @@ public class QuirofanoService : IQuirofanoService
     // ========================================================================
     // 2. HOJA DE ANESTESIA INTRAOPERATORIA (Reemplaza vt_hojaanestesia.aspx.vb)
     // ========================================================================
-    public async Task<HojaAnestesiaCompletaDto> ObtenerHojaAnestesiaAsync(int idOrden, int nhcl, int numFormulario = 1)
+    public async Task<HojaAnestesiaCompletaDto> ObtenerHojaAnestesiaAsync(int idOrden, int nhcl, int numFormulario = 1, int idCirugia = 0)
     {
         var hoja = new HojaAnestesiaCompletaDto
         {
             IdOrden = idOrden,
+            IdCirugia = idCirugia,
             Nhcl = nhcl,
             NumFormulario = numFormulario
         };
@@ -317,10 +455,11 @@ public class QuirofanoService : IQuirofanoService
 
         try
         {
+            await AsegurarColumnaCirugiaAsync("qvt_RegistroAnestesia");
             // 1. Cabecera qvt_RegistroAnestesia
             var reg = await _db.QueryFirstOrDefaultAsync<dynamic>(
-                @"SELECT TOP 1 * FROM qvt_RegistroAnestesia WHERE idOrden = @IdOrden ORDER BY idRegistro DESC",
-                new { IdOrden = idOrden });
+                @"SELECT TOP 1 * FROM qvt_RegistroAnestesia WHERE idOrden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia ORDER BY idRegistro DESC",
+                new { IdOrden = idOrden, IdCirugia = idCirugia });
 
             if (reg != null)
             {
@@ -543,13 +682,14 @@ public class QuirofanoService : IQuirofanoService
 
         try
         {
+            await AsegurarColumnaCirugiaAsync("qvt_RegistroAnestesia");
             if (string.IsNullOrWhiteSpace(dto.Firma))
                 dto.Firma = nombreUsuario;
 
             // 1. Upsert en qvt_RegistroAnestesia
             var regId = await _db.ExecuteScalarAsync<int?>(
-                "SELECT TOP 1 idRegistro FROM qvt_RegistroAnestesia WHERE idOrden = @IdOrden",
-                new { dto.IdOrden });
+                "SELECT TOP 1 idRegistro FROM qvt_RegistroAnestesia WHERE idOrden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia",
+                new { dto.IdOrden, dto.IdCirugia });
 
             if (regId.HasValue && regId.Value > 0)
             {
@@ -557,16 +697,16 @@ public class QuirofanoService : IQuirofanoService
                 await _db.ExecuteAsync(@"
                     UPDATE qvt_RegistroAnestesia SET
                         fecha = @Fecha, asa = @Asa, horaInicio = @HoraInicio, horaFin = @HoraFin,
-                        tipoAnestesia = @TipoAnestesia, firma = @Firma, atendido = 1
+                        tipoAnestesia = @TipoAnestesia, firma = @Firma, atendido = 1, id_cirugia = @IdCirugia
                     WHERE idRegistro = @IdRegistro", dto);
             }
             else
             {
                 dto.IdRegistro = await _db.ExecuteScalarAsync<int>(@"
                     INSERT INTO qvt_RegistroAnestesia (
-                        fecha, sexo, asa, idOrden, nhcl, atendido, fechaRegistro, horaInicio, horaFin, tipoAnestesia, firma
+                        fecha, sexo, asa, idOrden, id_cirugia, nhcl, atendido, fechaRegistro, horaInicio, horaFin, tipoAnestesia, firma
                     ) VALUES (
-                        @Fecha, @Sexo, @Asa, @IdOrden, @Nhcl, 1, GETDATE(), @HoraInicio, @HoraFin, @TipoAnestesia, @Firma
+                        @Fecha, @Sexo, @Asa, @IdOrden, @IdCirugia, @Nhcl, 1, GETDATE(), @HoraInicio, @HoraFin, @TipoAnestesia, @Firma
                     );
                     SELECT CAST(SCOPE_IDENTITY() AS INT);", dto);
             }
@@ -795,16 +935,18 @@ public class QuirofanoService : IQuirofanoService
     // ========================================================================
     // 3. PROTOCOLO OPERATORIO, EQUIPO Y CHEQUEO (vt_protocolo + vt_quirTeam + vt_QuirofanoIngreso)
     // ========================================================================
-    public async Task<ProtocoloQuirurgicoCompletoDto> ObtenerProtocoloQuirurgicoAsync(int idOrden, int nhcl)
+    public async Task<ProtocoloQuirurgicoCompletoDto> ObtenerProtocoloQuirurgicoAsync(int idOrden, int nhcl, int idCirugia = 0)
     {
-        var dto = new ProtocoloQuirurgicoCompletoDto { IdOrden = idOrden, Nhcl = nhcl };
+        var dto = new ProtocoloQuirurgicoCompletoDto { IdOrden = idOrden, IdCirugia = idCirugia, Nhcl = nhcl };
 
         try
         {
+            await AsegurarColumnaCirugiaAsync("qvt_Protocolo");
+            await AsegurarColumnaCirugiaAsync("qvt_ingresocirugia");
             // 1. qvt_Protocolo
             var prot = await _db.QueryFirstOrDefaultAsync<dynamic>(
-                "SELECT TOP 1 * FROM qvt_Protocolo WHERE idOrden = @IdOrden ORDER BY id DESC",
-                new { IdOrden = idOrden });
+                "SELECT TOP 1 * FROM qvt_Protocolo WHERE idOrden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia ORDER BY id DESC",
+                new { IdOrden = idOrden, IdCirugia = idCirugia });
 
             if (prot != null)
             {
@@ -833,8 +975,8 @@ public class QuirofanoService : IQuirofanoService
 
             // 2. qvt_ingresocirugia (Chequeo de Enfermería / Conteo de Gasas)
             var ing = await _db.QueryFirstOrDefaultAsync<dynamic>(
-                "SELECT TOP 1 * FROM qvt_ingresocirugia WHERE id_orden = @IdOrden ORDER BY sec DESC",
-                new { IdOrden = idOrden });
+                "SELECT TOP 1 * FROM qvt_ingresocirugia WHERE id_orden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia ORDER BY sec DESC",
+                new { IdOrden = idOrden, IdCirugia = idCirugia });
 
             if (ing != null)
             {
@@ -910,9 +1052,11 @@ public class QuirofanoService : IQuirofanoService
     {
         try
         {
+            await AsegurarColumnaCirugiaAsync("qvt_Protocolo");
+            await AsegurarColumnaCirugiaAsync("qvt_ingresocirugia");
             // 1. Upsert qvt_Protocolo
             var existeProt = await _db.ExecuteScalarAsync<int?>(
-                "SELECT TOP 1 id FROM qvt_Protocolo WHERE idOrden = @IdOrden", new { dto.IdOrden });
+                "SELECT TOP 1 id FROM qvt_Protocolo WHERE idOrden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia", new { dto.IdOrden, dto.IdCirugia });
 
             string muestraChar = dto.Muestra?.Trim().ToUpperInvariant() switch
             {
@@ -930,6 +1074,7 @@ public class QuirofanoService : IQuirofanoService
             var protParams = new
             {
                 dto.IdOrden,
+                dto.IdCirugia,
                 dto.Nhcl,
                 dto.Fecha,
                 TipoCirugia = Truncate(dto.TipoCirugia, 200),
@@ -961,19 +1106,20 @@ public class QuirofanoService : IQuirofanoService
                         sintesis = @Sintesis, complicaciones = @Complicaciones, sangrado = @Sangrado,
                         disposicion = @Disposicion, drenaje = @Drenaje, muestra = @Muestra,
                         fechaMuestra = @FechaMuestra, congelacion = @Congelacion, fechaConge = @FechaConge,
-                        horaInicio = @HoraInicio, horaFin = @HoraFin, duracionMinutos = @DuracionMinutos
+                        horaInicio = @HoraInicio, horaFin = @HoraFin, duracionMinutos = @DuracionMinutos,
+                        id_cirugia = @IdCirugia
                     WHERE id = @IdProtocolo", protParams);
             }
             else
             {
                 await _db.ExecuteAsync(@"
                     INSERT INTO qvt_Protocolo (
-                        idOrden, nhcl, fecha, tipoCirugia, principal, incision, hallazgos,
+                        idOrden, id_cirugia, nhcl, fecha, tipoCirugia, principal, incision, hallazgos,
                         procedimientoQuir, sintesis, complicaciones, sangrado, disposicion,
                         drenaje, muestra, fechaMuestra, congelacion, fechaConge,
                         horaInicio, horaFin, duracionMinutos
                     ) VALUES (
-                        @IdOrden, @Nhcl, @Fecha, @TipoCirugia, @Principal, @Incision, @Hallazgos,
+                        @IdOrden, @IdCirugia, @Nhcl, @Fecha, @TipoCirugia, @Principal, @Incision, @Hallazgos,
                         @ProcedimientoQuir, @Sintesis, @Complicaciones, @Sangrado, @Disposicion,
                         @Drenaje, @Muestra, @FechaMuestra, @Congelacion, @FechaConge,
                         @HoraInicio, @HoraFin, @DuracionMinutos
@@ -982,7 +1128,7 @@ public class QuirofanoService : IQuirofanoService
 
             // 2. Upsert qvt_ingresocirugia
             var existeIng = await _db.ExecuteScalarAsync<int?>(
-                "SELECT TOP 1 sec FROM qvt_ingresocirugia WHERE id_orden = @IdOrden", new { dto.IdOrden });
+                "SELECT TOP 1 sec FROM qvt_ingresocirugia WHERE id_orden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia", new { dto.IdOrden, dto.IdCirugia });
 
             string posChar = (dto.Posicion ?? string.Empty).Trim().ToUpperInvariant() switch
             {
@@ -1012,6 +1158,7 @@ public class QuirofanoService : IQuirofanoService
             {
                 dto.Nhcl,
                 dto.IdOrden,
+                dto.IdCirugia,
                 dto.Sala,
                 Posicion = posChar,
                 CondicionPiel = Truncate(dto.CondicionPiel, 150),
@@ -1038,18 +1185,19 @@ public class QuirofanoService : IQuirofanoService
                         lavado = @Lavado, unidadelectro = @UnidadElectro, localizacionplaca = @LocalizacionPlaca,
                         gasasl = @GasasIniciales, gasas = @GasasAdicionales, gasasr = @GasasRecuentoFinal,
                         compresas = @Compresas, materialdejado = @MaterialDejado, casocontaminado = @CasoContaminado,
-                        transferidoa = @TransferidoA, observaciones1 = @ObservacionesEnfermeria, iduser = @IdUser
+                        transferidoa = @TransferidoA, observaciones1 = @ObservacionesEnfermeria, iduser = @IdUser,
+                        id_cirugia = @IdCirugia
                     WHERE sec = @Sec", ingParams);
             }
             else
             {
                 await _db.ExecuteAsync(@"
                     INSERT INTO qvt_ingresocirugia (
-                        nhcl, id_orden, fecha, sala, posicion, condicionpiel, lavado,
+                        nhcl, id_orden, id_cirugia, fecha, sala, posicion, condicionpiel, lavado,
                         unidadelectro, localizacionplaca, gasasl, gasas, gasasr, compresas,
                         materialdejado, casocontaminado, transferidoa, observaciones1, iduser
                     ) VALUES (
-                        @Nhcl, @IdOrden, GETDATE(), @Sala, @Posicion, @CondicionPiel, @Lavado,
+                        @Nhcl, @IdOrden, @IdCirugia, GETDATE(), @Sala, @Posicion, @CondicionPiel, @Lavado,
                         @UnidadElectro, @LocalizacionPlaca, @GasasIniciales, @GasasAdicionales, @GasasRecuentoFinal, @Compresas,
                         @MaterialDejado, @CasoContaminado, @TransferidoA, @ObservacionesEnfermeria, @IdUser
                     )", ingParams);
@@ -1226,12 +1374,14 @@ public class QuirofanoService : IQuirofanoService
         return await _db.ExecuteAsync("UPDATE qvt_recuperacion SET estado = 'I' WHERE id = @Id", new { Id = id }) > 0;
     }
 
-    public async Task<PostOperatorioChecklistDto> ObtenerPostOperatorioChecklistAsync(int idOrden, int nhcl)
+    public async Task<PostOperatorioChecklistDto> ObtenerPostOperatorioChecklistAsync(int idOrden, int nhcl, int idCirugia = 0)
     {
+        await AsegurarColumnaCirugiaAsync("qvt_post_operatorio");
         const string sql = @"
             SELECT TOP 1
                 id AS Id,
                 ISNULL(idOrden, @IdOrden) AS IdOrden,
+                ISNULL(id_cirugia, @IdCirugia) AS IdCirugia,
                 ISNULL(nhcl, @Nhcl) AS Nhcl,
                 fechahorasal AS FechaHoraSalida,
                 ISNULL(destino, 'Hospitalización') AS Destino,
@@ -1245,17 +1395,17 @@ public class QuirofanoService : IQuirofanoService
                 CASE WHEN UPPER(ISNULL(sng, 'N')) = 'S' THEN 'SI' ELSE 'NO' END AS Sng, ISNULL(obssng, '') AS ObsSng,
                 CASE WHEN UPPER(ISNULL(otros, 'N')) = 'S' THEN 'SI' ELSE 'NO' END AS Otros, ISNULL(obsotros, '') AS ObsOtros
             FROM qvt_post_operatorio
-            WHERE idOrden = @IdOrden
+            WHERE idOrden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia
             ORDER BY id DESC";
 
         try
         {
-            var dto = await _db.QueryFirstOrDefaultAsync<PostOperatorioChecklistDto>(sql, new { IdOrden = idOrden, Nhcl = nhcl });
-            return dto ?? new PostOperatorioChecklistDto { IdOrden = idOrden, Nhcl = nhcl };
+            var dto = await _db.QueryFirstOrDefaultAsync<PostOperatorioChecklistDto>(sql, new { IdOrden = idOrden, Nhcl = nhcl, IdCirugia = idCirugia });
+            return dto ?? new PostOperatorioChecklistDto { IdOrden = idOrden, Nhcl = nhcl, IdCirugia = idCirugia };
         }
         catch
         {
-            return new PostOperatorioChecklistDto { IdOrden = idOrden, Nhcl = nhcl };
+            return new PostOperatorioChecklistDto { IdOrden = idOrden, Nhcl = nhcl, IdCirugia = idCirugia };
         }
     }
 
@@ -1266,9 +1416,10 @@ public class QuirofanoService : IQuirofanoService
             if (dto.IdOrden <= 0 || dto.Nhcl <= 0)
                 return false;
 
+            await AsegurarColumnaCirugiaAsync("qvt_post_operatorio");
             int filasAfectadas;
             var existeId = await _db.ExecuteScalarAsync<int?>(
-                "SELECT TOP 1 id FROM qvt_post_operatorio WHERE idOrden = @IdOrden", new { dto.IdOrden });
+                "SELECT TOP 1 id FROM qvt_post_operatorio WHERE idOrden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia", new { dto.IdOrden, dto.IdCirugia });
 
             if (existeId.HasValue && existeId.Value > 0)
             {
@@ -1279,11 +1430,12 @@ public class QuirofanoService : IQuirofanoService
                         apo = LEFT(@Apo, 1), obsapo = @ObsApo, liq = LEFT(@Liq, 1), obsliq = @ObsLiq,
                         son = LEFT(@Son, 1), obsson = @ObsSon, drenes = LEFT(@Drenes, 1), obsdrenes = @ObsDrenes,
                         drena = LEFT(@Drena, 1), obsdrena = @ObsDrena, sng = LEFT(@Sng, 1), obssng = @ObsSng,
-                        otros = LEFT(@Otros, 1), obsotros = @ObsOtros, usuario = @Usuario, localidad = @Localidad
+                        otros = LEFT(@Otros, 1), obsotros = @ObsOtros, usuario = @Usuario, localidad = @Localidad,
+                        id_cirugia = @IdCirugia
                     WHERE id = @Id",
                     new
                     {
-                        dto.FechaHoraSalida, dto.Destino,
+                        dto.FechaHoraSalida, dto.Destino, dto.IdCirugia,
                         dto.Ind, dto.ObsInd, dto.Sig, dto.ObsSig,
                         dto.Apo, dto.ObsApo, dto.Liq, dto.ObsLiq,
                         dto.Son, dto.ObsSon, dto.Drenes, dto.ObsDrenes,
@@ -1296,19 +1448,19 @@ public class QuirofanoService : IQuirofanoService
             {
                 filasAfectadas = await _db.ExecuteAsync(@"
                     INSERT INTO qvt_post_operatorio (
-                        idOrden, nhcl, hora, fecha, fechahorasal, destino,
+                        idOrden, id_cirugia, nhcl, hora, fecha, fechahorasal, destino,
                         ind, obsind, sig, obssig, apo, obsapo, liq, obsliq,
                         son, obsson, drenes, obsdrenes, drena, obsdrena, sng, obssng,
                         otros, obsotros, usuario, localidad
                     ) VALUES (
-                        @IdOrden, @Nhcl, CONVERT(VARCHAR(5), GETDATE(), 108), GETDATE(), @FechaHoraSalida, @Destino,
+                        @IdOrden, @IdCirugia, @Nhcl, CONVERT(VARCHAR(5), GETDATE(), 108), GETDATE(), @FechaHoraSalida, @Destino,
                         LEFT(@Ind, 1), @ObsInd, LEFT(@Sig, 1), @ObsSig, LEFT(@Apo, 1), @ObsApo, LEFT(@Liq, 1), @ObsLiq,
                         LEFT(@Son, 1), @ObsSon, LEFT(@Drenes, 1), @ObsDrenes, LEFT(@Drena, 1), @ObsDrena, LEFT(@Sng, 1), @ObsSng,
                         LEFT(@Otros, 1), @ObsOtros, @Usuario, @Localidad
                     )",
                     new
                     {
-                        dto.IdOrden, dto.Nhcl, dto.FechaHoraSalida, dto.Destino,
+                        dto.IdOrden, dto.IdCirugia, dto.Nhcl, dto.FechaHoraSalida, dto.Destino,
                         dto.Ind, dto.ObsInd, dto.Sig, dto.ObsSig,
                         dto.Apo, dto.ObsApo, dto.Liq, dto.ObsLiq,
                         dto.Son, dto.ObsSon, dto.Drenes, dto.ObsDrenes,
@@ -1470,14 +1622,15 @@ public class QuirofanoService : IQuirofanoService
     // ========================================================================
     // 5. PAUSA DE SEGURIDAD / LISTA DE CHEQUEO QUIRÚRGICO OMS (vt_ControlIngreso)
     // ========================================================================
-    public async Task<PausaSeguridadDto> ObtenerPausaSeguridadAsync(int idOrden, int nhcl)
+    public async Task<PausaSeguridadDto> ObtenerPausaSeguridadAsync(int idOrden, int nhcl, int idCirugia = 0)
     {
-        var dto = new PausaSeguridadDto { IdOrden = idOrden, Nhcl = nhcl };
+        var dto = new PausaSeguridadDto { IdOrden = idOrden, IdCirugia = idCirugia, Nhcl = nhcl };
         try
         {
+            await AsegurarColumnaCirugiaAsync("qvt_verificacion");
             var row = await _db.QueryFirstOrDefaultAsync<dynamic>(
-                "SELECT TOP 1 * FROM qvt_verificacion WHERE fichamedr = @IdOrden ORDER BY id DESC",
-                new { IdOrden = idOrden });
+                "SELECT TOP 1 * FROM qvt_verificacion WHERE fichamedr = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia ORDER BY id DESC",
+                new { IdOrden = idOrden, IdCirugia = idCirugia });
 
             if (row != null)
             {
@@ -1523,13 +1676,15 @@ public class QuirofanoService : IQuirofanoService
     {
         try
         {
+            await AsegurarColumnaCirugiaAsync("qvt_verificacion");
             var existe = await _db.ExecuteScalarAsync<int?>(
-                "SELECT TOP 1 id FROM qvt_verificacion WHERE fichamedr = @IdOrden",
-                new { dto.IdOrden });
+                "SELECT TOP 1 id FROM qvt_verificacion WHERE fichamedr = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia",
+                new { dto.IdOrden, dto.IdCirugia });
 
             var p = new
             {
                 dto.IdOrden,
+                dto.IdCirugia,
                 dto.Nhcl,
                 Hora = Truncate(dto.Hora, 50),
                 Fecha = dto.Fecha,
@@ -1574,14 +1729,14 @@ public class QuirofanoService : IQuirofanoService
                         perdidaSangre = @PerdidaSangre, problemaEspecifico = @ProblemaEspecifico,
                         problemasInstrumental = @ProblemasInstrumental, aspectosRecuperacion = @AspectosRecuperacion,
                         rpta18 = @Rpta18, rpta19 = @Rpta19, rpta20 = @Rpta20, rpta21 = @Rpta21,
-                        cerrado = @Cerrado
-                    WHERE fichamedr = @IdOrden", p);
+                        cerrado = @Cerrado, id_cirugia = @IdCirugia
+                    WHERE id = @Id", p);
             }
             else
             {
                 await _db.ExecuteAsync(@"
                     INSERT INTO qvt_verificacion (
-                        fichamedr, nhclr, horar, fechar,
+                        fichamedr, id_cirugia, nhclr, horar, fechar,
                         rpta1, rpta2, rpta3, rpta4, rpta5, rpta6, rpta7,
                         rpta8, rpta9, rpta10, rpta14, rpta15, rpta16, rpta17,
                         eventosCriticos, tiempoOperacion, perdidaSangre, problemaEspecifico,
@@ -1589,7 +1744,7 @@ public class QuirofanoService : IQuirofanoService
                         rpta18, rpta19, rpta20, rpta21,
                         usuarior, localidadr, cerrado
                     ) VALUES (
-                        @IdOrden, @Nhcl, @Hora, GETDATE(),
+                        @IdOrden, @IdCirugia, @Nhcl, @Hora, GETDATE(),
                         @Rpta1, @Rpta2, @Rpta3, @Rpta4, @Rpta5, @Rpta6, @Rpta7,
                         @Rpta8, @Rpta9, @Rpta10, @Rpta14, @Rpta15, @Rpta16, @Rpta17,
                         @EventosCriticos, @TiempoOperacion, @PerdidaSangre, @ProblemaEspecifico,
@@ -1792,6 +1947,130 @@ public class QuirofanoService : IQuirofanoService
         {
             _logger.LogError(ex, "Error al guardar checklist preoperatorio Orden {IdOrden}", dto.IdOrden);
             return (false, "No se pudo guardar el checklist preoperatorio.");
+        }
+    }
+
+    private async Task AsegurarTablaMonitorizacionAnestesiaAsync()
+    {
+        const string ddl = @"
+            IF OBJECT_ID('dbo.qvt_monitorizacion_anestesia', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.qvt_monitorizacion_anestesia (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    id_orden INT NOT NULL,
+                    id_cirugia INT NOT NULL DEFAULT 0,
+                    nhcl INT NOT NULL,
+                    procedimiento NVARCHAR(300) NULL,
+                    clasificacion_asa VARCHAR(10) NULL,
+                    datos_json NVARCHAR(MAX) NOT NULL,
+                    id_usuario INT NOT NULL,
+                    id_localidad INT NOT NULL DEFAULT 1,
+                    fecha_creacion DATETIME NOT NULL DEFAULT GETDATE(),
+                    fecha_actualizacion DATETIME NOT NULL DEFAULT GETDATE()
+                );
+                CREATE UNIQUE INDEX IX_qvt_monitorizacion_anestesia_orden_cirugia ON dbo.qvt_monitorizacion_anestesia (id_orden, id_cirugia);
+            END
+            ELSE
+            BEGIN
+                IF COL_LENGTH('dbo.qvt_monitorizacion_anestesia', 'id_cirugia') IS NULL
+                    ALTER TABLE dbo.qvt_monitorizacion_anestesia ADD id_cirugia INT NOT NULL CONSTRAINT DF_qvt_mon_anest_id_cirugia DEFAULT (0);
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_qvt_monitorizacion_anestesia_orden' AND object_id = OBJECT_ID('dbo.qvt_monitorizacion_anestesia'))
+                    DROP INDEX IX_qvt_monitorizacion_anestesia_orden ON dbo.qvt_monitorizacion_anestesia;
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_qvt_monitorizacion_anestesia_orden_cirugia' AND object_id = OBJECT_ID('dbo.qvt_monitorizacion_anestesia'))
+                    CREATE UNIQUE INDEX IX_qvt_monitorizacion_anestesia_orden_cirugia ON dbo.qvt_monitorizacion_anestesia (id_orden, id_cirugia);
+            END";
+        await _db.ExecuteAsync(ddl);
+    }
+
+    public async Task<MonitorizacionAnestesiaDto> ObtenerMonitorizacionAnestesiaAsync(int idOrden, int nhcl, int idCirugia = 0)
+    {
+        var dto = new MonitorizacionAnestesiaDto { IdOrden = idOrden, IdCirugia = idCirugia, Nhcl = nhcl };
+        if (idOrden <= 0) return dto;
+
+        try
+        {
+            await AsegurarTablaMonitorizacionAnestesiaAsync();
+            var row = await _db.QueryFirstOrDefaultAsync<(int Id, string DatosJson)?>(
+                "SELECT TOP 1 id, datos_json FROM dbo.qvt_monitorizacion_anestesia WHERE id_orden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia ORDER BY id DESC",
+                new { IdOrden = idOrden, IdCirugia = idCirugia });
+
+            if (row.HasValue && !string.IsNullOrWhiteSpace(row.Value.DatosJson))
+            {
+                var loaded = System.Text.Json.JsonSerializer.Deserialize<MonitorizacionAnestesiaDto>(row.Value.DatosJson);
+                if (loaded != null)
+                {
+                    loaded.Id = row.Value.Id;
+                    loaded.IdOrden = idOrden;
+                    loaded.IdCirugia = idCirugia;
+                    if (nhcl > 0) loaded.Nhcl = nhcl;
+                    if (loaded.Premedicacion.Count == 0) loaded.Premedicacion = [new(), new(), new()];
+                    if (loaded.Induccion.Count == 0) loaded.Induccion = [new(), new()];
+                    if (loaded.Fluidos.Count == 0) loaded.Fluidos = [new(), new()];
+                    if (loaded.Intervalos.Count == 0) loaded.Intervalos = MonitorizacionAnestesiaDto.CrearIntervalosIniciales();
+                    return loaded;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error al obtener Monitorización de Anestesia para Orden {IdOrden} Cirugía {IdCirugia}", idOrden, idCirugia);
+        }
+
+        return dto;
+    }
+
+    public async Task<(bool Ok, string? Mensaje)> GuardarMonitorizacionAnestesiaAsync(
+        MonitorizacionAnestesiaDto dto, int idUsuario, int idLocalidad)
+    {
+        try
+        {
+            await AsegurarTablaMonitorizacionAnestesiaAsync();
+            var json = System.Text.Json.JsonSerializer.Serialize(dto);
+            var asa = string.IsNullOrWhiteSpace(dto.ClasificacionAsa)
+                ? "I"
+                : (dto.EsEmergenciaAsa ? $"{dto.ClasificacionAsa}E" : dto.ClasificacionAsa);
+
+            const string sql = @"
+                IF EXISTS (SELECT 1 FROM dbo.qvt_monitorizacion_anestesia WHERE id_orden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia)
+                    UPDATE dbo.qvt_monitorizacion_anestesia
+                    SET nhcl = @Nhcl,
+                        procedimiento = @Procedimiento,
+                        clasificacion_asa = @ClasificacionAsa,
+                        datos_json = @DatosJson,
+                        id_usuario = @IdUsuario,
+                        id_localidad = @IdLocalidad,
+                        fecha_actualizacion = GETDATE()
+                    WHERE id_orden = @IdOrden AND ISNULL(id_cirugia, 0) = @IdCirugia;
+                ELSE
+                    INSERT INTO dbo.qvt_monitorizacion_anestesia
+                        (id_orden, id_cirugia, nhcl, procedimiento, clasificacion_asa, datos_json, id_usuario, id_localidad)
+                    VALUES
+                        (@IdOrden, @IdCirugia, @Nhcl, @Procedimiento, @ClasificacionAsa, @DatosJson, @IdUsuario, @IdLocalidad);";
+
+            await _db.ExecuteAsync(sql, new
+            {
+                dto.IdOrden,
+                dto.IdCirugia,
+                dto.Nhcl,
+                Procedimiento = Truncate(dto.Procedimiento, 300),
+                ClasificacionAsa = Truncate(asa, 10),
+                DatosJson = json,
+                IdUsuario = idUsuario,
+                IdLocalidad = idLocalidad > 0 ? idLocalidad : 1
+            });
+
+            try
+            {
+                await _db.RegistrarBitacoraAsync($"Monitorización de Anestesia (AVA) guardada Orden {dto.IdOrden}", idUsuario);
+            }
+            catch { }
+
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al guardar Monitorización de Anestesia Orden {IdOrden}", dto.IdOrden);
+            return (false, "No se pudo guardar la Hoja de Monitorización de Anestesia.");
         }
     }
 

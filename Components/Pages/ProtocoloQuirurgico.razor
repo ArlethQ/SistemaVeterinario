@@ -62,6 +62,11 @@
 }
 else if (paciente != null)
 {
+    <SelectorCirugiaOperacion Cirugias="_cirugiasOrden"
+                              IdCirugiaSeleccionada="_idCirugiaActiva"
+                              ModuloClave="protocolo"
+                              OnCirugiaCambiada="CambiarCirugiaActivaAsync" />
+
     <!-- Cabecera Paciente -->
     <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
         <div class="card-body py-2 px-3">
@@ -484,10 +489,14 @@ else if (paciente != null)
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
+    [Parameter] public int IdCirugia { get; set; }
+    [Parameter] public EventCallback<int> OnCirugiaCambiada { get; set; }
 
     private int ordenInput;
     private int nhclInput;
     private List<OrdenActivaResumenDto> ordenesActivas = new();
+    private List<CirugiaOperacionResumenDto> _cirugiasOrden = [];
+    private int _idCirugiaActiva;
     private int tabActiva = 1;
     private PacienteHeaderDto? paciente;
     private ProtocoloQuirurgicoCompletoDto protDto = new();
@@ -719,7 +728,16 @@ else if (paciente != null)
             nhclInput = Nhcl;
             ordenInput = IdOrden;
             Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
-            protDto = await QuirofanoService.ObtenerProtocoloQuirurgicoAsync(IdOrden, Nhcl);
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
+            if (IdCirugia > 0 && _cirugiasOrden.Any(c => c.IdCirugia == IdCirugia))
+                _idCirugiaActiva = IdCirugia;
+            else if (_idCirugiaActiva <= 0 || !_cirugiasOrden.Any(c => c.IdCirugia == _idCirugiaActiva))
+                _idCirugiaActiva = _cirugiasOrden.FirstOrDefault()?.IdCirugia ?? 0;
+
+            protDto = await QuirofanoService.ObtenerProtocoloQuirurgicoAsync(IdOrden, Nhcl, _idCirugiaActiva);
+            var cirActiva = _cirugiasOrden.FirstOrDefault(c => c.IdCirugia == _idCirugiaActiva);
+            if (cirActiva != null && string.IsNullOrWhiteSpace(protDto.Principal) && !string.IsNullOrWhiteSpace(cirActiva.Procedimiento))
+                protDto.Principal = cirActiva.Procedimiento;
             CalcularDuracionCirugia();
             paciente = p;
             CargarArchivosQuirurgicos();
@@ -737,6 +755,16 @@ else if (paciente != null)
         }
     }
 
+    private async Task CambiarCirugiaActivaAsync(int nuevoIdCirugia)
+    {
+        _idCirugiaActiva = nuevoIdCirugia;
+        IdCirugia = nuevoIdCirugia;
+        mensajeAlerta = string.Empty;
+        if (OnCirugiaCambiada.HasDelegate)
+            await OnCirugiaCambiada.InvokeAsync(nuevoIdCirugia);
+        await CargarDatosAsync(navegar: false);
+    }
+
     private async Task GuardarProtocoloAsync()
     {
         if (paciente == null) return;
@@ -751,6 +779,7 @@ else if (paciente != null)
 
         guardando = true;
         protDto.IdOrden = IdOrden;
+        protDto.IdCirugia = _idCirugiaActiva;
         protDto.Nhcl = Nhcl;
 
         var result = await QuirofanoService.GuardarProtocoloQuirurgicoAsync(
@@ -763,6 +792,8 @@ else if (paciente != null)
         mensajeAlerta = result.Ok
             ? "Protocolo Operatorio y Chequeo Quirúrgico guardados exitosamente."
             : $"Error al guardar el Protocolo Quirúrgico: {result.Mensaje}";
+        if (result.Ok)
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
     }
 
     private void CambiarTipoMiembro(bool esExterno)

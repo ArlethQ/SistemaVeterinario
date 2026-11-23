@@ -9,6 +9,7 @@ public class PreAnestesiaDto
 {
     public int IdPreAnestesico { get; set; }
     public int Orden { get; set; }
+    public int IdCirugia { get; set; }
     public int Nhcl { get; set; }
     public int IdUser { get; set; }
     public DateTime FechaIngreso { get; set; } = DateTime.Now;
@@ -99,6 +100,7 @@ public class HojaAnestesiaCompletaDto
 {
     public int IdRegistro { get; set; }
     public int IdOrden { get; set; }
+    public int IdCirugia { get; set; }
     public int Nhcl { get; set; }
     public int NumFormulario { get; set; } = 1;
     public DateTime Fecha { get; set; } = DateTime.Today;
@@ -230,6 +232,7 @@ public class ProtocoloQuirurgicoCompletoDto
     // Protocolo Operatorio (qvt_Protocolo)
     public int IdProtocolo { get; set; }
     public int IdOrden { get; set; }
+    public int IdCirugia { get; set; }
     public int Nhcl { get; set; }
     public DateTime Fecha { get; set; } = DateTime.Today;
     public string TipoCirugia { get; set; } = "Electiva";
@@ -349,6 +352,7 @@ public class PostOperatorioChecklistDto
 {
     public int Id { get; set; }
     public int IdOrden { get; set; }
+    public int IdCirugia { get; set; }
     public int Nhcl { get; set; }
     public DateTime? FechaHoraSalida { get; set; } = DateTime.Now;
     public string Destino { get; set; } = "Hospitalización";
@@ -410,6 +414,7 @@ public class PausaSeguridadDto
 {
     public int Id { get; set; }
     public int IdOrden { get; set; }
+    public int IdCirugia { get; set; }
     public int Nhcl { get; set; }
     public DateTime Fecha { get; set; } = DateTime.Today;
     public string Hora { get; set; } = DateTime.Now.ToString("HH:mm:ss");
@@ -446,4 +451,162 @@ public class PausaSeguridadDto
     public string Rpta21 { get; set; } = "N"; // Problemas instrumental a resolver
     public string AspectosRecuperacion { get; set; } = string.Empty; // Aspectos críticos de recuperación
     public string Cerrado { get; set; } = "S";
+}
+
+// ============================================================================
+// 6. HOJA DE MONITORIZACIÓN DE ANESTESIA UNIFICADA (MODELO AVA)
+// ============================================================================
+public class MonitorizacionAnestesiaDto
+{
+    public int Id { get; set; }
+    public int IdOrden { get; set; }
+    public int IdCirugia { get; set; }
+    public int Nhcl { get; set; }
+
+    // Bloque 1: Identificación y Procedimiento
+    public bool ConsentimientoFirmado { get; set; }
+    public DateTime? FechaConsentimiento { get; set; } = DateTime.Today;
+    public decimal? PesoKg { get; set; }
+    public DateTime? FechaNacimiento { get; set; }
+    public string Sexo { get; set; } = string.Empty; // "M" o "F"
+    public int? CondicionCorporal { get; set; } // 1..9
+    public string Procedimiento { get; set; } = string.Empty;
+    public string VeterinarioResponsable { get; set; } = string.Empty;
+    public string Anestesista { get; set; } = string.Empty;
+    public string ProcedimientosAdicionales { get; set; } = string.Empty;
+    public string PosicionPaciente { get; set; } = string.Empty;
+
+    // Bloque 2: Evaluación Preanestésica
+    public string HistoriaProblemaActual { get; set; } = string.Empty;
+    public string ExamenTemp { get; set; } = string.Empty;
+    public string ExamenPulso { get; set; } = string.Empty;
+    public string ExamenResp { get; set; } = string.Empty;
+    public string ExamenClinicoNotas { get; set; } = string.Empty;
+    public string TallaUbicacionCateter { get; set; } = string.Empty;
+    public DateTime? FechaCateter { get; set; } = DateTime.Today;
+    public string Temperamento { get; set; } = string.Empty;
+    public string AlergiasReacciones { get; set; } = string.Empty;
+    public string MedicacionActual { get; set; } = string.Empty;
+    public string PruebasDiagnostico { get; set; } = string.Empty;
+    public string ClasificacionAsa { get; set; } = "I"; // I, II, III, IV, V
+    public bool EsEmergenciaAsa { get; set; } // E
+    public string RiesgosCriticos { get; set; } = string.Empty;
+
+    // Bloque 3: Checklist Pre-Inducción
+    public bool CheckMaquinaAnestesia { get; set; }
+    public bool CheckO2Listo { get; set; }
+    public bool CheckPruebaFugas { get; set; }
+    public bool CheckValvulaApl { get; set; }
+    public bool CheckMonitorizacion { get; set; }
+    public bool CheckCalentamiento { get; set; }
+    public bool CheckIntubacion { get; set; }
+    public bool CheckEmergencia { get; set; }
+
+    // Bloque 4: Fármacos de Premedicación e Inducción
+    public List<FarmacoPremedicacionAvaDto> Premedicacion { get; set; } =
+    [
+        new(), new(), new()
+    ];
+    public List<FarmacoInduccionAvaDto> Induccion { get; set; } =
+    [
+        new(), new()
+    ];
+    public string TamanoTuboEndotraqueal { get; set; } = string.Empty;
+    public string BalonInflado { get; set; } = string.Empty; // "Y" o "N"
+    public bool UsaAntibioticos { get; set; }
+    public string DetalleAntibioticos { get; set; } = string.Empty;
+    public bool UsaAines { get; set; }
+    public string DetalleAines { get; set; } = string.Empty;
+    public string BloqueoLocoregional { get; set; } = string.Empty;
+
+    // Bloque 5: Monitorización Intraoperatoria
+    public List<FluidoAnestesiaAvaDto> Fluidos { get; set; } =
+    [
+        new(), new()
+    ];
+    public int? GasasDentro { get; set; }
+    public int? GasasFuera { get; set; }
+    public int? PunzantesDentro { get; set; }
+    public int? PunzantesFuera { get; set; }
+    public int? GasasFaringeDentro { get; set; }
+    public int? GasasFaringeFuera { get; set; }
+    public string EspecieVolemia { get; set; } = "PERRO"; // "PERRO" (90 mL/kg) o "GATO" (60 mL/kg)
+    public decimal? PerdidasSanguineasMl { get; set; }
+    public List<IntervaloMonitorizacionAvaDto> Intervalos { get; set; } = CrearIntervalosIniciales();
+
+    // Bloque 6: Notas y Postoperatorio
+    public string Notas { get; set; } = string.Empty;
+    public string PostoperatorioNotas { get; set; } = string.Empty;
+    public string PostTemp { get; set; } = string.Empty;
+    public string PostPulso { get; set; } = string.Empty;
+    public string PostResp { get; set; } = string.Empty;
+    public string FarmacosAntagonistas { get; set; } = string.Empty;
+    public string MuestrasLaboratorio { get; set; } = string.Empty;
+
+    public static List<IntervaloMonitorizacionAvaDto> CrearIntervalosIniciales(int cantidad = 12) =>
+        Enumerable.Range(0, cantidad).Select(_ => new IntervaloMonitorizacionAvaDto()).ToList();
+}
+
+public class FarmacoPremedicacionAvaDto
+{
+    public string Farmaco { get; set; } = string.Empty;
+    public string Dosis { get; set; } = string.Empty;
+    public string Ruta { get; set; } = string.Empty;
+    public string Hora { get; set; } = string.Empty;
+    public string Efecto { get; set; } = string.Empty;
+}
+
+public class FarmacoInduccionAvaDto
+{
+    public string Farmaco { get; set; } = string.Empty;
+    public string Dosis { get; set; } = string.Empty;
+    public string Ruta { get; set; } = string.Empty;
+    public string Hora { get; set; } = string.Empty;
+}
+
+public class FluidoAnestesiaAvaDto
+{
+    public string TipoFluido { get; set; } = string.Empty;
+    public string VelocidadMlKgH { get; set; } = string.Empty;
+}
+
+public class IntervaloMonitorizacionAvaDto
+{
+    public string Hora { get; set; } = string.Empty;
+    public decimal? Fc { get; set; }          // ● FC/PR/min
+    public decimal? Fr { get; set; }          // ◦ FR/min
+    public decimal? VentilacionMecanica { get; set; } // Ø VM (rpm)
+    public decimal? Pas { get; set; }         // ˅ PAS (mmHg)
+    public decimal? Pam { get; set; }         // – PAM (mmHg)
+    public decimal? Pad { get; set; }         // ˄ PAD (mmHg)
+    public decimal? Doppler { get; set; }     // ◎ Doppler (mmHg)
+    public decimal? Etco2 { get; set; }       // ▲ ETCO2 (mmHg)
+    public string AgenteVolatilPct { get; set; } = string.Empty; // Isofluorano / Sevofluorano %
+    public string O2AireLmin { get; set; } = string.Empty;       // O2 / aire L/min
+    public decimal? Spo2 { get; set; }        // % SpO2
+    public decimal? Temperatura { get; set; } // Temperatura °C
+    public bool LubricacionOcular { get; set; }
+    public string FluidoMlKgH { get; set; } = string.Empty;
+}
+
+public class CirugiaOperacionResumenDto
+{
+    public int IdCirugia { get; set; }
+    public int? IdOrden { get; set; }
+    public int Nhcl { get; set; }
+    public string Procedimiento { get; set; } = string.Empty;
+    public DateTime Fecha { get; set; } = DateTime.Today;
+    public string HoraInicio { get; set; } = string.Empty;
+    public string HoraFin { get; set; } = string.Empty;
+    public string Medico { get; set; } = string.Empty;
+    public string Anestesiologo { get; set; } = string.Empty;
+    public bool TieneMonAnestesia { get; set; }
+    public bool TienePausa { get; set; }
+    public bool TieneProtocolo { get; set; }
+    public bool TienePreAnestesia { get; set; }
+    public bool TieneAnestesia { get; set; }
+    public bool TieneRecuperacion { get; set; }
+
+    public string EtiquetaCorta =>
+        $"{(string.IsNullOrWhiteSpace(Procedimiento) ? $"Cirugía #{IdCirugia}" : Procedimiento)} · {Fecha:dd/MM/yyyy} {HoraInicio}-{HoraFin}";
 }

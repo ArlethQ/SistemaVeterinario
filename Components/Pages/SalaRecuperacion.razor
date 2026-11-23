@@ -59,6 +59,11 @@
 }
 else if (paciente != null)
 {
+    <SelectorCirugiaOperacion Cirugias="_cirugiasOrden"
+                              IdCirugiaSeleccionada="_idCirugiaActiva"
+                              ModuloClave="recuperacion"
+                              OnCirugiaCambiada="CambiarCirugiaActivaAsync" />
+
     <!-- Cabecera del Paciente -->
     <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
         <div class="card-body py-2 px-3">
@@ -494,10 +499,14 @@ else if (paciente != null)
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
+    [Parameter] public int IdCirugia { get; set; }
+    [Parameter] public EventCallback<int> OnCirugiaCambiada { get; set; }
 
     private int ordenInput;
     private int nhclInput;
     private List<OrdenActivaResumenDto> ordenesActivas = new();
+    private List<CirugiaOperacionResumenDto> _cirugiasOrden = [];
+    private int _idCirugiaActiva;
     private int tabActiva = 1;
     private PacienteHeaderDto? paciente;
 
@@ -624,9 +633,14 @@ else if (paciente != null)
         {
             Nhcl = p.Nhcl;
             Session.SeleccionarOrden(IdOrden, Nhcl, p.PacienteNombre);
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
+            if (IdCirugia > 0 && _cirugiasOrden.Any(c => c.IdCirugia == IdCirugia))
+                _idCirugiaActiva = IdCirugia;
+            else if (_idCirugiaActiva <= 0 || !_cirugiasOrden.Any(c => c.IdCirugia == _idCirugiaActiva))
+                _idCirugiaActiva = _cirugiasOrden.FirstOrDefault()?.IdCirugia ?? 0;
 
             var tSig = QuirofanoService.ObtenerSignosRecuperacionAsync(IdOrden);
-            var tPost = QuirofanoService.ObtenerPostOperatorioChecklistAsync(IdOrden, Nhcl);
+            var tPost = QuirofanoService.ObtenerPostOperatorioChecklistAsync(IdOrden, Nhcl, _idCirugiaActiva);
             var tLiqI = QuirofanoService.ObtenerLiquidosRecuperacionAsync(IdOrden, "I");
             var tLiqE = QuirofanoService.ObtenerLiquidosRecuperacionAsync(IdOrden, "E");
             var tObs = QuirofanoService.ObtenerObservacionesRecuperacionAsync(IdOrden);
@@ -821,9 +835,20 @@ else if (paciente != null)
         observacionesRecuperacion = await QuirofanoService.ObtenerObservacionesRecuperacionAsync(IdOrden);
     }
 
+    private async Task CambiarCirugiaActivaAsync(int nuevoIdCirugia)
+    {
+        _idCirugiaActiva = nuevoIdCirugia;
+        IdCirugia = nuevoIdCirugia;
+        mensajeAlerta = string.Empty;
+        if (OnCirugiaCambiada.HasDelegate)
+            await OnCirugiaCambiada.InvokeAsync(nuevoIdCirugia);
+        await CargarDatosAsync(navegar: false);
+    }
+
     private async Task GuardarChecklistPostOpAsync()
     {
         postChecklist.IdOrden = IdOrden;
+        postChecklist.IdCirugia = _idCirugiaActiva;
         postChecklist.Nhcl = Nhcl;
         var ok = await QuirofanoService.GuardarPostOperatorioChecklistAsync(
             postChecklist,
@@ -836,7 +861,10 @@ else if (paciente != null)
             : "Error al guardar el checklist post-operatorio.";
 
         if (ok)
-            postChecklist = await QuirofanoService.ObtenerPostOperatorioChecklistAsync(IdOrden, Nhcl);
+        {
+            postChecklist = await QuirofanoService.ObtenerPostOperatorioChecklistAsync(IdOrden, Nhcl, _idCirugiaActiva);
+            _cirugiasOrden = await QuirofanoService.ObtenerResumenCirugiasOrdenAsync(IdOrden, Nhcl);
+        }
     }
 
     private async Task ExportarPdfAsync()
