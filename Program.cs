@@ -68,6 +68,7 @@ builder.Services.AddScoped<AuthenticationStateProvider>(sp =>
     sp.GetRequiredService<VeterinariaAuthenticationStateProvider>());
 builder.Services.AddScoped<IAuthService, HosvetKardex.Web.Services.AuthService>();
 builder.Services.AddScoped<IInventarioService, InventarioService>();
+builder.Services.AddScoped<IFarmaciaService, FarmaciaService>();
 builder.Services.AddScoped<IKardexService, KardexService>();
 builder.Services.AddScoped<IHospitalizacionService, HospitalizacionService>();
 builder.Services.AddScoped<IFichasClinicasComplementariasService, FichasClinicasComplementariasService>();

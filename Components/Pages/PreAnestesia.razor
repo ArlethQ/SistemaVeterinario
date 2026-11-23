@@ -4,6 +4,7 @@
 @inject IKardexService KardexService
 @inject IQuirofanoService QuirofanoService
 @inject IInventarioService InventarioService
+@inject IFarmaciaService FarmaciaService
 @inject IReportExportService ReportService
 @inject SessionStateService Session
 @inject IJSRuntime JS
@@ -232,9 +233,12 @@ else
         <!-- Columna Derecha: Medicación Pre-Anestésica y stock -->
         <div class="col-lg-5">
             <div class="card shadow-sm border-0 mb-3">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center gap-2">
-                    <span class="fw-bold text-primary">3. Medicación Pre-Anestésica (Stock en @NombreSedeActiva)</span>
-                    <span class="badge bg-primary-subtle text-primary border">@catalogoStockSede.Count en stock</span>
+                <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span class="fw-bold text-primary">3. Medicación Pre-Anestésica (Cola de Farmacia · @NombreSedeActiva)</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary-subtle text-primary border">@catalogoStockSede.Count en stock</span>
+                        <a href="/farmacia" class="btn btn-xs btn-outline-primary py-0 px-2 fw-semibold">Ver Cola Farmacia</a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="input-group input-group-sm mb-2">
@@ -758,13 +762,25 @@ else
 
         if (ok)
         {
+            await FarmaciaService.ReservarStockDirectoAsync(
+                itemSeleccionadoStock.Id,
+                nuevoProd.CodigoProd,
+                cantidadBase,
+                SedeActivaId,
+                IdOrden,
+                Nhcl,
+                Session.CurrentUser?.IdUsuario ?? 1,
+                "PreAnestesia",
+                nuevoProd.MedBodega);
+
             itemSeleccionadoStock = null;
             ingresarPorPaquete = false;
             filtroProd = string.Empty;
             nuevoProd = new ProductoQuirofanoDto { Modulo = "PreAnestesia", Via = "IV" };
+            await CargarCatalogoStockSedeAsync();
             listaPremedicacion = await QuirofanoService.ObtenerProductosQuirofanoAsync(IdOrden, "PreAnestesia");
             esError = false;
-            mensajeAlerta = "Pre-medicación registrada correctamente.";
+            mensajeAlerta = "Pre-medicación enviada a la cola de Farmacia y reservada del stock disponible.";
         }
         else
         {
@@ -775,7 +791,15 @@ else
 
     private async Task EliminarProductoAsync(ProductoQuirofanoDto p)
     {
+        await FarmaciaService.LiberarStockDirectoAsync(
+            p.CodigoProd,
+            p.CantProd,
+            SedeActivaId,
+            IdOrden,
+            Session.CurrentUser?.IdUsuario ?? 1,
+            "PreAnestesia");
         await QuirofanoService.EliminarProductoQuirofanoAsync(p.Id, p.CodigoProd, IdOrden, "PRE");
+        await CargarCatalogoStockSedeAsync();
         listaPremedicacion = await QuirofanoService.ObtenerProductosQuirofanoAsync(IdOrden, "PreAnestesia");
     }
 

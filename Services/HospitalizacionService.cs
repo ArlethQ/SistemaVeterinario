@@ -910,6 +910,8 @@ public class HospitalizacionService : IHospitalizacionService
                        CONVERT(varchar(10), fecha, 120) AS Fecha, ISNULL(hora, '') AS Hora,
                        ISNULL(RTRIM(codigoprod), '') AS Codigo,
                        ISNULL(med_bodega, '') AS Bodega, ISNULL(med_medida, '') AS Medida,
+                       CASE WHEN ISNULL(grupo, '') = 'ENTREGADO' THEN 'ENTREGADO' ELSE 'PENDIENTE' END AS EstadoFarmacia,
+                       ISNULL(observaciones, '') AS DetalleFarmacia,
                        iniciales AS Iniciales, funcion AS Funcion
                 FROM hvt_cabMonitoreoMedBC
                 WHERE ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo'
@@ -1161,49 +1163,27 @@ public class HospitalizacionService : IHospitalizacionService
                 RETURN;
             END
 
-            DECLARE @NuevoStock DECIMAL(18,4) = @StockActual - @Cantidad;
+            DECLARE @NuevoReservado DECIMAL(18,4) = @StockReservado + @Cantidad;
+            DECLARE @DisponibleRestante DECIMAL(18,4) = @StockActual - @NuevoReservado;
 
+            -- Reservar en cola de Farmacia (no descuenta stock_actual hasta que Farmacia lo entregue)
             UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
-            SET stock_actual = @NuevoStock,
+            SET stock_reservado = @NuevoReservado,
                 fecha_actualizacion = SYSUTCDATETIME()
             WHERE codigo_producto = @CodProdInt
               AND id_sucursal = @Localidad
               AND id_empresa = @IdEmpresa;
 
-            -- Descontar de lotes disponibles (FIFO) si existen
-            DECLARE @RestanteLote DECIMAL(18,4) = @Cantidad;
-            DECLARE @IdLote BIGINT, @DispLote DECIMAL(18,4), @TomarLote DECIMAL(18,4);
-            WHILE @RestanteLote > 0
-            BEGIN
-                SET @IdLote = NULL;
-                SELECT TOP 1 @IdLote = l.id_lote, @DispLote = l.cantidad_disponible
-                FROM dbo.ECONTAX_INVENTARIO_LOTE l WITH (UPDLOCK, HOLDLOCK)
-                WHERE l.codigo_producto = @CodProdInt
-                  AND l.id_sucursal = @Localidad
-                  AND l.id_empresa = @IdEmpresa
-                  AND l.cantidad_disponible > 0
-                ORDER BY ISNULL(l.fecha_vencimiento, '9999-12-31'), l.fecha_ingreso, l.id_lote;
-
-                IF @IdLote IS NULL BREAK;
-
-                SET @TomarLote = CASE WHEN @DispLote <= @RestanteLote THEN @DispLote ELSE @RestanteLote END;
-                UPDATE dbo.ECONTAX_INVENTARIO_LOTE
-                SET cantidad_disponible = cantidad_disponible - @TomarLote
-                WHERE id_lote = @IdLote;
-
-                SET @RestanteLote = @RestanteLote - @TomarLote;
-            END
-
-            -- Registrar movimiento de salida en Kardex de inventario
+            -- Registrar movimiento de reserva en Kardex de inventario
             INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
                 codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
                 cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
                 metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
             ) VALUES (
-                @CodProdInt, @IdEmpresa, @Localidad, 'SALIDA',
-                @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
-                'PROMEDIO', 'MONITOREO', 'ORDEN:' + CAST(@OrdenId AS VARCHAR(20)), @Usuario, SYSUTCDATETIME(),
-                'Descargo Monitoreo 24h Orden #' + CAST(@OrdenId AS VARCHAR(20)) + ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) +
+                @CodProdInt, @IdEmpresa, @Localidad, 'RESERVA',
+                @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
+                'PROMEDIO', 'FARMACIA_COLA', 'ORDEN:' + CAST(@OrdenId AS VARCHAR(20)), @Usuario, SYSUTCDATETIME(),
+                'En cola de Farmacia · Monitoreo 24h Orden #' + CAST(@OrdenId AS VARCHAR(20)) + ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) +
                 CASE WHEN ISNULL(@Bodega, '') <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
             );
 
@@ -1211,15 +1191,15 @@ public class HospitalizacionService : IHospitalizacionService
             INSERT INTO hvt_cabMonitoreoMedBC (
                 ordenId, nhcl, hora, fecha, codigoprod, precioprod, stockprod,
                 indicacionesprod, cantprod, usuario, localidad, proddescripcion,
-                via, origen, iniciales, funcion, funcionario, estado, modulo,
-                med_iva, med_iddinamics, med_medida, med_bodega
+                via, origen, iniciales, funcion, funcionario, estado, grupo, modulo,
+                med_iva, med_iddinamics, med_medida, med_bodega, observaciones
             )
             OUTPUT INSERTED.id INTO @OutTbl
             VALUES (
-                @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProducto, @Precio, CAST(@NuevoStock AS INT),
+                @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProducto, @Precio, CAST(@DisponibleRestante AS INT),
                 @Indicaciones, @Cantidad, @Usuario, @Localidad, @Producto,
-                @Via, 'K', @Iniciales, @Funcion, @Funcionario, 'A', 'Monitoreo',
-                @Iva, CAST(@CodProdInt AS VARCHAR(50)), @Medida, @Bodega
+                @Via, 'K', @Iniciales, @Funcion, @Funcionario, 'A', 'PENDIENTE', 'Monitoreo',
+                @Iva, CAST(@CodProdInt AS VARCHAR(50)), @Medida, @Bodega, 'En cola de Farmacia'
             );
 
             COMMIT TRANSACTION;
@@ -1251,12 +1231,12 @@ public class HospitalizacionService : IHospitalizacionService
             });
 
         if (idInserted == -2)
-            return (false, "Stock insuficiente en la sucursal actual para descargar la cantidad solicitada.");
+            return (false, "Stock disponible insuficiente en la sucursal actual (considerando unidades ya reservadas en cola de Farmacia).");
         if (idInserted <= 0)
             return (false, "La orden no está disponible o el monitoreo está cerrado.");
 
         _inventarioService.InvalidarCacheCatalogo();
-        return (true, $"Medicamento registrado y descargado del stock ({input.Cantidad} {input.Medida} · {input.Bodega}).");
+        return (true, $"Solicitud enviada a la cola de Farmacia y reservada ({input.Cantidad} {input.Medida} · {input.Bodega}). Se descargará cuando Farmacia la entregue.");
     }
 
     public async Task<bool> ActualizarMedicamentoMonitoreoAsync(
@@ -1276,13 +1256,14 @@ public class HospitalizacionService : IHospitalizacionService
                 RETURN;
             END
 
-            DECLARE @CantAnterior DECIMAL(18,4), @CodProdInt INT, @CodProdStr VARCHAR(50), @Localidad INT, @Bodega VARCHAR(120);
+            DECLARE @CantAnterior DECIMAL(18,4), @CodProdInt INT, @CodProdStr VARCHAR(50), @Localidad INT, @Bodega VARCHAR(120), @EstadoFarmacia VARCHAR(50);
             SELECT TOP 1
                 @CantAnterior = ISNULL(cantprod, 0),
                 @CodProdInt = TRY_CAST(med_iddinamics AS INT),
                 @CodProdStr = codigoprod,
                 @Localidad = ISNULL(localidad, 1),
-                @Bodega = ISNULL(med_bodega, '')
+                @Bodega = ISNULL(med_bodega, ''),
+                @EstadoFarmacia = ISNULL(grupo, 'PENDIENTE')
             FROM hvt_cabMonitoreoMedBC WITH (UPDLOCK, HOLDLOCK)
             WHERE id = @Id AND ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo';
 
@@ -1321,23 +1302,46 @@ public class HospitalizacionService : IHospitalizacionService
                         RETURN;
                     END
 
-                    DECLARE @NuevoStock DECIMAL(18,4) = CASE WHEN @StockActual - @Delta < 0 THEN 0 ELSE @StockActual - @Delta END;
-                    UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
-                    SET stock_actual = @NuevoStock,
-                        fecha_actualizacion = SYSUTCDATETIME()
-                    WHERE codigo_producto = @CodProdInt AND id_sucursal = @Localidad AND id_empresa = @IdEmpresa;
+                    IF @EstadoFarmacia = 'ENTREGADO'
+                    BEGIN
+                        DECLARE @NuevoStock DECIMAL(18,4) = CASE WHEN @StockActual - @Delta < 0 THEN 0 ELSE @StockActual - @Delta END;
+                        UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                        SET stock_actual = @NuevoStock,
+                            fecha_actualizacion = SYSUTCDATETIME()
+                        WHERE codigo_producto = @CodProdInt AND id_sucursal = @Localidad AND id_empresa = @IdEmpresa;
 
-                    INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
-                        codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
-                        cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
-                        metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
-                    ) VALUES (
-                        @CodProdInt, @IdEmpresa, @Localidad, CASE WHEN @Delta > 0 THEN 'SALIDA' ELSE 'ENTRADA' END,
-                        ABS(@Delta), @CostoPromedio, ROUND(ABS(@Delta) * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
-                        'PROMEDIO', 'MONITOREO', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), 1, SYSUTCDATETIME(),
-                        'Ajuste Monitoreo 24h Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
-                        CASE WHEN @Bodega <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
-                    );
+                        INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                            codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                            cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                            metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                        ) VALUES (
+                            @CodProdInt, @IdEmpresa, @Localidad, CASE WHEN @Delta > 0 THEN 'SALIDA' ELSE 'ENTRADA' END,
+                            ABS(@Delta), @CostoPromedio, ROUND(ABS(@Delta) * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
+                            'PROMEDIO', 'MONITOREO', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), 1, SYSUTCDATETIME(),
+                            'Ajuste Monitoreo 24h Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                            CASE WHEN @Bodega <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
+                        );
+                    END
+                    ELSE
+                    BEGIN
+                        DECLARE @NuevoReservado DECIMAL(18,4) = CASE WHEN @StockReservado + @Delta < 0 THEN 0 ELSE @StockReservado + @Delta END;
+                        UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                        SET stock_reservado = @NuevoReservado,
+                            fecha_actualizacion = SYSUTCDATETIME()
+                        WHERE codigo_producto = @CodProdInt AND id_sucursal = @Localidad AND id_empresa = @IdEmpresa;
+
+                        INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                            codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                            cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                            metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                        ) VALUES (
+                            @CodProdInt, @IdEmpresa, @Localidad, CASE WHEN @Delta > 0 THEN 'RESERVA' ELSE 'RESERVA_LIBERADA' END,
+                            ABS(@Delta), @CostoPromedio, ROUND(ABS(@Delta) * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
+                            'PROMEDIO', 'FARMACIA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), 1, SYSUTCDATETIME(),
+                            'Ajuste de reserva en cola de Farmacia · Monitoreo 24h Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                            CASE WHEN @Bodega <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
+                        );
+                    END
                 END
             END
 
@@ -1379,13 +1383,14 @@ public class HospitalizacionService : IHospitalizacionService
                 RETURN;
             END
 
-            DECLARE @CantAnterior DECIMAL(18,4), @CodProdInt INT, @CodProdStr VARCHAR(50), @Localidad INT, @Bodega VARCHAR(120);
+            DECLARE @CantAnterior DECIMAL(18,4), @CodProdInt INT, @CodProdStr VARCHAR(50), @Localidad INT, @Bodega VARCHAR(120), @EstadoFarmacia VARCHAR(50);
             SELECT TOP 1
                 @CantAnterior = ISNULL(cantprod, 0),
                 @CodProdInt = TRY_CAST(med_iddinamics AS INT),
                 @CodProdStr = codigoprod,
                 @Localidad = ISNULL(localidad, 1),
-                @Bodega = ISNULL(med_bodega, '')
+                @Bodega = ISNULL(med_bodega, ''),
+                @EstadoFarmacia = ISNULL(grupo, 'PENDIENTE')
             FROM hvt_cabMonitoreoMedBC WITH (UPDLOCK, HOLDLOCK)
             WHERE id = @Id AND ordenId = @IdOrden AND ISNULL(nhcl, 0) IN (0, @Nhcl) AND modulo = 'Monitoreo';
 
@@ -1405,46 +1410,70 @@ public class HospitalizacionService : IHospitalizacionService
 
             IF @CantAnterior > 0 AND @CodProdInt > 0
             BEGIN
-                DECLARE @IdEmpresa INT, @StockActual DECIMAL(18,4), @CostoPromedio DECIMAL(18,4);
+                DECLARE @IdEmpresa INT, @StockActual DECIMAL(18,4), @StockReservado DECIMAL(18,4), @CostoPromedio DECIMAL(18,4);
                 SELECT TOP 1
                     @IdEmpresa = e.id_empresa,
                     @StockActual = e.stock_actual,
+                    @StockReservado = ISNULL(e.stock_reservado, 0),
                     @CostoPromedio = ISNULL(e.costo_promedio, 0)
                 FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
                 WHERE e.codigo_producto = @CodProdInt AND e.id_sucursal = @Localidad;
 
                 IF @IdEmpresa IS NOT NULL
                 BEGIN
-                    DECLARE @NuevoStock DECIMAL(18,4) = @StockActual + @CantAnterior;
-                    UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
-                    SET stock_actual = @NuevoStock,
-                        fecha_actualizacion = SYSUTCDATETIME()
-                    WHERE codigo_producto = @CodProdInt AND id_sucursal = @Localidad AND id_empresa = @IdEmpresa;
-
-                    DECLARE @IdLoteReintegro BIGINT;
-                    SELECT TOP 1 @IdLoteReintegro = l.id_lote
-                    FROM dbo.ECONTAX_INVENTARIO_LOTE l WITH (UPDLOCK, HOLDLOCK)
-                    WHERE l.codigo_producto = @CodProdInt AND l.id_sucursal = @Localidad AND l.id_empresa = @IdEmpresa
-                    ORDER BY l.id_lote DESC;
-
-                    IF @IdLoteReintegro IS NOT NULL
+                    IF @EstadoFarmacia = 'ENTREGADO'
                     BEGIN
-                        UPDATE dbo.ECONTAX_INVENTARIO_LOTE
-                        SET cantidad_disponible = cantidad_disponible + @CantAnterior
-                        WHERE id_lote = @IdLoteReintegro;
-                    END
+                        DECLARE @NuevoStock DECIMAL(18,4) = @StockActual + @CantAnterior;
+                        UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                        SET stock_actual = @NuevoStock,
+                            fecha_actualizacion = SYSUTCDATETIME()
+                        WHERE codigo_producto = @CodProdInt AND id_sucursal = @Localidad AND id_empresa = @IdEmpresa;
 
-                    INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
-                        codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
-                        cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
-                        metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
-                    ) VALUES (
-                        @CodProdInt, @IdEmpresa, @Localidad, 'ENTRADA',
-                        @CantAnterior, @CostoPromedio, ROUND(@CantAnterior * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
-                        'PROMEDIO', 'MONITOREO', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), 1, SYSUTCDATETIME(),
-                        'Reintegro por retiro en Monitoreo 24h Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
-                        CASE WHEN @Bodega <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
-                    );
+                        DECLARE @IdLoteReintegro BIGINT;
+                        SELECT TOP 1 @IdLoteReintegro = l.id_lote
+                        FROM dbo.ECONTAX_INVENTARIO_LOTE l WITH (UPDLOCK, HOLDLOCK)
+                        WHERE l.codigo_producto = @CodProdInt AND l.id_sucursal = @Localidad AND l.id_empresa = @IdEmpresa
+                        ORDER BY l.id_lote DESC;
+
+                        IF @IdLoteReintegro IS NOT NULL
+                        BEGIN
+                            UPDATE dbo.ECONTAX_INVENTARIO_LOTE
+                            SET cantidad_disponible = cantidad_disponible + @CantAnterior
+                            WHERE id_lote = @IdLoteReintegro;
+                        END
+
+                        INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                            codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                            cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                            metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                        ) VALUES (
+                            @CodProdInt, @IdEmpresa, @Localidad, 'ENTRADA',
+                            @CantAnterior, @CostoPromedio, ROUND(@CantAnterior * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
+                            'PROMEDIO', 'MONITOREO', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), 1, SYSUTCDATETIME(),
+                            'Reintegro por retiro en Monitoreo 24h Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                            CASE WHEN @Bodega <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
+                        );
+                    END
+                    ELSE
+                    BEGIN
+                        DECLARE @NuevoReservado DECIMAL(18,4) = CASE WHEN @StockReservado - @CantAnterior < 0 THEN 0 ELSE @StockReservado - @CantAnterior END;
+                        UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                        SET stock_reservado = @NuevoReservado,
+                            fecha_actualizacion = SYSUTCDATETIME()
+                        WHERE codigo_producto = @CodProdInt AND id_sucursal = @Localidad AND id_empresa = @IdEmpresa;
+
+                        INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                            codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                            cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                            metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                        ) VALUES (
+                            @CodProdInt, @IdEmpresa, @Localidad, 'RESERVA_LIBERADA',
+                            @CantAnterior, @CostoPromedio, ROUND(@CantAnterior * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
+                            'PROMEDIO', 'FARMACIA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), 1, SYSUTCDATETIME(),
+                            'Liberación de reserva en cola de Farmacia por retiro en Monitoreo 24h Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                            CASE WHEN @Bodega <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
+                        );
+                    END
                 END
             END
 

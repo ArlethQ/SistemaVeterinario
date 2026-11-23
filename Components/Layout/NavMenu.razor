@@ -33,6 +33,7 @@
                         <NavLink class="menu-link" href="@grupo.Url">@grupo.Descripcion</NavLink>
                     }
                 }
+                <NavLink class="menu-link" href="farmacia"><MenuIcon Name="kardex" /><span>Farmacia y despacho</span></NavLink>
             }
             else
             {
@@ -147,6 +148,10 @@
                             {
                                 <NavLink href="quirofano/anestesia">Hoja de anestesia</NavLink>
                             }
+                            @if (TienePermiso("quirofano/anestesia") || TienePermiso("quirofano/preanestesia"))
+                            {
+                                <NavLink href="quirofano/monitorizacion-anestesia">Monitorización de anestesia</NavLink>
+                            }
                             @if (TienePermiso("quirofano/protocolo"))
                             {
                                 <NavLink href="quirofano/protocolo">Protocolo quirúrgico</NavLink>
@@ -198,6 +203,11 @@
                             }
                         </div>
                     </details>
+                }
+
+                @if (TienePermiso("farmacia"))
+                {
+                    <NavLink class="menu-link" href="farmacia"><MenuIcon Name="kardex" /><span>Farmacia y despacho</span></NavLink>
                 }
 
                 @if (TienePermiso("operaciones/clinicas"))

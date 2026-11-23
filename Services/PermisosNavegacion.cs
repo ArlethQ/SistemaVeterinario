@@ -25,7 +25,7 @@ public sealed class PermisosNavegacion(int rol, IEnumerable<MenuItemModel> menus
                 _rutas.Contains("contabilidad/compras/importar-xml") ||
                 _rutas.Contains("contabilidad/facturacion/retenciones-generadas");
 
-        return clave == "dashboard" || _rutas.Contains(clave);
+        return clave is "dashboard" or "farmacia" || _rutas.Contains(clave);
     }
 
     public static string Normalizar(string ruta)

@@ -301,6 +301,8 @@ public class MonitoreoMedicamentoDto
     public string Codigo { get; set; } = string.Empty;
     public string Bodega { get; set; } = string.Empty;
     public string Medida { get; set; } = string.Empty;
+    public string EstadoFarmacia { get; set; } = "PENDIENTE";
+    public string DetalleFarmacia { get; set; } = string.Empty;
     public string? Iniciales { get; set; }
     public string? Funcion { get; set; }
 }
