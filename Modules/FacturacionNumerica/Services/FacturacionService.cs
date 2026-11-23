@@ -4117,7 +4117,9 @@ IF @resultado < 0
                     .Where(char.IsDigit)
                     .ToArray());
 
-                if (identificacionComprador.Length == 10)
+                if (identificacionComprador == "9999999999999")
+                    factura.CodclientesNavigation.Tipoidentificacion = "07";
+                else if (identificacionComprador.Length == 10)
                     factura.CodclientesNavigation.Tipoidentificacion = "05";
                 else if (identificacionComprador.Length == 13)
                     factura.CodclientesNavigation.Tipoidentificacion = "04";

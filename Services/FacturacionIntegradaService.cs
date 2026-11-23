@@ -8,6 +8,7 @@ public interface IFacturacionIntegradaService
     Task<EstadoFacturacionIntegradaDto> ObtenerEstadoAsync();
     Task<ResultadoSincronizacionClienteDto> SincronizarClienteAsync(int paCodigo, int idUsuario);
     Task<int> SincronizarPropietariosCoincidentesAsync(string filtro, int idUsuario, int limite = 20);
+    Task<HashSet<string>> ObtenerIdentificacionesSoloProveedoresAsync();
 }
 
 public sealed class FacturacionIntegradaService(
@@ -222,5 +223,35 @@ public sealed class FacturacionIntegradaService(
                 sincronizados++;
         }
         return sincronizados;
+    }
+
+    public async Task<HashSet<string>> ObtenerIdentificacionesSoloProveedoresAsync()
+    {
+        const string sql = """
+            SELECT DISTINCT LTRIM(RTRIM(p.ruc))
+            FROM dbo.PROVEEDORES p
+            WHERE ISNULL(p.estado, 1) = 1
+              AND LTRIM(RTRIM(ISNULL(p.ruc, ''))) <> ''
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM dbo.vt_clientes c
+                  WHERE ISNULL(c.pa_estado, 'A') = 'A'
+                    AND LTRIM(RTRIM(ISNULL(c.pa_cedula, ''))) = LTRIM(RTRIM(p.ruc))
+              );
+            """;
+
+        try
+        {
+            var rucs = await db.QueryAsync<string>(sql);
+            return rucs
+                .Select(r => (r ?? string.Empty).Trim())
+                .Where(r => r.Length > 0)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "No se pudieron consultar identificaciones exclusivas de proveedores.");
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
     }
 }

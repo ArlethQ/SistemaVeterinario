@@ -389,3 +389,20 @@ public sealed class OrdenPacienteResumenDto
     public DateTime? InicioConsultaUtc { get; set; }
     public DateTime? FinConsultaUtc { get; set; }
 }
+
+public sealed class ItemOrdenParaFacturaDto
+{
+    public string Origen { get; set; } = string.Empty; // CONSULTA, PROCEDIMIENTO, LABORATORIO, IMAGEN, FISIOTERAPIA, FARMACIA
+    public int SecOrigen { get; set; }
+    public int CodProducto { get; set; }
+    public string CodPrincipal { get; set; } = string.Empty;
+    public string CodAuxiliar { get; set; } = string.Empty;
+    public string Descripcion { get; set; } = string.Empty;
+    public string Detalle { get; set; } = string.Empty;
+    public decimal Cantidad { get; set; } = 1m;
+    public decimal PrecioUnitario { get; set; }
+    public decimal TarifaIva { get; set; }
+    public string? CodigoImpuestoSri { get; set; }
+    public int? TipoProducto { get; set; }
+    public int? SubtipoProducto { get; set; }
+}

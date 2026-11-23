@@ -35,6 +35,9 @@
 @inject NavigationManager NavigationManager
 @inject DemoCatalogService DemoCatalogService
 @inject ComisionesService ComisionesService
+@inject HosvetKardex.Web.Services.SessionStateService Session
+@inject IFarmaciaService FarmaciaService
+@inject CedulaLookupService CedulaLookupService
 @attribute [AllowAnonymous]
 
 <PageTitle>@(EsContextoBackOffice ? "Nueva Factura BackOffice | Numerica" : "Nueva Factura | Numerica e-fact")</PageTitle>
@@ -177,8 +180,18 @@
                         @foreach (var orden in ordenesFactura)
                         {
                             <button type="button" class="list-group-item list-group-item-action py-2"
-                                    disabled="@cargandoOrdenFactura" @onclick="() => SeleccionarOrdenFactura(orden)">
-                                <strong>Orden #@orden.IdOrden · @orden.MascotaNombre</strong>
+                                    disabled="@cargandoOrdenFactura" @onclick="() => SeleccionarOrdenFacturaAsync(orden)">
+                                <div class="d-flex justify-content-between align-items-center gap-2">
+                                    <strong>Orden #@orden.IdOrden · @orden.MascotaNombre</strong>
+                                    @if (string.Equals(orden.FacturadoBc, "S", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary border">Facturada @orden.NumeroFacturaBc</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary border">Pendiente</span>
+                                    }
+                                </div>
                                 <span class="d-block small text-muted">NHCL @orden.Nhcl · @orden.ClienteNombre · @orden.FechaOrden.ToString("dd/MM/yyyy")</span>
                             </button>
                         }
@@ -316,9 +329,18 @@
             SECCIÓN CLIENTE
         ======================================================= *@
         <div class="n-card mb-4" data-tour="invoice.client-section">
-            <div class="n-card-header">
+            <div class="n-card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h5><i class="bi bi-person-vcard me-2"></i> @(ordenFactura is null ? "Información del cliente" : "Cliente de facturación")</h5>
-                <small class="d-none d-sm-flex"><i class="bi bi-arrow-repeat me-1"></i> Los datos se actualizarán automáticamente</small>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="form-check mb-0">
+                        <input type="checkbox" class="form-check-input" id="check-consumidor-final"
+                               checked="@esConsumidorFinal" @onchange="ToggleConsumidorFinalAsync" />
+                        <label class="form-check-label small fw-semibold" for="check-consumidor-final">
+                            Consumidor Final (9999999999999)
+                        </label>
+                    </div>
+                    <small class="d-none d-md-flex"><i class="bi bi-arrow-repeat me-1"></i> Los datos se actualizarán automáticamente</small>
+                </div>
             </div>
 
             <div class="n-card-body n-client-card-body">
@@ -376,6 +398,10 @@
                                 @foreach (var it in identificaciones)
                                 {
                                     <option value="@it.IdeCodigo">@it.IdeDescripcion</option>
+                                }
+                                @if ((esConsumidorFinal || string.Equals(cliente.Tipoidentificacion, "07", StringComparison.Ordinal)) && !identificaciones.Any(x => x.IdeCodigo == "07"))
+                                {
+                                    <option value="07">CONSUMIDOR FINAL</option>
                                 }
                             </select>
                         </div>
@@ -2019,6 +2045,9 @@
     private bool cargandoOrdenFactura;
     private bool usarPropietarioFactura;
     private int? codigoPropietarioFactura;
+    private bool esConsumidorFinal;
+    private HashSet<string>? identificacionesSoloProveedores;
+    private readonly Dictionary<DetalleFacturaDto, (string Origen, int SecOrigen)> origenesDetalleOrden = new();
     private int productUserId;
     private bool backofficeSinAcceso;
     private string backofficeMensaje = "";
@@ -2197,6 +2226,8 @@
     private bool PuedeConsultarHistorialCliente => !string.IsNullOrWhiteSpace(cliente.Numeroidentificacion);
     private string NombreClienteHistorial => ObtenerNombreClienteVisual(cliente, textoBusqueda);
     private bool ClienteIngresadoSinRegistro =>
+        !esConsumidorFinal &&
+        !string.Equals(cliente.Numeroidentificacion?.Trim(), "9999999999999", StringComparison.Ordinal) &&
         cliente.Codcliente <= 0 &&
         !clienteDetectadoEnCatalogoFactura &&
         !string.IsNullOrWhiteSpace(cliente.Numeroidentificacion) &&
@@ -2514,6 +2545,11 @@
 
             currentUserId = emisorSistema.IdUsuario.Value;
         }
+        else
+        {
+            currentUserId = await FacturacionPageAccess.ResolveBillingUserIdAsync(currentUserId);
+            productUserId = currentUserId;
+        }
         if (EsContextoEDeclara)
         {
             cargandoInvolucradosFactura = true;
@@ -2640,7 +2676,7 @@
                 return;
 
             if (encontradas.FirstOrDefault() is { } orden)
-                SeleccionarOrdenFactura(orden);
+                await SeleccionarOrdenFacturaAsync(orden);
             else
                 mensajeOrdenFactura = "No se encontraron órdenes con anamnesis o procedimiento finalizado.";
         }
@@ -2656,22 +2692,52 @@
         }
     }
 
-    private void SeleccionarOrdenFactura(OrdenProformaResumenDto orden)
+    private async Task SeleccionarOrdenFacturaAsync(OrdenProformaResumenDto orden)
     {
         QuitarOrdenFactura();
         ordenFactura = orden;
         ordenesFactura = [];
         textoBusquedaOrdenFactura = $"#{orden.IdOrden}";
+        cargandoOrdenFactura = true;
+        try
+        {
+            await CargarPropietarioOrdenEnFacturaAsync(orden);
+            await CargarItemsOrdenEnFacturaAsync(orden);
+        }
+        finally
+        {
+            cargandoOrdenFactura = false;
+        }
     }
 
     private void QuitarOrdenFactura()
     {
         revisionBusquedaOrdenFactura++;
         ordenesFactura = [];
+        RemoverItemsOrigenOrden();
         LimpiarPropietarioFactura();
         ordenFactura = null;
         mensajeOrdenFactura = null;
         textoBusquedaOrdenFactura = "";
+        AsegurarFilaVaciaDetalle();
+        CalcularTotalesFactura();
+    }
+
+    private void RemoverItemsOrigenOrden()
+    {
+        if (origenesDetalleOrden.Count == 0)
+            return;
+
+        foreach (var d in origenesDetalleOrden.Keys.ToList())
+        {
+            detallesDto.Remove(d);
+            valoresTemporalesCantidad.Remove(d);
+            valoresTemporalesPrecio.Remove(d);
+            valoresTemporalesPorcentaje.Remove(d);
+            valoresTemporalesDescuentoMoneda.Remove(d);
+            modosDescuentoDetalle.Remove(d);
+        }
+        origenesDetalleOrden.Clear();
     }
 
     private void LimpiarPropietarioFactura()
@@ -2694,38 +2760,116 @@
         }
 
         cargandoOrdenFactura = true;
-        usarPropietarioFactura = true;
         try
         {
-            var resultado = await FacturacionIntegrada.SincronizarClienteAsync(orden.IdCliente, currentUserId);
-            if (!resultado.Exito || resultado.CodClienteFacturacion is not int codigo)
+            await CargarPropietarioOrdenEnFacturaAsync(orden);
+        }
+        finally
+        {
+            cargandoOrdenFactura = false;
+        }
+    }
+
+    private async Task CargarPropietarioOrdenEnFacturaAsync(OrdenProformaResumenDto orden)
+    {
+        usarPropietarioFactura = true;
+        esConsumidorFinal = false;
+        try
+        {
+            if (orden.IdCliente > 0 && !string.IsNullOrWhiteSpace(orden.ClienteCedula))
             {
-                mensajeOrdenFactura = resultado.Mensaje;
-                usarPropietarioFactura = false;
-                return;
+                var resultado = await FacturacionIntegrada.SincronizarClienteAsync(orden.IdCliente, currentUserId);
+                if (resultado.Exito && resultado.CodClienteFacturacion is int codigo)
+                {
+                    var clientes = await FacturacionService.BuscarClientesFiltroAsync(currentUserId, orden.ClienteCedula);
+                    var propietario = clientes.FirstOrDefault(c => c.Codcliente == codigo);
+                    if (propietario is not null)
+                    {
+                        codigoPropietarioFactura = codigo;
+                        await SeleccionarCliente(propietario);
+                        return;
+                    }
+                }
             }
 
-            var clientes = await FacturacionService.BuscarClientesFiltroAsync(currentUserId, orden.ClienteCedula);
-            var propietario = clientes.FirstOrDefault(c => c.Codcliente == codigo);
-            if (propietario is null)
+            codigoPropietarioFactura = null;
+            var cedulaLimpia = new string((orden.ClienteCedula ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+            var (apellidosOrd, nombresOrd) = SepararNombreCompletoLookup(orden.ClienteNombre);
+            cliente = new Simetric.Models.Cliente
             {
-                mensajeOrdenFactura = "No se pudieron cargar los datos de facturación del propietario.";
-                usarPropietarioFactura = false;
-                return;
-            }
-
-            codigoPropietarioFactura = codigo;
-            await SeleccionarCliente(propietario);
+                Usuario = currentUserId,
+                Estado = true,
+                Numeroidentificacion = cedulaLimpia,
+                Tipoidentificacion = InferirTipoIdentificacion(cedulaLimpia),
+                TipoCliente = ObtenerCodigoTipoCliente(juridica: false),
+                Oblgconta = "NO",
+                Apellidos = apellidosOrd ?? string.Empty,
+                Nombres = nombresOrd ?? string.Empty,
+                Direccion = orden.ClienteDireccion?.Trim(),
+                Celular = orden.ClienteTelefono?.Trim(),
+                Correo = orden.ClienteEmail?.Trim()
+            };
+            clienteDetectadoEnCatalogoFactura = false;
+            continuarConClienteSinRegistro = true;
+            correosOpcionalesFactura = new();
+            correosPersistidosClienteFactura = new();
         }
         catch (Exception ex)
         {
             LoggerOrdenFactura.LogWarning(ex, "No se pudo usar el propietario de la orden {Orden} en la factura.", orden.IdOrden);
             LimpiarPropietarioFactura();
-            mensajeOrdenFactura = "No se pudieron cargar los datos del propietario. Intenta nuevamente.";
+            mensajeOrdenFactura = "No se pudieron cargar los datos del propietario. Puedes ingresar otro cliente o Consumidor Final.";
         }
-        finally
+    }
+
+    private async Task CargarItemsOrdenEnFacturaAsync(OrdenProformaResumenDto orden)
+    {
+        try
         {
-            cargandoOrdenFactura = false;
+            int localidad = Session.Localidad > 0 ? Session.Localidad : 1;
+            var items = await AdmisionFacturacion.ObtenerItemsParaFacturaOrdenAsync(orden.IdOrden, localidad);
+            if (ordenFactura?.IdOrden != orden.IdOrden)
+                return;
+
+            RemoverItemsOrigenOrden();
+            detallesDto.RemoveAll(EsDetalleFacturaVacio);
+
+            foreach (var item in items)
+            {
+                var detalle = new DetalleFacturaDto
+                {
+                    Codproducto = item.CodProducto,
+                    Codprincipal = string.IsNullOrWhiteSpace(item.CodPrincipal) ? null : item.CodPrincipal,
+                    Codauxiliar = string.IsNullOrWhiteSpace(item.CodAuxiliar) ? null : item.CodAuxiliar,
+                    Cantidad = item.Cantidad > 0 ? item.Cantidad : 1m,
+                    Descripcion = item.Descripcion,
+                    Detalle = string.IsNullOrWhiteSpace(item.Detalle) ? null : item.Detalle,
+                    PorcentajeDescuento = 0m,
+                    Precio = item.PrecioUnitario,
+                    Descuento = 0m,
+                    Tarifa = (int)Math.Max(0m, decimal.Round(item.TarifaIva, 0, MidpointRounding.AwayFromZero)),
+                    TarifaPersonalizada = false,
+                    TarifaManual = null,
+                    TipoProducto = item.TipoProducto ?? 0,
+                    SubtipoProducto = item.SubtipoProducto,
+                    CodigoImpuestoSri = string.IsNullOrWhiteSpace(item.CodigoImpuestoSri) ? "2" : item.CodigoImpuestoSri
+                };
+                detallesDto.Add(detalle);
+                modosDescuentoDetalle[detalle] = ModoDescuento.Porcentaje;
+                origenesDetalleOrden[detalle] = (item.Origen, item.SecOrigen);
+            }
+
+            AsegurarFilaVaciaDetalle();
+            CalcularTotalesFactura();
+
+            mensajeOrdenFactura = string.Equals(orden.FacturadoBc, "S", StringComparison.OrdinalIgnoreCase)
+                ? $"Aviso: la orden #{orden.IdOrden} ya registra factura ({orden.NumeroFacturaBc}). Se cargaron {items.Count} rubro(s)."
+                : $"Orden #{orden.IdOrden}: {items.Count} rubro(s) cargado(s) al detalle.";
+        }
+        catch (Exception ex)
+        {
+            LoggerOrdenFactura.LogWarning(ex, "No se pudieron cargar los rubros de la orden #{IdOrden}.", orden.IdOrden);
+            mensajeOrdenFactura = "Se seleccionó la orden, pero no se pudieron cargar sus rubros automáticamente.";
         }
     }
 
@@ -2798,6 +2942,8 @@
         mensajeOrdenFactura = null;
         usarPropietarioFactura = false;
         codigoPropietarioFactura = null;
+        esConsumidorFinal = false;
+        origenesDetalleOrden.Clear();
         factura = new Simetric.Models.Factura
         {
             Estado = true,
@@ -3042,6 +3188,7 @@
     private string InferirTipoIdentificacion(string numero)
     {
         numero = (numero ?? "").Trim();
+        if (string.Equals(numero, "9999999999999", StringComparison.Ordinal)) return "07";
         if (cliente.Tipoidentificacion is "06" or "08" && numero.All(char.IsLetterOrDigit))
             return cliente.Tipoidentificacion;
         if (numero.Any(char.IsLetter)) return "06";
@@ -3822,6 +3969,7 @@
         productosFrecuentesCliente = productosFrecuentesCatalogo.ToList();
         clienteDetectadoEnCatalogoFactura = false;
         continuarConClienteSinRegistro = false;
+        esConsumidorFinal = string.Equals(numero, "9999999999999", StringComparison.Ordinal);
         facturaEsCredito = false;
         factura.Tiempocredito = null;
     }
@@ -3839,6 +3987,18 @@
             if (sincronizados > 0)
                 resultados = await FacturacionService.BuscarClientesFiltroAsync(
                     currentUserId, texto, false);
+        }
+
+        if (!EsContextoBackOffice && resultados.Count > 0)
+        {
+            identificacionesSoloProveedores ??= await FacturacionIntegrada.ObtenerIdentificacionesSoloProveedoresAsync();
+            if (identificacionesSoloProveedores.Count > 0)
+            {
+                resultados = resultados
+                    .Where(c => string.IsNullOrWhiteSpace(c.Numeroidentificacion) ||
+                                !identificacionesSoloProveedores.Contains(c.Numeroidentificacion.Trim()))
+                    .ToList();
+            }
         }
 
         return resultados;
@@ -3869,6 +4029,14 @@
 
         cliente.Numeroidentificacion = val;
 
+        if (string.Equals(val, "9999999999999", StringComparison.Ordinal))
+        {
+            await AplicarConsumidorFinalAsync();
+            return;
+        }
+
+        esConsumidorFinal = false;
+
         if (val.Length >= 1)
         {
             var version = ++versionBusquedaIdentificacion;
@@ -3888,6 +4056,31 @@
             if (coincidenciaExacta != null && val.Length is 10 or 13)
             {
                 await SeleccionarCliente(coincidenciaExacta);
+            }
+            else if (coincidenciaExacta is null && val.Length is 10 or 13)
+            {
+                await Task.Delay(350);
+                if (version != versionBusquedaIdentificacion ||
+                    !string.Equals(cliente.Numeroidentificacion?.Trim(), val, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                try
+                {
+                    var lookup = await CedulaLookupService.ConsultarAsync(val);
+                    if (version == versionBusquedaIdentificacion &&
+                        string.Equals(cliente.Numeroidentificacion?.Trim(), val, StringComparison.Ordinal) &&
+                        lookup.Success && lookup.Found)
+                    {
+                        AplicarResultadoLookupCliente(val, lookup);
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LoggerOrdenFactura.LogWarning(ex, "No se pudo autollenar desde consulta de identificación para {Identificacion}.", val);
+                }
             }
         }
         else
@@ -4167,8 +4360,18 @@
         versionBusquedaCliente++;
         versionBusquedaIdentificacion++;
         cliente = c;
+        esConsumidorFinal = string.Equals(c.Numeroidentificacion?.Trim(), "9999999999999", StringComparison.Ordinal) ||
+                            string.Equals(c.Tipoidentificacion?.Trim(), "07", StringComparison.Ordinal);
+        if (esConsumidorFinal)
+        {
+            c.Tipoidentificacion = "07";
+            c.Numeroidentificacion = "9999999999999";
+            if (string.IsNullOrWhiteSpace(c.Nombres)) c.Nombres = "CONSUMIDOR";
+            if (string.IsNullOrWhiteSpace(c.Apellidos)) c.Apellidos = "FINAL";
+            if (string.IsNullOrWhiteSpace(c.Oblgconta)) c.Oblgconta = "NO";
+        }
         clienteDetectadoEnCatalogoFactura = true;
-        continuarConClienteSinRegistro = false;
+        continuarConClienteSinRegistro = esConsumidorFinal;
         textoBusqueda = string.Empty;
         indiceSugerenciaClienteActiva = -1;
         indiceSugerenciaIdentificacionActiva = -1;
@@ -4191,6 +4394,31 @@
         await CargarCorreosOpcionalesClienteAsync();
         await CargarProductosFrecuentesClienteAsync();
 
+        if (ordenFactura is null &&
+            !cargandoOrdenFactura &&
+            !esConsumidorFinal &&
+            PuedeBuscarOrdenesFactura &&
+            !string.IsNullOrWhiteSpace(c.Numeroidentificacion))
+        {
+            var identFiltro = c.Numeroidentificacion.Trim();
+            try
+            {
+                var ordenesCliente = await AdmisionFacturacion.BuscarOrdenesParaFacturaAsync(identFiltro);
+                if (string.Equals(cliente.Numeroidentificacion?.Trim(), identFiltro, StringComparison.OrdinalIgnoreCase) &&
+                    ordenFactura is null)
+                {
+                    ordenesFactura = ordenesCliente;
+                    mensajeOrdenFactura = ordenesCliente.Count > 0
+                        ? $"Se encontraron {ordenesCliente.Count} orden(es) veterinaria(s) para este cliente. Elige una para cargar sus rubros."
+                        : "Este cliente no tiene órdenes veterinarias disponibles en la sucursal.";
+                }
+            }
+            catch (Exception ex)
+            {
+                LoggerOrdenFactura.LogWarning(ex, "No se pudieron consultar las órdenes del cliente {Identificacion}.", identFiltro);
+            }
+        }
+
         await InvokeAsync(StateHasChanged);
 
         if (cliente.Pais.HasValue && cliente.Pais > 0)
@@ -4200,6 +4428,178 @@
             if (cliente.Provincia.HasValue && cliente.Provincia > 0)
                 listaCiudades = await FacturacionService.GetCiudadesByProvinciaAsync(cliente.Provincia.Value);
         }
+    }
+
+    private async Task ToggleConsumidorFinalAsync(ChangeEventArgs e)
+    {
+        if (e.Value is true)
+        {
+            await AplicarConsumidorFinalAsync();
+            return;
+        }
+
+        esConsumidorFinal = false;
+        usarPropietarioFactura = false;
+        codigoPropietarioFactura = null;
+        LimpiarClienteFacturaParaNuevaBusqueda();
+    }
+
+    private async Task AplicarConsumidorFinalAsync()
+    {
+        esConsumidorFinal = true;
+        usarPropietarioFactura = false;
+        codigoPropietarioFactura = null;
+        versionBusquedaCliente++;
+        versionBusquedaIdentificacion++;
+        sugerencias = null;
+        sugerenciasIdentificacion = null;
+        indiceSugerenciaClienteActiva = -1;
+        indiceSugerenciaIdentificacionActiva = -1;
+
+        Simetric.Models.Cliente? consumidorDb = null;
+        try
+        {
+            var encontrados = await FacturacionService.BuscarClientesFiltroAsync(
+                currentUserId, "9999999999999", EsContextoBackOffice);
+            consumidorDb = encontrados.FirstOrDefault(c =>
+                string.Equals(c.Numeroidentificacion?.Trim(), "9999999999999", StringComparison.Ordinal));
+        }
+        catch (Exception ex)
+        {
+            LoggerOrdenFactura.LogWarning(ex, "No se pudo consultar Consumidor Final en catálogo.");
+        }
+
+        if (consumidorDb is not null)
+        {
+            consumidorDb.Tipoidentificacion = "07";
+            consumidorDb.Numeroidentificacion = "9999999999999";
+            if (consumidorDb.TipoCliente is null or <= 0)
+                consumidorDb.TipoCliente = ObtenerCodigoTipoCliente(juridica: false);
+            if (string.IsNullOrWhiteSpace(consumidorDb.Oblgconta))
+                consumidorDb.Oblgconta = "NO";
+            if (string.IsNullOrWhiteSpace(consumidorDb.Nombres))
+                consumidorDb.Nombres = "CONSUMIDOR";
+            if (string.IsNullOrWhiteSpace(consumidorDb.Apellidos))
+                consumidorDb.Apellidos = "FINAL";
+            if (string.IsNullOrWhiteSpace(consumidorDb.Direccion))
+                consumidorDb.Direccion = "S/N";
+            cliente = consumidorDb;
+        }
+        else
+        {
+            cliente = new Simetric.Models.Cliente
+            {
+                Usuario = currentUserId,
+                Estado = true,
+                Tipoidentificacion = "07",
+                Numeroidentificacion = "9999999999999",
+                TipoCliente = ObtenerCodigoTipoCliente(juridica: false),
+                Oblgconta = "NO",
+                Nombres = "CONSUMIDOR",
+                Apellidos = "FINAL",
+                Direccion = "S/N"
+            };
+        }
+
+        clienteDetectadoEnCatalogoFactura = true;
+        continuarConClienteSinRegistro = true;
+        correosOpcionalesFactura = new();
+        correosPersistidosClienteFactura = new();
+        facturaEsCredito = false;
+        factura.Tiempocredito = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void AplicarResultadoLookupCliente(string identificacion, CedulaLookupResult lookup)
+    {
+        bool esRuc = identificacion.Length == 13 || string.Equals(lookup.Tipo, "ruc", StringComparison.OrdinalIgnoreCase);
+        if (esRuc)
+        {
+            cliente.Tipoidentificacion = codigoRuc ?? "04";
+            bool esSociedad = (!string.IsNullOrWhiteSpace(lookup.TipoContribuyente) &&
+                               (lookup.TipoContribuyente.Contains("SOCIEDAD", StringComparison.OrdinalIgnoreCase) ||
+                                lookup.TipoContribuyente.Contains("JURID", StringComparison.OrdinalIgnoreCase) ||
+                                lookup.TipoContribuyente.Contains("PUBLIC", StringComparison.OrdinalIgnoreCase) ||
+                                lookup.TipoContribuyente.Contains("EMPRESA", StringComparison.OrdinalIgnoreCase))) ||
+                              (identificacion.Length == 13 && identificacion[2] is '6' or '9');
+
+            cliente.TipoCliente = ObtenerCodigoTipoCliente(juridica: esSociedad);
+            cliente.Oblgconta = NormalizarObligadoLookup(lookup.ObligadoLlevarContabilidad);
+
+            if (esSociedad)
+            {
+                var razon = (lookup.RazonSocial ?? lookup.NombreCompleto ?? string.Empty).Trim();
+                cliente.Nombrerazonsocial = razon;
+                cliente.Nombrecomercial = !string.IsNullOrWhiteSpace(lookup.NombreComercial)
+                    ? lookup.NombreComercial.Trim()
+                    : razon;
+                cliente.Nombres = null;
+                cliente.Apellidos = null;
+            }
+            else
+            {
+                var (apellidos, nombres) = SepararNombreCompletoLookup(lookup.RazonSocial ?? lookup.NombreCompleto);
+                cliente.Apellidos = apellidos ?? string.Empty;
+                cliente.Nombres = nombres ?? string.Empty;
+                cliente.Nombrerazonsocial = null;
+                cliente.Nombrecomercial = null;
+            }
+
+            var direccionRuc = !string.IsNullOrWhiteSpace(lookup.DireccionEstablecimiento)
+                ? lookup.DireccionEstablecimiento.Trim()
+                : lookup.DireccionMatriz?.Trim();
+            if (!string.IsNullOrWhiteSpace(direccionRuc))
+                cliente.Direccion = direccionRuc.Length > 100 ? direccionRuc[..100] : direccionRuc;
+        }
+        else
+        {
+            cliente.Tipoidentificacion = codigoCedula ?? "05";
+            cliente.TipoCliente = ObtenerCodigoTipoCliente(juridica: false);
+            cliente.Oblgconta = "NO";
+            var (apellidos, nombres) = SepararNombreCompletoLookup(lookup.NombreCompleto);
+            cliente.Apellidos = apellidos ?? string.Empty;
+            cliente.Nombres = nombres ?? string.Empty;
+            cliente.Nombrerazonsocial = null;
+            cliente.Nombrecomercial = null;
+            if (string.IsNullOrWhiteSpace(cliente.Direccion) && !string.IsNullOrWhiteSpace(lookup.LugarNacimiento))
+            {
+                var dir = lookup.LugarNacimiento.Trim();
+                cliente.Direccion = dir.Length > 100 ? dir[..100] : dir;
+            }
+        }
+
+        continuarConClienteSinRegistro = true;
+    }
+
+    private int? ObtenerCodigoTipoCliente(bool juridica)
+    {
+        var encontrado = tiposCliente.FirstOrDefault(x =>
+            juridica ? EsTipoClienteJuridico(x.TclDescripcion) : EsTipoClienteNatural(x.TclDescripcion));
+        return encontrado?.TclCodigo ?? cliente.TipoCliente ?? tiposCliente.FirstOrDefault()?.TclCodigo;
+    }
+
+    private static string NormalizarObligadoLookup(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+            return "NO";
+
+        var v = valor.Trim().ToUpperInvariant();
+        return v is "SI" or "SÍ" or "S" or "TRUE" or "1" ? "SI" : "NO";
+    }
+
+    private static (string? Apellidos, string? Nombres) SepararNombreCompletoLookup(string? nombreCompleto)
+    {
+        var partes = (nombreCompleto ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        return partes.Length switch
+        {
+            0 => (null, null),
+            1 => (partes[0], partes[0]),
+            2 => (partes[0], partes[1]),
+            3 => (string.Join(" ", partes.Take(2)), partes[2]),
+            _ => (string.Join(" ", partes.Take(2)), string.Join(" ", partes.Skip(2)))
+        };
     }
 
     private Task AbrirCrudClientesFacturaAsync()
@@ -5029,6 +5429,7 @@
             valoresTemporalesPorcentaje.Remove(detalle);
             valoresTemporalesDescuentoMoneda.Remove(detalle);
             modosDescuentoDetalle.Remove(detalle);
+            origenesDetalleOrden.Remove(detalle);
             AsegurarFilaVaciaDetalle();
             CalcularTotalesFactura();
             StateHasChanged();
@@ -5566,20 +5967,37 @@
         if (string.IsNullOrWhiteSpace(cliente.Tipoidentificacion))
             return "El cliente no tiene un tipo de identificación válido.";
 
-        var esDocumentoAlfanumerico = cliente.Tipoidentificacion is "06" or "08";
-        if (esDocumentoAlfanumerico)
+        var esConsumidorFinalValido = string.Equals(cliente.Tipoidentificacion, "07", StringComparison.Ordinal);
+        if (esConsumidorFinalValido)
         {
-            if (!cliente.Numeroidentificacion.All(char.IsLetterOrDigit))
-                return "La identificación del cliente solo puede contener letras y números.";
-            if (cliente.Numeroidentificacion.Length is < 3 or > 20)
-                return "La identificación del cliente debe tener entre 3 y 20 caracteres.";
+            if (!string.Equals(cliente.Numeroidentificacion, "9999999999999", StringComparison.Ordinal))
+                return "Para Consumidor Final la identificación debe ser 9999999999999.";
+            if (string.IsNullOrWhiteSpace(cliente.Nombres))
+                cliente.Nombres = "CONSUMIDOR";
+            if (string.IsNullOrWhiteSpace(cliente.Apellidos))
+                cliente.Apellidos = "FINAL";
+            if (string.IsNullOrWhiteSpace(cliente.Oblgconta))
+                cliente.Oblgconta = "NO";
+            if (cliente.TipoCliente is null or <= 0)
+                cliente.TipoCliente = ObtenerCodigoTipoCliente(juridica: false);
         }
         else
         {
-            if (!cliente.Numeroidentificacion.All(char.IsDigit))
-                return "La identificación del cliente solo debe contener números.";
-            if (cliente.Numeroidentificacion.Length is not (10 or 13))
-                return "La identificación del cliente debe tener 10 o 13 dígitos.";
+            var esDocumentoAlfanumerico = cliente.Tipoidentificacion is "06" or "08";
+            if (esDocumentoAlfanumerico)
+            {
+                if (!cliente.Numeroidentificacion.All(char.IsLetterOrDigit))
+                    return "La identificación del cliente solo puede contener letras y números.";
+                if (cliente.Numeroidentificacion.Length is < 3 or > 20)
+                    return "La identificación del cliente debe tener entre 3 y 20 caracteres.";
+            }
+            else
+            {
+                if (!cliente.Numeroidentificacion.All(char.IsDigit))
+                    return "La identificación del cliente solo debe contener números.";
+                if (cliente.Numeroidentificacion.Length is not (10 or 13))
+                    return "La identificación del cliente debe tener 10 o 13 dígitos.";
+            }
         }
 
         if (cliente.TipoCliente == null || cliente.TipoCliente <= 0)
@@ -5820,15 +6238,8 @@
                 var ordenVigente = (await AdmisionFacturacion.BuscarOrdenesParaFacturaAsync("", ordenSeleccionada.IdOrden)).FirstOrDefault();
                 if (ordenVigente is null)
                 {
+                    await AlertService.CloseAsync();
                     await AlertService.ShowErrorAsync("La orden seleccionada ya no está habilitada para facturación.");
-                    return;
-                }
-
-                if (usarPropietarioFactura && (cliente.Codcliente != codigoPropietarioFactura ||
-                    ordenVigente.IdCliente != ordenSeleccionada.IdCliente ||
-                    !string.Equals(cliente.Numeroidentificacion?.Trim(), ordenVigente.ClienteCedula, StringComparison.OrdinalIgnoreCase)))
-                {
-                    await AlertService.ShowErrorAsync("Vuelve a cargar los datos del propietario o desmarca la casilla para facturar a otro cliente.");
                     return;
                 }
             }
@@ -5849,6 +6260,35 @@
             }
 
             facturaGuardada = true;
+            if (ordenFactura is { } ordenFacturada)
+            {
+                try
+                {
+                    var itemsFarmaciaFacturados = detallesFacturables
+                        .Where(d => origenesDetalleOrden.TryGetValue(d, out var org) &&
+                                    string.Equals(org.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase))
+                        .Select(d => (origenesDetalleOrden[d].SecOrigen, d.Codproducto, d.Cantidad))
+                        .ToList();
+
+                    var numeroFacturaVisual = $"{serieVisual}-{factura.Numfactura}";
+                    var sedeLiquidacion = Session.Localidad > 0 ? Session.Localidad : 1;
+                    var usuarioLiquidacion = Session.IdUser > 0 ? Session.IdUser : 1;
+
+                    await FarmaciaService.LiquidarRecetaPorFacturaAsync(
+                        ordenFacturada.IdOrden,
+                        itemsFarmaciaFacturados,
+                        sedeLiquidacion,
+                        usuarioLiquidacion,
+                        Session.NombreUsuario,
+                        numeroFacturaVisual);
+
+                    await AdmisionFacturacion.MarcarOrdenFacturadaAsync(ordenFacturada.IdOrden, numeroFacturaVisual);
+                }
+                catch (Exception exLiq)
+                {
+                    LoggerOrdenFactura.LogWarning(exLiq, "La factura fue guardada, pero hubo una observación al liquidar farmacia/estado de la orden #{IdOrden}.", ordenFacturada.IdOrden);
+                }
+            }
             var mensajeResultado = "";
             try
             {

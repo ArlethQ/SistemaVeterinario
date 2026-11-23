@@ -102,6 +102,7 @@ public class FarmaciaRecetaSoapOrdenDto
     public DateTime Fecha { get; set; } = DateTime.Today;
     public List<FarmaciaRecetaSoapItemDto> Items { get; set; } = [];
     public bool TienePendientes => Items.Any(x => x.EstaEnCola);
+    public bool TieneEnFacturacion => Items.Any(x => x.EstaPorFacturar);
     public decimal TotalACobrar => Items.Where(x => x.EstaEnCola && x.SeVende && x.CantidadAVender > 0).Sum(x => x.SubtotalVenta);
 }
 
@@ -133,7 +134,11 @@ public class FarmaciaRecetaSoapItemDto
     public decimal StockReservadoTotalSede { get; set; }
     public decimal StockLibreSede => Math.Max(0, StockFisicoSede - StockReservadoTotalSede);
 
-    public bool EstaEnCola => string.Equals(Estado, "Por Entregar", StringComparison.OrdinalIgnoreCase);
+    public bool EstaEnCola =>
+        string.Equals(Estado, "Por Entregar", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Estado, "Por Facturar", StringComparison.OrdinalIgnoreCase);
+
+    public bool EstaPorFacturar => string.Equals(Estado, "Por Facturar", StringComparison.OrdinalIgnoreCase);
 
     // Máximo disponible para esta línea = lo que sigue libre en la sede + lo que ya tiene reservado esta línea
     public decimal MaximoDisponibleParaEstaLinea =>

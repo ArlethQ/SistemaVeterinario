@@ -16,7 +16,9 @@ public interface IFarmaciaService
     Task<List<FarmaciaStockSedeItemDto>> ObtenerStockSedeDetalladoAsync(int idLocalidad, string? filtro = null);
     Task<List<FarmaciaRecetaSoapOrdenDto>> ObtenerRecetasSoapColaAsync(int idLocalidad, string? filtro = null, string estadoFiltro = "PENDIENTE");
     Task<(bool Exito, string Mensaje)> ActualizarReservaRecetaSoapAsync(FarmaciaRecetaSoapOrdenDto receta, int idLocalidad, int idUsuario);
+    Task<(bool Exito, string Mensaje)> EnviarRecetaAFacturacionAsync(FarmaciaRecetaSoapOrdenDto receta, int idLocalidad, int idUsuario, string nombreUsuario);
     Task<(bool Exito, string Mensaje)> CompletarVentaRecetaSoapAsync(FarmaciaRecetaSoapOrdenDto receta, int idLocalidad, int idUsuario, string nombreUsuario, string inicialesUsuario);
+    Task<(bool Exito, string Mensaje)> LiquidarRecetaPorFacturaAsync(int idOrden, IReadOnlyCollection<(int SecMedicina, int CodigoProducto, decimal CantidadFacturada)> itemsFacturados, int idLocalidad, int idUsuario, string nombreUsuario, string numeroFactura);
 }
 
 public class FarmaciaService : IFarmaciaService
@@ -1011,9 +1013,9 @@ public class FarmaciaService : IFarmaciaService
             ) pMatch
             LEFT JOIN ExistenciasSede ex ON ex.codigo_producto = COALESCE(NULLIF(m.med_idProdu, 0), pMatch.CODIGO, 0)
             WHERE ISNULL(m.med_id_orden, 0) > 0
-              AND (o.ordenAten_localidad IS NULL OR o.ordenAten_localidad = 0 OR o.ordenAten_localidad = @IdLocalidad)
+              AND COALESCE(NULLIF(o.ordenAten_idlocalidad, 0), o.ordenAten_localidad, 0) IN (0, @IdLocalidad)
             ORDER BY
-                CASE WHEN ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') = 'Por Entregar' THEN 0 ELSE 1 END,
+                CASE WHEN ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') IN ('Por Entregar', 'Por Facturar') THEN 0 ELSE 1 END,
                 m.med_id_orden DESC,
                 m.sec ASC;";
 
@@ -1023,7 +1025,12 @@ public class FarmaciaService : IFarmaciaService
 
             foreach (var it in items)
             {
-                if (it.EstaEnCola)
+                if (it.EstaPorFacturar)
+                {
+                    it.SeVende = it.TieneProductoEnCatalogo && it.CantidadReservadaLinea > 0;
+                    it.CantidadAVender = it.SeVende ? Math.Min(it.CantidadReservadaLinea, it.MaximoDisponibleParaEstaLinea) : 0m;
+                }
+                else if (it.EstaEnCola)
                 {
                     var maxDisp = it.MaximoDisponibleParaEstaLinea;
                     it.SeVende = it.TieneProductoEnCatalogo && maxDisp > 0;
@@ -1083,12 +1090,41 @@ public class FarmaciaService : IFarmaciaService
         }
     }
 
-    public async Task<(bool Exito, string Mensaje)> ActualizarReservaRecetaSoapAsync(
+    public Task<(bool Exito, string Mensaje)> ActualizarReservaRecetaSoapAsync(
         FarmaciaRecetaSoapOrdenDto receta,
         int idLocalidad,
         int idUsuario)
+        => GuardarReservaLineasRecetaSoapAsync(receta, idLocalidad, marcarPorFacturar: false, nombreUsuario: null);
+
+    public async Task<(bool Exito, string Mensaje)> EnviarRecetaAFacturacionAsync(
+        FarmaciaRecetaSoapOrdenDto receta,
+        int idLocalidad,
+        int idUsuario,
+        string nombreUsuario)
+    {
+        var pendientes = receta.Items.Where(x => x.EstaEnCola).ToList();
+        if (pendientes.Count == 0)
+            return (false, "Esta receta ya fue liquidada previamente.");
+
+        foreach (var item in pendientes.Where(x => x.SeVende && x.CantidadAVender > 0))
+        {
+            if (item.CodigoProductoInt <= 0)
+                return (false, $"El medicamento '{item.NombreRecetado}' no está vinculado a un producto en stock. Vincúlalo o desmárcalo.");
+            if (item.CantidadAVender > item.MaximoDisponibleParaEstaLinea)
+                return (false, $"La cantidad seleccionada de '{item.NombreRecetado}' ({item.CantidadAVender:0.##}) supera el stock disponible ({item.MaximoDisponibleParaEstaLinea:0.##}).");
+        }
+
+        return await GuardarReservaLineasRecetaSoapAsync(receta, idLocalidad, marcarPorFacturar: true, nombreUsuario);
+    }
+
+    private async Task<(bool Exito, string Mensaje)> GuardarReservaLineasRecetaSoapAsync(
+        FarmaciaRecetaSoapOrdenDto receta,
+        int idLocalidad,
+        bool marcarPorFacturar,
+        string? nombreUsuario)
     {
         int sedeId = idLocalidad > 0 ? idLocalidad : 1;
+        string despachador = string.IsNullOrWhiteSpace(nombreUsuario) ? "Farmacia" : nombreUsuario.Trim();
 
         const string sqlLinea = @"
             SET XACT_ABORT ON;
@@ -1105,7 +1141,7 @@ public class FarmaciaService : IFarmaciaService
             FROM dbo.vt_medicinas WITH (UPDLOCK, HOLDLOCK)
             WHERE sec = @Sec;
 
-            IF @EstadoActual <> 'Por Entregar'
+            IF @EstadoActual NOT IN ('Por Entregar', 'Por Facturar')
             BEGIN
                 ROLLBACK TRANSACTION;
                 SELECT 0;
@@ -1121,7 +1157,7 @@ public class FarmaciaService : IFarmaciaService
                 WHERE codigo_producto = @CodAnterior AND id_sucursal = @IdLocalidad;
             END
 
-            -- 2. Reservar la nueva cantidad deseada (limitada al disponible real)
+            -- 2. Reservar la nueva cantidad deseada (limitada al disponible real, sin descontar stock_actual ni Kardex)
             DECLARE @NuevoReservadoLinea DECIMAL(18,4) = 0;
             IF @NuevoCodProd > 0 AND @CantidadDeseada > 0
             BEGIN
@@ -1150,7 +1186,12 @@ public class FarmaciaService : IFarmaciaService
 
             UPDATE dbo.vt_medicinas
             SET med_idProdu = @NuevoCodProd,
-                med_cantidad1 = @NuevoReservadoLinea
+                med_cantidad1 = @NuevoReservadoLinea,
+                med_estado = CASE WHEN @MarcarPorFacturar = 1 THEN 'Por Facturar' ELSE @EstadoActual END,
+                med_observaciones = CASE
+                    WHEN @MarcarPorFacturar = 1 THEN LEFT('Farmacia->Caja (' + CONVERT(VARCHAR(16), GETDATE(), 120) + '): ' + CAST(@NuevoReservadoLinea AS VARCHAR(20)) + ' en cola · ' + @Despachador, 240)
+                    ELSE med_observaciones
+                END
             WHERE sec = @Sec;
 
             COMMIT TRANSACTION;
@@ -1166,12 +1207,16 @@ public class FarmaciaService : IFarmaciaService
                     item.Sec,
                     NuevoCodProd = item.CodigoProductoInt,
                     CantidadDeseada = deseada,
-                    IdLocalidad = sedeId
+                    IdLocalidad = sedeId,
+                    MarcarPorFacturar = marcarPorFacturar ? 1 : 0,
+                    Despachador = despachador
                 });
             }
 
             _inventarioService.InvalidarCacheCatalogo();
-            return (true, $"Reserva en cola actualizada para la Receta de la Orden #{receta.IdOrden}. Las unidades no seleccionadas quedaron libres.");
+            return marcarPorFacturar
+                ? (true, $"Receta Orden #{receta.IdOrden} enviada a Facturación con reserva temporal. El stock definitivo se descargará cuando se genere la factura.")
+                : (true, $"Reserva en cola actualizada para la Receta de la Orden #{receta.IdOrden}. Las unidades no seleccionadas quedaron libres.");
         }
         catch (Exception ex)
         {
@@ -1188,10 +1233,6 @@ public class FarmaciaService : IFarmaciaService
         string inicialesUsuario)
     {
         int sedeId = idLocalidad > 0 ? idLocalidad : 1;
-        string despachador = string.IsNullOrWhiteSpace(nombreUsuario) ? "Farmacia" : nombreUsuario.Trim();
-        string iniciales = string.IsNullOrWhiteSpace(inicialesUsuario) ? "FAR" : inicialesUsuario.Trim();
-        if (iniciales.Length > 5) iniciales = iniciales[..5];
-
         var pendientes = receta.Items.Where(x => x.EstaEnCola).ToList();
         if (pendientes.Count == 0)
             return (false, "Esta receta ya fue procesada previamente.");
@@ -1203,6 +1244,111 @@ public class FarmaciaService : IFarmaciaService
             if (item.CantidadAVender > item.MaximoDisponibleParaEstaLinea)
                 return (false, $"La cantidad a vender de '{item.NombreRecetado}' ({item.CantidadAVender:0.##}) supera el stock disponible ({item.MaximoDisponibleParaEstaLinea:0.##}).");
         }
+
+        var cantidades = pendientes.ToDictionary(
+            x => x.Sec,
+            x => x.SeVende && x.CantidadAVender > 0 ? x.CantidadAVender : 0m);
+
+        return await LiquidarLineasRecetaAsync(
+            receta,
+            pendientes,
+            cantidades,
+            sedeId,
+            idUsuario,
+            nombreUsuario,
+            inicialesUsuario,
+            referenciaTipo: "FARMACIA_RECETA",
+            referenciaValor: $"ORDEN:{receta.IdOrden}",
+            etiquetaOrigen: "Farmacia");
+    }
+
+    public async Task<(bool Exito, string Mensaje)> LiquidarRecetaPorFacturaAsync(
+        int idOrden,
+        IReadOnlyCollection<(int SecMedicina, int CodigoProducto, decimal CantidadFacturada)> itemsFacturados,
+        int idLocalidad,
+        int idUsuario,
+        string nombreUsuario,
+        string numeroFactura)
+    {
+        if (idOrden <= 0)
+            return (false, "Orden inválida para liquidar farmacia.");
+
+        int sedeOrden = await _db.ExecuteScalarAsync<int?>(@"
+            SELECT TOP 1 COALESCE(NULLIF(ordenAten_idlocalidad, 0), ordenAten_localidad, @DefaultSede)
+            FROM dbo.vt_ordenAtencion
+            WHERE ordenAten_id = @IdOrden;",
+            new { IdOrden = idOrden, DefaultSede = idLocalidad > 0 ? idLocalidad : 1 }) ?? (idLocalidad > 0 ? idLocalidad : 1);
+
+        var ordenes = await ObtenerRecetasSoapColaAsync(sedeOrden, idOrden.ToString(), "PENDIENTE");
+        var receta = ordenes.FirstOrDefault(x => x.IdOrden == idOrden);
+        if (receta is null)
+            return (true, "La orden no tenía medicamentos pendientes en cola de Farmacia.");
+
+        var pendientes = receta.Items.Where(x => x.EstaEnCola).ToList();
+        if (pendientes.Count == 0)
+            return (true, "La orden no tenía medicamentos pendientes en cola de Farmacia.");
+
+        var porSec = itemsFacturados
+            .Where(x => x.SecMedicina > 0 && x.CantidadFacturada > 0)
+            .GroupBy(x => x.SecMedicina)
+            .ToDictionary(g => g.Key, g => g.Sum(i => i.CantidadFacturada));
+
+        var manualesPorProducto = itemsFacturados
+            .Where(x => x.SecMedicina <= 0 && x.CodigoProducto > 0 && x.CantidadFacturada > 0)
+            .GroupBy(x => x.CodigoProducto)
+            .ToDictionary(g => g.Key, g => g.Sum(i => i.CantidadFacturada));
+
+        var cantidades = new Dictionary<int, decimal>();
+        foreach (var item in pendientes)
+        {
+            if (porSec.TryGetValue(item.Sec, out var cantSec))
+            {
+                cantidades[item.Sec] = cantSec;
+            }
+            else if (item.CodigoProductoInt > 0 && manualesPorProducto.TryGetValue(item.CodigoProductoInt, out var cantManual) && cantManual > 0)
+            {
+                var asignar = Math.Min(cantManual, Math.Max(item.CantidadRecetada, item.CantidadReservadaLinea));
+                cantidades[item.Sec] = asignar;
+                manualesPorProducto[item.CodigoProductoInt] = cantManual - asignar;
+            }
+            else
+            {
+                cantidades[item.Sec] = 0m;
+            }
+        }
+
+        string refDoc = string.IsNullOrWhiteSpace(numeroFactura)
+            ? $"ORDEN:{idOrden}"
+            : $"FAC:{numeroFactura.Trim()}";
+
+        return await LiquidarLineasRecetaAsync(
+            receta,
+            pendientes,
+            cantidades,
+            sedeOrden,
+            idUsuario,
+            nombreUsuario,
+            inicialesUsuario: "CAJ",
+            referenciaTipo: "FACTURA_FARMACIA",
+            referenciaValor: refDoc,
+            etiquetaOrigen: string.IsNullOrWhiteSpace(numeroFactura) ? "Factura" : $"Factura {numeroFactura.Trim()}");
+    }
+
+    private async Task<(bool Exito, string Mensaje)> LiquidarLineasRecetaAsync(
+        FarmaciaRecetaSoapOrdenDto receta,
+        List<FarmaciaRecetaSoapItemDto> pendientes,
+        Dictionary<int, decimal> cantidadesCompradas,
+        int sedeId,
+        int idUsuario,
+        string nombreUsuario,
+        string inicialesUsuario,
+        string referenciaTipo,
+        string referenciaValor,
+        string etiquetaOrigen)
+    {
+        string despachador = string.IsNullOrWhiteSpace(nombreUsuario) ? "Farmacia" : nombreUsuario.Trim();
+        string iniciales = string.IsNullOrWhiteSpace(inicialesUsuario) ? "FAR" : inicialesUsuario.Trim();
+        if (iniciales.Length > 5) iniciales = iniciales[..5];
 
         const string sqlLinea = @"
             SET XACT_ABORT ON;
@@ -1221,7 +1367,7 @@ public class FarmaciaService : IFarmaciaService
             FROM dbo.vt_medicinas WITH (UPDLOCK, HOLDLOCK)
             WHERE sec = @Sec;
 
-            IF @EstadoActual <> 'Por Entregar'
+            IF @EstadoActual NOT IN ('Por Entregar', 'Por Facturar')
             BEGIN
                 ROLLBACK TRANSACTION;
                 SELECT 0;
@@ -1301,11 +1447,11 @@ public class FarmaciaService : IFarmaciaService
                 ) VALUES (
                     @CodProdFinal, @IdEmpresa, @IdLocalidad, 'SALIDA',
                     @CantidadComprada, @CostoPromedio, ROUND(@CantidadComprada * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
-                    'PROMEDIO', 'FARMACIA_RECETA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
-                    'Venta de Receta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) + ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) +
+                    'PROMEDIO', @ReferenciaTipo, LEFT(@ReferenciaValor, 100), @IdUsuario, SYSUTCDATETIME(),
+                    @EtiquetaOrigen + ' Receta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) + ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) +
                     ' · Comprado: ' + CAST(@CantidadComprada AS VARCHAR(20)) + ' de ' + CAST(@CantRecetada AS VARCHAR(20)) + ' recetado' +
                     CASE WHEN ISNULL(@Bodega, '') <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END +
-                    ' · Despachado por: ' + @Despachador
+                    ' · Responsable: ' + @Despachador
                 );
 
                 -- Registrar en historial de ventas de Farmacia
@@ -1317,7 +1463,7 @@ public class FarmaciaService : IFarmaciaService
                 ) VALUES (
                     @IdOrden, @Nhcl, CONVERT(VARCHAR(5), GETDATE(), 108), CAST(GETDATE() AS date), @CodigoPrincipal, @PrecioUnitario, CAST(@NuevoStock AS INT),
                     @Indicaciones, @CantidadComprada, @IdUsuario, @IdLocalidad, @NombreProducto,
-                    'RECETA SOAP', 'F', @Iniciales, 'Farmacia', @Despachador, 'A', 'ENTREGADO', 'VentaFarmacia',
+                    'RECETA SOAP', 'F', @Iniciales, @EtiquetaOrigen, @Despachador, 'A', 'ENTREGADO', 'VentaFarmacia',
                     'IVA0', CAST(@CodProdFinal AS VARCHAR(50)), @UnidadMedida, @Bodega,
                     'Receta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) + ' · ' + @PacienteRef
                 );
@@ -1329,8 +1475,8 @@ public class FarmaciaService : IFarmaciaService
                 ELSE 'Entregado'
             END;
 
-            DECLARE @ObsFinal VARCHAR(240) = 'Farmacia (' + CONVERT(VARCHAR(16), GETDATE(), 120) + '): comprado ' +
-                CAST(@CantidadComprada AS VARCHAR(20)) + ' de ' + CAST(@CantRecetada AS VARCHAR(20)) + ' · ' + @Despachador;
+            DECLARE @ObsFinal VARCHAR(240) = LEFT(@EtiquetaOrigen + ' (' + CONVERT(VARCHAR(16), GETDATE(), 120) + '): comprado ' +
+                CAST(@CantidadComprada AS VARCHAR(20)) + ' de ' + CAST(@CantRecetada AS VARCHAR(20)) + ' · ' + @Despachador, 240);
 
             UPDATE dbo.vt_medicinas
             SET med_idProdu = @CodProdFinal,
@@ -1350,7 +1496,7 @@ public class FarmaciaService : IFarmaciaService
 
             foreach (var item in pendientes)
             {
-                decimal cantComprada = item.SeVende && item.CantidadAVender > 0 ? item.CantidadAVender : 0m;
+                decimal cantComprada = cantidadesCompradas.TryGetValue(item.Sec, out var q) && q > 0 ? q : 0m;
                 int res = await _db.ExecuteScalarAsync<int>(sqlLinea, new
                 {
                     item.Sec,
@@ -1362,6 +1508,9 @@ public class FarmaciaService : IFarmaciaService
                     IdUsuario = idUsuario > 0 ? idUsuario : 1,
                     Despachador = despachador,
                     Iniciales = iniciales,
+                    ReferenciaTipo = referenciaTipo,
+                    ReferenciaValor = referenciaValor,
+                    EtiquetaOrigen = etiquetaOrigen,
                     CodigoPrincipal = string.IsNullOrWhiteSpace(item.CodigoPrincipal) ? item.CodigoProductoInt.ToString() : item.CodigoPrincipal,
                     NombreProducto = string.IsNullOrWhiteSpace(item.NombreProductoInventario) ? item.NombreRecetado : item.NombreProductoInventario,
                     item.PrecioUnitario,
@@ -1378,11 +1527,11 @@ public class FarmaciaService : IFarmaciaService
             }
 
             _inventarioService.InvalidarCacheCatalogo();
-            return (true, $"Receta SOAP Orden #{receta.IdOrden} completada: {comprados} medicamento(s) vendidos y descargados del Kardex, {omitidos} no comprados (reserva liberada).");
+            return (true, $"Receta SOAP Orden #{receta.IdOrden} completada: {comprados} medicamento(s) descargados del Kardex, {omitidos} no comprados (reserva liberada).");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al completar venta de receta SOAP Orden {IdOrden}", receta.IdOrden);
+            _logger.LogError(ex, "Error al liquidar receta SOAP Orden {IdOrden}", receta.IdOrden);
             return (false, $"Error al procesar la receta: {ex.Message}");
         }
     }

@@ -61,6 +61,8 @@ public interface IAdmisionFacturacionService
     Task<List<OrdenProformaResumenDto>> BuscarOrdenesParaProformaAsync(DateTime desde, DateTime hasta, string filtro = "");
     Task<OrdenProformaResumenDto?> ObtenerDetalleProformaOrdenAsync(int idOrden);
     Task<List<OrdenProformaResumenDto>> BuscarOrdenesParaFacturaAsync(string filtro, int? idOrden = null);
+    Task<List<ItemOrdenParaFacturaDto>> ObtenerItemsParaFacturaOrdenAsync(int idOrden, int idLocalidad);
+    Task<bool> MarcarOrdenFacturadaAsync(int idOrden, string numeroFactura);
     Task<(ItemFacturableProformaDto? Cargo, string Mensaje)> AgregarCargoProformaManualAsync(ItemFacturableProformaDto cargo);
     Task<(bool Exito, string NumeroProforma, string Mensaje)> EmitirProformaAsync(int idOrden, List<ItemFacturableProformaDto> itemsSeleccionados, int idUsuario);
 
@@ -2531,6 +2533,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         var cols = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
         string colFactura = cols.Contains("ordenaten_factura") ? "RTRIM(ISNULL(o.ordenaten_factura, 'N'))" : "'N'";
         string colNumFac = cols.Contains("ordenaten_numfacBC") ? "RTRIM(ISNULL(o.ordenaten_numfacBC, ''))" : "''";
+        string exprNoFacturada = cols.Contains("ordenaten_factura")
+            ? "CASE WHEN ISNULL(o.ordenaten_factura, 'N') = 'S' THEN 1 ELSE 0 END"
+            : "0";
         string sqlOrden = $@"
             SELECT TOP (30)
                 o.ordenAten_id AS IdOrden,
@@ -2561,7 +2566,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 WHERE f.med_orden = o.ordenAten_id AND f.med_nhcl = o.ordenAten_nhcl
                 ORDER BY f.sec DESC
             ) f
-            WHERE o.ordenAten_estado = 'T' AND {AlcanceOrden}
+            WHERE ((@SoloProcesos = 1 AND o.ordenAten_estado = 'T')
+                   OR (@SoloProcesos = 0 AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E', 'T')))
+              AND {AlcanceOrden}
               AND (@SoloProcesos = 0 OR f.med_requiereHospitalizacion = 1 OR f.med_pregunta = 'S')
               AND (@IdOrden IS NULL OR o.ordenAten_id = @IdOrden)
               AND (@Desde IS NULL OR o.ordenAten_fecha >= @Desde)
@@ -2570,12 +2577,17 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    OR (@SoloProcesos = 0 AND (
                        (@Numero IS NOT NULL AND (CHARINDEX(@Filtro, CONVERT(varchar(20), o.ordenAten_id)) > 0
                                                  OR CHARINDEX(@Filtro, CONVERT(varchar(20), o.ordenAten_nhcl)) > 0))
-                       OR CHARINDEX(@Filtro, c.pa_cedula) > 0))
+                       OR CHARINDEX(@Filtro, LTRIM(RTRIM(ISNULL(c.pa_cedula, '')))) > 0
+                       OR (LEN(@Filtro) = 13 AND RIGHT(@Filtro, 3) = '001'
+                           AND LTRIM(RTRIM(ISNULL(c.pa_cedula, ''))) = LEFT(@Filtro, 10))))
                    OR p.mas_nombre LIKE '%' + @Filtro + '%' OR c.pa_cedula = @Filtro
                    OR CONCAT(RTRIM(c.pa_apellidos), ' ', RTRIM(c.pa_nombres)) LIKE '%' + @Filtro + '%'
                    OR CONCAT(RTRIM(c.pa_nombres), ' ', RTRIM(c.pa_apellidos)) LIKE '%' + @Filtro + '%')
             ORDER BY CASE WHEN @SoloProcesos = 0 AND o.ordenAten_id = @Numero THEN 0 ELSE 1 END,
-                     o.ordenAten_fechaProcesado DESC, o.ordenAten_id DESC;";
+                     CASE WHEN @SoloProcesos = 0 THEN (CASE WHEN o.ordenAten_idlocalidad = @LocalidadSesion THEN 0 ELSE 1 END) ELSE 0 END,
+                     CASE WHEN @SoloProcesos = 0 THEN {exprNoFacturada} ELSE 0 END,
+                     ISNULL(o.ordenAten_fechaProcesado, o.ordenAten_fecha) DESC,
+                     o.ordenAten_id DESC;";
 
         var texto = filtro.Trim().TrimStart('#').Trim();
         return (await _db.QueryAsync<OrdenProformaResumenDto>(sqlOrden, new
@@ -2915,6 +2927,318 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             _logger.LogError(ex, "No se pudo consultar la bitácora de auditoría.");
             throw;
         }
+    }
+
+    public async Task<List<ItemOrdenParaFacturaDto>> ObtenerItemsParaFacturaOrdenAsync(int idOrden, int idLocalidad)
+    {
+        if (idOrden <= 0)
+            return [];
+
+        var header = await _db.QueryFirstOrDefaultAsync<OrdenFacturaHeaderRow>("""
+            SELECT TOP (1)
+                o.ordenAten_id AS IdOrden,
+                o.ordenAten_nhcl AS Nhcl,
+                ISNULL(NULLIF(o.ordenAten_idlocalidad, 0), 1) AS IdLocalidad,
+                CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento,
+                RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad
+            FROM vt_ordenAtencion o
+            LEFT JOIN vt_especialidades e ON e.es_id = o.ordenAten_esp_numero
+            WHERE o.ordenAten_id = @IdOrden
+            """, new { IdOrden = idOrden });
+
+        if (header is null)
+            return [];
+
+        var resultado = new List<ItemOrdenParaFacturaDto>();
+        int idUsuarioCatalogo = 1_000_000 + (idLocalidad > 0 ? idLocalidad : header.IdLocalidad);
+
+        if (!header.EsProcedimiento)
+        {
+            var prodConsulta = await _db.QueryFirstOrDefaultAsync<OrdenProductoQueryRow>("""
+                SELECT TOP (1)
+                    p.CODIGO AS CodProducto,
+                    ISNULL(NULLIF(RTRIM(p.CODIGO_PRINCIPAL), ''), 'CONS') AS CodPrincipal,
+                    ISNULL(RTRIM(p.COD_AUXILIAR), '') AS CodAuxiliar,
+                    RTRIM(ISNULL(p.NOMBRE, '')) AS Descripcion,
+                    ISNULL(RTRIM(p.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
+                    ISNULL(RTRIM(p.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
+                    p.TIPO_PRODUCTO AS TipoProducto,
+                    p.IDSUBTIPO AS SubtipoProducto
+                FROM VeterinariaFacturacion.dbo.PRODUCTO p
+                LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+                LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
+                WHERE ISNULL(p.ESTADO, 1) = 1
+                  AND (UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) IN ('CONSULTA', 'CONSULTAS')
+                       OR UPPER(LTRIM(RTRIM(ISNULL(p.NOMBRE, '')))) LIKE 'CONSULTA%')
+                ORDER BY CASE WHEN p.IDUSUARIO = @IdUsuario THEN 0 ELSE 1 END, p.CODIGO;
+                """, new { IdUsuario = idUsuarioCatalogo });
+
+            var descConsulta = string.IsNullOrWhiteSpace(header.Especialidad)
+                ? "Consulta Veterinaria"
+                : $"Consulta Veterinaria - {header.Especialidad}";
+
+            resultado.Add(new ItemOrdenParaFacturaDto
+            {
+                Origen = "CONSULTA",
+                SecOrigen = idOrden,
+                CodProducto = prodConsulta?.CodProducto ?? 0,
+                CodPrincipal = !string.IsNullOrWhiteSpace(prodConsulta?.CodPrincipal) ? prodConsulta.CodPrincipal : "CONS",
+                CodAuxiliar = prodConsulta?.CodAuxiliar ?? string.Empty,
+                Descripcion = descConsulta,
+                Detalle = $"Orden #{idOrden}",
+                Cantidad = 1m,
+                PrecioUnitario = 30.00m,
+                TarifaIva = NormalizarTarifaIvaProducto(prodConsulta?.PorcentajeImpuestoRaw),
+                CodigoImpuestoSri = !string.IsNullOrWhiteSpace(prodConsulta?.CodigoImpuestoSri) ? prodConsulta.CodigoImpuestoSri : "2",
+                TipoProducto = prodConsulta?.TipoProducto,
+                SubtipoProducto = prodConsulta?.SubtipoProducto
+            });
+        }
+
+        var colsProc = await ObtenerColumnasTablaAsync("vt_procedimientos");
+        string secProcCol = colsProc.Contains("sec") ? "p.sec" : "0";
+        string cantProcCol = colsProc.Contains("proc_cantidad") ? "CAST(ISNULL(NULLIF(p.proc_cantidad, 0), 1) AS decimal(18,4))" : "CAST(1 AS decimal(18,4))";
+        string precioProcCol = colsProc.Contains("proc_precio") ? "CAST(COALESCE(NULLIF(p.proc_precio, 0), pr.VALOR_UNITARIO, 0) AS decimal(18,4))" : "CAST(ISNULL(pr.VALOR_UNITARIO, 0) AS decimal(18,4))";
+        string obsProcCol = colsProc.Contains("proc_observaciones") ? "ISNULL(CONVERT(nvarchar(250), p.proc_observaciones), '')" : "''";
+        string descProcExpr = colsProc.Contains("proc_descripcion")
+            ? "COALESCE(NULLIF(RTRIM(pr.NOMBRE), ''), NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(250), p.proc_descripcion))), ''), CONCAT('Procedimiento #', p.proc_idProdu))"
+            : "COALESCE(NULLIF(RTRIM(pr.NOMBRE), ''), CONCAT('Procedimiento #', p.proc_idProdu))";
+        string estadoProcFilter = colsProc.Contains("proc_estado")
+            ? "AND UPPER(LTRIM(RTRIM(ISNULL(p.proc_estado, '')))) NOT IN ('ANULADO', 'ELIMINADO', 'CANCELADO')"
+            : string.Empty;
+
+        var procedimientos = await _db.QueryAsync<OrdenProductoQueryRow>($"""
+            SELECT
+                'PROCEDIMIENTO' AS Origen,
+                {secProcCol} AS SecOrigen,
+                ISNULL(pr.CODIGO, ISNULL(p.proc_idProdu, 0)) AS CodProducto,
+                ISNULL(RTRIM(pr.CODIGO_PRINCIPAL), '') AS CodPrincipal,
+                ISNULL(RTRIM(pr.COD_AUXILIAR), '') AS CodAuxiliar,
+                {descProcExpr} AS Descripcion,
+                {obsProcCol} AS Detalle,
+                {cantProcCol} AS Cantidad,
+                {precioProcCol} AS PrecioUnitario,
+                ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
+                ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
+                pr.TIPO_PRODUCTO AS TipoProducto,
+                pr.IDSUBTIPO AS SubtipoProducto
+            FROM vt_procedimientos p
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO = p.proc_idProdu
+            WHERE p.proc_idOrden = @IdOrden
+              {estadoProcFilter}
+            ORDER BY p.proc_fecha, p.proc_idProdu;
+            """, new { IdOrden = idOrden });
+
+        var laboratorios = await _db.QueryAsync<OrdenProductoQueryRow>("""
+            SELECT
+                'LABORATORIO' AS Origen,
+                l.sec AS SecOrigen,
+                ISNULL(pr.CODIGO, ISNULL(l.labO_idProdu, 0)) AS CodProducto,
+                ISNULL(RTRIM(pr.CODIGO_PRINCIPAL), '') AS CodPrincipal,
+                ISNULL(RTRIM(pr.COD_AUXILIAR), '') AS CodAuxiliar,
+                COALESCE(NULLIF(RTRIM(pr.NOMBRE), ''), CONCAT('Examen Laboratorio #', l.labO_idProdu)) AS Descripcion,
+                ISNULL(CONVERT(nvarchar(250), l.labO_observaciones), '') AS Detalle,
+                CAST(ISNULL(NULLIF(l.labO_cantidad, 0), 1) AS decimal(18,4)) AS Cantidad,
+                CAST(ISNULL(pr.VALOR_UNITARIO, 0) AS decimal(18,4)) AS PrecioUnitario,
+                ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
+                ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
+                pr.TIPO_PRODUCTO AS TipoProducto,
+                pr.IDSUBTIPO AS SubtipoProducto
+            FROM vt_labOrdenes l
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO = l.labO_idProdu
+            WHERE l.labO_id_orden = @IdOrden
+              AND UPPER(LTRIM(RTRIM(ISNULL(l.labO_estado, '')))) NOT IN ('ANULADO', 'ELIMINADO', 'CANCELADO')
+            ORDER BY l.sec;
+            """, new { IdOrden = idOrden });
+
+        var imagenes = await _db.QueryAsync<OrdenProductoQueryRow>("""
+            SELECT
+                'IMAGEN' AS Origen,
+                r.sec AS SecOrigen,
+                ISNULL(pr.CODIGO, ISNULL(r.rxO_idProdu, 0)) AS CodProducto,
+                ISNULL(RTRIM(pr.CODIGO_PRINCIPAL), '') AS CodPrincipal,
+                ISNULL(RTRIM(pr.COD_AUXILIAR), '') AS CodAuxiliar,
+                COALESCE(NULLIF(RTRIM(pr.NOMBRE), ''), CONCAT('Estudio Imagen #', r.rxO_idProdu)) AS Descripcion,
+                ISNULL(CONVERT(nvarchar(250), r.rxO_observaciones), '') AS Detalle,
+                CAST(ISNULL(NULLIF(r.rxO_cantidad, 0), 1) AS decimal(18,4)) AS Cantidad,
+                CAST(ISNULL(pr.VALOR_UNITARIO, 0) AS decimal(18,4)) AS PrecioUnitario,
+                ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
+                ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
+                pr.TIPO_PRODUCTO AS TipoProducto,
+                pr.IDSUBTIPO AS SubtipoProducto
+            FROM vt_rxOrdenes r
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO = r.rxO_idProdu
+            WHERE r.rxO_id_orden = @IdOrden
+              AND UPPER(LTRIM(RTRIM(ISNULL(r.rxO_estado, '')))) NOT IN ('ANULADO', 'ELIMINADO', 'CANCELADO')
+            ORDER BY r.sec;
+            """, new { IdOrden = idOrden });
+
+        var fisioterapias = await _db.QueryAsync<OrdenProductoQueryRow>("""
+            SELECT
+                'FISIOTERAPIA' AS Origen,
+                f.sec AS SecOrigen,
+                ISNULL(pr.CODIGO, ISNULL(f.fisioO_idProdu, 0)) AS CodProducto,
+                ISNULL(RTRIM(pr.CODIGO_PRINCIPAL), '') AS CodPrincipal,
+                ISNULL(RTRIM(pr.COD_AUXILIAR), '') AS CodAuxiliar,
+                COALESCE(NULLIF(RTRIM(pr.NOMBRE), ''), CONCAT('Fisioterapia #', f.fisioO_idProdu)) AS Descripcion,
+                ISNULL(CONVERT(nvarchar(250), f.fisoO_observaciones), '') AS Detalle,
+                CAST(ISNULL(NULLIF(f.fisioO_cantidad, 0), 1) AS decimal(18,4)) AS Cantidad,
+                CAST(ISNULL(pr.VALOR_UNITARIO, 0) AS decimal(18,4)) AS PrecioUnitario,
+                ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
+                ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
+                pr.TIPO_PRODUCTO AS TipoProducto,
+                pr.IDSUBTIPO AS SubtipoProducto
+            FROM vt_fisioterapia_ordenes f
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO = f.fisioO_idProdu
+            WHERE f.fisioO_id_orden = @IdOrden
+              AND ISNULL(f.fisioO_estado, 'A') = 'A'
+            ORDER BY f.sec;
+            """, new { IdOrden = idOrden });
+
+        var medicinas = await _db.QueryAsync<OrdenProductoQueryRow>("""
+            SELECT
+                'FARMACIA' AS Origen,
+                m.sec AS SecOrigen,
+                ISNULL(pr.CODIGO, 0) AS CodProducto,
+                ISNULL(RTRIM(pr.CODIGO_PRINCIPAL), '') AS CodPrincipal,
+                ISNULL(RTRIM(pr.COD_AUXILIAR), '') AS CodAuxiliar,
+                COALESCE(NULLIF(RTRIM(pr.NOMBRE), ''), NULLIF(LTRIM(RTRIM(m.med_otroMedicamento)), ''), 'Medicamento Receta') AS Descripcion,
+                ISNULL(CONVERT(nvarchar(250), m.med_indicaciones), '') AS Detalle,
+                CAST(ISNULL(m.med_cantidad1, 0) AS decimal(18,4)) AS Cantidad,
+                CAST(ISNULL(pr.VALOR_UNITARIO, 0) AS decimal(18,4)) AS PrecioUnitario,
+                ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
+                ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
+                pr.TIPO_PRODUCTO AS TipoProducto,
+                pr.IDSUBTIPO AS SubtipoProducto
+            FROM dbo.vt_medicinas m
+            OUTER APPLY (
+                SELECT TOP 1 pm.CODIGO
+                FROM VeterinariaFacturacion.dbo.PRODUCTO pm
+                WHERE ISNULL(m.med_idProdu, 0) <= 0
+                  AND LTRIM(RTRIM(ISNULL(m.med_otroMedicamento, ''))) <> ''
+                  AND (pm.NOMBRE = LTRIM(RTRIM(m.med_otroMedicamento))
+                       OR pm.CODIGO_PRINCIPAL = LTRIM(RTRIM(m.med_otroMedicamento)))
+            ) pMatch
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr
+                ON pr.CODIGO = COALESCE(NULLIF(m.med_idProdu, 0), pMatch.CODIGO)
+            WHERE m.med_id_orden = @IdOrden
+              AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') IN ('Por Entregar', 'Por Facturar')
+              AND CAST(ISNULL(m.med_cantidad1, 0) AS decimal(18,4)) > 0
+              AND ISNULL(pr.CODIGO, 0) > 0
+            ORDER BY m.sec;
+            """, new { IdOrden = idOrden });
+
+        foreach (var row in procedimientos.Concat(laboratorios).Concat(imagenes).Concat(fisioterapias).Concat(medicinas))
+        {
+            resultado.Add(new ItemOrdenParaFacturaDto
+            {
+                Origen = row.Origen,
+                SecOrigen = row.SecOrigen,
+                CodProducto = row.CodProducto,
+                CodPrincipal = row.CodPrincipal,
+                CodAuxiliar = row.CodAuxiliar,
+                Descripcion = row.Descripcion,
+                Detalle = row.Detalle,
+                Cantidad = row.Cantidad > 0 ? row.Cantidad : 1m,
+                PrecioUnitario = row.PrecioUnitario,
+                TarifaIva = NormalizarTarifaIvaProducto(row.PorcentajeImpuestoRaw),
+                CodigoImpuestoSri = !string.IsNullOrWhiteSpace(row.CodigoImpuestoSri) ? row.CodigoImpuestoSri : "2",
+                TipoProducto = row.TipoProducto,
+                SubtipoProducto = row.SubtipoProducto
+            });
+        }
+
+        return resultado;
+    }
+
+    public async Task<bool> MarcarOrdenFacturadaAsync(int idOrden, string numeroFactura)
+    {
+        if (idOrden <= 0)
+            return false;
+
+        try
+        {
+            var cols = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
+            var updates = new List<string>();
+            if (cols.Contains("ordenaten_factura"))
+                updates.Add("ordenaten_factura = 'S'");
+            if (cols.Contains("ordenaten_numfacBC"))
+                updates.Add("ordenaten_numfacBC = LEFT(@NumeroFactura, 50)");
+
+            if (updates.Count == 0)
+                return false;
+
+            var sql = $"UPDATE vt_ordenAtencion SET {string.Join(", ", updates)} WHERE ordenAten_id = @IdOrden;";
+            var rows = await _db.ExecuteAsync(sql, new
+            {
+                IdOrden = idOrden,
+                NumeroFactura = (numeroFactura ?? string.Empty).Trim()
+            });
+            return rows > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo marcar la orden #{IdOrden} como facturada.", idOrden);
+            return false;
+        }
+    }
+
+    private static decimal NormalizarTarifaIvaProducto(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return 0m;
+
+        var soloNumero = new string(raw.Trim().Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray())
+            .Replace(',', '.');
+        if (!decimal.TryParse(soloNumero, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var valor))
+            return 0m;
+
+        if (valor > 0m && valor <= 1m)
+            valor *= 100m;
+
+        var codigo = (int)Math.Round(valor, 0, MidpointRounding.AwayFromZero);
+        return codigo switch
+        {
+            0 => 0m,
+            2 => 12m,
+            3 => 14m,
+            4 => 15m,
+            5 => 5m,
+            6 => 0m,
+            7 => 0m,
+            8 => 8m,
+            10 => 13m,
+            13 => 10m,
+            14 => 3m,
+            15 => 15m,
+            _ => Math.Max(0m, decimal.Round(valor, 0, MidpointRounding.AwayFromZero))
+        };
+    }
+
+    private sealed class OrdenFacturaHeaderRow
+    {
+        public int IdOrden { get; set; }
+        public int Nhcl { get; set; }
+        public int IdLocalidad { get; set; }
+        public bool EsProcedimiento { get; set; }
+        public string Especialidad { get; set; } = string.Empty;
+    }
+
+    private sealed class OrdenProductoQueryRow
+    {
+        public string Origen { get; set; } = string.Empty;
+        public int SecOrigen { get; set; }
+        public int CodProducto { get; set; }
+        public string CodPrincipal { get; set; } = string.Empty;
+        public string CodAuxiliar { get; set; } = string.Empty;
+        public string Descripcion { get; set; } = string.Empty;
+        public string Detalle { get; set; } = string.Empty;
+        public decimal Cantidad { get; set; }
+        public decimal PrecioUnitario { get; set; }
+        public string CodigoImpuestoSri { get; set; } = string.Empty;
+        public string PorcentajeImpuestoRaw { get; set; } = string.Empty;
+        public int? TipoProducto { get; set; }
+        public int? SubtipoProducto { get; set; }
     }
 }
 
