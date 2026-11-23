@@ -1,0 +1,74 @@
+.signos-view {
+    --signos-ink: #102952;
+    --signos-border: #c5d9ee;
+    min-width: 0;
+    color: var(--signos-ink);
+}
+
+.signos-hero {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    min-height: 92px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    background: linear-gradient(110deg, #f8fbff 30%, #e9f5ff 70%, #f5faff);
+}
+
+.signos-hero::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0 30% 0 46%;
+    opacity: .42;
+    background: url("/imagenes/dashboard-mascotas.png") center 20% / auto 175% no-repeat;
+    mask-image: linear-gradient(to right, transparent, #000 25% 74%, transparent);
+}
+
+.signos-heading, .signos-actions { display: flex; align-items: center; gap: 10px; }
+.signos-actions { flex-wrap: wrap; }
+.signos-heading > i { color: #074875; font-size: 2.65rem; line-height: 1; }
+.signos-heading h1 { margin: 0; font-size: clamp(1.24rem, 1.55vw, 1.65rem); font-weight: 800; }
+.signos-heading p { margin: 4px 0 0; color: #465970; font-size: .76rem; }
+
+.signos-panel {
+    min-width: 0;
+    border: 1px solid var(--signos-border);
+    border-radius: 12px;
+    background: linear-gradient(145deg, #fff, #f1f7fe);
+    box-shadow: 0 3px 8px #173b6712;
+}
+
+.signos-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    min-height: 38px;
+    padding: 7px 13px;
+    border-radius: 11px 11px 0 0;
+    background: #064369;
+    color: #fff;
+}
+
+.signos-section > span { color: inherit; }
+.signos-sheet { padding: 3px 10px; border-radius: 999px; background: #d4edff; color: #064c8c; font-size: .74rem; font-weight: 750; white-space: nowrap; }
+.signos-sheet-select { border-color: var(--signos-border); }
+.signos-patient > div { min-width: 0; padding-inline: 12px; overflow-wrap: anywhere; }
+.signos-patient .text-muted { margin-bottom: 3px; font-size: .72rem; }
+.signos-panel .table-responsive { border-radius: 0 0 11px 11px; }
+
+.signos-embedded .signos-hero { min-height: 0; }
+.signos-embedded .signos-hero::before { display: none; }
+
+@media (max-width: 900px) {
+    .signos-hero::before { display: none; }
+    .signos-patient > div { flex: 0 0 50%; width: 50%; }
+    .signos-patient > div:nth-child(even) { border-inline-end: 0 !important; }
+}
