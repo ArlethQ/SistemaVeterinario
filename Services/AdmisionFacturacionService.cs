@@ -923,8 +923,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         int localidadObjetivo = ResolverLocalidadActiva(idLocalidad);
         try
         {
-            return (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
-                SELECT DISTINCT u.user_numero AS Id, u.user_nombre AS Descripcion, ISNULL(u.user_esp_numero, 0) AS IdPadre
+            var medicos = (await _db.QueryAsync<CatalogoItemGenericoDto>(@"
+                SELECT DISTINCT u.user_numero AS Id, RTRIM(u.user_nombre) AS Descripcion, ISNULL(u.user_esp_numero, 0) AS IdPadre
                 FROM vt_usuarios u
                 LEFT JOIN vt_usuarioEspecialidades ue ON ue.ue_idUsuario = u.user_numero AND ISNULL(ue.ue_estado, 'A') = 'A'
                 WHERE u.user_estado = 'A'
@@ -955,7 +955,39 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                           )
                       )
                   )
-                ORDER BY u.user_nombre", new { IdEsp = idEspecialidad, IdLocalidad = localidadObjetivo })).ToList();
+                ORDER BY RTRIM(u.user_nombre)", new { IdEsp = idEspecialidad, IdLocalidad = localidadObjetivo })).ToList();
+
+            var tieneTablaCirugias = await _db.ExecuteScalarAsync<int>("SELECT CASE WHEN OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL THEN 1 ELSE 0 END");
+            if (tieneTablaCirugias == 1 && medicos.Count > 0)
+            {
+                var tieneColAnest = await _db.ExecuteScalarAsync<int>("SELECT CASE WHEN COL_LENGTH('dbo.qvt_calendario_cirugias', 'codanestesiologo') IS NOT NULL THEN 1 ELSE 0 END");
+                var sqlOcupados = tieneColAnest == 1
+                    ? @"SELECT codmed AS Id FROM qvt_calendario_cirugias
+                        WHERE ISNULL(estado, 'A') = 'A'
+                          AND CAST(fechacirugia AS date) = CAST(GETDATE() AS date)
+                          AND TRY_CONVERT(time, horainicio) <= CAST(GETDATE() AS time)
+                          AND TRY_CONVERT(time, horafinalizacion) > CAST(GETDATE() AS time)
+                        UNION
+                        SELECT codanestesiologo AS Id FROM qvt_calendario_cirugias
+                        WHERE ISNULL(estado, 'A') = 'A'
+                          AND codanestesiologo IS NOT NULL
+                          AND CAST(fechacirugia AS date) = CAST(GETDATE() AS date)
+                          AND TRY_CONVERT(time, horainicio) <= CAST(GETDATE() AS time)
+                          AND TRY_CONVERT(time, horafinalizacion) > CAST(GETDATE() AS time)"
+                    : @"SELECT codmed AS Id FROM qvt_calendario_cirugias
+                        WHERE ISNULL(estado, 'A') = 'A'
+                          AND CAST(fechacirugia AS date) = CAST(GETDATE() AS date)
+                          AND TRY_CONVERT(time, horainicio) <= CAST(GETDATE() AS time)
+                          AND TRY_CONVERT(time, horafinalizacion) > CAST(GETDATE() AS time)";
+                var ocupados = (await _db.QueryAsync<int>(sqlOcupados)).ToHashSet();
+                foreach (var med in medicos)
+                {
+                    if (ocupados.Contains(med.Id))
+                        med.Descripcion = $"{med.Descripcion} (Ocupado - en cirugía)";
+                }
+            }
+
+            return medicos;
         }
         catch (Exception ex)
         {
@@ -1299,28 +1331,68 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
     {
         if (!_session.IsAuthenticated || nhcl <= 0) return [];
         var ordenes = await _db.QueryAsync<OrdenPacienteResumenDto>($@"
+            DECLARE @AhoraLocal datetime = GETDATE(), @AhoraUtc datetime = GETUTCDATE();
             SELECT o.ordenAten_id AS IdOrden,
                    ISNULL(o.ordenAten_idMedico, 0) AS IdMedico,
-                   ISNULL(o.ordenAten_fecha, GETDATE()) AS Fecha,
+                   ISNULL(o.ordenAten_fecha, @AhoraLocal) AS Fecha,
                    ISNULL(o.ordenAten_hora, '') AS Hora,
                    ISNULL(esp.es_descripcion, 'Consulta General') AS Especialidad,
                    ISNULL(u.user_nombre, 'Médico') AS Medico,
                    ISNULL(o.ordenAten_estado, 'A') AS Estado,
                    CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento,
-                   CAST(CASE WHEN DATEADD(hour, 24,
-                       CASE
-                           WHEN ISNULL(o.ordenAten_estado, 'A') = 'T'
-                               THEN COALESCE(o.ordenAten_fechaProcesado, TRY_CAST(CONCAT(CONVERT(varchar(10), o.ordenAten_fecha, 23), ' ', NULLIF(RTRIM(o.ordenAten_hora), '')) AS datetime), CAST(o.ordenAten_fecha AS datetime))
-                           ELSE COALESCE(o.ordenAten_fechaenAtencion, TRY_CAST(CONCAT(CONVERT(varchar(10), o.ordenAten_fecha, 23), ' ', NULLIF(RTRIM(o.ordenAten_hora), '')) AS datetime), CAST(o.ordenAten_fecha AS datetime))
-                       END
-                   ) >= GETDATE() THEN 1 ELSE 0 END AS bit) AS EnVentanaEdicion24h
+                   CAST(CASE
+                       WHEN ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E') THEN 1
+                       WHEN ISNULL(o.ordenAten_estado, 'A') = 'T'
+                            AND DATEADD(hour, 24, COALESCE(o.ordenAten_fechaProcesado, TRY_CAST(CONCAT(CONVERT(varchar(10), o.ordenAten_fecha, 23), ' ', NULLIF(RTRIM(o.ordenAten_hora), '')) AS datetime), CAST(o.ordenAten_fecha AS datetime))) >= @AhoraLocal
+                           THEN 1
+                       ELSE 0
+                   END AS bit) AS EnVentanaEdicion24h,
+                   DATEADD(second, -DATEDIFF(second, tiempos.InicioEsperaLocal, @AhoraLocal), @AhoraUtc) AS InicioEsperaUtc,
+                   CASE WHEN tiempos.FinEsperaLocal IS NOT NULL
+                       THEN DATEADD(second, -DATEDIFF(second,
+                           CASE WHEN tiempos.FinEsperaLocal < tiempos.InicioEsperaLocal THEN tiempos.InicioEsperaLocal ELSE tiempos.FinEsperaLocal END,
+                           @AhoraLocal), @AhoraUtc)
+                   END AS FinEsperaUtc,
+                   CASE WHEN tiempos.InicioConsultaLocal IS NOT NULL
+                       THEN DATEADD(second, -DATEDIFF(second, tiempos.InicioConsultaLocal, @AhoraLocal), @AhoraUtc)
+                   END AS InicioConsultaUtc,
+                   CASE WHEN ISNULL(o.ordenAten_estado, 'A') = 'T' AND o.ordenAten_fechaProcesado IS NOT NULL
+                       THEN DATEADD(second, -DATEDIFF(second, o.ordenAten_fechaProcesado, @AhoraLocal), @AhoraUtc)
+                   END AS FinConsultaUtc
             FROM vt_ordenAtencion o
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             LEFT JOIN vt_especialidades esp ON o.ordenAten_esp_numero = esp.es_id
+            OUTER APPLY (
+                SELECT MAX(CASE WHEN v.vit_detalle = CONCAT(@PrefijoAsignacion, o.ordenAten_id) THEN v.vit_idFechaMod END) AS FechaAsignacion,
+                       MIN(CASE WHEN v.vit_detalle = CONCAT('Inicio de consulta Orden #', o.ordenAten_id) THEN v.vit_idFechaMod END) AS InicioConsulta
+                FROM vt_vitacora v WITH (NOLOCK)
+                WHERE v.vit_detalle IN (
+                    CONCAT(@PrefijoAsignacion, o.ordenAten_id),
+                    CONCAT('Inicio de consulta Orden #', o.ordenAten_id)
+                )
+            ) bitacora
+            CROSS APPLY (
+                SELECT COALESCE(
+                           bitacora.FechaAsignacion,
+                           TRY_CAST(CONCAT(CONVERT(varchar(10), o.ordenAten_fecha, 23), ' ', NULLIF(RTRIM(o.ordenAten_hora), '')) AS datetime),
+                           CAST(o.ordenAten_fecha AS datetime),
+                           @AhoraLocal
+                       ) AS InicioEsperaLocal,
+                       COALESCE(
+                           bitacora.InicioConsulta,
+                           o.ordenAten_fechaenAtencion,
+                           CASE WHEN ISNULL(o.ordenAten_estado, 'A') = 'T' THEN o.ordenAten_fechaProcesado END
+                       ) AS FinEsperaLocal,
+                       COALESCE(
+                           bitacora.InicioConsulta,
+                           o.ordenAten_fechaenAtencion
+                       ) AS InicioConsultaLocal
+            ) tiempos
             WHERE o.ordenAten_nhcl = @Nhcl AND {AlcanceOrden}
             ORDER BY o.ordenAten_id DESC", new
             {
                 Nhcl = nhcl,
+                PrefijoAsignacion,
                 Rol = _session.TipoUser,
                 VeTodasSucursales = EsRolSinRestriccionSucursal(_session.TipoUser) ? 1 : 0,
                 LocalidadSesion = _session.Localidad,
@@ -1385,7 +1457,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             DECLARE @Inicio datetime, @Ahora datetime = GETDATE();
             UPDATE o SET ordenAten_estado = CASE WHEN o.ordenAten_estado = 'T' THEN 'T' ELSE 'E' END,
                 ordenAten_idEnfermero = CASE WHEN @Triaje = 1 AND (ISNULL(o.ordenAten_esProcedimiento, 0) = 1 OR ISNULL(o.ordenAten_triajeMedico, 0) = 0) THEN @UsuarioSesion ELSE o.ordenAten_idEnfermero END,
-                ordenAten_fechaenAtencion = CASE WHEN ISNULL(o.ordenAten_estado, 'A') = 'A' THEN @Ahora ELSE o.ordenAten_fechaenAtencion END
+                ordenAten_fechaenAtencion = CASE
+                    WHEN ISNULL(o.ordenAten_estado, 'A') = 'A' OR o.ordenAten_fechaenAtencion IS NULL THEN @Ahora
+                    WHEN @Triaje = 0 AND NOT EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @Marca) THEN @Ahora
+                    ELSE o.ordenAten_fechaenAtencion
+                END
             FROM vt_ordenAtencion o
             WHERE o.ordenAten_id = @IdOrden AND o.ordenAten_nhcl = @Nhcl
               AND (ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
@@ -1395,12 +1471,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
               AND {AlcanceOrden}
               AND EXISTS (
                   SELECT 1 FROM vt_usuarios u
-                  JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
+                  LEFT JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
                   WHERE u.user_numero = @UsuarioSesion AND u.user_estado = 'A'
                     AND (@Triaje = 0 OR {ResponsableTriaje}))
               AND ((@Triaje = 1 AND NOT EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @FinTriaje))
                 OR (@Triaje = 0 AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
-                    AND ((@Rol = 2 AND o.ordenAten_idMedico = @UsuarioSesion)
+                    AND (@Rol = 1
+                        OR (@Rol = 2 AND o.ordenAten_idMedico = @UsuarioSesion)
                         OR EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle = @FinTriaje))));
             IF @@ROWCOUNT = 1
             BEGIN
@@ -1415,6 +1492,35 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
                     VALUES (@Marca, @UsuarioSesion, @Inicio, '127.0.0.1', 'BlazorClient');
                 END
+
+                IF @Triaje = 0 AND NOT EXISTS (SELECT 1 FROM vt_vitacora WHERE vit_detalle LIKE CONCAT('Tiempo en espera Orden #', @IdOrden, ':%'))
+                BEGIN
+                    DECLARE @InicioEspera datetime;
+                    SELECT @InicioEspera = COALESCE(
+                        (SELECT MAX(v.vit_idFechaMod) FROM vt_vitacora v WHERE v.vit_detalle = CONCAT(@PrefijoAsignacion, @IdOrden)),
+                        TRY_CAST(CONCAT(CONVERT(varchar(10), o.ordenAten_fecha, 23), ' ', NULLIF(RTRIM(o.ordenAten_hora), '')) AS datetime),
+                        CAST(o.ordenAten_fecha AS datetime)
+                    )
+                    FROM vt_ordenAtencion o
+                    WHERE o.ordenAten_id = @IdOrden;
+
+                    IF @InicioEspera IS NOT NULL
+                    BEGIN
+                        DECLARE @SegEspera int = CASE WHEN @Inicio > @InicioEspera THEN DATEDIFF(second, @InicioEspera, @Inicio) ELSE 0 END;
+                        DECLARE @HorasEsp int = @SegEspera / 3600;
+                        DECLARE @MinEsp int = (@SegEspera % 3600) / 60;
+                        DECLARE @RemSegEsp int = @SegEspera % 60;
+                        DECLARE @TextoEspera varchar(120) = CONCAT(
+                            'Tiempo en espera Orden #', @IdOrden, ': ',
+                            RIGHT('00' + CAST(@HorasEsp AS varchar(10)), CASE WHEN @HorasEsp < 100 THEN 2 ELSE LEN(CAST(@HorasEsp AS varchar(10))) END), ':',
+                            RIGHT('00' + CAST(@MinEsp AS varchar(2)), 2), ':',
+                            RIGHT('00' + CAST(@RemSegEsp AS varchar(2)), 2),
+                            ' (', @SegEspera, 's)'
+                        );
+                        INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
+                        VALUES (@TextoEspera, @UsuarioSesion, @Inicio, '127.0.0.1', 'BlazorClient');
+                    END
+                END
             END;
             COMMIT TRANSACTION;
             SELECT DATEADD(second, -DATEDIFF(second, @Inicio, @Ahora), GETUTCDATE());
@@ -1423,6 +1529,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             IdOrden = idOrden,
             Nhcl = nhcl,
             Triaje = triaje,
+            PrefijoAsignacion,
             MarcaRecepcion = $"{PrefijoRecepcion}{idOrden}",
             Marca = triaje ? $"Inicio de triaje Orden #{idOrden}" : $"Inicio de consulta Orden #{idOrden}",
             FinTriaje = $"Triaje de ingreso completado Orden #{idOrden}",
@@ -1656,14 +1763,12 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             OUTER APPLY (
                 SELECT MAX(v.vit_idFechaMod) AS Fecha
                 FROM vt_vitacora v
-                WHERE v.vit_idFechaMod >= DATEADD(day, -14, @Hoy)
-                  AND v.vit_detalle LIKE CONCAT(@PrefijoAsignacion, o.ordenAten_id)
+                WHERE v.vit_detalle LIKE CONCAT(@PrefijoAsignacion, o.ordenAten_id)
             ) asignacion
             OUTER APPLY (
                 SELECT MAX(v.vit_idFechaMod) AS Fecha
                 FROM vt_vitacora v
                 WHERE asignacion.Fecha IS NULL
-                  AND v.vit_idFechaMod >= DATEADD(day, -14, @Hoy)
                   AND v.vit_detalle LIKE CONCAT('Cambio de médico/especialidad en orden #', o.ordenAten_id, ': médico %, especialidad %')
             ) historica
             OUTER APPLY (
@@ -1676,7 +1781,6 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     CONCAT('Inicio de consulta Orden #', o.ordenAten_id)
                 )) marcas(Triaje, FinTriaje, Consulta)
                 JOIN vt_vitacora v ON v.vit_detalle IN (marcas.Triaje, marcas.FinTriaje, marcas.Consulta)
-                    AND v.vit_idFechaMod >= DATEADD(day, -14, @Hoy)
             ) fases
             {ConsultaRecepcionOrden}
             {ConsultaPrioridadOrden}
@@ -1684,7 +1788,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                    (@Triaje = 0 AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                         AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0
                         AND (@Rol <> 2 OR o.ordenAten_idMedico = @Usuario)
-                        AND (@Rol = 2 OR fases.FinTriaje IS NOT NULL))
+                        AND (@Rol IN (1, 2) OR fases.FinTriaje IS NOT NULL))
                    OR (@Triaje = 1 AND (ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                         OR (o.ordenAten_estado = 'T' AND EXISTS (
                             SELECT 1 FROM vt_vitacora v
@@ -1960,11 +2064,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         var tieneTablaCirugias = await _db.ExecuteScalarAsync<int>("SELECT CASE WHEN OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL THEN 1 ELSE 0 END");
         if (tieneTablaCirugias == 1)
         {
-            cirugias = (await _db.QueryAsync<(DateTime Fecha, string Inicio, string Fin)>(@"
+            var tieneColAnest = await _db.ExecuteScalarAsync<int>("SELECT CASE WHEN COL_LENGTH('dbo.qvt_calendario_cirugias', 'codanestesiologo') IS NOT NULL THEN 1 ELSE 0 END");
+            var filtroAnest = tieneColAnest == 1 ? " OR ISNULL(codanestesiologo, 0) = @IdMedico" : "";
+            cirugias = (await _db.QueryAsync<(DateTime Fecha, string Inicio, string Fin)>($@"
                 SELECT CAST(fechacirugia AS date), RTRIM(horainicio), RTRIM(horafinalizacion)
                 FROM qvt_calendario_cirugias
                 WHERE ISNULL(estado, 'A') = 'A'
-                  AND (codmed = @IdMedico OR localidad = @IdLocalidad)
+                  AND (codmed = @IdMedico{filtroAnest})
                   AND fechacirugia >= @Desde AND fechacirugia < DATEADD(day, 1, @Hasta)", parametros)).ToList();
         }
         var cirugiasPorDia = cirugias.ToLookup(c => c.Fecha);

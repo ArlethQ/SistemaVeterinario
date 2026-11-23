@@ -38,7 +38,7 @@
         {
             <div class="table-responsive mt-2">
                 <table class="table table-sm align-middle mb-0">
-                    <thead><tr><th>Orden</th><th>Fecha</th><th>Especialidad</th><th>Médico</th><th>Estado</th><th>Ficha SOAP</th></tr></thead>
+                    <thead><tr><th>Orden</th><th>Fecha</th><th>Especialidad</th><th>Médico</th><th>Estado</th><th>Tiempo en espera</th><th>Ficha SOAP</th></tr></thead>
                     <tbody>
                         @foreach (var orden in OrdenesVisibles.Skip((PaginaActual - 1) * TamanoPagina).Take(TamanoPagina))
                         {
@@ -67,6 +67,19 @@
                                     }
                                 </td>
                                 <td>
+                                    @if (estadoOrd != "I" && orden.InicioEsperaUtc is { } inicioEspera)
+                                    {
+                                        <ContadorAtencion @key="(orden.IdOrden, inicioEspera, orden.FinEsperaUtc)"
+                                                          Etiqueta="Espera"
+                                                          InicioUtc="inicioEspera"
+                                                          FinUtc="orden.FinEsperaUtc" />
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">-</span>
+                                    }
+                                </td>
+                                <td>
                                     @if (estadoOrd == "I")
                                     {
                                         <span class="text-muted">Anulada</span>
@@ -77,7 +90,7 @@
                                             <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AbrirOrden.InvokeAsync((orden.IdOrden, NhclHistorial, false))">Ver</button>
                                             @if (PuedeEditar(orden, estadoOrd))
                                             {
-                                                <button type="button" class="btn btn-sm btn-primary" @onclick="() => AbrirOrden.InvokeAsync((orden.IdOrden, NhclHistorial, true))">Editar</button>
+                                                <button type="button" class="btn btn-sm btn-primary" @onclick="() => AbrirOrden.InvokeAsync((orden.IdOrden, NhclHistorial, true))">@(estadoOrd == "A" ? "Iniciar / Editar" : "Editar")</button>
                                             }
                                         </div>
                                     }
@@ -116,7 +129,7 @@
 
     private bool PuedeEditar(OrdenPacienteResumenDto orden, string estado) =>
         estado is ("A" or "E" or "T") &&
-        (RolUsuario == 1 || (RolUsuario == 2 && orden.IdMedico == IdUsuario && orden.EnVentanaEdicion24h));
+        (RolUsuario == 1 || (RolUsuario == 2 && orden.IdMedico == IdUsuario && (estado is ("A" or "E") || orden.EnVentanaEdicion24h)));
 
     private const int TamanoPagina = 10;
     private int _pagina = 1;

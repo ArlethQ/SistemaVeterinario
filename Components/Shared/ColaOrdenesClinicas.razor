@@ -41,13 +41,27 @@
                         @foreach (var orden in grupo)
                         {
                             <tr @key="orden.IdOrden" class="@(OrdenSeleccionada == orden.IdOrden ? "table-active" : null)">
-                                <td>@orden.FechaAsignacion.ToString("HH:mm:ss")</td>
+                                <td>
+                                    @if (orden.FechaAsignacion.Date < _dia)
+                                    {
+                                        <span class="d-block small text-muted">@orden.FechaAsignacion.ToString("dd/MM/yyyy")</span>
+                                    }
+                                    <span>@orden.FechaAsignacion.ToString("HH:mm:ss")</span>
+                                </td>
                                 <td>#@orden.IdOrden @orden.Turno</td>
                                 <td>@orden.Mascota <small class="text-muted">NHCL #@orden.Nhcl</small></td>
                                 @if (Triaje) { <td>@orden.Especie</td><td>@orden.Especialidad</td> }
                                 <td>@(EsTriaje(orden) && (!orden.TriajeMedico || orden.EsProcedimiento) ? (string.IsNullOrWhiteSpace(orden.Enfermero) ? "Disponible" : orden.Enfermero) : orden.Medico)</td>
                                 @if (UnificarConTriaje) { <td>@(EsTriaje(orden) ? "Triaje" : "Consulta")</td> }
-                                <td>@(EstaEnEspera(orden) ? "En espera" : "En atención")</td>
+                                <td>
+                                    <div class="d-flex flex-column align-items-start gap-1">
+                                        <span>@(EstaEnEspera(orden) ? "En espera" : "En atención")</span>
+                                        <ContadorAtencion @key="(orden.IdOrden, orden.FechaAsignacion, FinEsperaUtc(orden))"
+                                                          Etiqueta="Espera"
+                                                          InicioUtc="AClinicaUtc(orden.FechaAsignacion)"
+                                                          FinUtc="FinEsperaUtc(orden)" />
+                                    </div>
+                                </td>
                                 <td>
                                     @if (orden.FechaRecepcion is DateTime recepcion)
                                     {
@@ -120,6 +134,17 @@
 
     private bool EstaEnEspera(OrdenAtencionResumenDto orden) =>
         Triaje ? orden.InicioTriaje is null : orden.InicioConsulta is null;
+
+    private static DateTime AClinicaUtc(DateTime fechaClinica) =>
+        DateTime.SpecifyKind(fechaClinica.AddHours(5), DateTimeKind.Utc);
+
+    private DateTime? FinEsperaUtc(OrdenAtencionResumenDto orden)
+    {
+        var finLocal = Triaje ? orden.InicioTriaje : (orden.InicioConsulta ?? orden.FinConsulta);
+        if (finLocal is not DateTime fin)
+            return null;
+        return AClinicaUtc(fin < orden.FechaAsignacion ? orden.FechaAsignacion : fin);
+    }
 
     private bool EmergenciaSinConfirmar(OrdenAtencionResumenDto orden) =>
         Prioridad(orden) == 0 && EstaEnEspera(orden) && orden.FechaRecepcion is null;

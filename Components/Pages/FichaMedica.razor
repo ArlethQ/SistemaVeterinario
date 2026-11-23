@@ -63,6 +63,10 @@
                     }
                 </div>
             }
+            @if (_inicioEsperaUtc is { } inicioEspera)
+            {
+                <ContadorAtencion @key="(IdOrden, inicioEspera, _finEsperaUtc)" Etiqueta="Tiempo en espera" InicioUtc="inicioEspera" FinUtc="_finEsperaUtc" />
+            }
             @if (_inicioConsultaUtc is { } inicio)
             {
                 <ContadorAtencion @key="(IdOrden, inicio)" Etiqueta="Consulta" InicioUtc="inicio" FinUtc="_finConsultaUtc" />
@@ -196,14 +200,23 @@
 
     @if (!FichaEditable && (_ordenActualCerrada || _estadoOrden is ("A" or "E")))
     {
-        <p class="small text-muted mb-2">
-            @(SoloVer ? "Ficha SOAP en modo de solo lectura."
-                : Session.TipoUser != 1 && _ordenActualAsignadaA != Session.IdUser
-                ? "Solo lectura: esta ficha SOAP está asignada a otro médico."
-                : _ordenActualCerrada
-                    ? "Ficha SOAP bloqueada (solo editable por el médico asignado dentro de las primeras 24 horas o por un administrador)."
-                    : "Ficha SOAP de solo lectura (fuera de las 24 horas permitidas o pendiente de triaje/inicio de atención).")
-        </p>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <p class="small text-muted mb-0">
+                @(SoloVer ? "Ficha SOAP en modo de solo lectura."
+                    : Session.TipoUser != 1 && _ordenActualAsignadaA != Session.IdUser
+                    ? "Solo lectura: esta ficha SOAP está asignada a otro médico."
+                    : _ordenActualCerrada
+                        ? "Ficha SOAP bloqueada (solo editable por el médico asignado dentro de las primeras 24 horas posteriores al cierre o por un administrador)."
+                        : "Ficha SOAP de solo lectura (pendiente de inicio de atención).")
+            </p>
+            @if (SoloVer && !SoloLectura && PuedeHabilitarEdicionOrdenActual)
+            {
+                <button type="button" class="btn btn-sm btn-primary py-0 px-2"
+                        @onclick='() => Nav.NavigateTo($"/consulta/fichamedica/{IdOrden}/{Nhcl}")'>
+                    <i class="bi bi-pencil-square me-1"></i>@(_estadoOrden == "A" ? "Iniciar y editar consulta" : "Editar ficha SOAP")
+                </button>
+            }
+        </div>
     }
     <fieldset disabled="@(!FichaEditable || Guardando)">
     <!-- TAB 1: EXAMEN FÍSICO, CONSTANTES FISIOLÓGICAS Y TRIAJE -->
@@ -1147,13 +1160,17 @@
     private OrdenPacienteResumenDto? OrdenActualResumen => _historialOrdenes.FirstOrDefault(o => o.IdOrden == IdOrden);
     private int _ordenActualAsignadaA => OrdenActualResumen?.IdMedico ?? 0;
     private bool FichaCargada => Paciente != null && IdOrden > 0 && !CargandoInicial;
+    private bool PuedeHabilitarEdicionOrdenActual => FichaCargada && _estadoOrden is ("A" or "E" or "T") &&
+        (Session.TipoUser == 1 || (OrdenActualResumen is { } ord && ord.IdMedico == Session.IdUser && (_estadoOrden is ("A" or "E") || ord.EnVentanaEdicion24h)));
     private bool FichaEditable => !SoloVer && FichaCargada &&
         (Session.TipoUser == 1
             ? ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || _estadoOrden == "T")
             : (OrdenActualResumen is { } ord
                 && ord.IdMedico == Session.IdUser
-                && ord.EnVentanaEdicion24h
+                && (_estadoOrden is ("A" or "E") || ord.EnVentanaEdicion24h)
                 && ((_estadoOrden is ("A" or "E") && _inicioConsultaUtc.HasValue) || _estadoOrden == "T")));
+    private DateTime? _inicioEsperaUtc;
+    private DateTime? _finEsperaUtc;
     private DateTime? _inicioConsultaUtc;
     private DateTime? _finConsultaUtc;
     private string? _estadoOrden;
@@ -1347,6 +1364,8 @@
 
     private async Task CargarDatosCompletosAsync()
     {
+        _inicioEsperaUtc = null;
+        _finEsperaUtc = null;
         _inicioConsultaUtc = null;
         _finConsultaUtc = null;
         MensajeAlerta = null;
@@ -1385,8 +1404,13 @@
             }
         }
 
-        _estadoOrden = _historialOrdenes.FirstOrDefault(orden => orden.IdOrden == IdOrden)?.Estado.Trim().ToUpperInvariant();
+        var resumenActual = _historialOrdenes.FirstOrDefault(orden => orden.IdOrden == IdOrden);
+        _estadoOrden = resumenActual?.Estado.Trim().ToUpperInvariant();
         _ordenActualCerrada = _estadoOrden == "T";
+        _inicioEsperaUtc = resumenActual?.InicioEsperaUtc;
+        _finEsperaUtc = resumenActual?.FinEsperaUtc;
+        _inicioConsultaUtc = resumenActual?.InicioConsultaUtc;
+        _finConsultaUtc = resumenActual?.FinConsultaUtc;
         if (!SoloVer && !_ordenActualCerrada)
             Session.SeleccionarOrden(IdOrden, Nhcl, Paciente?.PacienteNombre);
 
@@ -1395,9 +1419,28 @@
 
         if (!SoloVer && _estadoOrden is ("A" or "E"))
         {
-            _inicioConsultaUtc = await AdmisionService.IniciarAtencionClinicaAsync(IdOrden, Nhcl, triaje: false);
-            if (!_inicioConsultaUtc.HasValue)
+            var inicioAtencionUtc = await AdmisionService.IniciarAtencionClinicaAsync(IdOrden, Nhcl, triaje: false);
+            if (inicioAtencionUtc.HasValue)
+            {
+                _inicioConsultaUtc = inicioAtencionUtc;
+                _finEsperaUtc ??= inicioAtencionUtc;
+                _estadoOrden = "E";
+                if (resumenActual != null)
+                {
+                    resumenActual.Estado = "E";
+                    resumenActual.EnVentanaEdicion24h = true;
+                    resumenActual.InicioConsultaUtc = inicioAtencionUtc;
+                    resumenActual.FinEsperaUtc ??= inicioAtencionUtc;
+                }
+                if (_colaOrdenes is not null)
+                {
+                    await _colaOrdenes.RefrescarAsync();
+                }
+            }
+            else
+            {
                 MensajeAlerta = "No se pudo iniciar la consulta de esta orden.";
+            }
         }
 
         var tFicha = ConsultaService.ObtenerFichaMedicaAsync(IdOrden, Nhcl);
@@ -1663,10 +1706,16 @@
 
             _estadoOrden = "T";
             _finConsultaUtc = DateTime.UtcNow;
+            _finEsperaUtc ??= _inicioConsultaUtc ?? _finConsultaUtc;
             _ordenActualCerrada = true;
             var ordenGuardada = _historialOrdenes.FirstOrDefault(orden => orden.IdOrden == ordenCerrada);
             if (ordenGuardada != null)
+            {
                 ordenGuardada.Estado = "T";
+                ordenGuardada.EnVentanaEdicion24h = true;
+                ordenGuardada.FinEsperaUtc ??= _finEsperaUtc;
+                ordenGuardada.FinConsultaUtc = _finConsultaUtc;
+            }
         }
         Guardando = false;
 

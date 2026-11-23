@@ -384,4 +384,8 @@ public sealed class OrdenPacienteResumenDto
     public string Medico { get; set; } = string.Empty;
     public string Estado { get; set; } = string.Empty;
     public bool EnVentanaEdicion24h { get; set; }
+    public DateTime? InicioEsperaUtc { get; set; }
+    public DateTime? FinEsperaUtc { get; set; }
+    public DateTime? InicioConsultaUtc { get; set; }
+    public DateTime? FinConsultaUtc { get; set; }
 }

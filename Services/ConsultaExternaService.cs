@@ -561,17 +561,16 @@ public class ConsultaExternaService : IConsultaExternaService
                                   @EsAdmin = 0
                                   AND ISNULL(ordenAten_estado, 'A') IN ('A', 'E', 'T')
                                   AND ordenAten_idMedico = @IdUsuarioSesion
-                                  AND DATEADD(hour, 24,
-                                      CASE
-                                          WHEN ISNULL(ordenAten_estado, 'A') = 'T'
-                                              THEN COALESCE(ordenAten_fechaProcesado, TRY_CAST(CONCAT(CONVERT(varchar(10), ordenAten_fecha, 23), ' ', NULLIF(RTRIM(ordenAten_hora), '')) AS datetime), CAST(ordenAten_fecha AS datetime))
-                                          ELSE COALESCE(ordenAten_fechaenAtencion, TRY_CAST(CONCAT(CONVERT(varchar(10), ordenAten_fecha, 23), ' ', NULLIF(RTRIM(ordenAten_hora), '')) AS datetime), CAST(ordenAten_fecha AS datetime))
-                                      END
-                                  ) >= GETDATE()
+                                  AND (
+                                      ISNULL(ordenAten_estado, 'A') IN ('A', 'E')
+                                      OR DATEADD(hour, 24,
+                                          COALESCE(ordenAten_fechaProcesado, TRY_CAST(CONCAT(CONVERT(varchar(10), ordenAten_fecha, 23), ' ', NULLIF(RTRIM(ordenAten_hora), '')) AS datetime), CAST(ordenAten_fecha AS datetime))
+                                      ) >= GETDATE()
+                                  )
                               )
                           )
                     )
-                        THROW 50001, 'La orden ya no permite editar la ficha SOAP (fuera de las 24 horas o no asignada al médico).', 1;
+                        THROW 50001, 'La orden ya no permite editar la ficha SOAP (fuera de las 24 horas posteriores al cierre o no asignada al médico).', 1;
                     """, new { dto.MedOrden, dto.MedNhcl, EsAdmin = _session.TipoUser == 1 ? 1 : 0, IdUsuarioSesion = _session.IdUser }));
             }
 
