@@ -7,6 +7,48 @@
     --app-table-header-text: #102952;
 }
 
+.app-doc-action.app-doc-pdf {
+    --doc-action-bg: #ce3746;
+    --doc-action-border: #ce3746;
+    --doc-action-text: #fff;
+}
+
+.app-doc-action.app-doc-excel {
+    --doc-action-bg: #007e74;
+    --doc-action-border: #007e74;
+    --doc-action-text: #fff;
+}
+
+body :is(button, a).app-doc-action:is(.app-doc-pdf, .app-doc-excel, .app-doc-print):not([hidden]) {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+    min-height: 34px !important;
+    padding: 4px 11px !important;
+    border: 1px solid var(--doc-action-border, #bbd4ed) !important;
+    border-radius: 8px !important;
+    background: var(--doc-action-bg, #f8fbff) !important;
+    color: var(--doc-action-text, #123d70) !important;
+    box-shadow: none !important;
+    transform: none !important;
+    font: inherit;
+    font-size: .74rem !important;
+    font-weight: 750 !important;
+    line-height: 1.2 !important;
+    text-decoration: none !important;
+    white-space: nowrap;
+}
+
+body :is(button, a).app-doc-action.app-doc-icon:not([hidden]) {
+    min-width: 34px;
+    padding-inline: 7px !important;
+}
+
+.app-doc-action:not(:disabled, .disabled, [aria-disabled="true"]):hover { filter: brightness(.94); }
+.app-doc-action:is(:disabled, .disabled, [aria-disabled="true"]) { opacity: .63; }
+.app-doc-action i { color: inherit !important; flex-shrink: 0; }
+
 @media screen {
     table > thead > tr > :is(th, td),
     .workspace-content .table-head,

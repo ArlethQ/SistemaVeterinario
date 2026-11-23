@@ -16,17 +16,17 @@
             <div class="d-flex flex-wrap gap-2">
                 @if (_tab == "atenciones")
                 {
-                    <button class="btn btn-outline-danger" disabled="@(!_atenciones.Any() || _cargando)" @onclick="ExportarAtencionesPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF</button>
-                    <button class="btn btn-outline-success" disabled="@(!_atenciones.Any() || _cargando)" @onclick="ExportarAtencionesExcelAsync"><i class="bi bi-file-earmark-excel-fill me-1"></i>Excel</button>
+                    <button class="btn btn-outline-danger app-doc-action app-doc-pdf" disabled="@(!_atenciones.Any() || _cargando)" @onclick="ExportarAtencionesPdfAsync"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>PDF</button>
+                    <button class="btn btn-outline-success app-doc-action app-doc-excel" disabled="@(!_atenciones.Any() || _cargando)" @onclick="ExportarAtencionesExcelAsync"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i>Excel</button>
                 }
                 else if (_tab == "diagnosticos")
                 {
-                    <button class="btn btn-outline-danger" disabled="@(!_diagnosticos.Any() || _cargando)" @onclick="ExportarDiagnosticosPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF</button>
-                    <button class="btn btn-outline-success" disabled="@(!_diagnosticos.Any() || _cargando)" @onclick="ExportarDiagnosticosExcelAsync"><i class="bi bi-file-earmark-excel-fill me-1"></i>Excel</button>
+                    <button class="btn btn-outline-danger app-doc-action app-doc-pdf" disabled="@(!_diagnosticos.Any() || _cargando)" @onclick="ExportarDiagnosticosPdfAsync"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>PDF</button>
+                    <button class="btn btn-outline-success app-doc-action app-doc-excel" disabled="@(!_diagnosticos.Any() || _cargando)" @onclick="ExportarDiagnosticosExcelAsync"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i>Excel</button>
                 }
                 else if (_tab == "partes")
                 {
-                    <button class="btn btn-outline-danger" disabled="@(!_partes.Any() || _cargando)" @onclick="ExportarPartesPdfAsync"><i class="bi bi-file-earmark-pdf-fill me-1"></i>Imprimir consolidado</button>
+                    <button class="btn btn-outline-danger app-doc-action app-doc-print" disabled="@(!_partes.Any() || _cargando)" @onclick="ExportarPartesPdfAsync"><i class="bi bi-printer" aria-hidden="true"></i>Imprimir consolidado</button>
                 }
             </div>
         </div>
@@ -138,7 +138,7 @@
                             }
                             else
                             {
-                                @foreach (var x in _partes) { <tr><td>@x.Fecha.ToString("g")</td><td>@x.IdOrden / @x.Nhcl</td><td><strong>@x.Paciente</strong><small class="d-block">@x.Propietario</small></td><td>@x.Procedimiento</td><td>@x.Diagnostico <button class="btn btn-sm btn-outline-primary float-end" @onclick="() => AbrirProtocolo(x.IdOrden, x.Nhcl)">Ver e imprimir</button></td></tr> }
+                                @foreach (var x in _partes) { <tr><td>@x.Fecha.ToString("g")</td><td>@x.IdOrden / @x.Nhcl</td><td><strong>@x.Paciente</strong><small class="d-block">@x.Propietario</small></td><td>@x.Procedimiento</td><td>@x.Diagnostico <button class="btn btn-sm btn-outline-primary float-end app-doc-action app-doc-print" @onclick="() => AbrirProtocolo(x.IdOrden, x.Nhcl)"><i class="bi bi-printer" aria-hidden="true"></i> Ver e imprimir</button></td></tr> }
                             }
                             @if (!_cargando && ((_tab == "atenciones" && !_atenciones.Any()) || (_tab == "diagnosticos" && !_diagnosticos.Any()) || (_tab == "partes" && !_partes.Any()))) { <tr><td colspan="7" class="text-center text-muted py-4">No existen registros para el período y filtros seleccionados.</td></tr> }
                         </tbody>

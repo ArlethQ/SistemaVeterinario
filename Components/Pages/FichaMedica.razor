@@ -74,8 +74,8 @@
             <SaveButton class="btn btn-sm btn-success" OnClick="GuardarFichaCompletaAsync" Disabled="@(Guardando || !FichaEditable)">
                 <i class="bi bi-floppy-fill me-1"></i>@(Guardando ? "Guardando..." : "Guardar Ficha SOAP")
             </SaveButton>
-            <button class="btn btn-sm btn-outline-danger" disabled="@(!FichaCargada)" @onclick="ExportarPdfAsync">
-                <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF Historia
+            <button class="btn btn-sm btn-outline-danger app-doc-action app-doc-pdf" disabled="@(!FichaCargada)" @onclick="ExportarPdfAsync">
+                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>PDF Historia
             </button>
             @if (!ModoModal)
             {
@@ -568,9 +568,9 @@
                             <a href="/farmacia" class="btn btn-xs btn-outline-info text-dark py-0 px-2" title="Ver receta en Cola de Farmacia">
                                 <i class="ri-medicine-bottle-line me-1"></i>Cola Farmacia
                             </a>
-                            <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2" @onclick="ImprimirRecetaMedicaPdfAsync"
+                            <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 app-doc-action app-doc-print" @onclick="ImprimirRecetaMedicaPdfAsync"
                                     title="Imprimir Receta Médica">
-                                <i class="bi bi-printer me-1"></i>Imprimir Receta
+                                <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Receta
                             </button>
                             <button type="button" class="btn btn-xs btn-outline-primary py-0" @onclick='() => Nav.NavigateTo($"/consulta/recetario/{Ficha.MedOrden}/{Ficha.MedNhcl}")'>
                                 Abrir Recetario Completo
@@ -819,9 +819,9 @@
                                             <i class="bi bi-droplet-half me-1"></i>Orden de Laboratorio
                                             <span class="badge bg-info text-dark ms-1">@OrdenesLab.Count</span>
                                         </span>
-                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2"
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 app-doc-action app-doc-print"
                                                 @onclick="ImprimirOrdenLaboratorioPdfAsync">
-                                            <i class="bi bi-printer me-1"></i>Imprimir Orden de Laboratorio
+                                            <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Orden de Laboratorio
                                         </button>
                                     </div>
                                     <div class="table-responsive">
@@ -875,9 +875,9 @@
                                             <i class="bi bi-radioactive me-1"></i>Orden de Imagenología
                                             <span class="badge bg-warning text-dark ms-1">@OrdenesImagen.Count</span>
                                         </span>
-                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2"
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 app-doc-action app-doc-print"
                                                 @onclick="ImprimirOrdenImagenPdfAsync">
-                                            <i class="bi bi-printer me-1"></i>Imprimir Orden de Imagenología
+                                            <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Orden de Imagenología
                                         </button>
                                     </div>
                                     <div class="table-responsive">
@@ -927,9 +927,9 @@
                                             <i class="bi bi-heart-pulse me-1"></i>Orden de Fisioterapia
                                             <span class="badge bg-success ms-1">@OrdenesFisio.Count</span>
                                         </span>
-                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2"
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 app-doc-action app-doc-print"
                                                 @onclick="ImprimirOrdenFisioterapiaPdfAsync">
-                                            <i class="bi bi-printer me-1"></i>Imprimir Orden de Fisioterapia
+                                            <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Orden de Fisioterapia
                                         </button>
                                     </div>
                                     <div class="table-responsive">
