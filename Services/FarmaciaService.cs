@@ -61,8 +61,8 @@ public class FarmaciaService : IFarmaciaService
                     ISNULL(m.ordenId, 0) AS IdOrden,
                     ISNULL(m.nhcl, 0) AS Nhcl,
                     ISNULL(mas.mas_nombre, 'Paciente #' + CAST(ISNULL(m.nhcl, 0) AS VARCHAR(20))) AS Paciente,
-                    ISNULL(mas.mas_especie, '') AS Especie,
-                    LTRIM(RTRIM(ISNULL(cli.cli_apellidos, '') + ' ' + ISNULL(cli.cli_nombres, ''))) AS Propietario,
+                    ISNULL(esp.especie_descripcion, '') AS Especie,
+                    LTRIM(RTRIM(ISNULL(cli.pa_apellidos, '') + ' ' + ISNULL(cli.pa_nombres, ''))) AS Propietario,
                     ISNULL(NULLIF(LTRIM(RTRIM(m.modulo)), ''), 'Monitoreo') AS Modulo,
                     ISNULL(RTRIM(m.codigoprod), '') AS CodigoProducto,
                     COALESCE(TRY_CAST(m.med_iddinamics AS INT), p.CODIGO, 0) AS CodigoProductoInt,
@@ -81,8 +81,9 @@ public class FarmaciaService : IFarmaciaService
                     ISNULL(ex.StockFisico, 0) AS StockFisico,
                     ISNULL(ex.StockReservado, 0) AS StockReservado
                 FROM dbo.hvt_cabMonitoreoMedBC m
-                LEFT JOIN dbo.vt_mascotas mas ON mas.mas_nhcl = m.nhcl
-                LEFT JOIN dbo.vt_clientes cli ON cli.cli_codigo = mas.mas_idcliente
+                LEFT JOIN dbo.vt_pacientes mas ON mas.mas_nhcl = m.nhcl
+                LEFT JOIN dbo.vt_especie esp ON esp.especie_id = mas.mas_especie
+                LEFT JOIN dbo.vt_clientes cli ON cli.pa_codigo = mas.mas_idcliente
                 LEFT JOIN dbo.PRODUCTO p ON p.CODIGO = TRY_CAST(m.med_iddinamics AS INT)
                     OR (TRY_CAST(m.med_iddinamics AS INT) IS NULL AND (p.CODIGO_PRINCIPAL = m.codigoprod OR CAST(p.CODIGO AS VARCHAR(50)) = m.codigoprod))
                 LEFT JOIN ExistenciasSede ex ON ex.codigo_producto = COALESCE(TRY_CAST(m.med_iddinamics AS INT), p.CODIGO, 0)
@@ -99,8 +100,8 @@ public class FarmaciaService : IFarmaciaService
                     ISNULL(q.ordenId, 0) AS IdOrden,
                     ISNULL(q.nhcl, 0) AS Nhcl,
                     ISNULL(mas.mas_nombre, 'Paciente #' + CAST(ISNULL(q.nhcl, 0) AS VARCHAR(20))) AS Paciente,
-                    ISNULL(mas.mas_especie, '') AS Especie,
-                    LTRIM(RTRIM(ISNULL(cli.cli_apellidos, '') + ' ' + ISNULL(cli.cli_nombres, ''))) AS Propietario,
+                    ISNULL(esp.especie_descripcion, '') AS Especie,
+                    LTRIM(RTRIM(ISNULL(cli.pa_apellidos, '') + ' ' + ISNULL(cli.pa_nombres, ''))) AS Propietario,
                     ISNULL(NULLIF(LTRIM(RTRIM(q.modulo)), ''), 'Quirófano') AS Modulo,
                     ISNULL(RTRIM(CONVERT(VARCHAR(50), q.codigoprod)), '') AS CodigoProducto,
                     ISNULL(p.CODIGO, 0) AS CodigoProductoInt,
@@ -119,8 +120,9 @@ public class FarmaciaService : IFarmaciaService
                     ISNULL(ex.StockFisico, 0) AS StockFisico,
                     ISNULL(ex.StockReservado, 0) AS StockReservado
                 FROM dbo.qvt_productosUtilizados q
-                LEFT JOIN dbo.vt_mascotas mas ON mas.mas_nhcl = q.nhcl
-                LEFT JOIN dbo.vt_clientes cli ON cli.cli_codigo = mas.mas_idcliente
+                LEFT JOIN dbo.vt_pacientes mas ON mas.mas_nhcl = q.nhcl
+                LEFT JOIN dbo.vt_especie esp ON esp.especie_id = mas.mas_especie
+                LEFT JOIN dbo.vt_clientes cli ON cli.pa_codigo = mas.mas_idcliente
                 LEFT JOIN dbo.PRODUCTO p ON p.CODIGO_PRINCIPAL = CONVERT(VARCHAR(50), q.codigoprod)
                     OR CAST(p.CODIGO AS VARCHAR(50)) = CONVERT(VARCHAR(50), q.codigoprod)
                 LEFT JOIN ExistenciasSede ex ON ex.codigo_producto = ISNULL(p.CODIGO, 0)
@@ -973,9 +975,9 @@ public class FarmaciaService : IFarmaciaService
                 m.sec AS Sec,
                 ISNULL(m.med_id_orden, 0) AS IdOrden,
                 ISNULL(m.med_nhcl, 0) AS Nhcl,
-                ISNULL(mas.mas_nombre, ISNULL(o.ordenAten_nombre, 'Paciente #' + CAST(ISNULL(m.med_nhcl, 0) AS VARCHAR(20)))) AS Paciente,
-                ISNULL(mas.mas_especie, '') AS Especie,
-                LTRIM(RTRIM(ISNULL(cli.cli_apellidos, '') + ' ' + ISNULL(cli.cli_nombres, ''))) AS Propietario,
+                ISNULL(NULLIF(RTRIM(mas.mas_nombre), ''), 'Paciente #' + CAST(ISNULL(m.med_nhcl, 0) AS VARCHAR(20))) AS Paciente,
+                ISNULL(esp.especie_descripcion, '') AS Especie,
+                LTRIM(RTRIM(ISNULL(cli.pa_apellidos, '') + ' ' + ISNULL(cli.pa_nombres, ''))) AS Propietario,
                 ISNULL(u.user_nombre, 'Médico Veterinario') AS Medico,
                 ISNULL(m.med_fecha, GETDATE()) AS Fecha,
                 COALESCE(NULLIF(m.med_idProdu, 0), pMatch.CODIGO, 0) AS CodigoProductoInt,
@@ -1000,8 +1002,9 @@ public class FarmaciaService : IFarmaciaService
                 CAST(ISNULL(ex.StockReservado, 0) AS DECIMAL(18,4)) AS StockReservadoTotalSede
             FROM dbo.vt_medicinas m
             LEFT JOIN dbo.vt_ordenAtencion o ON o.ordenAten_id = m.med_id_orden
-            LEFT JOIN dbo.vt_mascotas mas ON mas.mas_nhcl = m.med_nhcl
-            LEFT JOIN dbo.vt_clientes cli ON cli.cli_codigo = COALESCE(mas.mas_idcliente, o.ordenAten_idcliente)
+            LEFT JOIN dbo.vt_pacientes mas ON mas.mas_nhcl = m.med_nhcl
+            LEFT JOIN dbo.vt_especie esp ON esp.especie_id = mas.mas_especie
+            LEFT JOIN dbo.vt_clientes cli ON cli.pa_codigo = COALESCE(mas.mas_idcliente, o.ordenAten_idcliente)
             LEFT JOIN dbo.vt_usuarios u ON u.user_numero = o.ordenAten_idMedico
             LEFT JOIN dbo.PRODUCTO p ON p.CODIGO = m.med_idProdu AND m.med_idProdu > 0
             OUTER APPLY (
@@ -1013,7 +1016,7 @@ public class FarmaciaService : IFarmaciaService
             ) pMatch
             LEFT JOIN ExistenciasSede ex ON ex.codigo_producto = COALESCE(NULLIF(m.med_idProdu, 0), pMatch.CODIGO, 0)
             WHERE ISNULL(m.med_id_orden, 0) > 0
-              AND COALESCE(NULLIF(o.ordenAten_idlocalidad, 0), o.ordenAten_localidad, 0) IN (0, @IdLocalidad)
+              AND ISNULL(o.ordenAten_idlocalidad, 0) IN (0, @IdLocalidad)
             ORDER BY
                 CASE WHEN ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') IN ('Por Entregar', 'Por Facturar') THEN 0 ELSE 1 END,
                 m.med_id_orden DESC,
@@ -1274,7 +1277,7 @@ public class FarmaciaService : IFarmaciaService
             return (false, "Orden inválida para liquidar farmacia.");
 
         int sedeOrden = await _db.ExecuteScalarAsync<int?>(@"
-            SELECT TOP 1 COALESCE(NULLIF(ordenAten_idlocalidad, 0), ordenAten_localidad, @DefaultSede)
+            SELECT TOP 1 COALESCE(NULLIF(ordenAten_idlocalidad, 0), @DefaultSede)
             FROM dbo.vt_ordenAtencion
             WHERE ordenAten_id = @IdOrden;",
             new { IdOrden = idOrden, DefaultSede = idLocalidad > 0 ? idLocalidad : 1 }) ?? (idLocalidad > 0 ? idLocalidad : 1);

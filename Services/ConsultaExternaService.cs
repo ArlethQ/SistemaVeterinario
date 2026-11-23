@@ -1326,7 +1326,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 @CantReservada = CAST(ISNULL(m.med_cantidad1, 0) AS DECIMAL(18,4)),
                 @Estado = ISNULL(m.med_estado, 'Por Entregar'),
                 @IdOrden = ISNULL(m.med_id_orden, 0),
-                @IdLocalidad = ISNULL(o.ordenAten_localidad, 1)
+                @IdLocalidad = ISNULL(o.ordenAten_idlocalidad, 1)
             FROM dbo.vt_medicinas m WITH (UPDLOCK, HOLDLOCK)
             LEFT JOIN dbo.vt_ordenAtencion o ON o.ordenAten_id = m.med_id_orden
             WHERE m.sec = @Sec;
