@@ -580,7 +580,7 @@
                     <div class="card-body">
                         <!-- Formulario rápido para agregar prescripción médica -->
                         <div class="row g-2 mb-3 p-2 bg-light rounded border">
-                            <div class="col-md-6 position-relative">
+                            <div class="col-md-5 position-relative">
                                 <label class="form-label small fw-semibold">Medicamento / Producto *</label>
                                 <div class="input-group input-group-sm">
                                     <input type="text" class="form-control" autocomplete="off"
@@ -603,17 +603,38 @@
                                         {
                                             <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center"
                                                     @onclick="() => SeleccionarMedicamento(prod)">
-                                                <span><strong>[@prod.Id] @prod.Codigo</strong> @prod.Descripcion</span>
+                                                <span>
+                                                    <strong>[@prod.Id] @prod.Codigo</strong> @prod.Descripcion
+                                                    <small class="text-muted ms-1">(@prod.UnidadMedida@(prod.FactorConversion > 1m ? $" · Paq. ×{prod.FactorConversion:G29}" : ""))</small>
+                                                </span>
                                                 <span class="text-muted ms-2">$@(prod.Precio?.ToString("F2") ?? "0.00")</span>
                                             </button>
                                         }
                                     </div>
                                 }
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label small fw-semibold">Cant.</label>
-                                <input type="number" min="1" step="1" class="form-control form-control-sm" onkeydown="return event.key !== '-'"
-                                       @bind="NuevoMedicamento.Cantidad" @bind:after="ActualizarCantidadLetras" />
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Cant. y Presentación</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" min="1" step="1" class="form-control" style="max-width: 72px;" onkeydown="return event.key !== '-'"
+                                           @bind="NuevoMedicamento.Cantidad" @bind:after="ActualizarCantidadLetras" />
+                                    <select class="form-select"
+                                            @bind="_modoDespachoReceta"
+                                            @bind:after="ActualizarCantidadLetras">
+                                        <option value="UNIDAD">Por unidad (@UnidadProductoReceta)</option>
+                                        <option value="PAQUETE">@(FactorProductoReceta > 1m ? $"Por paquete (×{FactorProductoReceta:G29} {UnidadProductoReceta})" : "Por paquete / caja")</option>
+                                        <option value="PASTILLA">Pastilla(s) / Tableta(s)</option>
+                                        <option value="JARABE">Jarabe / Frasco</option>
+                                        <option value="AMPOLLA">Ampolla(s) / Vial</option>
+                                        <option value="SOBRE">Sobre(s)</option>
+                                    </select>
+                                </div>
+                                @if (_modoDespachoReceta == "PAQUETE" && FactorProductoReceta > 1m)
+                                {
+                                    <small class="text-primary d-block mt-1 fw-semibold" style="font-size:.72rem;">
+                                        = @CantidadBaseRecetaCalculada.ToString("0.##") @UnidadProductoReceta en cola de Farmacia
+                                    </small>
+                                }
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label small fw-semibold">En Letras</label>
@@ -1207,6 +1228,15 @@
     private List<CatalogoOperativoDto> _catalogoMedicamentos = new();
     private List<CatalogoOperativoDto> _sugerenciasMedicamento = new();
     private bool _mostrarSugerenciasMed;
+    private CatalogoOperativoDto? _productoRecetaSeleccionado;
+    private string _modoDespachoReceta = "UNIDAD";
+    private string UnidadProductoReceta => string.IsNullOrWhiteSpace(_productoRecetaSeleccionado?.UnidadMedida)
+        ? "UNIDAD"
+        : _productoRecetaSeleccionado!.UnidadMedida.Trim().ToUpperInvariant();
+    private decimal FactorProductoReceta => _productoRecetaSeleccionado is { FactorConversion: > 1m } p ? p.FactorConversion : 1m;
+    private decimal CantidadBaseRecetaCalculada => _modoDespachoReceta == "PAQUETE" && FactorProductoReceta > 1m
+        ? Math.Round(NuevoMedicamento.Cantidad * FactorProductoReceta, 4)
+        : NuevoMedicamento.Cantidad;
     private RecetaMedicamentoItemDto NuevoMedicamento { get; set; } = new();
 
     // Órdenes de Servicio (Laboratorio, Imagenología, Fisioterapia desde PRODUCTO)
@@ -1875,8 +1905,10 @@
     private void OnMedicamentoInputChanged()
     {
         NuevoMedicamento.CodigoProd = string.Empty;
+        _productoRecetaSeleccionado = null;
         ActualizarSugerenciasMedicamento();
         _mostrarSugerenciasMed = _sugerenciasMedicamento.Any();
+        ActualizarCantidadLetras();
     }
 
     private void ActualizarSugerenciasMedicamento()
@@ -1894,48 +1926,156 @@
 
     private void SeleccionarMedicamento(CatalogoOperativoDto prod)
     {
+        _productoRecetaSeleccionado = prod;
         NuevoMedicamento.CodigoProd = prod.Id.ToString();
         NuevoMedicamento.Descripcionamento = prod.Descripcion;
         NuevoMedicamento.Precio = prod.Precio ?? 0m;
         _mostrarSugerenciasMed = false;
+        ActualizarCantidadLetras();
     }
 
     private void LimpiarSeleccionMedicamento()
     {
+        _productoRecetaSeleccionado = null;
+        _modoDespachoReceta = "UNIDAD";
         NuevoMedicamento.CodigoProd = string.Empty;
         NuevoMedicamento.Descripcionamento = string.Empty;
         NuevoMedicamento.Precio = 0m;
         _sugerenciasMedicamento.Clear();
         _mostrarSugerenciasMed = false;
+        ActualizarCantidadLetras();
     }
 
     private void ActualizarCantidadLetras()
     {
-        int n = (int)Math.Round(NuevoMedicamento.Cantidad);
-        NuevoMedicamento.CantidadLetras = NumeroALetras(n);
+        int n = Math.Max(1, (int)Math.Round(NuevoMedicamento.Cantidad));
+        NuevoMedicamento.CantidadLetras = FormatearCantidadEnLetras(n, _modoDespachoReceta, UnidadProductoReceta, FactorProductoReceta);
     }
 
-    private static string NumeroALetras(int numero) => numero switch
+    internal static string FormatearCantidadEnLetras(int cantidad, string modo, string unidadProducto, decimal factorConversion)
     {
-        1 => "UNO",
-        2 => "DOS",
-        3 => "TRES",
-        4 => "CUATRO",
-        5 => "CINCO",
-        6 => "SEIS",
-        7 => "SIETE",
-        8 => "OCHO",
-        9 => "NUEVE",
-        10 => "DIEZ",
-        12 => "DOCE",
-        14 => "CATORCE",
-        15 => "QUINCE",
-        20 => "VEINTE",
-        21 => "VEINTIUNO",
-        28 => "VEINTIOCHO",
-        30 => "TREINTA",
-        _ => numero.ToString()
-    };
+        string modoUpper = (modo ?? "UNIDAD").Trim().ToUpperInvariant();
+        return modoUpper switch
+        {
+            "PAQUETE" when factorConversion > 1m =>
+                $"{NumeroALetras(cantidad, femenino: false, apocoparUno: true)} {(cantidad == 1 ? "PAQUETE" : "PAQUETES")} ({(int)Math.Round(cantidad * factorConversion)} {PluralizarUnidad(unidadProducto, (int)Math.Round(cantidad * factorConversion))})",
+            "PAQUETE" =>
+                $"{NumeroALetras(cantidad, femenino: false, apocoparUno: true)} {(cantidad == 1 ? "PAQUETE" : "PAQUETES")}",
+            "PASTILLA" =>
+                $"{NumeroALetras(cantidad, femenino: true, apocoparUno: false)} {(cantidad == 1 ? "PASTILLA" : "PASTILLAS")}",
+            "JARABE" =>
+                $"{NumeroALetras(cantidad, femenino: false, apocoparUno: true)} {(cantidad == 1 ? "JARABE" : "JARABES")}",
+            "AMPOLLA" =>
+                $"{NumeroALetras(cantidad, femenino: true, apocoparUno: false)} {(cantidad == 1 ? "AMPOLLA" : "AMPOLLAS")}",
+            "SOBRE" =>
+                $"{NumeroALetras(cantidad, femenino: false, apocoparUno: true)} {(cantidad == 1 ? "SOBRE" : "SOBRES")}",
+            _ => FormatearPorUnidadBase(cantidad, unidadProducto)
+        };
+    }
+
+    private static string FormatearPorUnidadBase(int cantidad, string unidadProducto)
+    {
+        string u = string.IsNullOrWhiteSpace(unidadProducto) ? "UNIDAD" : unidadProducto.Trim().ToUpperInvariant();
+        bool fem = u is "UNIDAD" or "PASTILLA" or "TABLETA" or "CAPSULA" or "CÁPSULA" or "AMPOLLA" or "CAJA" or "TIRA" or "PIPETA" or "JERINGA" or "BOTELLA" or "BOLSA" or "DOSIS";
+        string numTexto = NumeroALetras(cantidad, femenino: fem, apocoparUno: !fem);
+        return $"{numTexto} {PluralizarUnidad(u, cantidad)}";
+    }
+
+    private static string PluralizarUnidad(string unidad, int cantidad)
+    {
+        string u = string.IsNullOrWhiteSpace(unidad) ? "UNIDAD" : unidad.Trim().ToUpperInvariant();
+        if (cantidad == 1) return u;
+        return u switch
+        {
+            "UNIDAD" => "UNIDADES",
+            "ML" or "MG" or "GR" or "KG" or "L" or "CC" or "DOSIS" => u,
+            _ when u.EndsWith("A") || u.EndsWith("E") || u.EndsWith("O") => u + "S",
+            _ when u.EndsWith("S") => u,
+            _ => u + "ES"
+        };
+    }
+
+    internal static string NumeroALetras(int numero, bool femenino = false, bool apocoparUno = false)
+    {
+        if (numero <= 0) return "CERO";
+        if (numero > 9999) return numero.ToString();
+
+        if (numero >= 1000)
+        {
+            int miles = numero / 1000;
+            int restoMil = numero % 1000;
+            string prefijoMil = miles == 1 ? "MIL" : $"{NumeroALetras(miles, femenino: false, apocoparUno: true)} MIL";
+            return restoMil == 0 ? prefijoMil : $"{prefijoMil} {NumeroALetras(restoMil, femenino, apocoparUno)}";
+        }
+
+        if (numero >= 100)
+        {
+            if (numero == 100) return "CIEN";
+            int centenas = numero / 100;
+            int restoCien = numero % 100;
+            string textoCentena = centenas switch
+            {
+                1 => "CIENTO",
+                5 => femenino ? "QUINIENTAS" : "QUINIENTOS",
+                7 => femenino ? "SETECIENTAS" : "SETECIENTOS",
+                9 => femenino ? "NOVECIENTAS" : "NOVECIENTOS",
+                _ => $"{NumeroALetras(centenas, femenino: false, apocoparUno: false)}{(femenino ? "CIENTAS" : "CIENTOS")}"
+            };
+            return restoCien == 0 ? textoCentena : $"{textoCentena} {NumeroALetras(restoCien, femenino, apocoparUno)}";
+        }
+
+        return numero switch
+        {
+            1 => femenino ? "UNA" : (apocoparUno ? "UN" : "UNO"),
+            2 => "DOS",
+            3 => "TRES",
+            4 => "CUATRO",
+            5 => "CINCO",
+            6 => "SEIS",
+            7 => "SIETE",
+            8 => "OCHO",
+            9 => "NUEVE",
+            10 => "DIEZ",
+            11 => "ONCE",
+            12 => "DOCE",
+            13 => "TRECE",
+            14 => "CATORCE",
+            15 => "QUINCE",
+            16 => "DIECISÉIS",
+            17 => "DIECISIETE",
+            18 => "DIECIOCHO",
+            19 => "DIECINUEVE",
+            20 => "VEINTE",
+            21 => femenino ? "VEINTIUNA" : (apocoparUno ? "VEINTIÚN" : "VEINTIUNO"),
+            22 => "VEINTIDÓS",
+            23 => "VEINTITRÉS",
+            24 => "VEINTICUATRO",
+            25 => "VEINTICINCO",
+            26 => "VEINTISÉIS",
+            27 => "VEINTISIETE",
+            28 => "VEINTIOCHO",
+            29 => "VEINTINUEVE",
+            _ => FormatearDecena(numero, femenino, apocoparUno)
+        };
+    }
+
+    private static string FormatearDecena(int numero, bool femenino, bool apocoparUno)
+    {
+        int decena = (numero / 10) * 10;
+        int unidad = numero % 10;
+        string textoDecena = decena switch
+        {
+            30 => "TREINTA",
+            40 => "CUARENTA",
+            50 => "CINCUENTA",
+            60 => "SESENTA",
+            70 => "SETENTA",
+            80 => "OCHENTA",
+            90 => "NOVENTA",
+            _ => decena.ToString()
+        };
+        return unidad == 0 ? textoDecena : $"{textoDecena} Y {NumeroALetras(unidad, femenino, apocoparUno)}";
+    }
 
     private async Task AgregarMedicamentoAsync()
     {
@@ -1973,11 +2113,18 @@
                      || p.Id.ToString() == NuevoMedicamento.Descripcionamento.Trim()));
                 if (exacto != null)
                 {
+                    _productoRecetaSeleccionado = exacto;
                     NuevoMedicamento.CodigoProd = exacto.Id.ToString();
                     NuevoMedicamento.Descripcionamento = exacto.Descripcion;
                 }
             }
 
+            if (string.IsNullOrWhiteSpace(NuevoMedicamento.CantidadLetras) || int.TryParse(NuevoMedicamento.CantidadLetras.Trim(), out _))
+            {
+                ActualizarCantidadLetras();
+            }
+
+            NuevoMedicamento.Cantidad = CantidadBaseRecetaCalculada;
             NuevoMedicamento.IdOrden = ordenTarget;
             NuevoMedicamento.Nhcl = nhclTarget;
             int idUser = Session.CurrentUser?.UserNumero ?? 1;
@@ -1990,6 +2137,9 @@
             }
 
             NuevoMedicamento = new RecetaMedicamentoItemDto();
+            _productoRecetaSeleccionado = null;
+            _modoDespachoReceta = "UNIDAD";
+            ActualizarCantidadLetras();
             _mostrarSugerenciasMed = false;
             RecetaItems = await ConsultaService.ObtenerRecetaOrdenAsync(ordenTarget);
             EsError = false;

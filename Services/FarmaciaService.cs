@@ -986,6 +986,7 @@ public class FarmaciaService : IFarmaciaService
                 ISNULL(COALESCE(p.NOMBRE, pMatch.NOMBRE), '') AS NombreProductoInventario,
                 ISNULL(m.med_indicaciones, '') AS Indicaciones,
                 CAST(ISNULL(m.med_cantidad, 1) AS DECIMAL(18,4)) AS CantidadRecetada,
+                ISNULL(m.med_cantidadLetras, '') AS CantidadLetras,
                 CAST(ISNULL(m.med_cantidad1, 0) AS DECIMAL(18,4)) AS CantidadReservadaLinea,
                 ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') AS Estado,
                 ISNULL(m.med_observaciones, '') AS Observaciones,

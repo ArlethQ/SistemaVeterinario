@@ -121,6 +121,7 @@ public class FarmaciaRecetaSoapItemDto
     public string NombreProductoInventario { get; set; } = string.Empty;
     public string Indicaciones { get; set; } = string.Empty;
     public decimal CantidadRecetada { get; set; }
+    public string CantidadLetras { get; set; } = string.Empty;
     public decimal CantidadReservadaLinea { get; set; }
     public string Estado { get; set; } = "Por Entregar"; // "Por Entregar", "Entregado", "Parcial", "No Comprado"
     public string Observaciones { get; set; } = string.Empty;

@@ -214,18 +214,36 @@
 
                     <!-- Formulario para agregar ítem a la receta -->
                     <div class="row g-2 mb-3 p-2 bg-light rounded border">
-                        <div class="col-md-5">
+                        <div class="col-md-4">
                             <label class="form-label small fw-semibold">Medicamento / Principio Activo / Presentación *</label>
-                            <BuscadorMedicamentos Value="@NuevoItem.Descripcionamento" ValueChanged="@(texto => { NuevoItem.Descripcionamento = texto; NuevoItem.CodigoProd = string.Empty; })" Productos="@_catalogoEFact" Selected="@(producto => NuevoItem.CodigoProd = producto.Id.ToString())" />
+                            <BuscadorMedicamentos Value="@NuevoItem.Descripcionamento" ValueChanged="@(texto => { NuevoItem.Descripcionamento = texto; NuevoItem.CodigoProd = string.Empty; _productoSeleccionado = null; ActualizarCantidadLetras(); })" Productos="@_catalogoEFact" Selected="@(producto => { _productoSeleccionado = producto; NuevoItem.CodigoProd = producto.Id.ToString(); ActualizarCantidadLetras(); })" />
                             @foreach (var aviso in _advertencias.Where(aviso => aviso.EstaVigente(HoyClinica) && aviso.AplicaA(NuevoItem)))
                             {
                                 <p class="text-danger small mb-0" role="alert">No administrar. @aviso.Motivo</p>
                             }
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-semibold">Cantidad</label>
-                            <input type="number" min="1" step="1" class="form-control form-control-sm" onkeydown="return event.key !== '-'"
-                                   @bind="NuevoItem.Cantidad" @bind:after="ActualizarCantidadLetras" />
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Cant. y Presentación</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" min="1" step="1" class="form-control" style="max-width: 72px;" onkeydown="return event.key !== '-'"
+                                       @bind="NuevoItem.Cantidad" @bind:after="ActualizarCantidadLetras" />
+                                <select class="form-select"
+                                        @bind="_modoDespacho"
+                                        @bind:after="ActualizarCantidadLetras">
+                                    <option value="UNIDAD">Por unidad (@UnidadProductoActual)</option>
+                                    <option value="PAQUETE">@(FactorProductoActual > 1m ? $"Por paquete (×{FactorProductoActual:G29} {UnidadProductoActual})" : "Por paquete / caja")</option>
+                                    <option value="PASTILLA">Pastilla(s) / Tableta(s)</option>
+                                    <option value="JARABE">Jarabe / Frasco</option>
+                                    <option value="AMPOLLA">Ampolla(s) / Vial</option>
+                                    <option value="SOBRE">Sobre(s)</option>
+                                </select>
+                            </div>
+                            @if (_modoDespacho == "PAQUETE" && FactorProductoActual > 1m)
+                            {
+                                <small class="text-primary d-block mt-1 fw-semibold" style="font-size:.72rem;">
+                                    = @CantidadBaseCalculada.ToString("0.##") @UnidadProductoActual en cola de Farmacia
+                                </small>
+                            }
                         </div>
                         <div class="col-md-3">
                             <label class="form-label small fw-semibold">Cantidad en Letras</label>
@@ -426,6 +444,15 @@
     private List<DiagnosticoCie10Dto> DiagnosticosOrden { get; set; } = new();
     private string IndicacionesGenerales { get; set; } = string.Empty;
     private List<CatalogoOperativoDto> _catalogoEFact = new();
+    private CatalogoOperativoDto? _productoSeleccionado;
+    private string _modoDespacho = "UNIDAD";
+    private string UnidadProductoActual => string.IsNullOrWhiteSpace(_productoSeleccionado?.UnidadMedida)
+        ? "UNIDAD"
+        : _productoSeleccionado!.UnidadMedida.Trim().ToUpperInvariant();
+    private decimal FactorProductoActual => _productoSeleccionado is { FactorConversion: > 1m } p ? p.FactorConversion : 1m;
+    private decimal CantidadBaseCalculada => _modoDespacho == "PAQUETE" && FactorProductoActual > 1m
+        ? Math.Round(NuevoItem.Cantidad * FactorProductoActual, 4)
+        : NuevoItem.Cantidad;
     private RecetaMedicamentoItemDto NuevoItem { get; set; } = new();
 
     protected override async Task OnParametersSetAsync()
@@ -550,31 +577,9 @@
 
     private void ActualizarCantidadLetras()
     {
-        int n = (int)Math.Round(NuevoItem.Cantidad);
-        NuevoItem.CantidadLetras = NumeroALetras(n);
+        int n = Math.Max(1, (int)Math.Round(NuevoItem.Cantidad));
+        NuevoItem.CantidadLetras = FichaMedica.FormatearCantidadEnLetras(n, _modoDespacho, UnidadProductoActual, FactorProductoActual);
     }
-
-    private static string NumeroALetras(int numero) => numero switch
-    {
-        1 => "UNO",
-        2 => "DOS",
-        3 => "TRES",
-        4 => "CUATRO",
-        5 => "CINCO",
-        6 => "SEIS",
-        7 => "SIETE",
-        8 => "OCHO",
-        9 => "NUEVE",
-        10 => "DIEZ",
-        12 => "DOCE",
-        14 => "CATORCE",
-        15 => "QUINCE",
-        20 => "VEINTE",
-        21 => "VEINTIUNO",
-        28 => "VEINTIOCHO",
-        30 => "TREINTA",
-        _ => numero.ToString()
-    };
 
     private async Task AgregarItemRecetaAsync()
     {
@@ -598,10 +603,16 @@
                 || p.Id.ToString() == NuevoItem.Descripcionamento.Trim()));
             if (exacto != null)
             {
+                _productoSeleccionado = exacto;
                 NuevoItem.CodigoProd = exacto.Id.ToString();
                 NuevoItem.Descripcionamento = exacto.Descripcion;
             }
         }
+        if (string.IsNullOrWhiteSpace(NuevoItem.CantidadLetras) || int.TryParse(NuevoItem.CantidadLetras.Trim(), out _))
+        {
+            ActualizarCantidadLetras();
+        }
+        NuevoItem.Cantidad = CantidadBaseCalculada;
         NuevoItem.IdOrden = IdOrden;
         NuevoItem.Nhcl = Nhcl;
         int idUser = Session.CurrentUser?.UserNumero ?? 1;
@@ -613,6 +624,9 @@
             return;
         }
         NuevoItem = new RecetaMedicamentoItemDto();
+        _productoSeleccionado = null;
+        _modoDespacho = "UNIDAD";
+        ActualizarCantidadLetras();
         ItemsReceta = await ConsultaService.ObtenerRecetaOrdenAsync(IdOrden);
         EsError = false;
         MensajeAlerta = "Medicamento agregado a la receta.";
