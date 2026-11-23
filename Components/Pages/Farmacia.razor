@@ -176,9 +176,82 @@
         }
         else
         {
-            <div class="d-flex flex-column gap-3">
-                @foreach (var rec in RecetasSoapFiltradas)
-                {
+            var recetasLista = RecetasSoapFiltradas.ToList();
+            var recActiva = recetasLista.FirstOrDefault(x => x.IdOrden == _idOrdenRecetaSeleccionada)
+                            ?? recetasLista.FirstOrDefault();
+
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-primary">
+                        <i class="ri-file-list-3-line me-1"></i>Órdenes con receta SOAP
+                        <span class="badge bg-primary-subtle text-primary border ms-1">@recetasLista.Count</span>
+                    </h6>
+                    <small class="text-muted">Selecciona una orden para revisar sus medicamentos y mandarla a Facturación</small>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0 small">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">Orden</th>
+                                <th>Fecha</th>
+                                <th>Paciente</th>
+                                <th>Tutor</th>
+                                <th>Médico</th>
+                                <th class="text-center">Ítems</th>
+                                <th class="text-end">Total</th>
+                                <th>Estado</th>
+                                <th class="text-end pe-3">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ordRec in recetasLista)
+                            {
+                                bool esActiva = recActiva?.IdOrden == ordRec.IdOrden;
+                                <tr @key="ordRec.IdOrden"
+                                    class="@(esActiva ? "table-active" : "")"
+                                    style="cursor:pointer;"
+                                    @onclick="() => _idOrdenRecetaSeleccionada = ordRec.IdOrden">
+                                    <td class="ps-3 fw-bold text-primary">#@ordRec.IdOrden</td>
+                                    <td>@ordRec.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>
+                                        <strong>@ordRec.Paciente</strong>
+                                        <small class="text-muted ms-1">NHCL #@ordRec.Nhcl</small>
+                                    </td>
+                                    <td>@ordRec.Propietario</td>
+                                    <td>@ordRec.Medico</td>
+                                    <td class="text-center"><span class="badge bg-secondary-subtle text-dark border">@ordRec.Items.Count</span></td>
+                                    <td class="text-end fw-semibold">$@ordRec.TotalACobrar.ToString("N2")</td>
+                                    <td>
+                                        @if (ordRec.TieneEnFacturacion)
+                                        {
+                                            <span class="badge bg-info-subtle text-info-emphasis border">En Facturación</span>
+                                        }
+                                        else if (ordRec.TienePendientes)
+                                        {
+                                            <span class="badge bg-warning-subtle text-dark border">Por Entregar</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success-subtle text-success border">Completada</span>
+                                        }
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <button type="button"
+                                                class="btn btn-xs @(esActiva ? "btn-primary" : "btn-outline-primary") py-0 px-2"
+                                                @onclick:stopPropagation="true"
+                                                @onclick="() => _idOrdenRecetaSeleccionada = ordRec.IdOrden">
+                                            @(esActiva ? "Abierta" : "Abrir")
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @if (recActiva is { } rec)
+            {
                     <div @key="rec.IdOrden" class="card shadow-sm border-0 overflow-hidden">
                         <div class="card-header bg-light-subtle py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
                             <div>
@@ -250,23 +323,7 @@
                                                     {
                                                         <small class="text-muted d-block">Posología: @item.Indicaciones</small>
                                                     }
-                                                    @if (item.EstaEnCola)
-                                                    {
-                                                        <div class="mt-1">
-                                                            <select class="form-select form-select-sm py-0"
-                                                                    style="font-size:.76rem;min-height:27px;max-width:390px;"
-                                                                    value="@item.CodigoProductoInt"
-                                                                    @onchange="e => OnCambiarProductoInventarioReceta(item, e.Value)"
-                                                                    disabled="@_procesando">
-                                                                <option value="0">-- Sin producto en stock vinculado (Vincular con stock de @NombreSucursalActiva) --</option>
-                                                                @foreach (var prodStock in _stockDetallado)
-                                                                {
-                                                                    <option value="@prodStock.CodigoProducto">@prodStock.NombreProducto (@prodStock.CodigoPrincipal) · Físico: @prodStock.StockFisico.ToString("0.##") @prodStock.UnidadMedida · @prodStock.Bodega</option>
-                                                                }
-                                                            </select>
-                                                        </div>
-                                                    }
-                                                    else if (!string.IsNullOrWhiteSpace(item.Observaciones))
+                                                    @if (!item.EstaEnCola && !string.IsNullOrWhiteSpace(item.Observaciones))
                                                     {
                                                         <small class="text-success d-block">@item.Observaciones</small>
                                                     }
@@ -382,32 +439,17 @@
                                 <div class="d-flex flex-wrap align-items-center gap-2">
                                     <span class="fw-bold text-dark me-2">Total compra: <span class="text-primary fs-6">$@rec.TotalACobrar.ToString("N2")</span></span>
                                     <button type="button"
-                                            class="btn btn-sm btn-outline-secondary"
-                                            title="Ajustar las unidades reservadas en cola según los cambios hechos arriba sin cerrar aún la compra"
-                                            @onclick="() => ActualizarReservaRecetaSoapAsync(rec)"
-                                            disabled="@_procesando">
-                                        <i class="ri-save-3-line me-1"></i>Ajustar reserva en cola
-                                    </button>
-                                    <button type="button"
                                             class="btn btn-sm btn-primary fw-bold"
-                                            title="Enviar la selección a Nueva Factura manteniendo la reserva temporal; el stock solo se descargará al generar la factura"
+                                            title="Enviar la selección a Facturación manteniendo la reserva temporal; el stock solo se descargará al generar la factura"
                                             @onclick="() => EnviarRecetaAFacturacionAsync(rec)"
                                             disabled="@_procesando">
-                                        <i class="ri-bill-line me-1"></i>Enviar a Facturación (Mantener reserva)
-                                    </button>
-                                    <button type="button"
-                                            class="btn btn-sm btn-success fw-bold"
-                                            title="Completar la entrega directa y descargar del Kardex únicamente lo comprado"
-                                            @onclick="() => CompletarVentaRecetaSoapAsync(rec)"
-                                            disabled="@_procesando">
-                                        <i class="ri-check-double-line me-1"></i>Completar Compra Directa
+                                        <i class="ri-bill-line me-1"></i>Mandar a Facturación
                                     </button>
                                 </div>
                             </div>
                         }
                     </div>
-                }
-            </div>
+            }
         }
     }
     else if (_tabActiva == "cola")
@@ -930,6 +972,7 @@
 
     private string _filtroRecetasSoap = string.Empty;
     private string _estadoFiltroRecetasSoap = "PENDIENTE";
+    private int _idOrdenRecetaSeleccionada;
     private string _filtroCola = string.Empty;
     private string _estadoFiltroCola = "PENDIENTE";
     private string _moduloFiltroCola = "TODOS";
