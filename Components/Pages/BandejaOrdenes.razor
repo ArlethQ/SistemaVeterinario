@@ -498,7 +498,7 @@
                                     class="btn btn-xs btn-outline-primary bg-white py-0 px-2"
                                     style="font-size: 0.75rem;"
                                     onmousedown="event.preventDefault()"
-                                    onclick="@($"window.hosvetEditor.insertToken('editorConsentimientoHosp', '{campo.Token}')")"
+                                    @onclick="() => InsertarCampoConsentimientoAsync(campo.Token)"
                                     title="@($"Inserta {campo.Token} — se rellena automáticamente al procesar la plantilla")">
                                 + @campo.Etiqueta
                             </button>
@@ -1592,6 +1592,13 @@
             _inicializarEditorModal = false;
             await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorConsentimientoHosp", _htmlConsentimiento);
         }
+    }
+
+    private async Task InsertarCampoConsentimientoAsync(string token)
+    {
+        if (_ordenSeleccionada is null) return;
+        var campos = await ConsultaService.ObtenerCamposDocumentoAsync(_ordenSeleccionada.Nhcl);
+        await JS.InvokeVoidAsync("hosvetEditor.insertToken", "editorConsentimientoHosp", token, campos[token]);
     }
 
     private async Task CargarConsentimientoOrdenAsync(int idOrden, int nhcl)

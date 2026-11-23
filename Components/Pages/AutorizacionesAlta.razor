@@ -239,7 +239,7 @@
                                         class="btn btn-xs btn-outline-primary bg-white py-0 px-2"
                                         style="font-size: 0.75rem;"
                                         onmousedown="event.preventDefault()"
-                                        onclick="@($"window.hosvetEditor.insertToken('editorDocVisual', '{campo.Token}')")"
+                                        @onclick="() => InsertarCampoAsync(campo.Token)"
                                         title="@($"Inserta {campo.Token} — se rellena automáticamente con los datos del paciente/tutor")">
                                     + @campo.Etiqueta
                                 </button>
@@ -654,7 +654,7 @@
             }
             if (FormatoSeleccionadoId > 0 && Nhcl > 0)
             {
-                NuevaAutorizacion.DetalleHtml = await ConsultaService.ProcesarPlantillaConDatosPacienteAsync(FormatoSeleccionadoId, Nhcl);
+                NuevaAutorizacion.DetalleHtml = await ConsultaService.ProcesarPlantillaConDatosPacienteAsync(FormatoSeleccionadoId, Nhcl, conservarCampos: true);
             }
             else if (FormatoSeleccionadoId > 0 && plantilla != null)
             {
@@ -774,17 +774,19 @@
         }
     }
 
+    private async Task InsertarCampoAsync(string token)
+    {
+        if (Nhcl <= 0) return;
+        var campos = await ConsultaService.ObtenerCamposDocumentoAsync(Nhcl);
+        await JS.InvokeVoidAsync("hosvetEditor.insertToken", "editorDocVisual", token, campos[token]);
+    }
+
     private async Task GuardarPlantillaAsync()
     {
         try
         {
-            var html = await JS.InvokeAsync<string>("hosvetEditor.getContent", "editorDocVisual");
-            if (html != null)
-            {
-                NuevaAutorizacion.DetalleHtml = html;
-            }
-
-            if (string.IsNullOrWhiteSpace(NuevaAutorizacion.DetalleHtml))
+            var html = await JS.InvokeAsync<string>("hosvetEditor.getContent", "editorDocVisual", true);
+            if (string.IsNullOrWhiteSpace(html))
             {
                 MensajeAlerta = "El contenido de la plantilla no puede estar vacío.";
                 EsErrorAlerta = true;
@@ -798,7 +800,7 @@
             var ok = await ConsultaService.GuardarPlantillaFormatoAsync(
                 FormatoSeleccionadoId,
                 nombrePlantilla,
-                NuevaAutorizacion.DetalleHtml);
+                html);
 
             if (ok)
             {

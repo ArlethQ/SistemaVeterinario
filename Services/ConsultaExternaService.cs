@@ -56,7 +56,8 @@ public interface IConsultaExternaService
     Task<List<FormatoPlantillaDto>> ObtenerPlantillasFormatosAsync(string? tipo = null);
     Task<FormatoPlantillaDto?> ObtenerPlantillaHospitalizacionDefaultAsync();
     Task<FormatoPlantillaDto?> ObtenerPlantillaPorTipoONombreAsync(string tipo, string? nombreContiene = null);
-    Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl);
+    Task<Dictionary<string, string>> ObtenerCamposDocumentoAsync(int nhcl);
+    Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl, bool conservarCampos = false);
     Task<bool> GuardarPlantillaFormatoAsync(int formId, string nombre, string html);
     Task<(bool Ok, string? Mensaje)> EliminarPlantillaFormatoAsync(int formId);
     Task<List<AutorizacionClinicaDto>> ObtenerAutorizacionesPacienteAsync(int nhcl);
@@ -1706,7 +1707,7 @@ public class ConsultaExternaService : IConsultaExternaService
             .Replace("NUMRICA", "NUMÉRICA");
     }
 
-    public async Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl)
+    public async Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl, bool conservarCampos = false)
     {
         var plantilla = await _db.ExecuteScalarAsync<string?>(
             "SELECT CAST(form_archivoHtml AS VARCHAR(MAX)) FROM vt_formatos WHERE form_id = @FormId", new { FormId = formId });
@@ -1718,6 +1719,22 @@ public class ConsultaExternaService : IConsultaExternaService
 <p>Fecha: [FECHAPIE] | Teléfono: [TELEFONOPIE]</p>";
         }
 
+        var campos = await ObtenerCamposDocumentoAsync(nhcl);
+        var contenido = CorregirCaracteresEspeciales(plantilla)
+            .Replace("src=\"imagenes/", "src=\"/imagenes/")
+            .Replace("src='imagenes/", "src='/imagenes/");
+        return System.Text.RegularExpressions.Regex.Replace(contenido, @"\[[A-Z]+\]", match =>
+        {
+            if (!campos.TryGetValue(match.Value, out var valor)) return match.Value;
+            var texto = System.Net.WebUtility.HtmlEncode(valor);
+            return conservarCampos
+                ? $"<span data-hosvet-token=\"{match.Value}\" contenteditable=\"false\">{(texto.Length == 0 ? "—" : texto)}</span>"
+                : texto;
+        });
+    }
+
+    public async Task<Dictionary<string, string>> ObtenerCamposDocumentoAsync(int nhcl)
+    {
         var datos = await _db.QueryFirstOrDefaultAsync<dynamic>(@"
             SELECT TOP 1
                 RTRIM(ISNULL(p.mas_nombre, '')) AS Mascota,
@@ -1767,31 +1784,29 @@ public class ConsultaExternaService : IConsultaExternaService
             edadTexto = anios > 0 ? $"{anios}a {meses}m" : $"{meses} meses";
         }
 
-        string resultado = CorregirCaracteresEspeciales(plantilla)
-            .Replace("src=\"imagenes/", "src=\"/imagenes/")
-            .Replace("src='imagenes/", "src='/imagenes/")
-            .Replace("[NOMBRECLIENTE]", cliente)
-            .Replace("[CLIENTE]", cliente)
-            .Replace("[CEDULA]", cedula)
-            .Replace("[MASCOTA]", mascota)
-            .Replace("[NOMBREMASCOTA]", mascota)
-            .Replace("[ESPECIE]", especie)
-            .Replace("[RAZA]", raza)
-            .Replace("[SEXO]", sexo)
-            .Replace("[EDAD]", edadTexto)
-            .Replace("[USUARIO]", medico)
-            .Replace("[MEDICO]", medico)
-            .Replace("[NOMBREPIE]", cliente)
-            .Replace("[CEDULAPIE]", cedula)
-            .Replace("[TELEFONOPIE]", celular)
-            .Replace("[CONVENSIONALPIE]", telefono)
-            .Replace("[FECHAPIE]", hoy)
-            .Replace("[FECHADIA]", hoy)
-            .Replace("[FECHA]", hoy)
-            .Replace("[NHCL]", nhcl.ToString())
-            .Replace("[DIRECCION]", direccion);
-
-        return resultado;
+        return new Dictionary<string, string>
+        {
+            ["[NOMBRECLIENTE]"] = cliente,
+            ["[CLIENTE]"] = cliente,
+            ["[CEDULA]"] = cedula,
+            ["[MASCOTA]"] = mascota,
+            ["[NOMBREMASCOTA]"] = mascota,
+            ["[ESPECIE]"] = especie,
+            ["[RAZA]"] = raza,
+            ["[SEXO]"] = sexo,
+            ["[EDAD]"] = edadTexto,
+            ["[USUARIO]"] = medico,
+            ["[MEDICO]"] = medico,
+            ["[NOMBREPIE]"] = cliente,
+            ["[CEDULAPIE]"] = cedula,
+            ["[TELEFONOPIE]"] = celular,
+            ["[CONVENSIONALPIE]"] = telefono,
+            ["[FECHAPIE]"] = hoy,
+            ["[FECHADIA]"] = hoy,
+            ["[FECHA]"] = hoy,
+            ["[NHCL]"] = nhcl.ToString(),
+            ["[DIRECCION]"] = direccion,
+        };
     }
 
     public async Task<List<AutorizacionClinicaDto>> ObtenerAutorizacionesPacienteAsync(int nhcl)

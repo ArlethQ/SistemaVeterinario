@@ -405,9 +405,16 @@ document.addEventListener('paste', function (e) {
 // ============================================================================
 window.hosvetEditor = {
     activeImg: null,
-    getContent: function(elementId) {
+    getContent: function(elementId, asTemplate = false) {
         const el = document.getElementById(elementId);
-        return el ? el.innerHTML : "";
+        if (!el) return "";
+        const copy = el.cloneNode(true);
+        for (const field of copy.querySelectorAll("span[data-hosvet-token]")) {
+            field.replaceWith(document.createTextNode(asTemplate
+                ? field.dataset.hosvetToken
+                : field.textContent));
+        }
+        return copy.innerHTML;
     },
     setContent: function(elementId, html) {
         const el = document.getElementById(elementId);
@@ -456,15 +463,18 @@ window.hosvetEditor = {
             window.hosvetEditor.selectImage(img);
         }, 80);
     },
-    insertToken: function(elementId, token) {
+    insertToken: function(elementId, token, value) {
         const editor = document.getElementById(elementId);
         if (!editor || !token) return;
+        const node = document.createElement("span");
+        node.dataset.hosvetToken = token;
+        node.contentEditable = "false";
+        node.textContent = value || "—";
         editor.focus();
         const sel = window.getSelection();
         if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
             const range = sel.getRangeAt(0);
             range.deleteContents();
-            const node = document.createTextNode(token);
             range.insertNode(node);
             const newRange = document.createRange();
             newRange.setStartAfter(node);
@@ -472,7 +482,7 @@ window.hosvetEditor = {
             sel.removeAllRanges();
             sel.addRange(newRange);
         } else {
-            editor.appendChild(document.createTextNode(token));
+            editor.appendChild(node);
         }
     },
     initImageResizer: function(elementId) {
