@@ -97,15 +97,17 @@
     @if (!ModoModal)
     {
         <div hidden="@(!_verHistorial)">
-            <HistorialOrdenesSoap @key="Nhcl" @ref="_historialSoap" NhclActual="@(Paciente?.Nhcl ?? 0)" NombreActual="@Paciente?.PacienteNombre"
-                                 OrdenActual="@IdOrden" OrdenActualCerrada="@_ordenActualCerrada" OrdenesActuales="@_historialOrdenes" ErrorActual="@_errorHistorialOrdenes" RolUsuario="@Session.TipoUser" IdUsuario="@Session.IdUser" AbrirOrden="AbrirOrdenHistorialAsync" />
+            <HistorialOrdenesSoap @key="@(Paciente?.Nhcl ?? (HistorialNhcl ?? 0))" @ref="_historialSoap"
+                                  NhclActual="@(Paciente?.Nhcl ?? (HistorialNhcl ?? 0))"
+                                  NombreActual="@(Paciente?.PacienteNombre ?? (HistorialNhcl > 0 ? $"NHCL #{HistorialNhcl}" : null))"
+                                  OrdenActual="@IdOrden" OrdenActualCerrada="@_ordenActualCerrada" OrdenesActuales="@_historialOrdenes" ErrorActual="@_errorHistorialOrdenes" RolUsuario="@Session.TipoUser" IdUsuario="@Session.IdUser" AbrirOrden="AbrirOrdenHistorialAsync" />
         </div>
     }
 
     <div hidden="@_verHistorial">
     @if (!ModoModal)
     {
-        <ColaOrdenesClinicas @ref="_colaOrdenes" OrdenSeleccionada="@IdOrden" UnificarConTriaje="@(Session.TipoUser == 2)" />
+        <ColaOrdenesClinicas @ref="_colaOrdenes" OrdenSeleccionada="@IdOrden" UnificarConTriaje="@(Session.TipoUser == 2)" OnColaModificada="RefrescarHistorialTrasCambioColaAsync" />
     }
 
     @if (!string.IsNullOrEmpty(MensajeAlerta))
@@ -1123,6 +1125,7 @@
     [Parameter] public bool ModoModal { get; set; }
     [Parameter] public bool SoloLectura { get; set; }
     [SupplyParameterFromQuery(Name = "ver")] public bool? Ver { get; set; }
+    [SupplyParameterFromQuery(Name = "historialNhcl")] public int? HistorialNhcl { get; set; }
     private bool SoloVer => Ver == true || SoloLectura;
 
     private List<OrdenActivaResumenDto> _ordenesActivas = new();
@@ -1347,6 +1350,20 @@
             else
             {
                 Paciente = null;
+                _historialOrdenes = [];
+                _errorHistorialOrdenes = false;
+                if (HistorialNhcl is int nhclHist && nhclHist > 0)
+                {
+                    try
+                    {
+                        _historialOrdenes = await AdmisionService.ObtenerOrdenesPacienteAsync(nhclHist);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Error al cargar el historial de órdenes de la mascota {Nhcl}", nhclHist);
+                        _errorHistorialOrdenes = true;
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -1364,6 +1381,27 @@
 
     private async Task AbrirOrdenHistorialAsync((int IdOrden, int Nhcl, bool Editar) orden)
     {
+        if (orden.Editar && _colaOrdenes is not null)
+        {
+            var abierta = _colaOrdenes.ObtenerConsultaAbierta(orden.IdOrden);
+            if (abierta is null && FichaEditable && IdOrden > 0 && IdOrden != orden.IdOrden && _estadoOrden is ("A" or "E"))
+            {
+                abierta = new OrdenAtencionResumenDto
+                {
+                    IdOrden = IdOrden,
+                    Nhcl = Nhcl,
+                    Mascota = Paciente?.PacienteNombre ?? $"Orden #{IdOrden}"
+                };
+            }
+
+            if (abierta is not null)
+            {
+                _verHistorial = false;
+                _colaOrdenes.MostrarModalConsultaAbierta(abierta, orden.IdOrden);
+                return;
+            }
+        }
+
         if (!await GuardarCambiosSoapAsync()) return;
 
         _verHistorial = false;
@@ -1373,7 +1411,31 @@
     private async Task VerHistorialAsync()
     {
         if (await GuardarCambiosSoapAsync())
+        {
             _verHistorial = true;
+            await RefrescarHistorialTrasCambioColaAsync();
+        }
+    }
+
+    private async Task RefrescarHistorialTrasCambioColaAsync()
+    {
+        int nhclObjetivo = Paciente?.Nhcl ?? (Nhcl > 0 ? Nhcl : HistorialNhcl ?? 0);
+        if (nhclObjetivo > 0)
+        {
+            try
+            {
+                _historialOrdenes = await AdmisionService.ObtenerOrdenesPacienteAsync(nhclObjetivo);
+                _errorHistorialOrdenes = false;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Error al refrescar el historial de órdenes de la mascota {Nhcl}", nhclObjetivo);
+                _errorHistorialOrdenes = true;
+            }
+        }
+
+        if (_mascotaConsultada is not null && _historialSoap is not null)
+            await _historialSoap.VerOrdenesAsync(_mascotaConsultada);
     }
 
     private async Task SeleccionarTabAsync(int tab)

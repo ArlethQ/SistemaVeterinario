@@ -74,7 +74,12 @@
                                     @if (orden.PuedeAbrirCola)
                                     {
                                         <div class="d-flex flex-wrap align-items-center gap-1">
-                                            <a class="btn btn-sm btn-outline-primary" href="@RutaOrden(orden)">@(TextoAccion(orden)) <span class="visually-hidden">orden #@orden.IdOrden</span></a>
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-primary"
+                                                    disabled="@_procesandoCola"
+                                                    @onclick="() => IntentarAbrirOrdenAsync(orden)">
+                                                @(TextoAccion(orden)) <span class="visually-hidden">orden #@orden.IdOrden</span>
+                                            </button>
                                             @if (!Triaje && !EstaEnEspera(orden))
                                             {
                                                 <button type="button"
@@ -89,10 +94,10 @@
                                             {
                                                 <button type="button"
                                                         class="btn btn-sm btn-outline-danger"
-                                                        title="Eliminar / anular esta orden abierta de la cola"
+                                                        title="Anular esta orden de la cola"
                                                         disabled="@_procesandoCola"
-                                                        @onclick="() => EliminarOrdenColaAsync(orden)">
-                                                    Eliminar
+                                                        @onclick="() => AnularOrdenColaAsync(orden)">
+                                                    Anular
                                                 </button>
                                             }
                                         </div>
@@ -111,11 +116,49 @@
     }
 </section>
 
+@if (_ordenAbiertaBloqueo is { } abiertaModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true"
+         aria-labelledby="titulo-modal-consulta-abierta" style="background-color: rgba(15, 23, 42, 0.55); z-index: 1080;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow border-0">
+                <div class="modal-header bg-warning bg-opacity-25">
+                    <h5 class="modal-title fw-bold text-dark" id="titulo-modal-consulta-abierta">
+                        <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Consulta abierta en atención
+                    </h5>
+                    <button type="button" class="btn-close" aria-label="Cerrar" @onclick="CerrarModalConsultaAbierta"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">
+                        No puedes iniciar la consulta de la orden <strong>#@_idOrdenIntentada</strong> mientras tengas una ficha SOAP abierta sin guardar.
+                    </p>
+                    <div class="alert alert-light border small mb-0">
+                        <div><strong>Orden abierta:</strong> #@abiertaModal.IdOrden</div>
+                        <div><strong>Paciente:</strong> @abiertaModal.Mascota (NHCL #@abiertaModal.Nhcl)</div>
+                        <div class="text-muted mt-1">
+                            Guarda la ficha SOAP de esa orden (o pásala a <strong>En espera</strong> / anúlala) para poder abrir otra consulta.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CerrarModalConsultaAbierta">
+                        Entendido
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="IrAConsultaAbierta">
+                        Ir a la consulta abierta (#@abiertaModal.IdOrden)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public bool Triaje { get; set; }
     [Parameter] public bool AbrirEnSoap { get; set; }
     [Parameter] public bool UnificarConTriaje { get; set; }
     [Parameter] public int OrdenSeleccionada { get; set; }
+    [Parameter] public EventCallback OnColaModificada { get; set; }
 
     private readonly CancellationTokenSource _cancelacion = new();
     private readonly HashSet<(int Id, DateTime Asignacion)> _vistas = [];
@@ -176,6 +219,46 @@
     private bool _disposed;
     private bool _actualizando;
     private bool _procesandoCola;
+    private OrdenAtencionResumenDto? _ordenAbiertaBloqueo;
+    private int _idOrdenIntentada;
+
+    public OrdenAtencionResumenDto? ObtenerConsultaAbierta(int excluirOrdenId = 0) =>
+        Triaje ? null : _ordenes.FirstOrDefault(o => o.IdOrden != excluirOrdenId && !EstaEnEspera(o));
+
+    public void MostrarModalConsultaAbierta(OrdenAtencionResumenDto abierta, int idOrdenIntentada)
+    {
+        _ordenAbiertaBloqueo = abierta;
+        _idOrdenIntentada = idOrdenIntentada;
+        StateHasChanged();
+    }
+
+    private void CerrarModalConsultaAbierta()
+    {
+        _ordenAbiertaBloqueo = null;
+        _idOrdenIntentada = 0;
+    }
+
+    private void IrAConsultaAbierta()
+    {
+        if (_ordenAbiertaBloqueo is not { } abierta)
+            return;
+
+        var ruta = RutaOrden(abierta);
+        CerrarModalConsultaAbierta();
+        Nav.NavigateTo(ruta);
+    }
+
+    private void IntentarAbrirOrdenAsync(OrdenAtencionResumenDto orden)
+    {
+        if (!Triaje && EstaEnEspera(orden) && ObtenerConsultaAbierta(orden.IdOrden) is { } abierta)
+        {
+            _ordenAbiertaBloqueo = abierta;
+            _idOrdenIntentada = orden.IdOrden;
+            return;
+        }
+
+        Nav.NavigateTo(RutaOrden(orden));
+    }
 
     private async Task PasarOrdenAEsperaAsync(OrdenAtencionResumenDto orden)
     {
@@ -186,11 +269,13 @@
             if (await AdmisionService.PasarOrdenAEsperaAsync(orden.IdOrden))
             {
                 await ActualizarAsync(_cancelacion.Token, permitirSonido: false);
+                if (OnColaModificada.HasDelegate)
+                    await OnColaModificada.InvokeAsync();
                 if (OrdenSeleccionada == orden.IdOrden)
                 {
                     if (Session.OrdenActiva == orden.IdOrden)
                         Session.LimpiarOrdenActiva();
-                    Nav.NavigateTo("/consulta/fichamedica");
+                    Nav.NavigateTo(orden.Nhcl > 0 ? $"/consulta/fichamedica?historialNhcl={orden.Nhcl}" : "/consulta/fichamedica");
                 }
             }
         }
@@ -204,7 +289,7 @@
         }
     }
 
-    private async Task EliminarOrdenColaAsync(OrdenAtencionResumenDto orden)
+    private async Task AnularOrdenColaAsync(OrdenAtencionResumenDto orden)
     {
         if (_procesandoCola || _disposed) return;
         _procesandoCola = true;
@@ -213,17 +298,19 @@
             if (await AdmisionService.AnularOrdenAsync(orden.IdOrden, Session.IdUser > 0 ? Session.IdUser : 1))
             {
                 await ActualizarAsync(_cancelacion.Token, permitirSonido: false);
+                if (OnColaModificada.HasDelegate)
+                    await OnColaModificada.InvokeAsync();
                 if (OrdenSeleccionada == orden.IdOrden)
                 {
                     if (Session.OrdenActiva == orden.IdOrden)
                         Session.LimpiarOrdenActiva();
-                    Nav.NavigateTo("/consulta/fichamedica");
+                    Nav.NavigateTo(orden.Nhcl > 0 ? $"/consulta/fichamedica?historialNhcl={orden.Nhcl}" : "/consulta/fichamedica");
                 }
             }
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "No se pudo eliminar/anular la orden {IdOrden} de la cola.", orden.IdOrden);
+            Logger.LogWarning(ex, "No se pudo anular la orden {IdOrden} de la cola.", orden.IdOrden);
         }
         finally
         {
