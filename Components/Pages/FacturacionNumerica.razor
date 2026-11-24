@@ -836,6 +836,28 @@
             </div>
         </div>
 
+        @if (ordenFactura is not null && recetaOrdenFactura is not null)
+        {
+            <div class="mb-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                    <div class="small fw-semibold text-primary">
+                        <i class="ri-capsule-line me-1"></i>Receta médica de la orden (sincronizada con Farmacia)
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(mensajeRecetaOrdenFactura))
+                    {
+                        <span class="badge bg-info-subtle text-info-emphasis border">@mensajeRecetaOrdenFactura</span>
+                    }
+                </div>
+                <RecetaSoapFarmaciaCard Receta="@recetaOrdenFactura"
+                                        NombreSucursal="@NombreSucursalFactura"
+                                        Procesando="@cargandoRecetaOrdenFactura"
+                                        TextoBotonAccion="Aplicar cambios a Factura y Farmacia"
+                                        TituloBotonAccion="Guarda los cambios en Farmacia (manteniendo la reserva temporal) y actualiza el detalle de la factura"
+                                        OnAplicarReceta="rec => AplicarCambiosRecetaEnFacturaAsync(rec)"
+                                        OnCambioLocal="MarcarRecetaOrdenModificada" />
+            </div>
+        }
+
         @* =======================================================
             SECCIÓN DETALLE DE PRODUCTOS
         ======================================================= *@
@@ -2055,6 +2077,11 @@
     private List<OrdenProformaResumenDto> ordenesFactura = [];
     private OrdenProformaResumenDto? ordenFactura;
     private bool cargandoOrdenFactura;
+    private FarmaciaRecetaSoapOrdenDto? recetaOrdenFactura;
+    private bool cargandoRecetaOrdenFactura;
+    private bool recetaOrdenModificadaEnPanel;
+    private string? mensajeRecetaOrdenFactura;
+    private string NombreSucursalFactura => string.IsNullOrWhiteSpace(Session.LocalidadDescripcion) ? "Sucursal actual" : Session.LocalidadDescripcion;
     private bool usarPropietarioFactura;
     private int? codigoPropietarioFactura;
     private bool esConsumidorFinal;
@@ -2638,6 +2665,29 @@
         cliente.Estado = true;
         if (OrdenIdFactura is int idOrden && idOrden > 0 && !EsContextoBackOffice)
             await CargarOrdenesFacturaAsync(idOrden);
+        else if (PuedeBuscarOrdenesFactura)
+            await CargarOrdenesPendientesColaFacturaAsync();
+    }
+
+    private async Task CargarOrdenesPendientesColaFacturaAsync()
+    {
+        if (!PuedeBuscarOrdenesFactura) return;
+        var revision = ++revisionBusquedaOrdenFactura;
+        try
+        {
+            var encontradas = await AdmisionFacturacion.BuscarOrdenesParaFacturaAsync("");
+            if (revision != revisionBusquedaOrdenFactura || ordenFactura is not null)
+                return;
+
+            ordenesFactura = encontradas;
+            mensajeOrdenFactura = encontradas.Count == 0
+                ? "No hay órdenes pendientes en cola para facturar."
+                : null;
+        }
+        catch (Exception ex)
+        {
+            LoggerOrdenFactura.LogWarning(ex, "No se pudo cargar la cola de órdenes pendientes para factura.");
+        }
     }
 
     private async Task BuscarOrdenesFacturaAsync(string texto)
@@ -2649,7 +2699,11 @@
         ordenesFactura = [];
         mensajeOrdenFactura = null;
         if (string.IsNullOrWhiteSpace(filtro.TrimStart('#')))
+        {
+            if (ordenFactura is null)
+                await CargarOrdenesPendientesColaFacturaAsync();
             return;
+        }
 
         await Task.Delay(300);
         if (revision != revisionBusquedaOrdenFactura)
@@ -2715,6 +2769,7 @@
         {
             await CargarPropietarioOrdenEnFacturaAsync(orden);
             await CargarItemsOrdenEnFacturaAsync(orden);
+            await CargarRecetaOrdenFacturaAsync(orden.IdOrden);
         }
         finally
         {
@@ -2726,11 +2781,127 @@
     {
         revisionBusquedaOrdenFactura++;
         ordenesFactura = [];
+        recetaOrdenFactura = null;
+        recetaOrdenModificadaEnPanel = false;
+        mensajeRecetaOrdenFactura = null;
         RemoverItemsOrigenOrden();
         LimpiarPropietarioFactura();
         ordenFactura = null;
         mensajeOrdenFactura = null;
         textoBusquedaOrdenFactura = "";
+        AsegurarFilaVaciaDetalle();
+        CalcularTotalesFactura();
+        if (PuedeBuscarOrdenesFactura)
+            _ = CargarOrdenesPendientesColaFacturaAsync();
+    }
+
+    private void MarcarRecetaOrdenModificada()
+    {
+        recetaOrdenModificadaEnPanel = true;
+        mensajeRecetaOrdenFactura = "Tienes cambios sin aplicar en la receta.";
+    }
+
+    private async Task CargarRecetaOrdenFacturaAsync(int idOrden)
+    {
+        try
+        {
+            int localidad = Session.Localidad > 0 ? Session.Localidad : 1;
+            var recetas = await FarmaciaService.ObtenerRecetasSoapColaAsync(localidad, idOrden.ToString(), "PENDIENTE");
+            if (ordenFactura?.IdOrden != idOrden)
+                return;
+            recetaOrdenFactura = recetas.FirstOrDefault(x => x.IdOrden == idOrden);
+            recetaOrdenModificadaEnPanel = false;
+            mensajeRecetaOrdenFactura = null;
+        }
+        catch (Exception ex)
+        {
+            LoggerOrdenFactura.LogWarning(ex, "No se pudo cargar la receta SOAP de la orden #{IdOrden} en facturación.", idOrden);
+            recetaOrdenFactura = null;
+        }
+    }
+
+    private async Task AplicarCambiosRecetaEnFacturaAsync(FarmaciaRecetaSoapOrdenDto rec, bool mostrarMensaje = true)
+    {
+        if (cargandoRecetaOrdenFactura || ordenFactura?.IdOrden != rec.IdOrden)
+            return;
+
+        cargandoRecetaOrdenFactura = true;
+        try
+        {
+            int localidad = Session.Localidad > 0 ? Session.Localidad : 1;
+            var res = await FarmaciaService.EnviarRecetaAFacturacionAsync(
+                rec,
+                localidad,
+                Session.IdUser,
+                Session.NombreUsuario);
+            if (!res.Exito)
+            {
+                mensajeRecetaOrdenFactura = res.Mensaje;
+                if (mostrarMensaje)
+                    await AlertService.ShowWarningAsync(res.Mensaje, "Receta médica");
+                return;
+            }
+
+            await SincronizarItemsFarmaciaEnFacturaAsync(rec.IdOrden);
+            await CargarRecetaOrdenFacturaAsync(rec.IdOrden);
+            recetaOrdenModificadaEnPanel = false;
+            mensajeRecetaOrdenFactura = mostrarMensaje ? "Cambios guardados y sincronizados con Farmacia y Factura." : null;
+        }
+        catch (Exception ex)
+        {
+            LoggerOrdenFactura.LogWarning(ex, "Error al sincronizar cambios de receta #{IdOrden} en facturación.", rec.IdOrden);
+            mensajeRecetaOrdenFactura = "No se pudieron aplicar los cambios de la receta.";
+        }
+        finally
+        {
+            cargandoRecetaOrdenFactura = false;
+        }
+    }
+
+    private async Task SincronizarItemsFarmaciaEnFacturaAsync(int idOrden)
+    {
+        int localidad = Session.Localidad > 0 ? Session.Localidad : 1;
+        var items = await AdmisionFacturacion.ObtenerItemsParaFacturaOrdenAsync(idOrden, localidad);
+        if (ordenFactura?.IdOrden != idOrden)
+            return;
+
+        foreach (var d in origenesDetalleOrden.Where(kv => string.Equals(kv.Value.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Key).ToList())
+        {
+            detallesDto.Remove(d);
+            valoresTemporalesCantidad.Remove(d);
+            valoresTemporalesPrecio.Remove(d);
+            valoresTemporalesPorcentaje.Remove(d);
+            valoresTemporalesDescuentoMoneda.Remove(d);
+            modosDescuentoDetalle.Remove(d);
+            origenesDetalleOrden.Remove(d);
+        }
+
+        detallesDto.RemoveAll(EsDetalleFacturaVacio);
+        foreach (var item in items.Where(i => string.Equals(i.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase)))
+        {
+            var detalle = new DetalleFacturaDto
+            {
+                Codproducto = item.CodProducto,
+                Codprincipal = string.IsNullOrWhiteSpace(item.CodPrincipal) ? null : item.CodPrincipal,
+                Codauxiliar = string.IsNullOrWhiteSpace(item.CodAuxiliar) ? null : item.CodAuxiliar,
+                Cantidad = item.Cantidad > 0 ? item.Cantidad : 1m,
+                Descripcion = item.Descripcion,
+                Detalle = string.IsNullOrWhiteSpace(item.Detalle) ? null : item.Detalle,
+                PorcentajeDescuento = 0m,
+                Precio = item.PrecioUnitario,
+                Descuento = 0m,
+                Tarifa = (int)Math.Max(0m, decimal.Round(item.TarifaIva, 0, MidpointRounding.AwayFromZero)),
+                TarifaPersonalizada = false,
+                TarifaManual = null,
+                TipoProducto = item.TipoProducto ?? 0,
+                SubtipoProducto = item.SubtipoProducto,
+                CodigoImpuestoSri = string.IsNullOrWhiteSpace(item.CodigoImpuestoSri) ? "2" : item.CodigoImpuestoSri
+            };
+            detallesDto.Add(detalle);
+            modosDescuentoDetalle[detalle] = ModoDescuento.Porcentaje;
+            origenesDetalleOrden[detalle] = (item.Origen, item.SecOrigen);
+        }
+
         AsegurarFilaVaciaDetalle();
         CalcularTotalesFactura();
     }
@@ -2950,6 +3121,9 @@
         revisionBusquedaOrdenFactura++;
         ordenFactura = null;
         ordenesFactura = [];
+        recetaOrdenFactura = null;
+        recetaOrdenModificadaEnPanel = false;
+        mensajeRecetaOrdenFactura = null;
         textoBusquedaOrdenFactura = "";
         mensajeOrdenFactura = null;
         usarPropietarioFactura = false;
@@ -6140,6 +6314,9 @@
             await AlertService.ShowInfoAsync("Modo demo: la emision esta bloqueada para invitados.");
             return;
         }
+
+        if (ordenFactura is not null && recetaOrdenFactura is not null && recetaOrdenModificadaEnPanel)
+            await AplicarCambiosRecetaEnFacturaAsync(recetaOrdenFactura, mostrarMensaje: false);
 
         facturaSecuenciaPendiente = await FacturacionService.ObtenerFacturaPendienteSecuenciaAsync(
             currentUserId,

@@ -2571,6 +2571,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
               AND {AlcanceOrden}
               AND (@SoloProcesos = 0 OR f.med_requiereHospitalizacion = 1 OR f.med_pregunta = 'S')
               AND (@IdOrden IS NULL OR o.ordenAten_id = @IdOrden)
+              AND (@SoloProcesos = 1 OR @IdOrden IS NOT NULL OR @Filtro <> '' OR {exprNoFacturada} = 0)
               AND (@Desde IS NULL OR o.ordenAten_fecha >= @Desde)
               AND (@Hasta IS NULL OR o.ordenAten_fecha < @Hasta)
               AND (@Filtro = '' OR (@Numero IS NOT NULL AND (o.ordenAten_id = @Numero OR o.ordenAten_nhcl = @Numero))
