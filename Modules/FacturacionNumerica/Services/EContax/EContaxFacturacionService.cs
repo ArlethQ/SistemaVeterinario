@@ -221,7 +221,7 @@ public sealed class EContaxFacturacionService
     {
         var contexto = await _tenant.GetContextAsync(idUsuario);
         if (contexto.IdSucursal is not > 0)
-            throw new InvalidOperationException("El usuario de E-Contax no tiene una sucursal asignada.");
+            throw new InvalidOperationException("El usuario del módulo contable no tiene una sucursal asignada.");
 
         await using var db = await _dbFactory.CreateDbContextAsync();
         var cajas = await db.Caja
@@ -238,7 +238,7 @@ public sealed class EContaxFacturacionService
             throw new InvalidOperationException("La sucursal no tiene un punto de emisión configurado.");
 
         if (cajas.Count > 1)
-            throw new InvalidOperationException("La sucursal tiene más de un punto de emisión activo. Debe quedar uno solo para emitir en E-Contax.");
+            throw new InvalidOperationException("La sucursal tiene más de un punto de emisión activo. Debe quedar uno solo para emitir en e-ForVets.");
 
         return (contexto, cajas[0]);
     }

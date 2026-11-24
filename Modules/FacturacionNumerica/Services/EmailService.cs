@@ -2191,14 +2191,14 @@ Atentamente,
         var mensaje = new MimeMessage();
         mensaje.From.Add(new MailboxAddress(_nombreRemitente, _usuario));
         mensaje.To.Add(MailboxAddress.Parse(NormalizarEmail(emailDestino)));
-        mensaje.Subject = $"Invitación a {empresa} en E-Contax";
+        mensaje.Subject = $"Invitación a {empresa} en e-ForVets";
         mensaje.Body = new BodyBuilder
         {
-            HtmlBody = $"<p>Te invitaron a unirte a <strong>{WebUtility.HtmlEncode(empresa)}</strong> en E-Contax.</p>" +
-                $"<p>A partir de ahora tendrás acceso a la información de esta empresa dentro de E-Contax, limitado a la sucursal <strong>{WebUtility.HtmlEncode(sucursal)}</strong> y al rol <strong>{WebUtility.HtmlEncode(rol)}</strong>.</p>" +
+            HtmlBody = $"<p>Te invitaron a unirte a <strong>{WebUtility.HtmlEncode(empresa)}</strong> en e-ForVets.</p>" +
+                $"<p>A partir de ahora tendrás acceso a la información de esta empresa dentro del módulo contable, limitado a la sucursal <strong>{WebUtility.HtmlEncode(sucursal)}</strong> y al rol <strong>{WebUtility.HtmlEncode(rol)}</strong>.</p>" +
                 $"<p><a href='{WebUtility.HtmlEncode(url)}'>Ver invitación y aceptar acceso</a></p>" +
                 "<p>Usa la cuenta de E-Fact asociada a este correo. La invitación vence en 48 horas y se utiliza una sola vez.</p>",
-            TextBody = $"Te invitaron a unirte a {empresa} en E-Contax. Tendrás acceso a la información de la empresa en la sucursal {sucursal}, con el rol {rol}. Abre este enlace para aceptar: {url}. Vence en 48 horas."
+            TextBody = $"Te invitaron a unirte a {empresa} en e-ForVets. Tendrás acceso a la información de la empresa en la sucursal {sucursal}, con el rol {rol}. Abre este enlace para aceptar: {url}. Vence en 48 horas."
         }.ToMessageBody();
         await SendMessageAsync(mensaje);
     }

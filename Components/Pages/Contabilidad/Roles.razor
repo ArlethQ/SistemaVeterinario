@@ -5,9 +5,9 @@
 @using Simetric.Services.EContax
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
-<PageTitle>@(EsRutaUsuarios ? "Usuarios | E-Contax" : "Roles y permisos | E-Contax")</PageTitle>
+<PageTitle>@(EsRutaUsuarios ? "Usuarios | e-ForVets" : "Roles y permisos | e-ForVets")</PageTitle>
 <div class="security-shell">
-    <section class="security-hero"><div class="hero-copy"><span class="hero-eyebrow">@(EsRutaUsuarios ? "Equipo de la empresa" : "Control de accesos")</span><h2>@(EsRutaUsuarios ? "Usuarios E-Contax" : "Roles y permisos")</h2><p>@resumen?.Empresa.Nombre</p></div></section>
+    <section class="security-hero"><div class="hero-copy"><span class="hero-eyebrow">@(EsRutaUsuarios ? "Equipo de la empresa" : "Control de accesos")</span><h2>@(EsRutaUsuarios ? "Usuarios e-ForVets" : "Roles y permisos")</h2><p>@resumen?.Empresa.Nombre</p></div></section>
     @if (error is not null) { <div class="alert alert-danger" role="alert">@error</div> }
     @if (mensaje is not null) { <div class="alert alert-success" role="status">@mensaje</div> }
     @if (cargando) { <p>Cargando…</p> }
@@ -15,10 +15,10 @@
     {
         <section class="roles-panel invitation-preview">
             <div class="invitation-preview-head">
-                <div><span class="panel-kicker">Invitación de empresa</span><h3>Acceso a E-Contax de @invitacion.Empresa</h3></div>
+                <div><span class="panel-kicker">Invitación de empresa</span><h3>Acceso al módulo contable de @invitacion.Empresa</h3></div>
                 <span class="assignment-badge"><i class="bi bi-building-check"></i> Acceso por empresa</span>
             </div>
-            <p class="invitation-intro">Al aceptar, tu cuenta de E-Fact quedará vinculada a esta empresa. Desde ahora verás en E-Contax la información y operación habilitadas para la sucursal asignada.</p>
+            <p class="invitation-intro">Al aceptar, tu cuenta de E-Fact quedará vinculada a esta empresa. Desde ahora verás en e-ForVets la información y operación habilitadas para la sucursal asignada.</p>
             <div class="invitation-details">
                 <div class="invitation-detail"><span>Empresa</span><strong>@invitacion.Empresa</strong><small>@(invitacion.IdentificacionEmpresa ?? "Información empresarial")</small></div>
                 <div class="invitation-detail"><span>Sucursal</span><strong>@invitacion.Sucursal</strong><small>Alcance de tu acceso</small></div>
@@ -51,7 +51,7 @@
         {
             <div class="account-access-card">
                 <div class="account-access-head"><div><span class="panel-kicker">Contexto activo</span><strong>Información de la empresa</strong></div><span class="assignment-badge"><i class="bi bi-shield-check"></i> Acceso habilitado</span></div>
-                <p>Tu sesión está vinculada a la información de <strong>@resumen.Empresa.Nombre</strong>. En E-Contax solo verás los módulos y datos permitidos para tu alcance.</p>
+                <p>Tu sesión está vinculada a la información de <strong>@resumen.Empresa.Nombre</strong>. En e-ForVets solo verás los módulos y datos permitidos para tu alcance.</p>
                 <div class="account-access-grid">
                     <div><span>Empresa</span><strong>@resumen.Empresa.Nombre</strong></div>
                     <div><span>Sucursal</span><strong>@SucursalActual</strong></div>
@@ -240,7 +240,7 @@
             else if (tab == "Invitaciones")
             {
                 <h3>Invitar a una cuenta de E-Fact</h3>
-                <p>Envía el enlace al correo de una cuenta existente de E-Fact. Al aceptarlo, esa persona conservará su contraseña y verá en E-Contax la información de tu empresa, limitada a la sucursal y al rol asignados.</p>
+                <p>Envía el enlace al correo de una cuenta existente de E-Fact. Al aceptarlo, esa persona conservará su contraseña y verá en e-ForVets la información de tu empresa, limitada a la sucursal y al rol asignados.</p>
                 <label>Correo</label><input class="form-control mb-3" type="email" @bind="email" maxlength="320" />
                 @Asignacion()
                 <button class="primary-btn my-3" disabled="@ocupado" @onclick="InvitarAsync">Enviar invitación</button>

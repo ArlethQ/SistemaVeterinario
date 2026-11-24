@@ -229,7 +229,7 @@ public sealed class EContaxSeguridadService(IDbContextFactory<AppDbContext> fact
     public async Task ExigirAccionAsync(int userId, string ruta, EContaxAccion accion)
     {
         if (!await PuedeAccederRutaAsync(userId, ruta, accion))
-            throw new InvalidOperationException($"No tienes permiso para {accion.ToString().ToLowerInvariant()} en esta función de E-Contax.");
+            throw new InvalidOperationException($"No tienes permiso para {accion.ToString().ToLowerInvariant()} en esta función del módulo contable.");
     }
 
     public async Task<EContaxAccion> GetAccionesRutaAsync(int userId, string ruta)

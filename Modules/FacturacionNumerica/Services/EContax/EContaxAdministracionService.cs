@@ -26,7 +26,7 @@ public class EContaxAdministracionService
     private async Task ExigirAccionAsync(string ruta, EContaxAccion accion)
     {
         if (!await PuedeAccionAsync(ruta, accion))
-            throw new InvalidOperationException($"No tienes permiso para {accion.ToString().ToLowerInvariant()} en esta función de E-Contax.");
+            throw new InvalidOperationException($"No tienes permiso para {accion.ToString().ToLowerInvariant()} en esta función del módulo contable.");
     }
 
     private async Task<bool> PuedeAccionAsync(string ruta, EContaxAccion accion)

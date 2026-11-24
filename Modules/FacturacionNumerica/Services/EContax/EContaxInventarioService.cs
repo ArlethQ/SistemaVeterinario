@@ -627,7 +627,7 @@ public sealed class EContaxInventarioService
 
         var actor = await _tenant.GetContextAsync(context, userId);
         if (actor.IdEmpresa != factura.Idempresa.Value)
-            throw new InvalidOperationException("La nota de crédito no pertenece a la empresa activa de E-Contax.");
+            throw new InvalidOperationException("La nota de crédito no pertenece a la empresa activa del módulo contable.");
 
         var idSucursal = factura.Idsucursal ?? actor.IdSucursal;
         if (idSucursal is not > 0)
@@ -757,7 +757,7 @@ public sealed class EContaxInventarioService
 
         var actor = await _tenant.GetContextAsync(context, userId);
         if (actor.IdEmpresa != factura.Idempresa.Value)
-            throw new InvalidOperationException("La nota de crédito no pertenece a la empresa activa de E-Contax.");
+            throw new InvalidOperationException("La nota de crédito no pertenece a la empresa activa del módulo contable.");
 
         var referencia = $"NC:{secNotaCredito}";
         if (!await context.EContaxInventarioMovimientos.AnyAsync(x =>

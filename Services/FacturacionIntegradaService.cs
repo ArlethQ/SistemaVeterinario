@@ -49,7 +49,7 @@ public sealed class FacturacionIntegradaService(
                 ? estado.ListaParaConfigurarFacturas
                     ? "La base integrada está disponible."
                     : "La estructura existe, pero falta configurar emisor o caja."
-                : "Ejecute primero el script de integración de Facturación/EContax.";
+                : "Ejecute primero el script de integración de facturación y contabilidad.";
             return estado;
         }
         catch (Exception ex)

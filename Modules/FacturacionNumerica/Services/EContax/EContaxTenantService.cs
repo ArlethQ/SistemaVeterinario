@@ -56,9 +56,9 @@ public sealed class EContaxTenantService
         if (asignacion is not null)
         {
             if (asignacion.Suspendido)
-                throw new InvalidOperationException("Tu acceso a esta empresa de E-Contax está suspendido.");
+                throw new InvalidOperationException("Tu acceso a esta empresa del módulo contable está suspendido.");
             if (!asignacion.Estado)
-                throw new InvalidOperationException("La cuenta no está vinculada a una empresa de E-Contax.");
+                throw new InvalidOperationException("La cuenta no está vinculada a una empresa del módulo contable.");
             var empresa = await context.EContaxEmpresas
                 .SingleAsync(x => x.IdEmpresa == asignacion.IdEmpresa);
             if (!empresa.Estado)
@@ -152,7 +152,7 @@ public sealed class EContaxTenantService
         var sucursalId = contexto?.IdSucursal ?? await ResolveSucursalFallbackAsync(context, userId, ownerId, empresaId);
 
         if (empresaId <= 0)
-            throw new InvalidOperationException("El usuario no tiene empresa asignada para E-Contax.");
+            throw new InvalidOperationException("El usuario no tiene empresa asignada para e-ForVets.");
 
         await SincronizarLocalidadesVeterinariaSiAplicaAsync(context, empresaId, _configuration);
 

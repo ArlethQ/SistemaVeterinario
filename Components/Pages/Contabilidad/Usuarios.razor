@@ -29,16 +29,16 @@
     var usuariosVisibles = usuariosList.ToList();
 }
 
-<PageTitle>Usuarios | Numerica E-Contax</PageTitle>
+<PageTitle>Usuarios | e-ForVets</PageTitle>
 <link rel="stylesheet" href="/css/econtax-usuarios.css?v=20260529-usuarios" />
 
 <div class="users-shell" data-tour="usuarios.page">
     <section class="users-hero" data-tour="usuarios.hero">
         <div class="hero-copy">
             <span class="hero-eyebrow">Administracion de accesos</span>
-            <h2>Usuarios E-Contax</h2>
+            <h2>Usuarios de contabilidad</h2>
             <p>
-                Gestione usuarios y asigne roles propios de E-Contax sin mezclar la matriz de permisos de e-fact.
+                Gestione usuarios y asigne roles propios del módulo contable sin mezclar la matriz de permisos de e-fact.
             </p>
         </div>
 
@@ -62,7 +62,7 @@
             </article>
 
             <article class="summary-card">
-                <span class="summary-label">Con rol E-Contax</span>
+                <span class="summary-label">Con rol de contabilidad</span>
                 <strong>@UsuariosConRol</strong>
                 <small>Usuarios con un perfil de menu asignado.</small>
             </article>
@@ -127,7 +127,7 @@
                     <thead>
                         <tr>
                             <th>Usuario</th>
-                            <th>Rol E-Contax</th>
+                            <th>Rol de contabilidad</th>
                             <th>Empresa / sucursal</th>
                             <th>Seguridad</th>
                             <th class="text-end">Acciones</th>
@@ -163,12 +163,12 @@
                                     @if (TieneEContaxActivo(u.IdUsuario))
                                     {
                                         <span class="role-pill @(rol is null ? "system-badge" : string.Empty)">
-                                            @(rol?.NombreRol ?? "Sin rol E-Contax")
+                                            @(rol?.NombreRol ?? "Sin rol contable")
                                         </span>
                                     }
                                     else
                                     {
-                                        <span class="role-pill system-badge">Sin E-Contax activo</span>
+                                        <span class="role-pill system-badge">Sin acceso contable</span>
                                     }
                                 </td>
                                 <td>
@@ -391,7 +391,7 @@
                         {
                             <div class="form-note form-field-wide">
                                 <i class="bi bi-info-circle"></i>
-                                <span>Esta cuenta no tiene el servicio E-Contax activo. No se gestionan roles ni permisos.</span>
+                                <span>Esta cuenta no tiene acceso al módulo contable. No se gestionan roles ni permisos.</span>
                             </div>
                         }
 
@@ -512,7 +512,7 @@
                             </span>
                         }
                         <h4>@usuarioSeleccionado.Nombres @usuarioSeleccionado.Apellidos</h4>
-                        <span class="role-pill">@(GetRolAsignado(usuarioSeleccionado.IdUsuario)?.NombreRol ?? "Sin rol E-Contax")</span>
+                        <span class="role-pill">@(GetRolAsignado(usuarioSeleccionado.IdUsuario)?.NombreRol ?? "Sin rol contable")</span>
                         <span class="status-pill @(usuarioSeleccionado.Estado == true ? "status-pill-active" : "status-pill-inactive")">
                             @(usuarioSeleccionado.Estado == true ? "Usuario activo" : "Usuario inactivo")
                         </span>
@@ -1021,14 +1021,14 @@
                 menusRolSeleccionados.ToList());
             if (!menusGuardados)
             {
-                errorFormularioUsuario = "El usuario se guardo, pero no se pudieron actualizar los menus del rol E-Contax.";
+                errorFormularioUsuario = "El usuario se guardo, pero no se pudieron actualizar los menus del rol de contabilidad.";
                 return;
             }
 
             var rolGuardado = await AdministracionService.AsignarEContaxRolAUsuarioAsync(tempUser.IdUsuario, rolSeleccionadoId);
             if (!rolGuardado)
             {
-                errorFormularioUsuario = "El usuario se guardo, pero no se pudo asignar el rol E-Contax.";
+                errorFormularioUsuario = "El usuario se guardo, pero no se pudo asignar el rol de contabilidad.";
                 return;
             }
         }
@@ -1266,7 +1266,7 @@
 
         if (CuentaConGestionEContax && rolSeleccionadoId <= 0)
         {
-            return "Debes seleccionar un rol E-Contax para el usuario.";
+            return "Debes seleccionar un rol de contabilidad para el usuario.";
         }
 
         if (CuentaConGestionEContax && empresaSeleccionadaId <= 0)

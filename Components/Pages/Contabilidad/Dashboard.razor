@@ -8,14 +8,14 @@
 @inject SelectedAppServiceStateService SelectedAppServiceState
 @inject EContaxSeguridadService SeguridadEContax
 
-<PageTitle>Inicio | E-Contax</PageTitle>
+<PageTitle>Inicio | e-ForVets</PageTitle>
 
 @if (!string.IsNullOrWhiteSpace(errorCarga))
 {
     <div class="econtax-page">
         <section class="econtax-state econtax-state-error">
             <i class="bi bi-exclamation-octagon"></i>
-            <h3>No pudimos abrir E-Contax</h3>
+            <h3>No pudimos abrir e-ForVets</h3>
             <p>@errorCarga</p>
             <button type="button" class="primary-btn" @onclick="VolverServicios">
                 <i class="bi bi-grid"></i>
@@ -31,9 +31,8 @@ else
             <div class="section-head">
                 <div>
                     <span class="section-kicker">Centro de operaciones</span>
-                    <h3>Gestiona tu empresa desde E-Contax</h3>
+                    <h3>Gestiona tu empresa desde e-ForVets</h3>
                 </div>
-                <span class="section-chip">E-CONTAX</span>
             </div>
             <p class="summary-spotlight-copy">Accede a facturacion, catalogos y configuracion manteniendo la informacion separada por empresa y sucursal.</p>
             <div class="spotlight-grid">
@@ -94,7 +93,7 @@ else
                     }
                     @if (accesos.Contains(EContaxRoutes.AdministracionRoles))
                     {
-                        <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.AdministracionRoles)"><span><strong>Roles y permisos</strong><span>Plantillas de menús por rol E-Contax.</span></span><i class="ri-arrow-right-s-line"></i></button>
+                        <button class="compact-row compact-row-action" @onclick="() => Ir(EContaxRoutes.AdministracionRoles)"><span><strong>Roles y permisos</strong><span>Plantillas de menús por rol de contabilidad.</span></span><i class="ri-arrow-right-s-line"></i></button>
                     }
                     @if (accesos.Contains(EContaxRoutes.Profile))
                     {
@@ -152,7 +151,7 @@ else
         }
         catch (Exception ex)
         {
-            errorCarga = $"No fue posible cargar los datos de E-Contax: {ex.Message}";
+            errorCarga = $"No fue posible cargar los datos del módulo contable: {ex.Message}";
         }
     }
 

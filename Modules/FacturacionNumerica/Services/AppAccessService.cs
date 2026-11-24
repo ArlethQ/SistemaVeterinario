@@ -339,7 +339,7 @@ public sealed class AppAccessService
                     (miembro.Empresa.IdTitular != userId && miembro.Sucursal?.Estado != true))
                     return new() { HasAccess = false, StatusText = "Sin vínculo activo", DenialReason = "La cuenta no tiene empresa y sucursal activas." };
                 if (miembro.Empresa.IdTitular == userId || miembro.EsAdminSucursal)
-                    return new() { HasAccess = true, HasActiveSubscription = true, StatusText = "Acceso por administración de E-Contax" };
+                    return new() { HasAccess = true, HasActiveSubscription = true, StatusText = "Acceso por administración contable" };
                 userId = miembro.Empresa.IdTitular ?? 0;
                 isSuperAdmin = false;
             }
@@ -679,7 +679,7 @@ END;
 MERGE [dbo].[APP_SERVICIOS] AS target
 USING (VALUES
     (N'e-fact',     N'E-FACT',     N'Facturacion electronica con acceso libre para todos los usuarios registrados.', N'/dashboard',        CAST(0 AS bit), CAST(1 AS bit), 1, N'ri-file-chart-line',  N'#0d6efd'),
-    (N'e-conta',    N'E-CONTAX',   N'Contabilidad y control financiero habilitado por suscripcion.',                 N'/e-contax',         CAST(1 AS bit), CAST(1 AS bit), 3, N'ri-line-chart-line',  N'#00A896'),
+    (N'e-conta',    N'Contabilidad',   N'Contabilidad y control financiero habilitado por suscripcion.',                 N'/contabilidad',         CAST(1 AS bit), CAST(1 AS bit), 3, N'ri-line-chart-line',  N'#00A896'),
     (N'e-declara',  N'E-DECLARA',  N'Declaraciones tributarias con acceso segun plan activo.',                       N'/e-declara',        CAST(1 AS bit), CAST(1 AS bit), 4, N'ri-government-line',  N'#fd7e14'),
     (N'e-people',   N'E-PEOPLE',   N'Gestion de talento humano y colaboradores bajo suscripcion.',                  N'/servicios/e-people',CAST(1 AS bit), CAST(1 AS bit), 5, N'ri-team-line',        N'#6f42c1'),
     (N'e-sign',     N'E-Rúbrica',   N'E-Rúbrica para firma electronica y certificado digital de documentos en linea.', N'/e-rubrica',            CAST(0 AS bit), CAST(1 AS bit), 2, N'ri-key-2-line',        N'#2E7D32'),

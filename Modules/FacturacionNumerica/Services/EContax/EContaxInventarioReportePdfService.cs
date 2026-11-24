@@ -71,7 +71,7 @@ public sealed class EContaxInventarioReportePdfService : IEContaxInventarioRepor
                         }
                     });
                 });
-                page.Footer().AlignRight().Text("E-Contax · Inventarios");
+                page.Footer().AlignRight().Text("e-ForVets · Inventarios");
             });
         }).GeneratePdf();
     }

@@ -381,7 +381,7 @@ public sealed class FacturaCompraManualService
             Autorizado = "1",
             EsDeducible = modelo.EsDeducible,
             Mensaje = string.IsNullOrWhiteSpace(modelo.Observacion)
-                ? "Factura de compra registrada en E-Contax."
+                ? "Factura de compra registrada en e-ForVets."
                 : modelo.Observacion.Trim(),
             Serie = serieDigitos,
             TipoPago = string.IsNullOrWhiteSpace(modelo.FormaPago) ? "20" : modelo.FormaPago,
@@ -419,7 +419,7 @@ public sealed class FacturaCompraManualService
                 PorImp = (int)detalle.Tarifa,
                 Tarifa = (int)detalle.Tarifa,
                 Inventariado = false,
-                Observacion = string.IsNullOrWhiteSpace(detalle.Detalle) ? "Factura de compra E-Contax" : detalle.Detalle.Trim()
+                Observacion = string.IsNullOrWhiteSpace(detalle.Detalle) ? "Factura de compra" : detalle.Detalle.Trim()
             });
         }
 
@@ -674,7 +674,7 @@ public sealed class FacturaCompraManualService
         compra.EstadoPago = "ANULADO";
         compra.ValorApagar = 0m;
         compra.FechaCancelado = null;
-        compra.Mensaje = "Factura de compra anulada en E-Contax.";
+        compra.Mensaje = "Factura de compra anulada en e-ForVets.";
         await context.SaveChangesAsync();
         return true;
     }

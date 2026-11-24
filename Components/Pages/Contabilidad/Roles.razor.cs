@@ -79,7 +79,7 @@ public partial class Roles
     {
         await Seguridad.AceptarAsync(userId, Codigo!);
         codigoProcesado = Codigo;
-    }, $"Invitación aceptada. Desde ahora tienes acceso a E-Contax de {invitacion?.Empresa ?? "la empresa"} y a la información habilitada para tu sucursal.");
+    }, $"Invitación aceptada. Desde ahora tienes acceso al módulo contable de {invitacion?.Empresa ?? "la empresa"} y a la información habilitada para tu sucursal.");
 
     private async Task CargarAsync()
     {
@@ -250,7 +250,7 @@ public partial class Roles
     private Task CancelarAsync(int id) => EjecutarAsync(() => Seguridad.CancelarInvitacionAsync(userId, id), "Invitación cancelada.");
     private Task TransferirAsync() => EjecutarAsync(() => Seguridad.TransferirAsync(userId, nuevoTitular), "Titularidad transferida. Puedes abandonar la empresa.");
     private Task CambiarSuspensionAsync(bool suspendido) => EjecutarAsync(() => Seguridad.CambiarSuspensionAsync(userId, usuarioEditando, suspendido),
-        suspendido ? "Acceso a E-Contax suspendido." : "Acceso a E-Contax reactivado.");
+        suspendido ? "Acceso al módulo contable suspendido." : "Acceso al módulo contable reactivado.");
     private Task DesvincularAsync() => EjecutarAsync(async () =>
     {
         await Seguridad.DesvincularUsuarioAsync(userId, usuarioEditando);
