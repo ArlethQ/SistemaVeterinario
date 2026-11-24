@@ -795,28 +795,6 @@
             </div>
         </div>
 
-        @if (ordenFactura is not null && recetaOrdenFactura is not null)
-        {
-            <div class="mb-4">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                    <div class="small fw-semibold text-primary">
-                        <i class="ri-capsule-line me-1"></i>Receta médica de la orden (sincronizada con Farmacia)
-                    </div>
-                    @if (!string.IsNullOrWhiteSpace(mensajeRecetaOrdenFactura))
-                    {
-                        <span class="badge bg-info-subtle text-info-emphasis border">@mensajeRecetaOrdenFactura</span>
-                    }
-                </div>
-                <RecetaSoapFarmaciaCard Receta="@recetaOrdenFactura"
-                                        NombreSucursal="@NombreSucursalFactura"
-                                        Procesando="@cargandoRecetaOrdenFactura"
-                                        TextoBotonAccion="Aplicar cambios a Factura y Farmacia"
-                                        TituloBotonAccion="Guarda los cambios en Farmacia (manteniendo la reserva temporal) y actualiza el detalle de la factura"
-                                        OnAplicarReceta="rec => AplicarCambiosRecetaEnFacturaAsync(rec)"
-                                        OnCambioLocal="MarcarRecetaOrdenModificada" />
-            </div>
-        }
-
         @* =======================================================
             SECCIÓN DETALLE DE PRODUCTOS
         ======================================================= *@
@@ -840,15 +818,15 @@
                         <thead class="n-table-header bg-light">
                             <tr>
                                 <th style="width: 68px; max-width: 78px;">Cód.</th>
-                                <th style="min-width: 190px;">Concepto</th>
-                                <th class="text-center" style="width: 185px;">Cant.</th>
-                                <th class="text-end" style="width: 92px;">Precio</th>
-                                <th class="text-center" style="width: 124px;">Descuento</th>
-                                <th class="text-end" style="width: 88px;" title="Descuento aplicado">Desc. apl.</th>
-                                <th class="text-end" style="width: 92px;">Base Imp.</th>
-                                <th class="text-center" style="width: 78px;">IVA</th>
-                                <th class="text-end" style="width: 96px;">Total</th>
-                                <th class="text-center" style="width: 40px;"></th>
+                                <th style="min-width: 245px; width: 28%;">Concepto</th>
+                                <th class="text-center" style="width: 175px;">Cant.</th>
+                                <th class="text-end" style="width: 76px;">Precio</th>
+                                <th class="text-center" style="width: 112px;">Descuento</th>
+                                <th class="text-end text-nowrap" style="width: 66px;" title="Descuento aplicado">Desc. apl.</th>
+                                <th class="text-end text-nowrap" style="width: 78px;">Base Imp.</th>
+                                <th class="text-center" style="width: 72px;">IVA</th>
+                                <th class="text-end" style="width: 82px;">Total</th>
+                                <th class="text-center" style="width: 38px;"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -882,17 +860,18 @@
                                                    placeholder="Cód." />
                                         }
                                     </td>
-                                    <td class="position-relative">
-                                        <input type="text"
-                                               class="n-input-sm n-detail-concept-input"
-                                               @bind="d.Descripcion"
-                                               @bind:event="oninput"
-                                               @bind:after="@(() => OnConceptoDetalleEditadoAsync(d))"
-                                               @onfocus="@(() => MostrarSugerenciasDetalleProductoAsync(d))"
-                                               @onblur="@(() => OcultarSugerenciasDetalleProductoAsync(d))"
-                                               @onkeydown="@((KeyboardEventArgs e) => OnKeyDownConceptoDetalleAsync(d, e))"
-                                               maxlength="150"
-                                               placeholder="@(EsDetalleFacturaVacio(d) ? "Buscar producto o servicio" : "Concepto o nombre manual")" />
+                                    <td class="position-relative" style="min-width: 245px; white-space: normal;">
+                                        <textarea class="n-input-sm n-detail-concept-input"
+                                                  rows="@(EsDetalleFacturaVacio(d) ? 1 : 2)"
+                                                  style="resize: none; white-space: normal; word-break: break-word; overflow-wrap: anywhere; line-height: 1.25; height: auto; min-height: @(EsDetalleFacturaVacio(d) ? "2rem" : "2.5rem");"
+                                                  @bind="d.Descripcion"
+                                                  @bind:event="oninput"
+                                                  @bind:after="@(() => OnConceptoDetalleEditadoAsync(d))"
+                                                  @onfocus="@(() => MostrarSugerenciasDetalleProductoAsync(d))"
+                                                  @onblur="@(() => OcultarSugerenciasDetalleProductoAsync(d))"
+                                                  @onkeydown="@((KeyboardEventArgs e) => OnKeyDownConceptoDetalleAsync(d, e))"
+                                                  maxlength="150"
+                                                  placeholder="@(EsDetalleFacturaVacio(d) ? "Buscar producto o servicio" : "Concepto o nombre manual")"></textarea>
                                         @if (ReferenceEquals(filaBusquedaProductoActiva, d) && sugerenciasProductos != null && sugerenciasProductos.Any())
                                         {
                                             <ul class="n-suggestions n-suggestions-inline n-detail-suggestions-floating">
