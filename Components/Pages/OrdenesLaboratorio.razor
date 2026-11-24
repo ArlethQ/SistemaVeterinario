@@ -15,7 +15,7 @@
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-white p-3 rounded shadow-sm border-start border-4 border-primary">
         <div>
             <h4 class="mb-0 text-primary fw-bold">
-                <i class="bi bi-eyedropper me-2"></i>Órdenes y Despacho de Laboratorio Clínico (16 Áreas)
+                <i class="bi bi-eyedropper me-2"></i>Órdenes y Despacho de Laboratorio Clínico
             </h4>
             <small class="text-muted">Solicitud y procesamiento de pruebas de laboratorio clínico por especialidad diagnóstica.</small>
         </div>
@@ -78,25 +78,21 @@
 
     <div class="row g-3">
         <!-- Columna Izquierda: Selector de los 16 Grupos de Laboratorio y Catálogo -->
-        <div class="col-lg-5">
+        <div class="col-lg-4">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-grid-3x3-gap-fill me-1"></i>Catálogo por Áreas de Laboratorio Clínico</span>
                     <span class="badge bg-primary">@CatalogoPruebas.Count pruebas</span>
                 </div>
                 <div class="card-body">
-                    <!-- Botonera de los 16 Grupos Oficiales (Reemplaza rbt_hemato .. rbt_drogas) -->
-                    <div class="d-flex flex-wrap gap-1 mb-3">
-                        @foreach (var g in GruposLaboratorio)
+                    <label class="form-label small fw-semibold mb-1" for="categoria-OrdenesLaboratorio">Categoría</label>
+                    <select id="categoria-OrdenesLaboratorio" class="form-select form-select-sm mb-2" @bind="GrupoSeleccionado" @bind:after="CambiarCategoriaAsync">
+                        <option value="">Seleccione una categoría</option>
+                        @foreach (var grupo in GruposLaboratorio)
                         {
-                            <button type="button"
-                                    class="btn btn-xs @(GrupoSeleccionado == g.GrupoId ? "btn-primary fw-bold" : "btn-outline-secondary") py-1 px-2"
-                                    style="font-size: 0.75rem;"
-                                    @onclick="() => SeleccionarGrupoAsync(g.GrupoId)">
-                                @g.NombreGrupo
-                            </button>
+                            <option value="@grupo.GrupoId">@grupo.NombreGrupo</option>
                         }
-                    </div>
+                    </select>
 
                     <!-- Buscador por texto -->
                     <div class="input-group input-group-sm mb-2">
@@ -120,9 +116,9 @@
 
                     <!-- Lista de Selección Múltiple de Pruebas -->
                     <div class="border rounded p-2 bg-light mb-2" style="max-height: 310px; overflow-y: auto;">
-                        @if (!CatalogoPruebas.Any())
+                        @if (CatalogoPruebas.Count == 0)
                         {
-                            <div class="text-center text-muted py-3 small">No se encontraron pruebas en este grupo.</div>
+                            <div class="text-center text-muted py-3 small">@(!GrupoSeleccionado.HasValue ? "Seleccione una categoría para ver sus pruebas." : "No se encontraron pruebas para esta categoría.")</div>
                         }
                         @foreach (var p in CatalogoPruebas)
                         {
@@ -138,7 +134,7 @@
                         }
                     </div>
 
-                    <button class="btn btn-sm btn-primary w-100" @onclick="AgregarPruebasSeleccionadasAsync">
+                    <button class="btn btn-sm btn-primary w-100" @onclick="AgregarPruebasSeleccionadasAsync" disabled="@(!CatalogoPruebas.Any(x => x.Seleccionado))">
                         <i class="bi bi-plus-circle-fill me-1"></i>Agregar Pruebas Seleccionadas a la Orden (@CatalogoPruebas.Count(x => x.Seleccionado))
                     </button>
                 </div>
@@ -146,7 +142,7 @@
         </div>
 
         <!-- Columna Derecha: Pruebas solicitadas en la orden y facturación -->
-        <div class="col-lg-7">
+        <div class="col-lg-8">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-list-check me-1"></i>Pruebas de Laboratorio Solicitadas en la Orden #@IdOrden</span>
@@ -228,7 +224,7 @@
 
     private int IdOrdenInput { get; set; }
     private int NhclInput { get; set; }
-    private int GrupoSeleccionado { get; set; } = 1;
+    private int? GrupoSeleccionado { get; set; }
     private string FiltroTexto { get; set; } = string.Empty;
     private string ObservacionMuestraDefault { get; set; } = string.Empty;
     private string PrioridadDefault { get; set; } = "Rutina";
@@ -251,11 +247,6 @@
         if (!GruposLaboratorio.Any())
         {
             GruposLaboratorio = await LabService.ObtenerSubcategoriasLaboratorioAsync();
-            GrupoSeleccionado = GruposLaboratorio.FirstOrDefault(g => g.GrupoId > 0)?.GrupoId ?? 0;
-        }
-        else if (!GruposLaboratorio.Any(g => g.GrupoId == GrupoSeleccionado))
-        {
-            GrupoSeleccionado = GruposLaboratorio.FirstOrDefault(g => g.GrupoId > 0)?.GrupoId ?? 0;
         }
 
         OrdenesActivas = await KardexService.ObtenerOrdenesActivasAsync();
@@ -327,15 +318,23 @@
         }
     }
 
-    private async Task SeleccionarGrupoAsync(int grupoId)
+    private int _versionCatalogo;
+
+    private Task CambiarCategoriaAsync()
     {
-        GrupoSeleccionado = grupoId;
-        await CargarCatalogoAsync();
+        CatalogoPruebas = new();
+        return CargarCatalogoAsync();
     }
 
     private async Task CargarCatalogoAsync()
     {
-        CatalogoPruebas = await LabService.ObtenerCatalogoLaboratorioAsync(GrupoSeleccionado, FiltroTexto, Session.Apostrofe);
+        var version = ++_versionCatalogo;
+        List<PruebaCatalogoDto> resultados = GrupoSeleccionado is int grupo
+            ? await LabService.ObtenerCatalogoLaboratorioAsync(grupo, FiltroTexto, Session.Apostrofe)
+            : [];
+
+        if (version == _versionCatalogo)
+            CatalogoPruebas = resultados;
     }
 
     private async Task CargarDatosOrdenAsync()
