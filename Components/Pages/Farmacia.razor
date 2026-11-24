@@ -294,7 +294,7 @@
                                             <th>Bodega (@NombreSucursalActiva)</th>
                                             <th class="text-center">Recetado</th>
                                             <th>Disponibilidad en Stock (@NombreSucursalActiva)</th>
-                                            <th class="text-center" style="width:185px;">Cant. a Vender</th>
+                                            <th class="text-center" style="width:215px;">Cant. a Vender</th>
                                             <th class="text-end">P. Unit.</th>
                                             <th class="text-end pe-3">Subtotal</th>
                                         </tr>
@@ -383,19 +383,20 @@
                                                     {
                                                         @if (item.FactorConversion > 1m && item.TieneProductoEnCatalogo)
                                                         {
-                                                            <div class="input-group input-group-sm">
+                                                            <div class="input-group input-group-sm flex-nowrap">
                                                                 <input type="number"
                                                                        min="0"
                                                                        max="@item.MaximoVisibleVenta"
                                                                        step="1"
+                                                                       style="min-width:58px;"
                                                                        class="form-control text-center fw-bold @(item.SeVende ? "text-primary" : "text-muted")"
                                                                        @bind="item.CantidadVisibleVenta"
                                                                        disabled="@(!item.SeVende || _procesando)" />
-                                                                <select class="form-select px-1"
-                                                                        style="max-width:74px;font-size:.72rem;"
+                                                                <select class="form-select ps-2 pe-4"
+                                                                        style="min-width:96px;width:auto;font-size:.76rem;"
                                                                         @bind="item.VenderPorPaquete"
                                                                         disabled="@(!item.SeVende || _procesando)">
-                                                                    <option value="true">Paq.</option>
+                                                                    <option value="true">Paquete</option>
                                                                     <option value="false">@item.UnidadMedida</option>
                                                                 </select>
                                                             </div>

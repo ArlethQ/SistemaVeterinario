@@ -1053,8 +1053,8 @@ public class FarmaciaService : IFarmaciaService
                 }
 
                 it.VenderPorPaquete = it.FactorConversion > 1m &&
-                    it.CantidadAVender >= it.FactorConversion &&
-                    (it.CantidadAVender % it.FactorConversion) == 0m;
+                    !string.IsNullOrWhiteSpace(it.CantidadLetras) &&
+                    it.CantidadLetras.Contains("PAQUETE", StringComparison.OrdinalIgnoreCase);
             }
 
             var ordenes = items
