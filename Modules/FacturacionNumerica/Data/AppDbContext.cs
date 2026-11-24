@@ -1183,6 +1183,7 @@ namespace Simetric.Data
                 entity.Property(e => e.Observacion).HasColumnName("OBSERVACION");
                 entity.Property(e => e.Tipocompravena).HasColumnName("TIPOCOMPRAVENA");
                 entity.Property(e => e.Inventario).HasColumnName("INVENTARIO");
+                entity.Property(e => e.SujetoFiscalizacion).HasColumnName("SUJETO_FISCALIZACION").HasDefaultValue(false);
 
                 entity.Property(e => e.Idsubtipo).HasColumnName("IDSUBTIPO");
 

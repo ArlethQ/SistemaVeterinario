@@ -1,0 +1,713 @@
+@page "/contabilidad/inventarios/fiscalizacion"
+@using System.Globalization
+@using ClosedXML.Excel
+@using Microsoft.EntityFrameworkCore
+@using Simetric.Data
+@using Simetric.Models
+@using Simetric.Models.EContax
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject HosvetKardex.Web.Services.SessionStateService Session
+@inject IJSRuntime JS
+
+<PageTitle>Productos sujetos a fiscalización | e-ForVets</PageTitle>
+
+<div class="container-fluid py-3 fisc-shell">
+    <!-- Encabezado -->
+    <div class="card border-0 shadow-sm mb-3 fisc-hero">
+        <div class="card-body py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <div class="text-uppercase fw-semibold small text-white-50 mb-1" style="letter-spacing:0.06em;">
+                    Inventarios · Control regulatorio ARCSA
+                </div>
+                <h3 class="mb-1 fw-bold text-white d-flex align-items-center gap-2">
+                    <i class="bi bi-shield-lock-fill"></i>
+                    <span>Productos sujetos a fiscalización</span>
+                </h3>
+                <p class="mb-0 small text-white-50">
+                    Inventario vigente y Kardex completo de entradas y salidas para el informe mensual de medicamentos controlados.
+                </p>
+            </div>
+            <div class="d-flex flex-wrap gap-2 no-print">
+                <button type="button" class="btn btn-sm btn-light fw-semibold text-success" @onclick="ExportarExcelAsync" disabled="@(_cargando || _resumenProductos.Count == 0)">
+                    <i class="bi bi-file-earmark-excel-fill me-1"></i>Exportar Excel Mensual
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light fw-semibold" @onclick="ImprimirAsync">
+                    <i class="bi bi-printer me-1"></i>Imprimir / PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros del período y consulta -->
+    <div class="card border-0 shadow-sm mb-3 no-print">
+        <div class="card-body py-2 px-3">
+            <div class="row g-2 align-items-end small">
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold text-muted">Mes del informe</label>
+                    <input type="month" class="form-control form-control-sm" value="@_mesTexto" @onchange="OnMesChangedAsync" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold text-muted">Desde</label>
+                    <input type="date" class="form-control form-control-sm" @bind="_desde" @bind:after="CargarDatosAsync" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold text-muted">Hasta</label>
+                    <input type="date" class="form-control form-control-sm" @bind="_hasta" @bind:after="CargarDatosAsync" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold text-muted">Sucursal</label>
+                    <select class="form-select form-select-sm" @bind="_idSucursalFiltro" @bind:after="CargarDatosAsync">
+                        <option value="0">Todas las sucursales</option>
+                        @foreach (var s in _sucursales)
+                        {
+                            <option value="@s.IdSucursal">@s.Nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1 fw-semibold text-muted">Buscar producto / código</label>
+                    <input type="text" class="form-control form-control-sm" placeholder="Ej. Ketamina, Tramadol, HV01..."
+                           @bind="_filtroTexto" @bind:event="oninput" />
+                </div>
+                <div class="col-md-1 d-grid">
+                    <button type="button" class="btn btn-sm btn-primary" @onclick="CargarDatosAsync" disabled="@_cargando">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-danger py-2 small mb-3">@_error</div>
+    }
+
+    <!-- KPIs -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2 px-3">
+                    <div class="text-muted small fw-semibold"><i class="bi bi-capsule me-1 text-primary"></i>Productos fiscalizados</div>
+                    <div class="fs-4 fw-bold text-dark mt-1">@ResumenFiltrado.Count</div>
+                    <div class="small text-muted">@ResumenFiltrado.Count(x => x.StockActual > 0) con stock vigente</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2 px-3">
+                    <div class="text-muted small fw-semibold"><i class="bi bi-box-seam me-1 text-info"></i>Existencia total actual</div>
+                    <div class="fs-4 fw-bold text-dark mt-1">@ResumenFiltrado.Sum(x => x.StockActual).ToString("N2")</div>
+                    <div class="small text-muted">Reservado: @ResumenFiltrado.Sum(x => x.StockReservado).ToString("N2")</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm h-100 border-start border-4 border-success">
+                <div class="card-body py-2 px-3">
+                    <div class="text-muted small fw-semibold"><i class="bi bi-arrow-down-circle-fill me-1 text-success"></i>Entradas del período</div>
+                    <div class="fs-4 fw-bold text-success mt-1">+@MovimientosFiltrados.Where(m => m.EsEntrada).Sum(m => m.Cantidad).ToString("N2")</div>
+                    <div class="small text-muted">@MovimientosFiltrados.Count(m => m.EsEntrada) movimientos de ingreso</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm h-100 border-start border-4 border-danger">
+                <div class="card-body py-2 px-3">
+                    <div class="text-muted small fw-semibold"><i class="bi bi-arrow-up-circle-fill me-1 text-danger"></i>Salidas del período</div>
+                    <div class="fs-4 fw-bold text-danger mt-1">-@MovimientosFiltrados.Where(m => !m.EsEntrada).Sum(m => m.Cantidad).ToString("N2")</div>
+                    <div class="small text-muted">@MovimientosFiltrados.Count(m => !m.EsEntrada) movimientos de egreso</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pestañas -->
+    <ul class="nav nav-tabs mb-3 no-print">
+        <li class="nav-item">
+            <button type="button" class="nav-link fw-semibold @(_tab == "inventario" ? "active" : "")" @onclick='() => _tab = "inventario"'>
+                <i class="bi bi-clipboard-data me-1"></i>Inventario y Resumen Mensual (@ResumenFiltrado.Count)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button type="button" class="nav-link fw-semibold @(_tab == "kardex" ? "active" : "")" @onclick='() => _tab = "kardex"'>
+                <i class="bi bi-journal-text me-1"></i>Kardex Entradas y Salidas (@MovimientosFiltrados.Count)
+            </button>
+        </li>
+    </ul>
+
+    @if (_cargando)
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-body py-4 text-center text-primary">
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                <span class="fw-semibold small">Cargando inventario y Kardex de productos sujetos a fiscalización...</span>
+            </div>
+        </div>
+    }
+    else if (_tab == "inventario")
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="fw-bold text-primary small">
+                    Resumen mensual (@_desde.ToString("dd/MM/yyyy") – @_hasta.ToString("dd/MM/yyyy"))
+                </div>
+                <div class="form-check form-switch mb-0 small no-print">
+                    <input class="form-check-input" type="checkbox" id="chkSoloConStock" @bind="_soloConStockOMovimiento" />
+                    <label class="form-check-label text-muted" for="chkSoloConStock">Solo con stock o movimientos</label>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Código</th>
+                            <th>Producto controlado</th>
+                            <th>Sucursal / Bodega</th>
+                            <th class="text-center">Unidad</th>
+                            <th class="text-end">Saldo Inicial</th>
+                            <th class="text-end text-success">Entradas</th>
+                            <th class="text-end text-danger">Salidas</th>
+                            <th class="text-end fw-bold">Stock Actual</th>
+                            <th class="text-end">Disponible</th>
+                            <th class="text-center">Estado</th>
+                            <th class="text-center no-print">Kardex</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (ResumenFiltrado.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="11" class="text-center text-muted py-4">
+                                    No se encontraron productos marcados como <strong>Sujeto a fiscalización</strong> para los filtros seleccionados.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var r in ResumenFiltrado)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-semibold text-nowrap">@r.CodigoPrincipal</td>
+                                    <td class="fw-semibold text-dark">@r.Nombre</td>
+                                    <td class="text-muted">
+                                        @r.Sucursal
+                                        @if (!string.IsNullOrWhiteSpace(r.Bodega))
+                                        {
+                                            <span class="d-block" style="font-size:11px;">@r.Bodega</span>
+                                        }
+                                    </td>
+                                    <td class="text-center"><span class="badge text-bg-light border text-secondary">@r.UnidadMedida</span></td>
+                                    <td class="text-end">@r.SaldoInicial.ToString("N2")</td>
+                                    <td class="text-end text-success fw-semibold">@(r.EntradasPeriodo > 0 ? $"+{r.EntradasPeriodo:N2}" : "0.00")</td>
+                                    <td class="text-end text-danger fw-semibold">@(r.SalidasPeriodo > 0 ? $"-{r.SalidasPeriodo:N2}" : "0.00")</td>
+                                    <td class="text-end fw-bold text-primary">@r.StockActual.ToString("N2")</td>
+                                    <td class="text-end">@r.StockDisponible.ToString("N2")</td>
+                                    <td class="text-center">
+                                        @if (r.StockActual <= 0)
+                                        {
+                                            <span class="badge text-bg-secondary">Sin stock</span>
+                                        }
+                                        else if (r.StockMinimo > 0 && r.StockActual <= r.StockMinimo)
+                                        {
+                                            <span class="badge text-bg-warning text-dark">Stock bajo</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge text-bg-success">Disponible</span>
+                                        }
+                                    </td>
+                                    <td class="text-center no-print">
+                                        <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" @onclick="() => VerKardexProducto(r.CodigoProducto)">
+                                            <i class="bi bi-journal-text me-1"></i>Ver
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2 no-print">
+                <div class="d-flex flex-wrap align-items-center gap-2 small">
+                    <label class="fw-semibold text-muted mb-0">Producto:</label>
+                    <select class="form-select form-select-sm" style="min-width:240px; max-width:340px;" @bind="_codigoProductoKardex">
+                        <option value="0">Todos los productos fiscalizados</option>
+                        @foreach (var p in _productosCatalogo)
+                        {
+                            <option value="@p.Codigo">@p.CodigoPrincipal · @p.Nombre</option>
+                        }
+                    </select>
+                    <label class="fw-semibold text-muted mb-0 ms-2">Tipo:</label>
+                    <select class="form-select form-select-sm" style="width:160px;" @bind="_tipoMovimientoFiltro">
+                        <option value="">Todos</option>
+                        <option value="ENTRADA">Solo entradas</option>
+                        <option value="SALIDA">Solo salidas</option>
+                    </select>
+                </div>
+                @if (_codigoProductoKardex > 0)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" @onclick="() => _codigoProductoKardex = 0">
+                        Ver todos los productos
+                    </button>
+                }
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Fecha / Hora</th>
+                            <th>Producto</th>
+                            <th>Sucursal</th>
+                            <th>Tipo</th>
+                            <th>Lote / Venc.</th>
+                            <th>Referencia</th>
+                            <th class="text-end text-success">Entrada</th>
+                            <th class="text-end text-danger">Salida</th>
+                            <th class="text-end fw-bold">Saldo</th>
+                            <th>Observación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (MovimientosFiltrados.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="10" class="text-center text-muted py-4">
+                                    No se registran movimientos de productos sujetos a fiscalización en el período @_desde.ToString("dd/MM/yyyy") – @_hasta.ToString("dd/MM/yyyy").
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var m in MovimientosFiltrados)
+                            {
+                                <tr>
+                                    <td class="text-nowrap">@m.FechaMovimiento.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>
+                                        <span class="fw-semibold text-dark">@m.NombreProducto</span>
+                                        <span class="text-muted d-block" style="font-size:11px;">@m.CodigoPrincipal · @m.UnidadMedida</span>
+                                    </td>
+                                    <td class="text-muted">@m.Sucursal</td>
+                                    <td>
+                                        <span class="badge @(m.EsEntrada ? "text-bg-success" : "text-bg-danger")">
+                                            @m.TipoMovimiento
+                                        </span>
+                                    </td>
+                                    <td class="text-muted text-nowrap">
+                                        @if (!string.IsNullOrWhiteSpace(m.NumeroLote))
+                                        {
+                                            <span>@m.NumeroLote</span>
+                                            @if (m.FechaVencimiento.HasValue)
+                                            {
+                                                <span class="d-block" style="font-size:11px;">Venc: @m.FechaVencimiento.Value.ToString("dd/MM/yyyy")</span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span>-</span>
+                                        }
+                                    </td>
+                                    <td class="text-muted">
+                                        @(string.IsNullOrWhiteSpace(m.Referencia) ? (m.ReferenciaTipo ?? "-") : $"{m.ReferenciaTipo} {m.Referencia}".Trim())
+                                    </td>
+                                    <td class="text-end text-success fw-semibold">@(m.EsEntrada ? $"+{m.Cantidad:N2}" : "")</td>
+                                    <td class="text-end text-danger fw-semibold">@(!m.EsEntrada ? $"-{m.Cantidad:N2}" : "")</td>
+                                    <td class="text-end fw-bold">@m.SaldoCantidad.ToString("N2")</td>
+                                    <td class="text-muted" style="max-width:240px;">@(string.IsNullOrWhiteSpace(m.Observacion) ? "-" : m.Observacion)</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .fisc-hero {
+        background: linear-gradient(135deg, #0f3a60 0%, #1d5d9b 100%);
+        border-radius: 14px;
+    }
+    @@media print {
+        .no-print { display: none !important; }
+        .fisc-hero { background: #0f3a60 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+</style>
+
+@code {
+    private sealed class ProductoFiscalizadoItem
+    {
+        public int Codigo { get; set; }
+        public string CodigoPrincipal { get; set; } = "";
+        public string Nombre { get; set; } = "";
+        public string UnidadMedida { get; set; } = "UNIDAD";
+    }
+
+    private sealed class ResumenFiscalizacionRow
+    {
+        public int CodigoProducto { get; set; }
+        public string CodigoPrincipal { get; set; } = "";
+        public string Nombre { get; set; } = "";
+        public string UnidadMedida { get; set; } = "UNIDAD";
+        public int IdSucursal { get; set; }
+        public string Sucursal { get; set; } = "Principal";
+        public string Bodega { get; set; } = "";
+        public decimal SaldoInicial { get; set; }
+        public decimal EntradasPeriodo { get; set; }
+        public decimal SalidasPeriodo { get; set; }
+        public decimal StockActual { get; set; }
+        public decimal StockReservado { get; set; }
+        public decimal StockDisponible => Math.Max(0m, StockActual - StockReservado);
+        public decimal StockMinimo { get; set; }
+    }
+
+    private sealed class MovimientoFiscalizacionRow
+    {
+        public long IdMovimiento { get; set; }
+        public int CodigoProducto { get; set; }
+        public string CodigoPrincipal { get; set; } = "";
+        public string NombreProducto { get; set; } = "";
+        public string UnidadMedida { get; set; } = "UNIDAD";
+        public int IdSucursal { get; set; }
+        public string Sucursal { get; set; } = "";
+        public string TipoMovimiento { get; set; } = "";
+        public bool EsEntrada { get; set; }
+        public decimal Cantidad { get; set; }
+        public decimal SaldoCantidad { get; set; }
+        public string? NumeroLote { get; set; }
+        public DateTime? FechaVencimiento { get; set; }
+        public string? ReferenciaTipo { get; set; }
+        public string? Referencia { get; set; }
+        public string? Observacion { get; set; }
+        public DateTime FechaMovimiento { get; set; }
+    }
+
+    private sealed record SucursalOpt(int IdSucursal, string Nombre);
+
+    private bool _cargando = true;
+    private string _error = string.Empty;
+    private string _tab = "inventario";
+    private string _mesTexto = DateTime.Today.ToString("yyyy-MM");
+    private DateTime _desde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime _hasta = new(DateTime.Today.Year, DateTime.Today.Month, DateTime.DaysInMonth(DateTime.Today.Year, DateTime.Today.Month));
+    private int _idSucursalFiltro;
+    private string _filtroTexto = string.Empty;
+    private bool _soloConStockOMovimiento;
+    private int _codigoProductoKardex;
+    private string _tipoMovimientoFiltro = string.Empty;
+
+    private List<SucursalOpt> _sucursales = [];
+    private List<ProductoFiscalizadoItem> _productosCatalogo = [];
+    private List<ResumenFiscalizacionRow> _resumenProductos = [];
+    private List<MovimientoFiscalizacionRow> _movimientos = [];
+
+    private List<ResumenFiscalizacionRow> ResumenFiltrado => _resumenProductos
+        .Where(x => (!_soloConStockOMovimiento || x.StockActual > 0 || x.EntradasPeriodo > 0 || x.SalidasPeriodo > 0)
+            && (string.IsNullOrWhiteSpace(_filtroTexto)
+                || x.Nombre.Contains(_filtroTexto.Trim(), StringComparison.OrdinalIgnoreCase)
+                || x.CodigoPrincipal.Contains(_filtroTexto.Trim(), StringComparison.OrdinalIgnoreCase)))
+        .ToList();
+
+    private List<MovimientoFiscalizacionRow> MovimientosFiltrados => _movimientos
+        .Where(m => (_codigoProductoKardex == 0 || m.CodigoProducto == _codigoProductoKardex)
+            && (string.IsNullOrWhiteSpace(_tipoMovimientoFiltro)
+                || (_tipoMovimientoFiltro == "ENTRADA" && m.EsEntrada)
+                || (_tipoMovimientoFiltro == "SALIDA" && !m.EsEntrada))
+            && (string.IsNullOrWhiteSpace(_filtroTexto)
+                || m.NombreProducto.Contains(_filtroTexto.Trim(), StringComparison.OrdinalIgnoreCase)
+                || m.CodigoPrincipal.Contains(_filtroTexto.Trim(), StringComparison.OrdinalIgnoreCase)
+                || (m.Referencia ?? string.Empty).Contains(_filtroTexto.Trim(), StringComparison.OrdinalIgnoreCase)
+                || (m.Observacion ?? string.Empty).Contains(_filtroTexto.Trim(), StringComparison.OrdinalIgnoreCase)))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatosAsync();
+    }
+
+    private async Task OnMesChangedAsync(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString();
+        if (!string.IsNullOrWhiteSpace(val) && DateTime.TryParseExact(val + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var inicioMes))
+        {
+            _mesTexto = val;
+            _desde = inicioMes;
+            _hasta = new DateTime(inicioMes.Year, inicioMes.Month, DateTime.DaysInMonth(inicioMes.Year, inicioMes.Month));
+            await CargarDatosAsync();
+        }
+    }
+
+    private void VerKardexProducto(int codigoProducto)
+    {
+        _codigoProductoKardex = codigoProducto;
+        _tab = "kardex";
+    }
+
+    private static bool EsMovimientoEntrada(string? tipo)
+    {
+        var t = (tipo ?? string.Empty).Trim().ToUpperInvariant();
+        return t.Contains("ENTRADA") || t.Contains("INGRESO") || t.Contains("COMPRA") || t.Contains("INICIAL") || t.Contains("DEVOL") || t == "AJUSTE_POSITIVO";
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        _cargando = true;
+        _error = string.Empty;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            var sucursalesDb = await db.EContaxSucursales
+                .AsNoTracking()
+                .Where(s => s.Estado)
+                .OrderBy(s => s.Nombre)
+                .Select(s => new SucursalOpt(s.IdSucursal, s.Nombre))
+                .ToListAsync();
+            _sucursales = sucursalesDb;
+            var sucMap = sucursalesDb.ToDictionary(x => x.IdSucursal, x => x.Nombre);
+
+            var bodegasMap = await db.EContaxBodegas
+                .AsNoTracking()
+                .ToDictionaryAsync(b => b.IdBodega, b => b.Nombre);
+
+            var prods = await db.Productos
+                .AsNoTracking()
+                .Where(p => p.Estado != false && p.SujetoFiscalizacion)
+                .OrderBy(p => p.Nombre)
+                .Select(p => new ProductoFiscalizadoItem
+                {
+                    Codigo = p.Codigo,
+                    CodigoPrincipal = string.IsNullOrWhiteSpace(p.CodigoPrincipal) ? $"#{p.Codigo}" : p.CodigoPrincipal.Trim(),
+                    Nombre = (p.Nombre ?? string.Empty).Trim(),
+                    UnidadMedida = string.IsNullOrWhiteSpace(p.UnidadMedida) ? "UNIDAD" : p.UnidadMedida.Trim().ToUpperInvariant()
+                })
+                .ToListAsync();
+
+            _productosCatalogo = prods;
+            var codigos = prods.Select(p => p.Codigo).ToList();
+            var prodMap = prods.ToDictionary(p => p.Codigo);
+
+            if (codigos.Count == 0)
+            {
+                _resumenProductos = [];
+                _movimientos = [];
+                return;
+            }
+
+            var desdeUtc = _desde.Date.ToUniversalTime();
+            var hastaUtcExcl = _hasta.Date.AddDays(1).ToUniversalTime();
+
+            var exQuery = db.EContaxInventarioExistencias
+                .AsNoTracking()
+                .Where(e => codigos.Contains(e.CodigoProducto));
+            if (_idSucursalFiltro > 0)
+                exQuery = exQuery.Where(e => e.IdSucursal == _idSucursalFiltro);
+            var existencias = await exQuery.ToListAsync();
+
+            var movQuery = db.EContaxInventarioMovimientos
+                .AsNoTracking()
+                .Where(m => codigos.Contains(m.CodigoProducto) && m.FechaMovimiento >= desdeUtc && m.FechaMovimiento < hastaUtcExcl);
+            if (_idSucursalFiltro > 0)
+                movQuery = movQuery.Where(m => m.IdSucursal == _idSucursalFiltro);
+
+            var movsDb = await movQuery
+                .OrderByDescending(m => m.FechaMovimiento)
+                .ThenByDescending(m => m.IdMovimiento)
+                .ToListAsync();
+
+            var saldoPrevioQuery = db.EContaxInventarioMovimientos
+                .AsNoTracking()
+                .Where(m => codigos.Contains(m.CodigoProducto) && m.FechaMovimiento < desdeUtc);
+            if (_idSucursalFiltro > 0)
+                saldoPrevioQuery = saldoPrevioQuery.Where(m => m.IdSucursal == _idSucursalFiltro);
+
+            var ultimosPrevios = await saldoPrevioQuery
+                .GroupBy(m => new { m.CodigoProducto, m.IdSucursal })
+                .Select(g => g.OrderByDescending(x => x.FechaMovimiento).ThenByDescending(x => x.IdMovimiento).First())
+                .ToListAsync();
+            var saldoPrevioMap = ultimosPrevios.ToDictionary(x => (x.CodigoProducto, x.IdSucursal), x => x.SaldoCantidad);
+
+            _movimientos = movsDb.Select(m =>
+            {
+                var p = prodMap[m.CodigoProducto];
+                return new MovimientoFiscalizacionRow
+                {
+                    IdMovimiento = m.IdMovimiento,
+                    CodigoProducto = m.CodigoProducto,
+                    CodigoPrincipal = p.CodigoPrincipal,
+                    NombreProducto = p.Nombre,
+                    UnidadMedida = p.UnidadMedida,
+                    IdSucursal = m.IdSucursal,
+                    Sucursal = sucMap.TryGetValue(m.IdSucursal, out var sn) ? sn : $"Sucursal #{m.IdSucursal}",
+                    TipoMovimiento = m.TipoMovimiento,
+                    EsEntrada = EsMovimientoEntrada(m.TipoMovimiento),
+                    Cantidad = Math.Abs(m.Cantidad),
+                    SaldoCantidad = m.SaldoCantidad,
+                    NumeroLote = m.NumeroLote,
+                    FechaVencimiento = m.FechaVencimiento,
+                    ReferenciaTipo = m.ReferenciaTipo,
+                    Referencia = m.Referencia,
+                    Observacion = m.Observacion,
+                    FechaMovimiento = m.FechaMovimiento
+                };
+            }).ToList();
+
+            var movsPorProdSuc = _movimientos.GroupBy(m => (m.CodigoProducto, m.IdSucursal))
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var resumen = new List<ResumenFiscalizacionRow>();
+            var llavesAgregadas = new HashSet<(int, int)>();
+
+            foreach (var ex in existencias)
+            {
+                if (!prodMap.TryGetValue(ex.CodigoProducto, out var p)) continue;
+                var key = (ex.CodigoProducto, ex.IdSucursal);
+                llavesAgregadas.Add(key);
+                movsPorProdSuc.TryGetValue(key, out var mList);
+                var ent = mList?.Where(x => x.EsEntrada).Sum(x => x.Cantidad) ?? 0m;
+                var sal = mList?.Where(x => !x.EsEntrada).Sum(x => x.Cantidad) ?? 0m;
+                var saldoIni = saldoPrevioMap.TryGetValue(key, out var sp)
+                    ? sp
+                    : Math.Max(0m, ex.StockActual - ent + sal);
+
+                resumen.Add(new ResumenFiscalizacionRow
+                {
+                    CodigoProducto = p.Codigo,
+                    CodigoPrincipal = p.CodigoPrincipal,
+                    Nombre = p.Nombre,
+                    UnidadMedida = p.UnidadMedida,
+                    IdSucursal = ex.IdSucursal,
+                    Sucursal = sucMap.TryGetValue(ex.IdSucursal, out var sn) ? sn : $"Sucursal #{ex.IdSucursal}",
+                    Bodega = ex.IdBodega.HasValue && bodegasMap.TryGetValue(ex.IdBodega.Value, out var bn) ? bn : string.Empty,
+                    SaldoInicial = saldoIni,
+                    EntradasPeriodo = ent,
+                    SalidasPeriodo = sal,
+                    StockActual = ex.StockActual,
+                    StockReservado = ex.StockReservado,
+                    StockMinimo = ex.StockMinimo
+                });
+            }
+
+            // Incluir productos fiscalizados que aún no tienen registro de existencia en ninguna sucursal
+            foreach (var p in prods)
+            {
+                if (!llavesAgregadas.Any(k => k.Item1 == p.Codigo))
+                {
+                    resumen.Add(new ResumenFiscalizacionRow
+                    {
+                        CodigoProducto = p.Codigo,
+                        CodigoPrincipal = p.CodigoPrincipal,
+                        Nombre = p.Nombre,
+                        UnidadMedida = p.UnidadMedida,
+                        Sucursal = "Sin existencia asignada"
+                    });
+                }
+            }
+
+            _resumenProductos = resumen
+                .OrderByDescending(x => x.StockActual > 0 || x.EntradasPeriodo > 0 || x.SalidasPeriodo > 0)
+                .ThenBy(x => x.Nombre)
+                .ThenBy(x => x.Sucursal)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = $"No se pudo cargar el módulo de productos sujetos a fiscalización: {ex.Message}";
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task ExportarExcelAsync()
+    {
+        try
+        {
+            using var wb = new XLWorkbook();
+
+            var ws1 = wb.Worksheets.Add("Resumen Mensual");
+            ws1.Cell(1, 1).Value = $"INFORME DE MOVIMIENTO DE MEDICAMENTOS SUJETOS A FISCALIZACIÓN ({_desde:dd/MM/yyyy} - {_hasta:dd/MM/yyyy})";
+            ws1.Cell(1, 1).Style.Font.Bold = true;
+            ws1.Cell(1, 1).Style.Font.FontSize = 12;
+
+            string[] headers1 = ["Código", "Producto", "Sucursal", "Bodega", "Unidad", "Saldo Inicial", "Entradas", "Salidas", "Stock Actual", "Reservado", "Disponible"];
+            for (int c = 0; c < headers1.Length; c++)
+            {
+                var cell = ws1.Cell(3, c + 1);
+                cell.Value = headers1[c];
+                cell.Style.Font.Bold = true;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#0f3a60");
+                cell.Style.Font.FontColor = XLColor.White;
+            }
+            int row1 = 4;
+            foreach (var r in ResumenFiltrado)
+            {
+                ws1.Cell(row1, 1).Value = r.CodigoPrincipal;
+                ws1.Cell(row1, 2).Value = r.Nombre;
+                ws1.Cell(row1, 3).Value = r.Sucursal;
+                ws1.Cell(row1, 4).Value = r.Bodega;
+                ws1.Cell(row1, 5).Value = r.UnidadMedida;
+                ws1.Cell(row1, 6).Value = r.SaldoInicial;
+                ws1.Cell(row1, 7).Value = r.EntradasPeriodo;
+                ws1.Cell(row1, 8).Value = r.SalidasPeriodo;
+                ws1.Cell(row1, 9).Value = r.StockActual;
+                ws1.Cell(row1, 10).Value = r.StockReservado;
+                ws1.Cell(row1, 11).Value = r.StockDisponible;
+                row1++;
+            }
+            ws1.Columns().AdjustToContents();
+
+            var ws2 = wb.Worksheets.Add("Kardex Entradas y Salidas");
+            string[] headers2 = ["Fecha/Hora", "Código", "Producto", "Unidad", "Sucursal", "Tipo Movimiento", "Lote", "Vencimiento", "Referencia", "Entrada", "Salida", "Saldo", "Observación"];
+            for (int c = 0; c < headers2.Length; c++)
+            {
+                var cell = ws2.Cell(1, c + 1);
+                cell.Value = headers2[c];
+                cell.Style.Font.Bold = true;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#0f3a60");
+                cell.Style.Font.FontColor = XLColor.White;
+            }
+            int row2 = 2;
+            foreach (var m in MovimientosFiltrados)
+            {
+                ws2.Cell(row2, 1).Value = m.FechaMovimiento.ToLocalTime().ToString("dd/MM/yyyy HH:mm");
+                ws2.Cell(row2, 2).Value = m.CodigoPrincipal;
+                ws2.Cell(row2, 3).Value = m.NombreProducto;
+                ws2.Cell(row2, 4).Value = m.UnidadMedida;
+                ws2.Cell(row2, 5).Value = m.Sucursal;
+                ws2.Cell(row2, 6).Value = m.TipoMovimiento;
+                ws2.Cell(row2, 7).Value = m.NumeroLote ?? "";
+                ws2.Cell(row2, 8).Value = m.FechaVencimiento?.ToString("dd/MM/yyyy") ?? "";
+                ws2.Cell(row2, 9).Value = $"{m.ReferenciaTipo} {m.Referencia}".Trim();
+                ws2.Cell(row2, 10).Value = m.EsEntrada ? m.Cantidad : 0m;
+                ws2.Cell(row2, 11).Value = !m.EsEntrada ? m.Cantidad : 0m;
+                ws2.Cell(row2, 12).Value = m.SaldoCantidad;
+                ws2.Cell(row2, 13).Value = m.Observacion ?? "";
+                row2++;
+            }
+            ws2.Columns().AdjustToContents();
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            var nombre = $"Informe_Fiscalizacion_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.xlsx";
+            await JS.InvokeVoidAsync("hosvetDownloadFile", nombre, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(ms.ToArray()));
+        }
+        catch (Exception ex)
+        {
+            _error = $"No se pudo exportar el Excel: {ex.Message}";
+        }
+    }
+
+    private async Task ImprimirAsync()
+    {
+        try { await JS.InvokeVoidAsync("print"); } catch { }
+    }
+}

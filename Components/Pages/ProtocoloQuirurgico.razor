@@ -2,6 +2,8 @@
 @page "/quirofano/protocolo/{IdOrden:int}/{Nhcl:int}"
 @inject IKardexService KardexService
 @inject IQuirofanoService QuirofanoService
+@inject IInventarioService InventarioService
+@inject IFarmaciaService FarmaciaService
 @inject IReportExportService ReportService
 @inject NavigationManager Nav
 @inject IWebHostEnvironment Environment
@@ -264,9 +266,57 @@ else if (paciente != null)
                                 </select>
                             </div>
 
-                            <div class="col-md-4">
-                                <label class="form-label mb-0 fw-semibold">Antisepsia / Lavado</label>
-                                <input type="text" class="form-control form-control-sm" @bind="protDto.Lavado" />
+                            <div class="col-md-4 position-relative">
+                                <label class="form-label mb-0 fw-semibold">Antisepsia / Lavado <small class="text-muted fw-normal">(stock)</small></label>
+                                <input type="text" class="form-control form-control-sm" autocomplete="off"
+                                       disabled="@_descargadoAntisepsia"
+                                       @bind="protDto.Lavado" @bind:event="oninput"
+                                       @onfocus="() => AbrirSugerenciasStockAsync(1)"
+                                       @onblur="CerrarSugerenciasStockAsync"
+                                       placeholder="Buscar en stock..." />
+                                @if (_sugStockTipo == 1)
+                                {
+                                    var sugs = FiltrarStock(protDto.Lavado);
+                                    <div class="list-group position-absolute start-0 bg-white border rounded shadow-sm mt-1" style="z-index:1060; min-width:250px; max-height:190px; overflow-y:auto;">
+                                        @if (sugs.Count == 0)
+                                        {
+                                            <div class="list-group-item py-1 px-2 text-muted small">Sin bienes en stock</div>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var prod in sugs)
+                                            {
+                                                var p = prod;
+                                                <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center gap-2 text-start"
+                                                        @onmousedown="() => SeleccionarStockAntisepsia(p)">
+                                                    <span class="text-truncate">@p.DisplayName</span>
+                                                    <span class="badge text-bg-success text-nowrap">@p.Available.ToString("N2") @p.BaseUnitOfMeasureCode</span>
+                                                </button>
+                                            }
+                                        }
+                                    </div>
+                                }
+                                @if (_stockAntisepsia != null)
+                                {
+                                    <div class="input-group input-group-sm mt-1">
+                                        <input type="number" step="0.01" min="0" max="@_stockAntisepsia.Available"
+                                               class="form-control text-center @(_cantAntisepsia > _stockAntisepsia.Available ? "is-invalid" : "")"
+                                               disabled="@_descargadoAntisepsia"
+                                               value="@_cantAntisepsia" @onchange="OnCantAntisepsiaChanged" />
+                                        <span class="input-group-text bg-light text-secondary px-1" style="font-size:10px;">@_stockAntisepsia.BaseUnitOfMeasureCode</span>
+                                        @if (_descargadoAntisepsia)
+                                        {
+                                            <span class="input-group-text bg-success text-white px-2" title="Descargado"><i class="bi bi-check-lg"></i></span>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="btn btn-outline-success px-2" disabled="@(_descargandoStock || _cantAntisepsia <= 0 || _cantAntisepsia > _stockAntisepsia.Available)"
+                                                    title="Descargar del inventario (máx. @_stockAntisepsia.Available.ToString("0.##") @_stockAntisepsia.BaseUnitOfMeasureCode)"
+                                                    @onclick="DescargarAntisepsiaAsync"><i class="bi bi-box-arrow-down"></i></button>
+                                        }
+                                    </div>
+                                    <div class="text-muted" style="font-size:10px;">Disponible: <strong>@_stockAntisepsia.Available.ToString("0.##") @_stockAntisepsia.BaseUnitOfMeasureCode</strong></div>
+                                }
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label mb-0 fw-semibold">Unidad Electrocirugía</label>
@@ -277,22 +327,139 @@ else if (paciente != null)
                                 <input type="text" class="form-control form-control-sm" @bind="protDto.LocalizacionPlaca" />
                             </div>
 
+                            <div class="col-12 position-relative">
+                                <label class="form-label mb-0 fw-semibold text-primary">Bien de Gasas <small class="text-muted fw-normal">(elija ítem con stock para limitar cantidades)</small></label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" autocomplete="off"
+                                           disabled="@_descargadoGasas"
+                                           @bind="_filtroGasasStock" @bind:event="oninput"
+                                           @onfocus="() => AbrirSugerenciasStockAsync(2)"
+                                           @onblur="CerrarSugerenciasStockAsync"
+                                           placeholder="Buscar gasas en stock..." />
+                                    @if (_stockGasas != null)
+                                    {
+                                        <span class="input-group-text bg-light text-secondary fw-semibold" style="font-size:11px;">
+                                            Disp: @_stockGasas.Available.ToString("0.##") @_stockGasas.BaseUnitOfMeasureCode
+                                        </span>
+                                        @if (_descargadoGasas)
+                                        {
+                                            <span class="input-group-text bg-success text-white px-2" title="Gasas descargadas del inventario"><i class="bi bi-check-lg me-1"></i>Descargado</span>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="btn btn-outline-success px-2"
+                                                    disabled="@(_descargandoStock || TotalGasasUsadas <= 0 || GasasExcedenStock)"
+                                                    title="Descargar total de gasas usadas (@TotalGasasUsadas @_stockGasas.BaseUnitOfMeasureCode)"
+                                                    @onclick="DescargarGasasAsync">
+                                                <i class="bi bi-box-arrow-down me-1"></i>Descargar (@TotalGasasUsadas)
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                                @if (_sugStockTipo == 2)
+                                {
+                                    var sugs = FiltrarStock(_filtroGasasStock);
+                                    <div class="list-group position-absolute start-0 end-0 bg-white border rounded shadow-sm mt-1" style="z-index:1060; max-height:190px; overflow-y:auto;">
+                                        @if (sugs.Count == 0)
+                                        {
+                                            <div class="list-group-item py-1 px-2 text-muted small">Sin bienes en stock</div>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var prod in sugs)
+                                            {
+                                                var p = prod;
+                                                <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center gap-2 text-start"
+                                                        @onmousedown="() => SeleccionarStockGasas(p)">
+                                                    <span class="text-truncate">@p.DisplayName</span>
+                                                    <span class="badge text-bg-success text-nowrap">@p.Available.ToString("N2") @p.BaseUnitOfMeasureCode</span>
+                                                </button>
+                                            }
+                                        }
+                                    </div>
+                                }
+                                @if (GasasExcedenStock && _stockGasas != null)
+                                {
+                                    <div class="text-danger fw-semibold mt-1" style="font-size:11px;">
+                                        El total de gasas (@TotalGasasUsadas) supera el stock disponible (@_stockGasas.Available.ToString("0.##") @_stockGasas.BaseUnitOfMeasureCode).
+                                    </div>
+                                }
+                            </div>
+
                             <div class="col-md-4">
                                 <label class="form-label mb-0 fw-bold text-primary">Gasas Iniciales</label>
-                                <input type="text" class="form-control form-control-sm" @bind="protDto.GasasIniciales" />
+                                <input type="number" min="0" max="@(_stockGasas != null ? (int)Math.Floor(_stockGasas.Available) : 9999)"
+                                       class="form-control form-control-sm @(GasasExcedenStock ? "is-invalid" : "")"
+                                       disabled="@_descargadoGasas"
+                                       value="@protDto.GasasIniciales" @onchange="OnGasasInicialesChanged" />
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label mb-0 fw-bold text-primary">Gasas Adicionales</label>
-                                <input type="text" class="form-control form-control-sm" @bind="protDto.GasasAdicionales" />
+                                <input type="number" min="0" max="@(_stockGasas != null ? Math.Max(0, (int)Math.Floor(_stockGasas.Available) - ParseEntero(protDto.GasasIniciales)) : 9999)"
+                                       class="form-control form-control-sm @(GasasExcedenStock ? "is-invalid" : "")"
+                                       disabled="@_descargadoGasas"
+                                       value="@protDto.GasasAdicionales" @onchange="OnGasasAdicionalesChanged" />
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label mb-0 fw-bold text-success">Recuento Final</label>
                                 <input type="text" class="form-control form-control-sm" @bind="protDto.GasasRecuentoFinal" />
                             </div>
 
-                            <div class="col-md-6">
-                                <label class="form-label mb-0 fw-semibold">Conteo Compresas / Cotonoides</label>
-                                <input type="text" class="form-control form-control-sm" @bind="protDto.Compresas" />
+                            <div class="col-md-6 position-relative">
+                                <label class="form-label mb-0 fw-semibold">Conteo Compresas / Cotonoides <small class="text-muted fw-normal">(stock opcional)</small></label>
+                                <input type="text" class="form-control form-control-sm" @bind="protDto.Compresas" placeholder="Ej: Completas" />
+                                <div class="input-group input-group-sm mt-1">
+                                    <input type="text" class="form-control" autocomplete="off"
+                                           disabled="@_descargadoCompresas"
+                                           @bind="_filtroCompresasStock" @bind:event="oninput"
+                                           @onfocus="() => AbrirSugerenciasStockAsync(3)"
+                                           @onblur="CerrarSugerenciasStockAsync"
+                                           placeholder="Elegir compresas en stock..." />
+                                    @if (_stockCompresas != null)
+                                    {
+                                        <input type="number" step="0.01" min="0" max="@_stockCompresas.Available"
+                                               class="form-control text-center @(_cantCompresas > _stockCompresas.Available ? "is-invalid" : "")"
+                                               style="max-width:65px;" disabled="@_descargadoCompresas"
+                                               value="@_cantCompresas" @onchange="OnCantCompresasChanged" />
+                                        <span class="input-group-text bg-light text-secondary px-1" style="font-size:10px;">@_stockCompresas.BaseUnitOfMeasureCode</span>
+                                        @if (_descargadoCompresas)
+                                        {
+                                            <span class="input-group-text bg-success text-white px-2" title="Descargado"><i class="bi bi-check-lg"></i></span>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="btn btn-outline-success px-2" disabled="@(_descargandoStock || _cantCompresas <= 0 || _cantCompresas > _stockCompresas.Available)"
+                                                    title="Descargar del inventario (máx. @_stockCompresas.Available.ToString("0.##") @_stockCompresas.BaseUnitOfMeasureCode)"
+                                                    @onclick="DescargarCompresasAsync"><i class="bi bi-box-arrow-down"></i></button>
+                                        }
+                                    }
+                                </div>
+                                @if (_sugStockTipo == 3)
+                                {
+                                    var sugs = FiltrarStock(_filtroCompresasStock);
+                                    <div class="list-group position-absolute start-0 end-0 bg-white border rounded shadow-sm mt-1" style="z-index:1060; max-height:190px; overflow-y:auto;">
+                                        @if (sugs.Count == 0)
+                                        {
+                                            <div class="list-group-item py-1 px-2 text-muted small">Sin bienes en stock</div>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var prod in sugs)
+                                            {
+                                                var p = prod;
+                                                <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center gap-2 text-start"
+                                                        @onmousedown="() => SeleccionarStockCompresas(p)">
+                                                    <span class="text-truncate">@p.DisplayName</span>
+                                                    <span class="badge text-bg-success text-nowrap">@p.Available.ToString("N2") @p.BaseUnitOfMeasureCode</span>
+                                                </button>
+                                            }
+                                        }
+                                    </div>
+                                }
+                                @if (_stockCompresas != null)
+                                {
+                                    <div class="text-muted" style="font-size:10px;">Disponible: <strong>@_stockCompresas.Available.ToString("0.##") @_stockCompresas.BaseUnitOfMeasureCode</strong></div>
+                                }
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label mb-0 fw-semibold">Paciente Transferido A</label>
@@ -517,6 +684,28 @@ else if (paciente != null)
     private bool esError;
     private string duracionCirugiaTexto = string.Empty;
     private bool errorHorarioCirugia;
+
+    private List<FarmacoStockDto> _catalogoStock = [];
+    private int _localidadStockCargada;
+    private int _sugStockTipo; // 1=Antisepsia, 2=Gasas, 3=Compresas
+    private bool _descargandoStock;
+
+    private FarmacoStockDto? _stockAntisepsia;
+    private decimal _cantAntisepsia = 1m;
+    private bool _descargadoAntisepsia;
+
+    private FarmacoStockDto? _stockGasas;
+    private string _filtroGasasStock = string.Empty;
+    private bool _descargadoGasas;
+
+    private FarmacoStockDto? _stockCompresas;
+    private string _filtroCompresasStock = string.Empty;
+    private decimal _cantCompresas = 1m;
+    private bool _descargadoCompresas;
+
+    private static int ParseEntero(string? val) => int.TryParse(val?.Trim(), out var n) && n > 0 ? n : 0;
+    private int TotalGasasUsadas => ParseEntero(protDto.GasasIniciales) + ParseEntero(protDto.GasasAdicionales);
+    private bool GasasExcedenStock => _stockGasas != null && TotalGasasUsadas > _stockGasas.Available;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -781,6 +970,12 @@ else if (paciente != null)
             mensajeAlerta = "La hora de finalización no puede ser anterior a la hora de inicio de la cirugía.";
             return;
         }
+        if (GasasExcedenStock && _stockGasas != null)
+        {
+            esError = true;
+            mensajeAlerta = $"El total de gasas ({TotalGasasUsadas}) supera el stock disponible ({_stockGasas.Available:0.##} {_stockGasas.BaseUnitOfMeasureCode}).";
+            return;
+        }
 
         guardando = true;
         protDto.IdOrden = IdOrden;
@@ -881,6 +1076,199 @@ else if (paciente != null)
     {
         await QuirofanoService.EliminarMiembroEquipoAsync(sec);
         protDto = await QuirofanoService.ObtenerProtocoloQuirurgicoAsync(IdOrden, Nhcl);
+    }
+
+    private async Task AsegurarCatalogoStockAsync(bool forzar = false)
+    {
+        var sede = Session.Localidad > 0 ? Session.Localidad : 1;
+        if (!forzar && _catalogoStock.Count > 0 && _localidadStockCargada == sede) return;
+        try
+        {
+            var lista = await InventarioService.BuscarMedicamentosConStockAsync(string.Empty, sede, Session.Apostrofe);
+            _catalogoStock = lista.Where(x => x.Available > 0).OrderBy(x => x.DisplayName).ToList();
+            _localidadStockCargada = sede;
+        }
+        catch { }
+    }
+
+    private List<FarmacoStockDto> FiltrarStock(string? texto)
+    {
+        var t = (texto ?? string.Empty).Trim();
+        IEnumerable<FarmacoStockDto> q = _catalogoStock;
+        if (!string.IsNullOrWhiteSpace(t))
+            q = q.Where(x =>
+                x.DisplayName.Contains(t, StringComparison.OrdinalIgnoreCase) ||
+                x.Number.Contains(t, StringComparison.OrdinalIgnoreCase));
+        return q.Take(12).ToList();
+    }
+
+    private async Task AbrirSugerenciasStockAsync(int tipo)
+    {
+        await AsegurarCatalogoStockAsync();
+        _sugStockTipo = tipo;
+    }
+
+    private async Task CerrarSugerenciasStockAsync()
+    {
+        await Task.Delay(160);
+        _sugStockTipo = 0;
+    }
+
+    private void SeleccionarStockAntisepsia(FarmacoStockDto prod)
+    {
+        _stockAntisepsia = prod;
+        protDto.Lavado = prod.DisplayName;
+        _cantAntisepsia = Math.Min(1m, prod.Available);
+        _descargadoAntisepsia = false;
+        _sugStockTipo = 0;
+    }
+
+    private void SeleccionarStockGasas(FarmacoStockDto prod)
+    {
+        _stockGasas = prod;
+        _filtroGasasStock = prod.DisplayName;
+        _descargadoGasas = false;
+        _sugStockTipo = 0;
+        var maxDisp = (int)Math.Floor(prod.Available);
+        var ini = ParseEntero(protDto.GasasIniciales);
+        var adi = ParseEntero(protDto.GasasAdicionales);
+        if (ini + adi > maxDisp)
+        {
+            protDto.GasasIniciales = Math.Min(ini, maxDisp).ToString();
+            protDto.GasasAdicionales = Math.Max(0, Math.Min(adi, maxDisp - ParseEntero(protDto.GasasIniciales))).ToString();
+        }
+    }
+
+    private void SeleccionarStockCompresas(FarmacoStockDto prod)
+    {
+        _stockCompresas = prod;
+        _filtroCompresasStock = prod.DisplayName;
+        _cantCompresas = Math.Min(1m, prod.Available);
+        _descargadoCompresas = false;
+        _sugStockTipo = 0;
+    }
+
+    private void OnCantAntisepsiaChanged(ChangeEventArgs e)
+    {
+        var val = decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : 0m;
+        if (val < 0m) val = 0m;
+        if (_stockAntisepsia != null && val > _stockAntisepsia.Available) val = _stockAntisepsia.Available;
+        _cantAntisepsia = val;
+    }
+
+    private void OnCantCompresasChanged(ChangeEventArgs e)
+    {
+        var val = decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : 0m;
+        if (val < 0m) val = 0m;
+        if (_stockCompresas != null && val > _stockCompresas.Available) val = _stockCompresas.Available;
+        _cantCompresas = val;
+    }
+
+    private void OnGasasInicialesChanged(ChangeEventArgs e)
+    {
+        var val = int.TryParse(e.Value?.ToString(), out var n) && n >= 0 ? n : 0;
+        if (_stockGasas != null)
+        {
+            var maxIni = Math.Max(0, (int)Math.Floor(_stockGasas.Available) - ParseEntero(protDto.GasasAdicionales));
+            if (val > maxIni) val = maxIni;
+        }
+        protDto.GasasIniciales = val.ToString();
+    }
+
+    private void OnGasasAdicionalesChanged(ChangeEventArgs e)
+    {
+        var val = int.TryParse(e.Value?.ToString(), out var n) && n >= 0 ? n : 0;
+        if (_stockGasas != null)
+        {
+            var maxAdi = Math.Max(0, (int)Math.Floor(_stockGasas.Available) - ParseEntero(protDto.GasasIniciales));
+            if (val > maxAdi) val = maxAdi;
+        }
+        protDto.GasasAdicionales = val.ToString();
+    }
+
+    private async Task DescargarAntisepsiaAsync()
+    {
+        if (_stockAntisepsia == null) return;
+        if (await DescargarBienProtocoloAsync(_stockAntisepsia, _cantAntisepsia, "Protocolo-Antisepsia", "Antisepsia / Lavado quirúrgico"))
+            _descargadoAntisepsia = true;
+    }
+
+    private async Task DescargarGasasAsync()
+    {
+        if (_stockGasas == null) return;
+        if (await DescargarBienProtocoloAsync(_stockGasas, TotalGasasUsadas, "Protocolo-Gasas", $"Gasas quirúrgicas (Ini:{protDto.GasasIniciales} Adic:{protDto.GasasAdicionales})"))
+            _descargadoGasas = true;
+    }
+
+    private async Task DescargarCompresasAsync()
+    {
+        if (_stockCompresas == null) return;
+        if (await DescargarBienProtocoloAsync(_stockCompresas, _cantCompresas, "Protocolo-Compresas", $"Compresas / Cotonoides ({protDto.Compresas})"))
+            _descargadoCompresas = true;
+    }
+
+    private async Task<bool> DescargarBienProtocoloAsync(FarmacoStockDto item, decimal cantidad, string modulo, string indicaciones)
+    {
+        if (paciente == null || IdOrden <= 0 || Nhcl <= 0) return false;
+        if (cantidad <= 0m)
+        {
+            esError = true;
+            mensajeAlerta = "Ingrese una cantidad mayor a cero.";
+            return false;
+        }
+        _descargandoStock = true;
+        try
+        {
+            await AsegurarCatalogoStockAsync(forzar: true);
+            var actual = _catalogoStock.FirstOrDefault(x => x.Id == item.Id || x.Number == item.Number);
+            if (actual == null || actual.Available < cantidad)
+            {
+                esError = true;
+                mensajeAlerta = $"Stock insuficiente para {item.DisplayName} (disponible: {actual?.Available ?? 0m:0.##} {item.BaseUnitOfMeasureCode}).";
+                return false;
+            }
+            var sede = Session.Localidad > 0 ? Session.Localidad : 1;
+            var idUsuario = Session.CurrentUser?.IdUsuario ?? 1;
+            var prodQui = new ProductoQuirofanoDto
+            {
+                OrdenId = IdOrden,
+                Nhcl = Nhcl,
+                CodigoProd = item.Number,
+                ProdDescripcion = item.DisplayName,
+                PrecioProd = item.UnitPrice,
+                StockProd = (int)Math.Ceiling(actual.Available),
+                CantProd = cantidad,
+                Via = "TOP",
+                Hora = DateTime.Now.ToString("HH:mm"),
+                IndicacionesProd = indicaciones,
+                Modulo = modulo,
+                MedBodega = actual.Location,
+                MedMedida = actual.BaseUnitOfMeasureCode,
+                Iniciales = Session.CurrentUser?.Iniciales ?? "QX",
+                Funcion = "Quirófano",
+                Funcionario = Session.CurrentUser?.NombreCompleto ?? "Quirófano"
+            };
+            var ok = await QuirofanoService.AgregarProductoQuirofanoAsync(prodQui, idUsuario, sede, "QUI");
+            if (!ok)
+            {
+                esError = true;
+                mensajeAlerta = $"No se pudo registrar {item.DisplayName} en quirófano.";
+                return false;
+            }
+            await FarmaciaService.ReservarStockDirectoAsync(
+                item.Id, item.Number, cantidad, sede, IdOrden, Nhcl, idUsuario, modulo, actual.Location);
+            await AsegurarCatalogoStockAsync(forzar: true);
+            esError = false;
+            mensajeAlerta = $"{item.DisplayName} ({cantidad:0.##} {actual.BaseUnitOfMeasureCode}) descargado y reservado del inventario.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            esError = true;
+            mensajeAlerta = $"Error al descargar del inventario: {ex.Message}";
+            return false;
+        }
+        finally { _descargandoStock = false; }
     }
 
     private async Task ExportarPdfAsync()

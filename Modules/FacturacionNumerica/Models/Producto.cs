@@ -75,6 +75,9 @@ public partial class Producto
     [Column("FACTOR_CONVERSION_INVENTARIO", TypeName = "decimal(18,4)")]
     public decimal FactorConversionInventario { get; set; } = 1m;
 
+    [Column("SUJETO_FISCALIZACION")]
+    public bool SujetoFiscalizacion { get; set; }
+
     public bool? Inventario { get; set; }
 
     [Column("IDSUBTIPO")]

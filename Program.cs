@@ -205,6 +205,23 @@ builder.Services.AddHttpClient<SriXmlProcessorService>(client => client.Timeout 
 
 var app = builder.Build();
 
+// Asegurar columna SUJETO_FISCALIZACION en dbo.PRODUCTO antes de cualquier consulta EF
+using (var scopeInit = app.Services.CreateScope())
+{
+    try
+    {
+        var dbFactoryInit = scopeInit.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var ctxInit = await dbFactoryInit.CreateDbContextAsync();
+        await ctxInit.Database.ExecuteSqlRawAsync(@"
+            IF OBJECT_ID('dbo.PRODUCTO', 'U') IS NOT NULL
+               AND COL_LENGTH('dbo.PRODUCTO', 'SUJETO_FISCALIZACION') IS NULL
+                ALTER TABLE dbo.PRODUCTO
+                ADD SUJETO_FISCALIZACION BIT NOT NULL
+                    CONSTRAINT DF_PRODUCTO_SUJETO_FISCALIZACION DEFAULT (0);");
+    }
+    catch { }
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {

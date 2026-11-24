@@ -629,6 +629,7 @@ public sealed class EContaxCatalogService
                 TipoCompravena = p.Tipocompravena,
                 UnidadMedida = p.UnidadMedida,
                 FactorConversionInventario = p.FactorConversionInventario,
+                SujetoFiscalizacion = p.SujetoFiscalizacion,
                 TipoProducto = p.TipoProducto,
                 Idsubtipo = p.Idsubtipo,
                 Codigoimpuesto = p.Codigoimpuesto,
@@ -691,6 +692,7 @@ public sealed class EContaxCatalogService
                 TipoCompravena = p.Tipocompravena,
                 UnidadMedida = p.UnidadMedida,
                 FactorConversionInventario = p.FactorConversionInventario,
+                SujetoFiscalizacion = p.SujetoFiscalizacion,
                 TipoProducto = p.TipoProducto,
                 Idsubtipo = p.Idsubtipo,
                 Codigoimpuesto = p.Codigoimpuesto,
@@ -736,6 +738,7 @@ public sealed class EContaxCatalogService
             Tipocompravena = model.TipoCompravena,
             UnidadMedida = NormalizarUnidad(model.UnidadMedida),
             FactorConversionInventario = ValidarFactorConversion(model.FactorConversionInventario),
+            SujetoFiscalizacion = model.SujetoFiscalizacion,
             TipoProducto = model.TipoProducto,
             Idsubtipo = model.Idsubtipo,
             Codigoimpuesto = model.Codigoimpuesto,
@@ -781,6 +784,7 @@ public sealed class EContaxCatalogService
         producto.Tipocompravena = model.TipoCompravena;
         producto.UnidadMedida = NormalizarUnidad(model.UnidadMedida);
         producto.FactorConversionInventario = ValidarFactorConversion(model.FactorConversionInventario);
+        producto.SujetoFiscalizacion = model.SujetoFiscalizacion;
         producto.TipoProducto = model.TipoProducto;
         producto.Idsubtipo = model.Idsubtipo;
         producto.Codigoimpuesto = model.Codigoimpuesto;

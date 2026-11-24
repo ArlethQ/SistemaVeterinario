@@ -342,6 +342,14 @@
                                             <label class="form-label small fw-semibold" title="Cantidad de unidades de medida que contiene 1 envase/caja">Factor / Contenido por envase</label>
                                             <input class="form-control" type="number" min="0.0001" step="0.01" @bind="_edit.FactorConversion" />
                                         </div>
+                                        <div class="col-12">
+                                            <div class="form-check form-switch mt-1">
+                                                <input class="form-check-input" type="checkbox" id="chkSujetoFiscalizacionCat" @bind="_edit.SujetoFiscalizacion" />
+                                                <label class="form-check-label small fw-semibold" for="chkSujetoFiscalizacionCat">
+                                                    Sujeto a fiscalización <span class="text-muted fw-normal">(Informe de movimiento de medicamentos sujetos a fiscalización)</span>
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
                                 }
                             }
@@ -874,6 +882,7 @@
             Subgrupo = idSubgrupoValido.HasValue ? x.Subgrupo : string.Empty,
             Tipo = tipoNorm,
             Inventario = x.Inventario,
+            SujetoFiscalizacion = x.SujetoFiscalizacion,
             UnidadMedida = string.IsNullOrWhiteSpace(x.UnidadMedida) ? "UNIDAD" : x.UnidadMedida,
             FactorConversion = x.FactorConversion <= 0 ? 1m : x.FactorConversion,
             CodigoImpuesto = x.CodigoImpuesto,
@@ -972,6 +981,7 @@
             Subgrupo = subgrupo,
             Tipo = esServicio ? "S" : "B",
             Inventario = !esServicio && guardado.Inventario,
+            SujetoFiscalizacion = !esServicio && guardado.SujetoFiscalizacion,
             UnidadMedida = esServicio ? "UNIDAD" : (string.IsNullOrWhiteSpace(guardado.UnidadMedida) ? "UNIDAD" : guardado.UnidadMedida),
             FactorConversion = esServicio || guardado.FactorConversion <= 0 ? 1m : guardado.FactorConversion,
             CodigoImpuesto = guardado.CodigoImpuesto == "2" ? "2" : string.Empty,

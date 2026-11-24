@@ -13,6 +13,7 @@ public sealed class EContaxProductoDto
     public string? TipoCompravena { get; set; }
     public string? UnidadMedida { get; set; }
     public decimal FactorConversionInventario { get; set; } = 1m;
+    public bool SujetoFiscalizacion { get; set; }
     public int? TipoProducto { get; set; }
     public int? Idsubtipo { get; set; }
     public string? Codigoimpuesto { get; set; }
@@ -42,6 +43,7 @@ public sealed class EContaxProductoUpsertDto
     public string? TipoCompravena { get; set; }
     public string? UnidadMedida { get; set; }
     public decimal FactorConversionInventario { get; set; } = 1m;
+    public bool SujetoFiscalizacion { get; set; }
     public int? TipoProducto { get; set; }
     public int? Idsubtipo { get; set; }
     public string? Codigoimpuesto { get; set; }
