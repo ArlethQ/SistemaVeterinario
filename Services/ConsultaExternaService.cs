@@ -1451,47 +1451,22 @@ public class ConsultaExternaService : IConsultaExternaService
                 RETURN;
             END
 
-            DECLARE @NuevoStock DECIMAL(18,4) = @StockActual - @Cantidad;
-
             UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
-            SET stock_actual = @NuevoStock,
+            SET stock_reservado = @StockReservado + @Cantidad,
                 fecha_actualizacion = SYSUTCDATETIME()
             WHERE codigo_producto = @CodProdInt
               AND id_sucursal = @IdLocalidad
               AND id_empresa = @IdEmpresa;
-
-            DECLARE @RestanteLote DECIMAL(18,4) = @Cantidad;
-            DECLARE @IdLote BIGINT, @DispLote DECIMAL(18,4), @TomarLote DECIMAL(18,4);
-            WHILE @RestanteLote > 0
-            BEGIN
-                SET @IdLote = NULL;
-                SELECT TOP 1 @IdLote = l.id_lote, @DispLote = l.cantidad_disponible
-                FROM dbo.ECONTAX_INVENTARIO_LOTE l WITH (UPDLOCK, HOLDLOCK)
-                WHERE l.codigo_producto = @CodProdInt
-                  AND l.id_sucursal = @IdLocalidad
-                  AND l.id_empresa = @IdEmpresa
-                  AND l.cantidad_disponible > 0
-                ORDER BY ISNULL(l.fecha_vencimiento, '9999-12-31'), l.fecha_ingreso, l.id_lote;
-
-                IF @IdLote IS NULL BREAK;
-
-                SET @TomarLote = CASE WHEN @DispLote <= @RestanteLote THEN @DispLote ELSE @RestanteLote END;
-                UPDATE dbo.ECONTAX_INVENTARIO_LOTE
-                SET cantidad_disponible = cantidad_disponible - @TomarLote
-                WHERE id_lote = @IdLote;
-
-                SET @RestanteLote = @RestanteLote - @TomarLote;
-            END
 
             INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
                 codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
                 cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
                 metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
             ) VALUES (
-                @CodProdInt, @IdEmpresa, @IdLocalidad, 'SALIDA',
-                @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
-                'PROMEDIO', 'CONSULTA_APLICADA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
-                'Medicamento/insumo aplicado en consulta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                @CodProdInt, @IdEmpresa, @IdLocalidad, 'RESERVA',
+                @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
+                'PROMEDIO', 'CONSULTA_APLICADA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
+                'Reserva en consulta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
                 ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) + ' · Cantidad: ' + CAST(@Cantidad AS VARCHAR(20))
             );
 
@@ -1502,7 +1477,7 @@ public class ConsultaExternaService : IConsultaExternaService
             ) VALUES (
                 @Nhcl, @CodProdInt, LEFT(ISNULL(@Indicaciones, ''), 250), @Cantidad, @IdOrden,
                 LEFT(ISNULL(@Descripcionamento, ''), 250), 'Administrado', @Cantidad, LEFT(ISNULL(@CantidadLetras, ''), 120),
-                GETDATE(), 'C', 'Administrado en consulta (directo a factura)', 1
+                GETDATE(), 'C', 'Administrado en consulta (reservado hasta facturar)', 0
             );
 
             COMMIT TRANSACTION;
@@ -1527,7 +1502,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 return (false, "Stock libre insuficiente en la sucursal actual para aplicar esa cantidad.");
 
             return res > 0
-                ? (true, "Medicamento / insumo registrado como administrado en consulta y descontado de stock.")
+                ? (true, "Medicamento / insumo registrado en consulta y reservado en stock hasta generar la factura.")
                 : (false, "No se pudo registrar el medicamento administrado en consulta.");
         }
         catch (Exception ex)

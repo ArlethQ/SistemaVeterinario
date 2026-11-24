@@ -1153,7 +1153,7 @@ public class FarmaciaService : IFarmaciaService
             FROM dbo.vt_medicinas WITH (UPDLOCK, HOLDLOCK)
             WHERE sec = @Sec;
 
-            IF @EstadoActual NOT IN ('Por Entregar', 'Por Facturar')
+            IF @EstadoActual NOT IN ('Por Entregar', 'Por Facturar', 'Administrado')
             BEGIN
                 ROLLBACK TRANSACTION;
                 SELECT 0;
@@ -1322,12 +1322,53 @@ public class FarmaciaService : IFarmaciaService
 
         var ordenes = await ObtenerRecetasSoapColaAsync(sedeOrden, idOrden.ToString(), "PENDIENTE");
         var receta = ordenes.FirstOrDefault(x => x.IdOrden == idOrden);
-        if (receta is null)
-            return (true, "La orden no tenía medicamentos pendientes en cola de Farmacia.");
+        var pendientes = receta?.Items.Where(x => x.EstaEnCola).ToList() ?? [];
 
-        var pendientes = receta.Items.Where(x => x.EstaEnCola).ToList();
-        if (pendientes.Count == 0)
-            return (true, "La orden no tenía medicamentos pendientes en cola de Farmacia.");
+        var aplicadosConsulta = (await _db.QueryAsync<FarmaciaRecetaSoapItemDto>("""
+            SELECT
+                m.sec AS Sec,
+                ISNULL(m.med_id_orden, 0) AS IdOrden,
+                ISNULL(m.med_nhcl, 0) AS Nhcl,
+                ISNULL(NULLIF(RTRIM(mas.mas_nombre), ''), 'Paciente #' + CAST(ISNULL(m.med_nhcl, 0) AS VARCHAR(20))) AS Paciente,
+                LTRIM(RTRIM(ISNULL(cli.pa_apellidos, '') + ' ' + ISNULL(cli.pa_nombres, ''))) AS Propietario,
+                ISNULL(m.med_idProdu, 0) AS CodigoProductoInt,
+                ISNULL(p.CODIGO_PRINCIPAL, '') AS CodigoPrincipal,
+                COALESCE(NULLIF(LTRIM(RTRIM(m.med_otroMedicamento)), ''), NULLIF(LTRIM(RTRIM(ISNULL(p.NOMBRE, ''))), ''), 'Medicamento aplicado') AS NombreRecetado,
+                ISNULL(p.NOMBRE, '') AS NombreProductoInventario,
+                ISNULL(m.med_indicaciones, '') AS Indicaciones,
+                CAST(ISNULL(m.med_cantidad, 0) AS DECIMAL(18,4)) AS CantidadRecetada,
+                CAST(ISNULL(m.med_cantidad1, ISNULL(m.med_cantidad, 0)) AS DECIMAL(18,4)) AS CantidadReservadaLinea,
+                CAST(ISNULL(m.med_cantidad1, ISNULL(m.med_cantidad, 0)) AS DECIMAL(18,4)) AS ReservadoRealLinea,
+                'Administrado' AS Estado,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.UNIDAD_MEDIDA)), ''), 'UNIDAD') AS UnidadMedida,
+                CAST(ISNULL(p.VALOR_UNITARIO, 0) AS DECIMAL(18,4)) AS PrecioUnitario,
+                'Bodega de la sucursal' AS Bodega
+            FROM dbo.vt_medicinas m
+            LEFT JOIN dbo.vt_ordenAtencion o ON o.ordenAten_id = m.med_id_orden
+            LEFT JOIN dbo.vt_pacientes mas ON mas.mas_nhcl = m.med_nhcl
+            LEFT JOIN dbo.vt_clientes cli ON cli.pa_codigo = COALESCE(mas.mas_idcliente, o.ordenAten_idcliente)
+            LEFT JOIN dbo.PRODUCTO p ON p.CODIGO = m.med_idProdu
+            WHERE m.med_id_orden = @IdOrden
+              AND LTRIM(RTRIM(ISNULL(m.med_tipo, ''))) = 'C'
+              AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), '') = 'Administrado'
+              AND CAST(ISNULL(m.med_cantidad, 0) AS DECIMAL(18,4)) > 0;
+            """, new { IdOrden = idOrden })).ToList();
+
+        if (aplicadosConsulta.Count > 0)
+        {
+            pendientes.AddRange(aplicadosConsulta);
+            receta ??= new FarmaciaRecetaSoapOrdenDto
+            {
+                IdOrden = idOrden,
+                Nhcl = aplicadosConsulta[0].Nhcl,
+                Paciente = aplicadosConsulta[0].Paciente,
+                Propietario = aplicadosConsulta[0].Propietario,
+                Items = pendientes
+            };
+        }
+
+        if (receta is null || pendientes.Count == 0)
+            return (true, "La orden no tenía medicamentos pendientes en cola de Farmacia ni aplicados en consulta.");
 
         var porSec = itemsFacturados
             .Where(x => x.SecMedicina > 0 && x.CantidadFacturada > 0)
@@ -1410,7 +1451,7 @@ public class FarmaciaService : IFarmaciaService
             FROM dbo.vt_medicinas WITH (UPDLOCK, HOLDLOCK)
             WHERE sec = @Sec;
 
-            IF @EstadoActual NOT IN ('Por Entregar', 'Por Facturar')
+            IF @EstadoActual NOT IN ('Por Entregar', 'Por Facturar', 'Administrado')
             BEGIN
                 ROLLBACK TRANSACTION;
                 SELECT 0;

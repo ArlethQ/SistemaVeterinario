@@ -6286,7 +6286,8 @@
                 {
                     var itemsFarmaciaFacturados = detallesFacturables
                         .Where(d => origenesDetalleOrden.TryGetValue(d, out var org) &&
-                                    string.Equals(org.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase))
+                                    (string.Equals(org.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(org.Origen, "CONSULTA_INSUMO", StringComparison.OrdinalIgnoreCase)))
                         .Select(d => (origenesDetalleOrden[d].SecOrigen, d.Codproducto, d.Cantidad))
                         .ToList();
 
