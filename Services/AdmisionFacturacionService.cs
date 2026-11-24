@@ -2587,6 +2587,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             ORDER BY CASE WHEN @SoloProcesos = 0 AND o.ordenAten_id = @Numero THEN 0 ELSE 1 END,
                      CASE WHEN @SoloProcesos = 0 THEN (CASE WHEN o.ordenAten_idlocalidad = @LocalidadSesion THEN 0 ELSE 1 END) ELSE 0 END,
                      CASE WHEN @SoloProcesos = 0 THEN {exprNoFacturada} ELSE 0 END,
+                     CASE WHEN @SoloProcesos = 0 THEN (CASE WHEN o.ordenAten_fechaProcesado IS NOT NULL THEN 0 ELSE 1 END) ELSE 0 END,
                      ISNULL(o.ordenAten_fechaProcesado, o.ordenAten_fecha) DESC,
                      o.ordenAten_id DESC;";
 

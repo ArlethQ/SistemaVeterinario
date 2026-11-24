@@ -1258,6 +1258,13 @@ public class FarmaciaService : IFarmaciaService
                 });
             }
 
+            if (marcarPorFacturar && receta.IdOrden > 0)
+            {
+                await _db.ExecuteAsync(
+                    "UPDATE dbo.vt_ordenAtencion SET ordenAten_fechaProcesado = GETDATE() WHERE ordenAten_id = @IdOrden;",
+                    new { receta.IdOrden });
+            }
+
             _inventarioService.InvalidarCacheCatalogo();
             return marcarPorFacturar
                 ? (true, $"Receta Orden #{receta.IdOrden} enviada a Facturación. Se mantiene la reserva original intacta hasta que se genere la factura.")
