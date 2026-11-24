@@ -10,25 +10,19 @@
 
 <PageTitle>Protocolo Quirúrgico y Chequeo de Cirugía - e-ForVets</PageTitle>
 
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-    <div>
-        <h4 class="mb-0 fw-bold text-primary">Protocolo Operatorio, Equipo Quirúrgico y Chequeo de Cirugía</h4>
-        <small class="text-muted">Descripción del acto operatorio, equipo quirúrgico interviniente y lista de chequeo de cirugía segura.</small>
+<div class="protocolo-view">
+<header class="protocolo-header mb-3">
+    <div class="protocolo-heading">
+        <i class="bi bi-scissors" aria-hidden="true"></i>
+        <div>
+            <h1>Protocolo quirúrgico</h1>
+            <p>Acto operatorio, equipo quirúrgico y chequeo de cirugía segura.</p>
+        </div>
     </div>
 
-    <div class="d-flex flex-wrap gap-2 align-items-center">
-        <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
-            <option value="0">-- Seleccionar Orden Activa --</option>
-            @foreach (var ord in ordenesActivas)
-            {
-                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
-            }
-        </select>
-
-        <BuscadorOrdenClinica @bind-Orden="ordenInput" @bind-Nhcl="nhclInput" OnBuscar="CargarPorInputAsync" />
-
-        @if (paciente != null)
-        {
+    @if (paciente != null)
+    {
+        <div class="d-flex flex-wrap gap-2 align-items-center">
             <SaveButton class="btn btn-sm btn-success fw-semibold" OnClick="GuardarProtocoloAsync" Disabled="@guardando">
                 @(guardando ? "Guardando..." : "Guardar Protocolo")
             </SaveButton>
@@ -41,8 +35,20 @@
             {
                 <a class="app-workflow-action app-workflow-recovery" href="/quirofano/recuperacion/@IdOrden/@Nhcl"><i class="bi bi-heart-pulse" aria-hidden="true"></i> Ir a Recuperación</a>
             }
+        </div>
+    }
+</header>
+
+<div class="protocolo-panel protocolo-search d-flex flex-wrap gap-2 align-items-center mb-3">
+    <select class="form-select form-select-sm protocolo-orden" aria-label="Orden activa" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+        <option value="0">-- Seleccionar Orden Activa --</option>
+        @foreach (var ord in ordenesActivas)
+        {
+            <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
         }
-    </div>
+    </select>
+
+    <BuscadorOrdenClinica @bind-Orden="ordenInput" @bind-Nhcl="nhclInput" OnBuscar="CargarPorInputAsync" />
 </div>
 
 @if (!string.IsNullOrEmpty(mensajeAlerta))
@@ -68,43 +74,40 @@ else if (paciente != null)
                               OnCirugiaCambiada="CambiarCirugiaActivaAsync" />
 
     <!-- Cabecera Paciente -->
-    <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
-        <div class="card-body py-2 px-3">
-            <div class="row g-2 align-items-center small">
-                <div class="col-md-3">
-                    <span class="text-muted">Orden / NHCL:</span>
-                    <strong class="ms-1 text-primary">#@paciente.OrdenAtencionId / @paciente.Nhcl</strong>
-                </div>
-                <div class="col-md-3">
-                    <span class="text-muted">Paciente:</span>
-                    <strong class="ms-1">@paciente.PacienteNombre</strong> (@paciente.Especie - @paciente.Raza)
-                </div>
-                <div class="col-md-3">
-                    <span class="text-muted">Edad / Sexo:</span>
-                    <strong class="ms-1">@paciente.EdadTexto / @paciente.Sexo</strong>
-                </div>
-                <div class="col-md-3">
-                    <span class="text-muted">Propietario:</span>
-                    <strong class="ms-1">@paciente.PropietarioNombre</strong>
-                </div>
-            </div>
-        </div>
-    </div>
+    <section class="protocolo-panel protocolo-patient mb-3" aria-label="Datos de la orden y del paciente">
+        <div><i class="bi bi-clipboard" aria-hidden="true"></i><div>
+            <span>Orden / NHCL</span>
+            <strong>#@paciente.OrdenAtencionId / @paciente.Nhcl</strong>
+        </div></div>
+        <div><i class="bi bi-heart-pulse" aria-hidden="true"></i><div>
+            <span>Paciente</span>
+            <strong class="text-primary">@paciente.PacienteNombre</strong>
+            <small>@paciente.Especie · @paciente.Raza</small>
+        </div></div>
+        <div><i class="bi bi-gender-ambiguous" aria-hidden="true"></i><div>
+            <span>Edad / Sexo</span>
+            <strong>@paciente.EdadTexto / @paciente.Sexo</strong>
+        </div></div>
+        <div><i class="bi bi-person" aria-hidden="true"></i><div>
+            <span>Propietario</span>
+            <strong>@paciente.PropietarioNombre</strong>
+        </div></div>
+    </section>
 
     <!-- Pestañas del Módulo Quirúrgico -->
-    <ul class="nav nav-tabs mb-3 small fw-semibold">
+    <ul class="nav nav-tabs protocolo-tabs mb-3 fw-semibold">
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 1 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(1)">
+            <button class="nav-link @(tabActiva == 1 ? "active" : "")" @onclick="() => CambiarTab(1)">
                 1. Protocolo Operatorio y Chequeo Quirúrgico
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 2 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(2)">
+            <button class="nav-link @(tabActiva == 2 ? "active" : "")" @onclick="() => CambiarTab(2)">
                 2. Equipo Quirúrgico Interviniente (@protDto.Equipo.Count)
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 3 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(3)">
+            <button class="nav-link @(tabActiva == 3 ? "active" : "")" @onclick="() => CambiarTab(3)">
                 3. Archivos y Fotos de Cirugía (@archivosQuirurgicos.Count)
             </button>
         </li>
@@ -115,8 +118,8 @@ else if (paciente != null)
         <div class="row g-3">
             <!-- Columna Izquierda: Descripción del Acto Quirúrgico (qvt_Protocolo) -->
             <div class="col-lg-7">
-                <div class="card shadow-sm border-0 mb-3">
-                    <div class="card-header bg-white fw-bold text-primary">
+                <div class="card protocolo-panel mb-3">
+                    <div class="card-header protocolo-section fw-bold">
                         1. Protocolo Operatorio
                     </div>
                 <div class="card-body small">
@@ -237,8 +240,8 @@ else if (paciente != null)
 
             <!-- Columna Derecha: Chequeo de Enfermería Quirúrgica y Conteo de Gasas (qvt_ingresocirugia) -->
             <div class="col-lg-5">
-                <div class="card shadow-sm border-0 mb-3">
-                    <div class="card-header bg-white fw-bold text-primary">
+                <div class="card protocolo-panel mb-3">
+                    <div class="card-header protocolo-section fw-bold">
                         2. Chequeo Quirúrgico y Conteo de Textiles
                     </div>
                     <div class="card-body small">
@@ -309,8 +312,8 @@ else if (paciente != null)
     else if (tabActiva == 2)
     {
         <!-- Pestaña 2: Equipo Quirúrgico (qvt_team / vt_quirTeam) -->
-        <div class="card shadow-sm border-0 mb-3">
-            <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+        <div class="card protocolo-panel mb-3">
+            <div class="card-header protocolo-section fw-bold d-flex justify-content-between align-items-center">
                 <span>Equipo Quirúrgico Interviniente (@protDto.Equipo.Count)</span>
                 <small class="text-muted">Asignación de cirujanos, anestesiólogo, instrumentistas y circulante</small>
             </div>
@@ -329,7 +332,7 @@ else if (paciente != null)
                     </div>
                 </div>
 
-                <div class="row g-2 mb-3 align-items-end bg-light p-2 rounded border">
+                <div class="row g-2 mb-3 align-items-end protocolo-toolbar p-2 rounded border">
                     <div class="col-md-5">
                         <label class="form-label mb-1 fw-semibold">Profesional del Sistema</label>
                         <select class="form-select form-select-sm" @bind="nuevoMiembro.IdUsuario">
@@ -363,8 +366,8 @@ else if (paciente != null)
                 </div>
 
                 <div class="table-responsive">
-                    <table class="table table-sm table-bordered align-middle mb-0">
-                        <thead class="table-light">
+                    <table class="table protocolo-table table-bordered align-middle mb-0">
+                        <thead>
                             <tr>
                                 <th>Profesional</th>
                                 <th>Rol en Quirófano</th>
@@ -425,13 +428,13 @@ else if (paciente != null)
     else if (tabActiva == 3)
     {
         <!-- Pestaña 3: Archivos Quirúrgicos del Paciente (vt_quirArchivos) -->
-        <div class="card shadow-sm border-0 mb-3">
-            <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
+        <div class="card protocolo-panel mb-3">
+            <div class="card-header protocolo-section fw-bold d-flex justify-content-between align-items-center">
                 <span>Archivos, Documentos y Evidencia Quirúrgica (@archivosQuirurgicos.Count)</span>
                 <span class="badge bg-info-subtle text-info border">Ruta: archivosPacientes/@Nhcl/ingreso</span>
             </div>
             <div class="card-body small">
-                <div class="row g-2 mb-3 bg-light p-2 rounded align-items-center">
+                <div class="row g-2 mb-3 protocolo-toolbar p-2 rounded align-items-center">
                     <div class="col-md-7">
                         <label class="form-label mb-1 fw-semibold">Subir nuevo archivo / foto quirúrgica (PDF, JPG, PNG, DOCX, XLSX máx 15MB):</label>
                         <InputFile class="form-control form-control-sm" OnChange="SubirArchivoQuirurgicoAsync" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" />
@@ -442,8 +445,8 @@ else if (paciente != null)
                 </div>
 
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover table-bordered align-middle mb-0">
-                        <thead class="table-light">
+                    <table class="table protocolo-table table-hover table-bordered align-middle mb-0">
+                        <thead>
                             <tr>
                                 <th>Nombre del Archivo</th>
                                 <th style="width: 170px;">Fecha y Hora</th>
@@ -484,6 +487,8 @@ else if (paciente != null)
         </div>
     }
 }
+
+</div>
 
 @code {
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);

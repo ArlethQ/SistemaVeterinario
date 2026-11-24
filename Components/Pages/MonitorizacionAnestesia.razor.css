@@ -1,0 +1,94 @@
+.anesthesia-view {
+    container-type: inline-size;
+    min-width: 0;
+    color: #102952;
+    --anesthesia-border: #c5d9ee;
+}
+
+.anesthesia-hero {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 14px 16px;
+    border: 1px solid #dbe9f6;
+    border-radius: 12px;
+    background: linear-gradient(110deg, #f8fbff 30%, #e9f5ff 70%, #f5faff);
+}
+
+.anesthesia-title, .anesthesia-toolbar, .anesthesia-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.anesthesia-title > i { color: #074875; font-size: 2rem; }
+.anesthesia-title h1 { margin: 0; font-size: clamp(1.24rem, 1.55vw, 1.65rem); font-weight: 800; }
+.anesthesia-toolbar, .anesthesia-actions { flex-wrap: wrap; }
+.anesthesia-toolbar:empty { display: none; }
+.anesthesia-toolbar > div { min-width: 0; }
+.anesthesia-toolbar select { width: min(280px, 64vw); }
+.anesthesia-actions { margin-inline-start: auto; justify-content: flex-end; }
+.anesthesia-actions ::deep .btn { min-height: 34px !important; }
+
+.anesthesia-panel {
+    min-width: 0;
+    border: 1px solid var(--anesthesia-border);
+    border-radius: 12px;
+    background: linear-gradient(145deg, #fff, #f1f7fe);
+    box-shadow: 0 3px 8px #173b6712;
+}
+
+.anesthesia-section {
+    padding: 8px 12px;
+    border-radius: 11px 11px 0 0;
+    background: #064369;
+    color: #fff;
+}
+
+.anesthesia-section :is(h6, .text-muted) { color: inherit !important; }
+.anesthesia-patient { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 10px 12px; }
+.anesthesia-patient > div { display: flex; align-items: center; gap: 9px; padding: 4px 10px; min-width: 0; overflow-wrap: anywhere; }
+.anesthesia-patient > div + div { border-inline-start: 1px solid var(--anesthesia-border); }
+.anesthesia-patient > div > i { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 12px; background: #e4f4fd; color: #0574b7; }
+.anesthesia-patient small { display: block; color: #465970; font-size: .72rem; }
+.anesthesia-patient strong { font-size: .83rem; }
+.anesthesia-name { color: #064ac1; }
+.anesthesia-id, .anesthesia-chip { display: inline-block; padding: 2px 7px; border-radius: 6px; background: #e2f0ff; color: #123d70; font-size: .72rem; }
+.anesthesia-id { margin: 3px 3px 0 0; }
+.anesthesia-asa { padding: 10px; margin-bottom: 12px; border: 1px solid var(--anesthesia-border); border-radius: 9px; background: #f0f7ff; }
+.anesthesia-asa-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; font-size: .84rem; }
+.anesthesia-asa-options { display: grid; grid-template-columns: repeat(5, minmax(26px, 1fr)) minmax(max-content, 1.25fr); gap: 5px; overflow-x: auto; padding: 4px; margin: -4px; }
+.anesthesia-asa-option { min-height: 34px; padding: 5px; border: 1px solid #95b5d6; border-radius: 7px; background: #fff; color: #123d70; font-size: .8rem; font-weight: 700; }
+.anesthesia-asa-option:hover { background: #e2f0ff; }
+.anesthesia-asa-option[aria-pressed="true"] { background: #075ca0; border-color: #075ca0; color: #fff; }
+.anesthesia-asa-option:focus-visible { outline: 2px solid #075ca0; outline-offset: 2px; }
+.anesthesia-emergency { padding-inline: 8px; border-color: #e7afb7; background: #ffe4e8; color: #922435; white-space: nowrap; }
+.anesthesia-emergency:hover { background: #ffd2d9; }
+.anesthesia-emergency[aria-pressed="true"] { background: #ab2b3b; border-color: #ab2b3b; }
+.anesthesia-vitals { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.anesthesia-vitals > div { flex: 1 1 5rem; width: auto; }
+
+@media screen {
+    .anesthesia-steps { display: grid; gap: 12px; margin-bottom: 12px; }
+    .anesthesia-steps > .card { margin-bottom: 0 !important; }
+    .anesthesia-steps .card-body .row > [class*="col-md-"] { flex: 0 0 50%; width: 50%; }
+}
+
+@container (min-width: 1040px) {
+    .anesthesia-steps { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+@container (max-width: 500px) {
+    .anesthesia-steps .card-body .row > [class*="col-md-"] { flex: 0 0 100%; width: 100%; }
+    .anesthesia-actions { margin-inline-start: 0; }
+}
+
+@container (width < 900px) {
+    .anesthesia-patient { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .anesthesia-patient > div:nth-child(odd) { border-inline-start: 0; }
+}
+
+@container (width < 475px) {
+    .anesthesia-patient { grid-template-columns: minmax(0, 1fr); }
+    .anesthesia-patient > div + div { border-inline-start: 0; border-top: 1px solid var(--anesthesia-border); }
+}
