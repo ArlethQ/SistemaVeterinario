@@ -294,7 +294,7 @@
                                             <th>Bodega (@NombreSucursalActiva)</th>
                                             <th class="text-center">Recetado</th>
                                             <th>Disponibilidad en Stock (@NombreSucursalActiva)</th>
-                                            <th class="text-center" style="width:140px;">Cant. a Vender</th>
+                                            <th class="text-center" style="width:185px;">Cant. a Vender</th>
                                             <th class="text-end">P. Unit.</th>
                                             <th class="text-end pe-3">Subtotal</th>
                                         </tr>
@@ -381,36 +381,57 @@
                                                 <td class="text-center">
                                                     @if (item.EstaEnCola)
                                                     {
-                                                        <div class="input-group input-group-sm">
-                                                            <input type="number"
-                                                                   min="0"
-                                                                   max="@item.MaximoDisponibleParaEstaLinea"
-                                                                   step="1"
-                                                                   class="form-control text-center fw-bold @(item.SeVende ? "text-primary" : "text-muted")"
-                                                                   @bind="item.CantidadAVender"
-                                                                   disabled="@(!item.SeVende || !item.TieneProductoEnCatalogo || _procesando)" />
-                                                            <span class="input-group-text px-1" style="font-size:.7rem;">@item.UnidadMedida</span>
-                                                        </div>
-                                                        @if (item.FactorConversion > 1m && item.EstaEnCola && item.TieneProductoEnCatalogo)
+                                                        @if (item.FactorConversion > 1m && item.TieneProductoEnCatalogo)
                                                         {
-                                                            <div class="d-flex justify-content-center align-items-center gap-1 mt-1">
-                                                                <small class="text-muted" style="font-size:.68rem;">1 Paq = @item.FactorConversion.ToString("G29") @item.UnidadMedida</small>
-                                                                @if (item.MaximoDisponibleParaEstaLinea >= item.FactorConversion)
-                                                                {
-                                                                    <button type="button"
-                                                                            class="btn btn-xs btn-outline-primary py-0 px-1"
-                                                                            style="font-size:.66rem;"
-                                                                            disabled="@(!item.SeVende || _procesando)"
-                                                                            @onclick="() => item.CantidadAVender = Math.Min(item.MaximoDisponibleParaEstaLinea, item.FactorConversion)">
-                                                                        1 Paq.
-                                                                    </button>
-                                                                }
+                                                            <div class="input-group input-group-sm">
+                                                                <input type="number"
+                                                                       min="0"
+                                                                       max="@item.MaximoVisibleVenta"
+                                                                       step="1"
+                                                                       class="form-control text-center fw-bold @(item.SeVende ? "text-primary" : "text-muted")"
+                                                                       @bind="item.CantidadVisibleVenta"
+                                                                       disabled="@(!item.SeVende || _procesando)" />
+                                                                <select class="form-select px-1"
+                                                                        style="max-width:74px;font-size:.72rem;"
+                                                                        @bind="item.VenderPorPaquete"
+                                                                        disabled="@(!item.SeVende || _procesando)">
+                                                                    <option value="true">Paq.</option>
+                                                                    <option value="false">@item.UnidadMedida</option>
+                                                                </select>
+                                                            </div>
+                                                            @if (item.VenderPorPaquete)
+                                                            {
+                                                                <small class="text-primary d-block mt-1 fw-semibold" style="font-size:.72rem;">
+                                                                    = @item.CantidadAVender.ToString("0.##") @item.UnidadMedida
+                                                                </small>
+                                                                <small class="text-muted d-block" style="font-size:.66rem;">
+                                                                    (1 Paq = @item.FactorConversion.ToString("G29") @item.UnidadMedida)
+                                                                </small>
+                                                            }
+                                                            else
+                                                            {
+                                                                <small class="text-muted d-block mt-1" style="font-size:.68rem;">
+                                                                    1 Paq = @item.FactorConversion.ToString("G29") @item.UnidadMedida
+                                                                </small>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="input-group input-group-sm">
+                                                                <input type="number"
+                                                                       min="0"
+                                                                       max="@item.MaximoDisponibleParaEstaLinea"
+                                                                       step="1"
+                                                                       class="form-control text-center fw-bold @(item.SeVende ? "text-primary" : "text-muted")"
+                                                                       @bind="item.CantidadAVender"
+                                                                       disabled="@(!item.SeVende || !item.TieneProductoEnCatalogo || _procesando)" />
+                                                                <span class="input-group-text px-1" style="font-size:.7rem;">@item.UnidadMedida</span>
                                                             </div>
                                                         }
                                                         @if (item.SeVende && item.CantidadAVender < item.CantidadRecetada)
                                                         {
                                                             <small class="text-warning-emphasis d-block mt-1" style="font-size:.7rem;">
-                                                                Compra parcial (@item.CantidadAVender.ToString("0.##") de @item.CantidadRecetada.ToString("0.##"))
+                                                                Compra parcial (@item.CantidadAVender.ToString("0.##") de @item.CantidadRecetada.ToString("0.##") @item.UnidadMedida)
                                                             </small>
                                                         }
                                                     }

@@ -154,5 +154,26 @@ public class FarmaciaRecetaSoapItemDto
     // Campos editables por el encargado de Farmacia antes de completar la compra
     public bool SeVende { get; set; } = true;
     public decimal CantidadAVender { get; set; }
+    public bool VenderPorPaquete { get; set; }
+
+    public decimal MaximoVisibleVenta =>
+        VenderPorPaquete && FactorConversion > 1m
+            ? Math.Floor(MaximoDisponibleParaEstaLinea / FactorConversion)
+            : MaximoDisponibleParaEstaLinea;
+
+    public decimal CantidadVisibleVenta
+    {
+        get => VenderPorPaquete && FactorConversion > 1m
+            ? Math.Round(CantidadAVender / FactorConversion, 4)
+            : CantidadAVender;
+        set
+        {
+            var baseCant = VenderPorPaquete && FactorConversion > 1m
+                ? Math.Round(Math.Max(0m, value) * FactorConversion, 4)
+                : Math.Max(0m, value);
+            CantidadAVender = Math.Min(MaximoDisponibleParaEstaLinea, baseCant);
+        }
+    }
+
     public decimal SubtotalVenta => SeVende && CantidadAVender > 0 ? Math.Round(CantidadAVender * PrecioUnitario, 2) : 0m;
 }

@@ -1051,6 +1051,10 @@ public class FarmaciaService : IFarmaciaService
                     it.SeVende = it.CantidadReservadaLinea > 0;
                     it.CantidadAVender = it.CantidadReservadaLinea;
                 }
+
+                it.VenderPorPaquete = it.FactorConversion > 1m &&
+                    it.CantidadAVender >= it.FactorConversion &&
+                    (it.CantidadAVender % it.FactorConversion) == 0m;
             }
 
             var ordenes = items
