@@ -328,10 +328,18 @@
                                                         <small class="text-success d-block">@item.Observaciones</small>
                                                     }
                                                 </td>
-                                                <td>
+                                                <td style="max-width:175px;">
                                                     @if (item.TieneProductoEnCatalogo)
                                                     {
-                                                        <span class="badge bg-info-subtle text-dark border"><i class="ri-store-2-line me-1"></i>@item.Bodega</span>
+                                                        var bodegasItem = (item.Bodega ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                                                        <div class="d-flex flex-column align-items-start gap-1">
+                                                            @foreach (var bod in bodegasItem)
+                                                            {
+                                                                <span class="badge bg-info-subtle text-dark border text-start text-wrap">
+                                                                    <i class="ri-store-2-line me-1"></i>@bod
+                                                                </span>
+                                                            }
+                                                        </div>
                                                     }
                                                     else
                                                     {
@@ -394,10 +402,11 @@
                                                                        disabled="@(!item.SeVende || _procesando)" />
                                                                 <select class="form-select ps-2 pe-4"
                                                                         style="min-width:96px;width:auto;font-size:.76rem;"
-                                                                        @bind="item.VenderPorPaquete"
+                                                                        @bind:get="@(item.VenderPorPaquete ? "PAQ" : "UNI")"
+                                                                        @bind:set="@((string? v) => CambiarModoVentaReceta(item, v == "PAQ"))"
                                                                         disabled="@(!item.SeVende || _procesando)">
-                                                                    <option value="true">Paquete</option>
-                                                                    <option value="false">@item.UnidadMedida</option>
+                                                                    <option value="PAQ">Paquete</option>
+                                                                    <option value="UNI">@item.UnidadMedida</option>
                                                                 </select>
                                                             </div>
                                                             @if (item.VenderPorPaquete)
@@ -1154,6 +1163,24 @@
         else if (item.CantidadAVender <= 0)
         {
             item.CantidadAVender = Math.Min(item.CantidadRecetada, item.MaximoDisponibleParaEstaLinea);
+        }
+    }
+
+    private void CambiarModoVentaReceta(FarmaciaRecetaSoapItemDto item, bool porPaquete)
+    {
+        item.VenderPorPaquete = porPaquete;
+        if (porPaquete && item.FactorConversion > 1m && item.CantidadAVender > 0m)
+        {
+            var paquetes = Math.Ceiling(item.CantidadAVender / item.FactorConversion);
+            var nuevaCantBase = Math.Round(paquetes * item.FactorConversion, 4);
+            if (nuevaCantBase > item.MaximoDisponibleParaEstaLinea)
+            {
+                var maxPaquetes = Math.Floor(item.MaximoDisponibleParaEstaLinea / item.FactorConversion);
+                nuevaCantBase = maxPaquetes > 0m
+                    ? Math.Round(maxPaquetes * item.FactorConversion, 4)
+                    : item.MaximoDisponibleParaEstaLinea;
+            }
+            item.CantidadAVender = nuevaCantBase;
         }
     }
 
