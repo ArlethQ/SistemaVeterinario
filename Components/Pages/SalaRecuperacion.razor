@@ -10,25 +10,19 @@
 
 <PageTitle>Sala de Recuperación y Post-Operatorio - e-ForVets</PageTitle>
 
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-    <div>
-        <h4 class="mb-0 fw-bold text-primary">Sala de Recuperación Post-Anestésica y Entrega Post-Operatoria</h4>
-        <small class="text-muted">Monitoreo post-anestésico, control de líquidos, evolución y entrega post-operatoria.</small>
+<div class="recuperacion-view">
+<header class="recuperacion-header mb-3">
+    <div class="recuperacion-heading">
+        <i class="bi bi-heart-pulse" aria-hidden="true"></i>
+        <div>
+            <h1>Sala de Recuperación</h1>
+            <p>Monitoreo postanestésico, control de líquidos, evolución y entrega postoperatoria.</p>
+        </div>
     </div>
 
-    <div class="d-flex flex-wrap gap-2 align-items-center">
-        <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
-            <option value="0">-- Seleccionar Orden Activa --</option>
-            @foreach (var ord in ordenesActivas)
-            {
-                <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
-            }
-        </select>
-
-        <BuscadorOrdenClinica @bind-Orden="ordenInput" @bind-Nhcl="nhclInput" OnBuscar="CargarPorInputAsync" />
-
-        @if (paciente != null)
-        {
+    @if (paciente != null)
+    {
+        <div class="d-flex flex-wrap gap-2 align-items-center">
             <button class="btn btn-sm btn-danger app-doc-action app-doc-pdf" @onclick="ExportarPdfAsync"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Exportar PDF</button>
             @if (Permisos.Permite("hospitalizacion/ficha"))
             {
@@ -38,8 +32,20 @@
             {
                 <a class="btn btn-sm btn-outline-secondary" href="/kardex/enfermeria/@IdOrden/@Nhcl">Kardex Enfermería</a>
             }
+        </div>
+    }
+</header>
+
+<div class="recuperacion-panel recuperacion-search d-flex flex-wrap gap-2 align-items-center mb-3">
+    <select class="form-select form-select-sm recuperacion-orden" aria-label="Orden activa" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+        <option value="0">-- Seleccionar Orden Activa --</option>
+        @foreach (var ord in ordenesActivas)
+        {
+            <option value="@ord.IdOrdenAtencion">#@ord.IdOrdenAtencion | NHCL:@ord.Nhcl - @ord.Paciente (@ord.Cliente)</option>
         }
-    </div>
+    </select>
+
+    <BuscadorOrdenClinica @bind-Orden="ordenInput" @bind-Nhcl="nhclInput" OnBuscar="CargarPorInputAsync" />
 </div>
 
 @if (!string.IsNullOrEmpty(mensajeAlerta))
@@ -65,43 +71,40 @@ else if (paciente != null)
                               OnCirugiaCambiada="CambiarCirugiaActivaAsync" />
 
     <!-- Cabecera del Paciente -->
-    <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
-        <div class="card-body py-2 px-3">
-            <div class="row g-2 align-items-center small">
-                <div class="col-md-3">
-                    <span class="text-muted">Orden / NHCL:</span>
-                    <strong class="ms-1 text-primary">#@paciente.OrdenAtencionId / @paciente.Nhcl</strong>
-                </div>
-                <div class="col-md-3">
-                    <span class="text-muted">Paciente:</span>
-                    <strong class="ms-1">@paciente.PacienteNombre</strong> (@paciente.Especie - @paciente.Raza)
-                </div>
-                <div class="col-md-3">
-                    <span class="text-muted">Edad / Sexo:</span>
-                    <strong class="ms-1">@paciente.EdadTexto / @paciente.Sexo</strong>
-                </div>
-                <div class="col-md-3">
-                    <span class="text-muted">Destino Post-Op:</span>
-                    <strong class="ms-1 text-success">@postChecklist.Destino</strong>
-                </div>
-            </div>
-        </div>
-    </div>
+    <section class="recuperacion-panel recuperacion-patient mb-3" aria-label="Datos de la orden y del paciente">
+        <div><i class="bi bi-clipboard" aria-hidden="true"></i><div>
+            <span>Orden / NHCL</span>
+            <strong>#@paciente.OrdenAtencionId / @paciente.Nhcl</strong>
+        </div></div>
+        <div><i class="bi bi-heart-pulse" aria-hidden="true"></i><div>
+            <span>Paciente</span>
+            <strong class="text-primary">@paciente.PacienteNombre</strong>
+            <small>@paciente.Especie · @paciente.Raza</small>
+        </div></div>
+        <div><i class="bi bi-gender-ambiguous" aria-hidden="true"></i><div>
+            <span>Edad / Sexo</span>
+            <strong>@paciente.EdadTexto / @paciente.Sexo</strong>
+        </div></div>
+        <div><i class="bi bi-signpost" aria-hidden="true"></i><div>
+            <span>Destino postoperatorio</span>
+            <strong class="text-success">@postChecklist.Destino</strong>
+        </div></div>
+    </section>
 
     <!-- Pestañas de Sala de Recuperación -->
-    <ul class="nav nav-tabs mb-3 small fw-semibold">
+    <ul class="nav nav-tabs recuperacion-tabs mb-3 fw-semibold">
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 1 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(1)">
+            <button class="nav-link @(tabActiva == 1 ? "active" : "")" @onclick="() => CambiarTab(1)">
                 1. Curva y Signos Vitales en Recuperación (@signosRecuperacion.Count)
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 2 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(2)">
+            <button class="nav-link @(tabActiva == 2 ? "active" : "")" @onclick="() => CambiarTab(2)">
                 2. Fármacos, Líquidos Administrados/Eliminados y Notas
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link @(tabActiva == 3 ? "active text-primary" : "text-secondary")" @onclick="() => CambiarTab(3)">
+            <button class="nav-link @(tabActiva == 3 ? "active" : "")" @onclick="() => CambiarTab(3)">
                 3. Checklist de Entrega Post-Operatoria
             </button>
         </li>
@@ -112,8 +115,8 @@ else if (paciente != null)
         <div class="row g-3">
             <!-- Formulario de Registro de Signo Vital en Recuperación -->
             <div class="col-lg-4">
-                <div class="card shadow-sm border-0">
-                    <div class="card-header bg-white fw-bold text-primary">
+                <div class="card recuperacion-panel">
+                    <div class="card-header recuperacion-section fw-bold">
                         @(nuevoSigno.Id > 0 ? $"Editar Control #{nuevoSigno.Id}" : "Nuevo Control de Signos en Recuperación")
                     </div>
                     <div class="card-body small">
@@ -174,10 +177,10 @@ else if (paciente != null)
 
             <!-- Gráfica SVG y Tabla de Signos Vitales en Recuperación -->
             <div class="col-lg-8">
-                <div class="card shadow-sm border-0 mb-3">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
-                        <span class="fw-bold text-primary small">Curva de Evolución en Sala de Recuperación</span>
-                        <div class="d-flex gap-2 small">
+                <div class="card recuperacion-panel mb-3">
+                    <div class="card-header recuperacion-section d-flex justify-content-between align-items-center py-2">
+                        <span class="fw-bold">Curva de Evolución en Sala de Recuperación</span>
+                        <div class="d-flex flex-wrap gap-2 small">
                             <span><span class="badge bg-danger">●</span> Pulso</span>
                             <span><span class="badge bg-primary">●</span> PAS</span>
                             <span><span class="badge bg-info text-dark">●</span> PAD</span>
@@ -185,7 +188,7 @@ else if (paciente != null)
                         </div>
                     </div>
                     <div class="card-body p-2">
-                        <svg viewBox="0 0 700 185" class="w-100 border rounded bg-light" style="max-height: 195px;">
+                        <svg viewBox="0 0 700 185" class="w-100 border rounded recuperacion-toolbar" style="max-height: 195px;">
                             @for (int v = 0; v <= 200; v += 50)
                             {
                                 double y = 160 - (v / 210.0 * 140);
@@ -213,11 +216,11 @@ else if (paciente != null)
                     </div>
                 </div>
 
-                <div class="card shadow-sm border-0">
+                <div class="card recuperacion-panel">
                     <div class="card-body p-0">
                         <div class="table-responsive">
-                            <table class="table table-sm table-hover table-bordered align-middle mb-0 small">
-                                <thead class="table-light text-center">
+                            <table class="table recuperacion-table table-hover table-bordered align-middle mb-0 small">
+                                <thead class="text-center">
                                     <tr>
                                         <th>Fecha / Hora</th>
                                         <th>Pulso</th>
@@ -272,12 +275,12 @@ else if (paciente != null)
         <div class="row g-3">
             <!-- Líquidos Administrados y Eliminados (qvt_ingliqadm) -->
             <div class="col-lg-6">
-                <div class="card shadow-sm border-0 mb-3">
-                    <div class="card-header bg-white fw-bold text-primary">
+                <div class="card recuperacion-panel mb-3">
+                    <div class="card-header recuperacion-section fw-bold">
                         Líquidos Administrados y Eliminados en Recuperación
                     </div>
                     <div class="card-body small">
-                        <div class="row g-2 mb-3 bg-light p-2 rounded border">
+                        <div class="row g-2 mb-3 recuperacion-toolbar p-2 rounded border">
                             <div class="col-md-3">
                                 <label class="form-label mb-0 fw-semibold">Tipo</label>
                                 <select class="form-select form-select-sm" @bind="nuevoLiquido.Tipo">
@@ -302,8 +305,8 @@ else if (paciente != null)
                         </div>
 
                         <h6 class="small fw-bold text-success mb-1">Líquidos Administrados (@liquidosIngresados.Count)</h6>
-                        <table class="table table-sm table-bordered small mb-3">
-                            <thead class="table-light">
+                        <table class="table recuperacion-table table-bordered small mb-3">
+                            <thead>
                                 <tr><th>Hora</th><th>Líquido Administrado</th><th>Observaciones</th><th></th></tr>
                             </thead>
                             <tbody>
@@ -322,8 +325,8 @@ else if (paciente != null)
                         </table>
 
                         <h6 class="small fw-bold text-danger mb-1">Líquidos Eliminados (@liquidosEliminados.Count)</h6>
-                        <table class="table table-sm table-bordered small mb-0">
-                            <thead class="table-light">
+                        <table class="table recuperacion-table table-bordered small mb-0">
+                            <thead>
                                 <tr><th>Hora</th><th>Líquido Eliminado</th><th>Observaciones</th><th></th></tr>
                             </thead>
                             <tbody>
@@ -346,8 +349,8 @@ else if (paciente != null)
 
             <!-- Notas de Evolución en Sala de Recuperación (qvt_observaciones_recuperacion) -->
             <div class="col-lg-6">
-                <div class="card shadow-sm border-0 mb-3">
-                    <div class="card-header bg-white fw-bold text-primary">
+                <div class="card recuperacion-panel mb-3">
+                    <div class="card-header recuperacion-section fw-bold">
                         Notas y Evolución en Sala de Recuperación
                     </div>
                     <div class="card-body small">
@@ -357,8 +360,8 @@ else if (paciente != null)
                         </div>
 
                         <div class="table-responsive">
-                            <table class="table table-sm table-bordered align-middle mb-0">
-                                <thead class="table-light">
+                            <table class="table recuperacion-table table-bordered align-middle mb-0">
+                                <thead>
                                     <tr>
                                         <th style="width: 110px;">Fecha / Hora</th>
                                         <th>Observación Clínica</th>
@@ -397,9 +400,9 @@ else if (paciente != null)
     }
     else if (tabActiva == 3)
     {
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <span class="fw-bold text-primary">Checklist de Entrega y Alta de Sala de Recuperación</span>
+        <div class="card recuperacion-panel">
+            <div class="card-header recuperacion-section d-flex justify-content-between align-items-center">
+                <span class="fw-bold">Checklist de Entrega y Alta de Sala de Recuperación</span>
                 <SaveButton class="btn btn-sm btn-success fw-semibold" OnClick="GuardarChecklistPostOpAsync">
                     Guardar Checklist Post-Operatorio
                 </SaveButton>
@@ -422,8 +425,8 @@ else if (paciente != null)
                 </div>
 
                 <div class="table-responsive">
-                    <table class="table table-sm table-bordered align-middle mb-0">
-                        <thead class="table-light">
+                    <table class="table recuperacion-table table-bordered align-middle mb-0">
+                        <thead>
                             <tr>
                                 <th style="width: 240px;">Ítem de Verificación Post-Quirúrgica</th>
                                 <th style="width: 140px;" class="text-center">Estado</th>
@@ -494,6 +497,8 @@ else if (paciente != null)
         </div>
     }
 }
+
+</div>
 
 @code {
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
