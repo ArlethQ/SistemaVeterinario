@@ -156,22 +156,25 @@ public class FarmaciaRecetaSoapItemDto
     public decimal CantidadAVender { get; set; }
     public bool VenderPorPaquete { get; set; }
 
+    private static decimal SinCerosFinales(decimal valor) =>
+        valor / 1.000000000000000000000000000000000m;
+
     public decimal MaximoVisibleVenta =>
-        VenderPorPaquete && FactorConversion > 1m
+        SinCerosFinales(VenderPorPaquete && FactorConversion > 1m
             ? Math.Floor(MaximoDisponibleParaEstaLinea / FactorConversion)
-            : MaximoDisponibleParaEstaLinea;
+            : MaximoDisponibleParaEstaLinea);
 
     public decimal CantidadVisibleVenta
     {
-        get => VenderPorPaquete && FactorConversion > 1m
+        get => SinCerosFinales(VenderPorPaquete && FactorConversion > 1m
             ? Math.Round(CantidadAVender / FactorConversion, 4)
-            : CantidadAVender;
+            : CantidadAVender);
         set
         {
             var baseCant = VenderPorPaquete && FactorConversion > 1m
                 ? Math.Round(Math.Max(0m, value) * FactorConversion, 4)
                 : Math.Max(0m, value);
-            CantidadAVender = Math.Min(MaximoDisponibleParaEstaLinea, baseCant);
+            CantidadAVender = SinCerosFinales(Math.Min(MaximoDisponibleParaEstaLinea, baseCant));
         }
     }
 

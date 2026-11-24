@@ -841,7 +841,7 @@
                             <tr>
                                 <th style="width: 68px; max-width: 78px;">Cód.</th>
                                 <th style="min-width: 190px;">Concepto</th>
-                                <th class="text-center" style="width: 84px;">Cant.</th>
+                                <th class="text-center" style="width: 185px;">Cant.</th>
                                 <th class="text-end" style="width: 92px;">Precio</th>
                                 <th class="text-center" style="width: 124px;">Descuento</th>
                                 <th class="text-end" style="width: 88px;" title="Descuento aplicado">Desc. apl.</th>
@@ -910,24 +910,96 @@
                                         }
                                     </td>
 
-                                    <td>
-                                        <input type="text"
-                                               class="n-input-sm text-center fw-bold border-primary"
-                                               style="background-color: #f3f4f6;"
-                                               inputmode="decimal"
-                                               disabled="@EsDetalleBloqueadoOrden(d)"
-                                               value="@GetCantidadVisual(d)"
-                                               @oninput="@((ChangeEventArgs e) => OnCantidadDetalleInput(d, e.Value?.ToString()))"
-                                               @onblur="@(() => OnCantidadDetalleBlur(d))" />
+                                    <td class="text-center">
                                         @{
-                                            var etiquetaUnidad = ObtenerEtiquetaUnidadCantidadDetalle(d);
+                                            var itemRecetaDetalle = ObtenerItemRecetaDeDetalle(d);
                                         }
-                                        @if (!string.IsNullOrWhiteSpace(etiquetaUnidad))
+                                        @if (itemRecetaDetalle is not null)
                                         {
-                                            <small class="d-block text-center fw-semibold mt-1 @(etiquetaUnidad.Contains("Paq", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-muted")"
-                                                   style="font-size:.7rem; line-height:1.1;">
-                                                @etiquetaUnidad
-                                            </small>
+                                            @if (itemRecetaDetalle.FactorConversion > 1m && itemRecetaDetalle.TieneProductoEnCatalogo)
+                                            {
+                                                <div class="input-group input-group-sm flex-nowrap">
+                                                    <input type="number"
+                                                           min="0"
+                                                           max="@itemRecetaDetalle.MaximoVisibleVenta"
+                                                           step="1"
+                                                           style="min-width: 56px;"
+                                                           class="form-control text-center fw-bold text-primary px-1"
+                                                           @bind="itemRecetaDetalle.CantidadVisibleVenta"
+                                                           @bind:after="() => OnCambioCantidadRecetaDesdeDetalle(d, itemRecetaDetalle)" />
+                                                    <select class="form-select ps-2 pe-4"
+                                                            style="min-width: 86px; width: auto; font-size: .75rem;"
+                                                            @bind:get="@(itemRecetaDetalle.VenderPorPaquete ? "PAQ" : "UNI")"
+                                                            @bind:set="@(v => CambiarModoVentaRecetaDesdeDetalle(d, itemRecetaDetalle, v == "PAQ"))">
+                                                        <option value="PAQ">Paquete</option>
+                                                        <option value="UNI">@itemRecetaDetalle.UnidadMedida</option>
+                                                    </select>
+                                                </div>
+                                                @if (itemRecetaDetalle.VenderPorPaquete)
+                                                {
+                                                    <small class="text-primary d-block fw-semibold mt-1" style="font-size:.7rem; line-height:1.15;">
+                                                        = @itemRecetaDetalle.CantidadAVender.ToString("0.##") @itemRecetaDetalle.UnidadMedida
+                                                        <span class="text-muted fw-normal">(1 Paq = @itemRecetaDetalle.FactorConversion.ToString("G29") @itemRecetaDetalle.UnidadMedida)</span>
+                                                    </small>
+                                                }
+                                                else
+                                                {
+                                                    <small class="text-muted d-block mt-1" style="font-size:.68rem; line-height:1.15;">
+                                                        1 Paq = @itemRecetaDetalle.FactorConversion.ToString("G29") @itemRecetaDetalle.UnidadMedida
+                                                    </small>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <div class="input-group input-group-sm flex-nowrap">
+                                                    <input type="number"
+                                                           min="0"
+                                                           max="@itemRecetaDetalle.MaximoDisponibleParaEstaLinea"
+                                                           step="1"
+                                                           style="min-width: 56px;"
+                                                           class="form-control text-center fw-bold text-primary px-1"
+                                                           @bind="itemRecetaDetalle.CantidadAVender"
+                                                           @bind:after="() => OnCambioCantidadRecetaDesdeDetalle(d, itemRecetaDetalle)" />
+                                                    <span class="input-group-text px-1" style="font-size:.7rem;">@itemRecetaDetalle.UnidadMedida</span>
+                                                </div>
+                                            }
+                                            @if (!itemRecetaDetalle.TieneProductoEnCatalogo || itemRecetaDetalle.MaximoDisponibleParaEstaLinea <= 0m)
+                                            {
+                                                <span class="badge bg-danger-subtle text-danger border mt-1" style="font-size:.68rem;">
+                                                    <i class="ri-error-warning-line me-1"></i>Sin stock
+                                                </span>
+                                            }
+                                            else if (itemRecetaDetalle.CubrePedidoCompleto)
+                                            {
+                                                <span class="badge bg-success-subtle text-success border mt-1" style="font-size:.68rem;">
+                                                    <i class="ri-checkbox-circle-line me-1"></i>Cubierto
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning-subtle text-dark border mt-1" style="font-size:.68rem;">
+                                                    <i class="ri-alert-line me-1"></i>Stock insuficiente (@ObtenerStockDisponibleEnModoReceta(itemRecetaDetalle))
+                                                </span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <input type="text"
+                                                   class="n-input-sm text-center fw-bold border-primary"
+                                                   style="background-color: #f3f4f6;"
+                                                   inputmode="decimal"
+                                                   disabled="@EsDetalleBloqueadoOrden(d)"
+                                                   value="@GetCantidadVisual(d)"
+                                                   @oninput="@((ChangeEventArgs e) => OnCantidadDetalleInput(d, e.Value?.ToString()))"
+                                                   @onblur="@(() => OnCantidadDetalleBlur(d))" />
+                                            var etiquetaUnidad = ObtenerEtiquetaUnidadCantidadDetalle(d);
+                                            @if (!string.IsNullOrWhiteSpace(etiquetaUnidad))
+                                            {
+                                                <small class="d-block text-center fw-semibold mt-1 @(etiquetaUnidad.Contains("Paq", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-muted")"
+                                                       style="font-size:.7rem; line-height:1.1;">
+                                                    @etiquetaUnidad
+                                                </small>
+                                            }
                                         }
                                     </td>
 
@@ -958,7 +1030,7 @@
                                             <div class="n-discount-input-wrap">
                                                 <input type="number"
                                                        class="n-input-sm text-end"
-                                                       step="0.01"
+                                                       step="@(GetModoDescuentoDetalle(d) == ModoDescuento.Porcentaje ? "1" : "0.01")"
                                                        min="0"
                                                        max="@(GetModoDescuentoDetalle(d) == ModoDescuento.Porcentaje ? "100" : null)"
                                                        value="@GetDescuentoDetalleVisual(d)"
@@ -2758,6 +2830,64 @@
         CalcularTotalesFactura();
         if (PuedeBuscarOrdenesFactura)
             _ = CargarOrdenesPendientesColaFacturaAsync();
+    }
+
+    private FarmaciaRecetaSoapItemDto? ObtenerItemRecetaDeDetalle(DetalleFacturaDto d)
+    {
+        if (recetaOrdenFactura is null)
+            return null;
+        if (!origenesDetalleOrden.TryGetValue(d, out var org) ||
+            !string.Equals(org.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return recetaOrdenFactura.Items.FirstOrDefault(x => x.Sec == org.SecOrigen);
+    }
+
+    private static string ObtenerStockDisponibleEnModoReceta(FarmaciaRecetaSoapItemDto item)
+    {
+        if (item.VenderPorPaquete && item.FactorConversion > 1m)
+            return $"{item.MaximoVisibleVenta:0.##} Paq.";
+        return $"{item.MaximoDisponibleParaEstaLinea:0.##} {item.UnidadMedida}";
+    }
+
+    private void OnCambioCantidadRecetaDesdeDetalle(DetalleFacturaDto d, FarmaciaRecetaSoapItemDto item)
+    {
+        item.SeVende = item.CantidadAVender > 0m;
+        d.Cantidad = item.CantidadAVender;
+        valoresTemporalesCantidad[d] = d.Cantidad.ToString("0.##", CultureInfo.InvariantCulture);
+        if (d.PorcentajeDescuento > 0)
+        {
+            var bruto = d.Cantidad * d.Precio;
+            d.Descuento = Math.Round(bruto * (d.PorcentajeDescuento / 100m), 2);
+        }
+        else if (GetModoDescuentoDetalle(d) == ModoDescuento.Moneda && d.Descuento > 0)
+        {
+            d.Descuento = Math.Min(d.Descuento, GetSubtotalBrutoDetalle(d));
+            valoresTemporalesDescuentoMoneda[d] = d.Descuento.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        recetaOrdenModificadaEnPanel = true;
+        mensajeRecetaOrdenFactura = "Cambios reflejados en vivo en el detalle (pendientes de guardar en Farmacia).";
+        CalcularTotalesFactura();
+        StateHasChanged();
+    }
+
+    private void CambiarModoVentaRecetaDesdeDetalle(DetalleFacturaDto d, FarmaciaRecetaSoapItemDto item, bool porPaquete)
+    {
+        item.VenderPorPaquete = porPaquete;
+        if (porPaquete && item.FactorConversion > 1m && item.CantidadAVender > 0m)
+        {
+            var paquetes = Math.Ceiling(item.CantidadAVender / item.FactorConversion);
+            var nuevaCantBase = Math.Round(paquetes * item.FactorConversion, 4);
+            if (nuevaCantBase > item.MaximoDisponibleParaEstaLinea)
+            {
+                var maxPaquetes = Math.Floor(item.MaximoDisponibleParaEstaLinea / item.FactorConversion);
+                nuevaCantBase = maxPaquetes > 0m
+                    ? Math.Round(maxPaquetes * item.FactorConversion, 4)
+                    : item.MaximoDisponibleParaEstaLinea;
+            }
+            item.CantidadAVender = nuevaCantBase;
+        }
+        OnCambioCantidadRecetaDesdeDetalle(d, item);
     }
 
     private string? ObtenerEtiquetaUnidadCantidadDetalle(DetalleFacturaDto d)
