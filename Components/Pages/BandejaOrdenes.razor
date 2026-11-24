@@ -443,11 +443,11 @@
     <dialog class="bandeja-dialog bandeja-dialog-editor" @ref="_dialogConsentimiento" aria-labelledby="modalConsentimientoTitulo">
         <div class="modal-dialog modal-dialog-scrollable">
             <div class="modal-content">
-                <div class="modal-header py-2">
-                    <h5 class="modal-title fw-bold" id="modalConsentimientoTitulo">
-                        <i class="bi bi-file-earmark-richtext me-1 text-primary"></i>Editar Consentimiento de Hospitalización — @_ordenSeleccionada.Paciente
+                <div class="modal-header d-flex justify-content-between align-items-center py-2 px-3 w-100">
+                    <h5 class="modal-title fw-bold mb-0" id="modalConsentimientoTitulo">
+                        <i class="bi bi-file-earmark-richtext me-1 text-primary"></i>Editar @(string.IsNullOrWhiteSpace(_tituloConsentimiento) ? "Documento" : _tituloConsentimiento) — @_ordenSeleccionada.Paciente
                     </h5>
-                    <button type="button" class="btn-close" autofocus disabled="@_procesandoConsentimiento" @onclick="CancelarConsentimientoAsync" aria-label="Cerrar"></button>
+                    <button type="button" class="btn-close ms-auto" autofocus disabled="@_procesandoConsentimiento" @onclick="CancelarConsentimientoAsync" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body">
                     @if (!string.IsNullOrWhiteSpace(_mensajeAlerta))

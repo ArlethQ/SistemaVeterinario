@@ -464,9 +464,12 @@ public class MonitorizacionAnestesiaDto
     public int Nhcl { get; set; }
 
     // Bloque 1: Identificación y Procedimiento
+    public bool CheckFormulariosConsentimiento { get; set; }
     public bool ConsentimientoFirmado { get; set; }
     public DateTime? FechaConsentimiento { get; set; } = DateTime.Today;
+    public string PreparadoPor { get; set; } = string.Empty;
     public decimal? PesoKg { get; set; }
+    public decimal? TallaCm { get; set; }
     public DateTime? FechaNacimiento { get; set; }
     public string Sexo { get; set; } = string.Empty; // "M" o "F"
     public int? CondicionCorporal { get; set; } // 1..9
@@ -481,12 +484,22 @@ public class MonitorizacionAnestesiaDto
     public string ExamenTemp { get; set; } = string.Empty;
     public string ExamenPulso { get; set; } = string.Empty;
     public string ExamenResp { get; set; } = string.Empty;
+    public int? ExamenSistolica { get; set; }
+    public int? ExamenDiastolica { get; set; }
+    public int? ExamenSaturacion { get; set; }
     public string ExamenClinicoNotas { get; set; } = string.Empty;
+    public bool ViaEndovenosaLista { get; set; }
     public string TallaUbicacionCateter { get; set; } = string.Empty;
     public DateTime? FechaCateter { get; set; } = DateTime.Today;
+    public int? MiccionVeces { get; set; }
+    public string HoraMiccion { get; set; } = string.Empty;
     public string Temperamento { get; set; } = string.Empty;
     public string AlergiasReacciones { get; set; } = string.Empty;
+    public string ProtesisImplantes { get; set; } = string.Empty;
     public string MedicacionActual { get; set; } = string.Empty;
+    public bool CheckExamenesLaboratorio { get; set; }
+    public bool CheckRayosX { get; set; }
+    public bool CheckEkg { get; set; }
     public string PruebasDiagnostico { get; set; } = string.Empty;
     public string ClasificacionAsa { get; set; } = "I"; // I, II, III, IV, V
     public bool EsEmergenciaAsa { get; set; } // E

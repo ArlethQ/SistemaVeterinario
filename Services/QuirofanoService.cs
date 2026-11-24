@@ -2007,8 +2007,19 @@ public class QuirofanoService : IQuirofanoService
                     if (loaded.Induccion.Count == 0) loaded.Induccion = [new(), new()];
                     if (loaded.Fluidos.Count == 0) loaded.Fluidos = [new(), new()];
                     if (loaded.Intervalos.Count == 0) loaded.Intervalos = MonitorizacionAnestesiaDto.CrearIntervalosIniciales();
-                    return loaded;
+                    dto = loaded;
                 }
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.AlergiasReacciones) && nhcl > 0)
+            {
+                var alergia = await _db.QueryFirstOrDefaultAsync<string>(@"
+                    SELECT TOP 1 RTRIM(ISNULL(antecedente_descripcion, ''))
+                    FROM vt_antecedentes
+                    WHERE antecedente_nhcl = @Nhcl AND ISNULL(antecedente_estado, 'A') = 'A'
+                    ORDER BY antecedente_fecha DESC", new { Nhcl = nhcl });
+                if (!string.IsNullOrWhiteSpace(alergia))
+                    dto.AlergiasReacciones = alergia;
             }
         }
         catch (Exception ex)
@@ -2058,6 +2069,33 @@ public class QuirofanoService : IQuirofanoService
                 IdUsuario = idUsuario,
                 IdLocalidad = idLocalidad > 0 ? idLocalidad : 1
             });
+
+            if (!string.IsNullOrWhiteSpace(dto.AlergiasReacciones) && dto.Nhcl > 0)
+            {
+                try
+                {
+                    var idCliente = await _db.QueryFirstOrDefaultAsync<int>(
+                        "SELECT TOP 1 ISNULL(mas_idcliente, 0) FROM vt_pacientes WHERE mas_nhcl = @Nhcl",
+                        new { dto.Nhcl });
+                    const string upsertAlergia = @"
+                        IF EXISTS (SELECT 1 FROM vt_antecedentes WHERE antecedente_nhcl=@Nhcl AND ISNULL(antecedente_estado,'A')='A')
+                            UPDATE vt_antecedentes SET antecedente_fecha=GETDATE(), antecedente_iduser=@IdUsuario,
+                                antecedente_cliente=@IdCliente, antecedente_descripcion=@Alergias
+                            WHERE antecedente_nhcl=@Nhcl AND ISNULL(antecedente_estado,'A')='A';
+                        ELSE
+                            INSERT INTO vt_antecedentes (antecedente_nhcl,antecedente_fecha,antecedente_iduser,
+                                antecedente_cliente,antecedente_estado,antecedente_descripcion)
+                            VALUES (@Nhcl,GETDATE(),@IdUsuario,@IdCliente,'A',@Alergias);";
+                    await _db.ExecuteAsync(upsertAlergia, new
+                    {
+                        dto.Nhcl,
+                        IdUsuario = idUsuario,
+                        IdCliente = idCliente,
+                        Alergias = Truncate(dto.AlergiasReacciones.Trim(), 250)
+                    });
+                }
+                catch { }
+            }
 
             try
             {

@@ -8,6 +8,7 @@
 @inject IConsultaExternaService ConsultaService
 @inject IInventarioService InventarioService
 @inject IFarmaciaService FarmaciaService
+@inject IWebHostEnvironment Env
 @inject SessionStateService Session
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -120,10 +121,6 @@ else if (_paciente != null)
         <div class="card-header anesthesia-section py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h6 class="mb-0 fw-bold text-primary"><i class="bi bi-clipboard2-pulse me-2"></i>1. Datos del Procedimiento y Paciente</h6>
             <div class="d-flex flex-wrap align-items-center gap-3 small">
-                <div class="form-check mb-0">
-                    <input class="form-check-input" type="checkbox" id="chkConsentAnest" @bind="_dto.ConsentimientoFirmado" @bind:after="GuardarBorradorAutoAsync" />
-                    <label class="form-check-label fw-semibold" for="chkConsentAnest">Consentimiento informado firmado</label>
-                </div>
                 <div class="d-flex align-items-center gap-1">
                     <span class="text-muted">Fecha:</span>
                     <input type="date" class="form-control form-control-sm" style="width:140px;" @bind="_dto.FechaConsentimiento" @bind:after="GuardarBorradorAutoAsync" />
@@ -131,6 +128,63 @@ else if (_paciente != null)
             </div>
         </div>
         <div class="card-body">
+            <div class="mb-3 d-flex flex-column gap-2">
+                @foreach (var doc in _docsQuirurgicos.Values)
+                {
+                    var d = doc;
+                    var firmado = !string.IsNullOrWhiteSpace(d.Autorizacion?.ArchivoUrl);
+                    var nombreArchivo = !string.IsNullOrWhiteSpace(d.Autorizacion?.ArchivoNombre)
+                        ? d.Autorizacion!.ArchivoNombre
+                        : d.Titulo;
+                    <div class="border rounded px-3 py-2 small @(firmado ? "bg-success-subtle border-success-subtle" : "bg-warning-subtle border-warning-subtle") d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <i class="bi @(firmado ? "bi-file-earmark-check-fill text-success" : "bi-exclamation-triangle-fill text-warning")"></i>
+                            <strong class="text-dark">@d.Titulo</strong>
+                            @if (firmado)
+                            {
+                                <span class="badge" style="background:#15803d;color:#ffffff;">Firmado</span>
+                            }
+                            else
+                            {
+                                <span class="badge" style="background:#b45309;color:#ffffff;">Sin documento firmado</span>
+                            }
+                        </div>
+                        <div class="d-flex flex-wrap align-items-center gap-1 no-print">
+                            @if (firmado)
+                            {
+                                <a class="btn btn-sm py-1 px-2 fw-semibold text-decoration-none d-inline-flex align-items-center gap-1 text-nowrap"
+                                   style="background:#15803d;color:#ffffff;border:1px solid #15803d;"
+                                   title="@nombreArchivo"
+                                   href="@d.Autorizacion!.ArchivoUrl" target="_blank" rel="noopener">
+                                    <i class="bi bi-eye"></i>
+                                    <span>Ver archivo subido</span>
+                                    <i class="bi bi-box-arrow-up-right" style="font-size:10px;"></i>
+                                </a>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-sm py-0 px-2"
+                                        style="background:#ffffff;color:#1e293b;border:1px solid #94a3b8;"
+                                        disabled="@_procesandoDoc"
+                                        @onclick="() => ImprimirDocumentoQuirAsync(d.Clave)">
+                                    <i class="bi bi-printer me-1"></i>Descargar / Imprimir PDF
+                                </button>
+                                <button type="button" class="btn btn-sm py-0 px-2"
+                                        style="background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd;"
+                                        disabled="@_procesandoDoc"
+                                        @onclick="() => AbrirModalEditorDocAsync(d.Clave)">
+                                    <i class="bi bi-pencil-square me-1"></i>Editar documento
+                                </button>
+                            }
+                            <label class="btn btn-sm py-0 px-2 mb-0"
+                                   style="background:#15803d;color:#ffffff;border:1px solid #15803d;cursor:pointer;">
+                                <i class="bi bi-cloud-arrow-up-fill me-1"></i>@(firmado ? "Reemplazar" : "Subir firmado (PDF / Foto)")
+                                <InputFile OnChange="@(e => SubirDocumentoFirmadoAsync(e, d.Clave))" accept="image/*,application/pdf,.doc,.docx" style="display:none;" />
+                            </label>
+                        </div>
+                    </div>
+                }
+            </div>
             <div class="row g-2 small">
                 <div class="col-md-4 position-relative">
                     <label class="form-label mb-1 fw-semibold">
@@ -218,6 +272,18 @@ else if (_paciente != null)
                     <label class="form-label mb-1 fw-semibold">CC (/9)</label>
                     <input type="number" min="1" max="9" class="form-control form-control-sm" @bind="_dto.CondicionCorporal" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="5" />
                 </div>
+                <div class="col-md-4">
+                    <label class="form-label mb-1 fw-semibold">Preparado por</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_dto.PreparadoPor" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Nombre de quien prepara al paciente..." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold">Talla (cm)</label>
+                    <input type="number" step="0.1" min="0" class="form-control form-control-sm" @bind="_dto.TallaCm" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ej: 45" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold">IMC</label>
+                    <input type="text" class="form-control form-control-sm bg-light" value="@ImcCalculadoTexto" readonly />
+                </div>
             </div>
         </div>
     </div>
@@ -265,24 +331,63 @@ else if (_paciente != null)
                             </div>
                         </div>
                     </div>
+                    <div class="row g-1 mb-1">
+                        <div class="col-4">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">Sist.</span>
+                                <input type="number" min="0" max="300" class="form-control" @bind="_dto.ExamenSistolica" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="mmHg" />
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">Diast.</span>
+                                <input type="number" min="0" max="300" class="form-control" @bind="_dto.ExamenDiastolica" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="mmHg" />
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">SpO₂%</span>
+                                <input type="number" min="0" max="100" class="form-control" @bind="_dto.ExamenSaturacion" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="98" />
+                            </div>
+                        </div>
+                    </div>
                     <textarea class="form-control form-control-sm" rows="2" @bind="_dto.ExamenClinicoNotas" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Auscultación cardiopulmonar, mucosas, TRC, hidratación..."></textarea>
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label mb-1 fw-semibold">Talla / ubicación del catéter IV</label>
-                    <input type="text" class="form-control form-control-sm" @bind="_dto.TallaUbicacionCateter" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ej: 22G Cefálica Der." />
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label mb-0 fw-semibold">Vía endovenosa / catéter IV</label>
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input" type="checkbox" id="chkViaIvLista" @bind="_dto.ViaEndovenosaLista" @bind:after="GuardarBorradorAutoAsync" />
+                            <label class="form-check-label small" for="chkViaIvLista">Colocada</label>
+                        </div>
+                    </div>
+                    <input type="text" class="form-control form-control-sm" @bind="_dto.TallaUbicacionCateter" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ej: 22G Cefálica Der. / Observación..." />
                 </div>
                 <div class="col-md-2">
                     <label class="form-label mb-1 fw-semibold">Fecha catéter</label>
                     <input type="date" class="form-control form-control-sm" @bind="_dto.FechaCateter" @bind:after="GuardarBorradorAutoAsync" />
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label mb-1 fw-semibold">Temperamento</label>
-                    <input type="text" class="form-control form-control-sm" @bind="_dto.Temperamento" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Dócil, nervioso, agresivo..." />
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold">Micción (veces)</label>
+                    <input type="number" min="0" class="form-control form-control-sm" @bind="_dto.MiccionVeces" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="0" />
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label mb-1 fw-semibold">Alergias / reacciones</label>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold">Hora micción</label>
+                    <input type="time" class="form-control form-control-sm" value="@_dto.HoraMiccion" @onchange="OnHoraMiccionChangedAsync" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 fw-semibold">Temperamento</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_dto.Temperamento" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Dócil, nervioso..." />
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label mb-1 fw-semibold">Alergias / reacciones <small class="text-muted fw-normal">(sincroniza con antecedentes)</small></label>
                     <input type="text" class="form-control form-control-sm" @bind="_dto.AlergiasReacciones" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ninguna conocida / especificar..." />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label mb-1 fw-semibold">Prótesis / implantes</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_dto.ProtesisImplantes" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Ninguna / especificar prótesis, placas, clavos..." />
                 </div>
 
                 <div class="col-md-4">
@@ -290,7 +395,14 @@ else if (_paciente != null)
                     <textarea class="form-control form-control-sm" rows="2" @bind="_dto.MedicacionActual" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Fármacos que recibe actualmente..."></textarea>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label mb-1 fw-semibold">Pruebas de diagnóstico</label>
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-1 gap-1">
+                        <label class="form-label mb-0 fw-semibold">Pruebas de diagnóstico</label>
+                        <div class="d-flex gap-2">
+                            <div class="form-check form-check-inline mb-0 me-0"><input class="form-check-input" type="checkbox" id="chkLabPre" @bind="_dto.CheckExamenesLaboratorio" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkLabPre">Lab</label></div>
+                            <div class="form-check form-check-inline mb-0 me-0"><input class="form-check-input" type="checkbox" id="chkRxPre" @bind="_dto.CheckRayosX" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkRxPre">RX</label></div>
+                            <div class="form-check form-check-inline mb-0 me-0"><input class="form-check-input" type="checkbox" id="chkEkgPre" @bind="_dto.CheckEkg" @bind:after="GuardarBorradorAutoAsync" /><label class="form-check-label" for="chkEkgPre">EKG</label></div>
+                        </div>
+                    </div>
                     <textarea class="form-control form-control-sm" rows="2" @bind="_dto.PruebasDiagnostico" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="Hemograma, bioquímica, RX, ECG..."></textarea>
                 </div>
                 <div class="col-md-4">
@@ -712,29 +824,41 @@ else if (_paciente != null)
                             var fl = _dto.Fluidos[idx];
                             var puedeQuitarFl = _dto.Fluidos.Count > 1 && EsFilaFluidoVacia(fl);
                             var sugFl = _sugFluidoIdx == idx ? FiltrarStock(fl.TipoFluido) : [];
-                            <div class="input-group input-group-sm mb-1 position-relative">
-                                <input type="text" class="form-control" autocomplete="off" disabled="@fl.DescargadoInventario"
-                                       @bind="fl.TipoFluido" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync"
-                                       @onfocus="() => AbrirSugerenciasFluidoAsync(idx)"
-                                       @onblur="CerrarSugerenciasFluidoAsync"
-                                       placeholder="Buscar fluido en stock..." />
-                                <input type="text" class="form-control" style="max-width:74px;" @bind="fl.VelocidadMlKgH" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="mL/kg/h" title="Velocidad (mL/kg/h)" />
-                                <input type="number" step="0.01" min="0" class="form-control text-center" style="max-width:68px;" disabled="@fl.DescargadoInventario"
-                                       @bind="fl.CantidadDescarga" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync"
-                                       placeholder="@(string.IsNullOrWhiteSpace(fl.UnidadMedida) ? "Cant." : fl.UnidadMedida)" title="Cantidad a descargar del inventario" />
-                                @if (fl.DescargadoInventario)
-                                {
-                                    <span class="input-group-text bg-success text-white px-2" title="Descargado del inventario"><i class="bi bi-check-lg"></i></span>
-                                }
-                                else if (!string.IsNullOrWhiteSpace(fl.IdProductoStock))
-                                {
-                                    <button type="button" class="btn btn-outline-success px-2 no-print" disabled="@_descargandoStock"
-                                            title="Descargar del inventario (@fl.UnidadMedida)"
-                                            @onclick="() => DescargarFluidoAsync(idx)"><i class="bi bi-box-arrow-down"></i></button>
-                                }
-                                <button type="button" class="btn btn-outline-danger px-2 no-print" disabled="@(!puedeQuitarFl)"
-                                        title="@(puedeQuitarFl ? "Quitar fila vacía" : "Solo se pueden quitar filas vacías")"
-                                        @onclick="() => QuitarFluidoAsync(idx)">×</button>
+                            <div class="border rounded p-1 mb-2 bg-light-subtle position-relative">
+                                <div class="input-group input-group-sm mb-1">
+                                    <input type="text" class="form-control" autocomplete="off" disabled="@fl.DescargadoInventario"
+                                           @bind="fl.TipoFluido" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync"
+                                           @onfocus="() => AbrirSugerenciasFluidoAsync(idx)"
+                                           @onblur="CerrarSugerenciasFluidoAsync"
+                                           placeholder="Buscar fluido en stock..." />
+                                    @if (fl.DescargadoInventario)
+                                    {
+                                        <span class="input-group-text bg-success text-white px-2" title="Descargado del inventario"><i class="bi bi-check-lg"></i></span>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(fl.IdProductoStock))
+                                    {
+                                        <button type="button" class="btn btn-outline-success px-2 no-print" disabled="@_descargandoStock"
+                                                title="Descargar del inventario (@fl.UnidadMedida)"
+                                                @onclick="() => DescargarFluidoAsync(idx)"><i class="bi bi-box-arrow-down"></i></button>
+                                    }
+                                    <button type="button" class="btn btn-outline-danger px-2 no-print" disabled="@(!puedeQuitarFl)"
+                                            title="@(puedeQuitarFl ? "Quitar fila vacía" : "Solo se pueden quitar filas vacías")"
+                                            @onclick="() => QuitarFluidoAsync(idx)">×</button>
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <div class="input-group input-group-sm" style="flex:1;">
+                                        <input type="number" step="0.01" min="0" class="form-control text-center" disabled="@fl.DescargadoInventario"
+                                               @bind="fl.CantidadDescarga" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync"
+                                               placeholder="Cant." title="Cantidad a descargar del inventario" />
+                                        <span class="input-group-text bg-white text-secondary fw-semibold px-2" style="font-size:11px;" title="Unidad de medida automática del inventario">
+                                            @(string.IsNullOrWhiteSpace(fl.UnidadMedida) ? "UND" : fl.UnidadMedida)
+                                        </span>
+                                    </div>
+                                    <div class="input-group input-group-sm" style="flex:1;">
+                                        <input type="text" class="form-control text-center" @bind="fl.VelocidadMlKgH" @bind:event="oninput" @bind:after="GuardarBorradorAutoAsync" placeholder="0" title="Velocidad de infusión" />
+                                        <span class="input-group-text bg-white text-muted px-2" style="font-size:11px;">mL/kg/h</span>
+                                    </div>
+                                </div>
                                 @if (_sugFluidoIdx == idx)
                                 {
                                     <div class="list-group position-absolute start-0 top-100 bg-white border rounded shadow-sm mt-1 w-100" style="z-index:1060; max-height:190px; overflow-y:auto;">
@@ -882,6 +1006,78 @@ else if (_paciente != null)
     </div>
 }
 
+@if (_mostrarModalEditorDoc && _paciente != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(15,23,42,0.55); z-index: 1090;" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header d-flex justify-content-between align-items-center py-2 px-3 w-100">
+                    <h5 class="modal-title fw-bold mb-0">
+                        <i class="bi bi-file-earmark-richtext me-2 text-primary"></i>Editar @(string.IsNullOrWhiteSpace(_tituloDocEditando) ? "Documento" : _tituloDocEditando) — @_paciente.PacienteNombre
+                    </h5>
+                    <button type="button" class="btn-close ms-auto" disabled="@_procesandoDoc" @onclick="CerrarModalEditorDoc" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold" for="txtTituloDocMonAnest">Título del documento</label>
+                        <input id="txtTituloDocMonAnest" class="form-control form-control-sm" @bind="_tituloDocEditando" maxlength="150" />
+                    </div>
+                    <div class="d-flex flex-wrap gap-1 p-1 bg-light border border-bottom-0 rounded-top align-items-center">
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('bold')" title="Negrita"><i class="bi bi-type-bold fw-bold"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('italic')" title="Cursiva"><i class="bi bi-type-italic"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('underline')" title="Subrayado"><i class="bi bi-type-underline"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('strikeThrough')" title="Tachado"><i class="bi bi-type-strikethrough"></i></button>
+                        <span class="vr mx-1 my-1"></span>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('formatBlock', '<h2>')" title="Título H2"><span class="fw-bold small">H2</span></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('formatBlock', '<h3>')" title="Subtítulo H3"><span class="fw-bold small">H3</span></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('formatBlock', '<p>')" title="Párrafo"><span class="small">P</span></button>
+                        <span class="vr mx-1 my-1"></span>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyLeft')" title="Izquierda"><i class="bi bi-text-left"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyCenter')" title="Centrar"><i class="bi bi-text-center"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyRight')" title="Derecha"><i class="bi bi-text-right"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('justifyFull')" title="Justificar"><i class="bi bi-justify"></i></button>
+                        <span class="vr mx-1 my-1"></span>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('insertUnorderedList')" title="Viñetas"><i class="bi bi-list-ul"></i></button>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none" onmousedown="event.preventDefault()" onclick="window.hosvetEditor.format('insertOrderedList')" title="Numerada"><i class="bi bi-list-ol"></i></button>
+                        <span class="vr mx-1 my-1"></span>
+                        <label class="btn btn-sm btn-white border py-0 px-2 shadow-none mb-0 text-primary fw-semibold" style="cursor:pointer;" title="Insertar imagen">
+                            <i class="bi bi-image-fill me-1"></i>Insertar Imagen
+                            <InputFile OnChange="SubirImagenEditorDocAsync" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" />
+                        </label>
+                        <span class="vr mx-1 my-1"></span>
+                        <button type="button" class="btn btn-sm btn-white border py-0 px-2 shadow-none text-dark fw-semibold" onmousedown="event.preventDefault()"
+                                onclick="window.hosvetEditor.printDocument(document.getElementById('txtTituloDocMonAnest')?.value, window.hosvetEditor.getContent('editorDocMonAnest'))" title="Imprimir o guardar PDF">
+                            <i class="bi bi-printer me-1"></i>Imprimir / PDF
+                        </button>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-1 px-2 py-1 bg-primary bg-opacity-10 border border-top-0 border-bottom-0 small">
+                        <span class="fw-semibold text-primary me-1"><i class="bi bi-magic me-1"></i>Campos automáticos:</span>
+                        @foreach (var campo in CamposAutomaticosDoc)
+                        {
+                            var tk = campo.Token;
+                            <button type="button" class="btn btn-xs btn-outline-primary bg-white py-0 px-2" style="font-size:0.75rem;"
+                                    onmousedown="event.preventDefault()" @onclick="() => InsertarCampoDocAsync(tk)">
+                                + @campo.Etiqueta
+                            </button>
+                        }
+                    </div>
+                    <div id="editorDocMonAnest"
+                         contenteditable="true"
+                         class="border rounded-bottom p-3 bg-white shadow-sm"
+                         style="min-height: 340px; max-height: 52vh; overflow-y: auto; outline: none; line-height: 1.5; font-size: 0.92rem;">
+                    </div>
+                </div>
+                <div class="modal-footer py-2 px-3 bg-light">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CerrarModalEditorDoc" disabled="@_procesandoDoc">Cancelar</button>
+                    <button type="button" class="btn btn-sm btn-primary fw-semibold" @onclick="GuardarDocDesdeModalAsync" disabled="@_procesandoDoc">
+                        <i class="bi bi-floppy-fill me-1"></i>@(_procesandoDoc ? "Guardando..." : "Guardar documento")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 </div>
 
 @code {
@@ -896,6 +1092,37 @@ else if (_paciente != null)
 
     private int _ordenInput;
     private int _nhclInput;
+    private sealed class DocQuirurgicoItem
+    {
+        public string Clave { get; init; } = "";
+        public string Tipo { get; init; } = "CIRUGIA";
+        public string? NombreContiene { get; init; }
+        public string Titulo { get; set; } = "";
+        public string Html { get; set; } = "";
+        public AutorizacionClinicaDto? Autorizacion { get; set; }
+    }
+
+    private static readonly (string Token, string Etiqueta)[] CamposAutomaticosDoc =
+    [
+        ("[CLIENTE]", "Dueño"), ("[CEDULA]", "Cédula"), ("[TELEFONO]", "Teléfono"),
+        ("[DIRECCION]", "Dirección"), ("[MASCOTA]", "Mascota"), ("[NHCL]", "NHCL"),
+        ("[ESPECIE]", "Especie"), ("[RAZA]", "Raza"), ("[SEXO]", "Sexo"),
+        ("[EDAD]", "Edad"), ("[MEDICO]", "Médico"), ("[FECHA]", "Fecha")
+    ];
+
+    private readonly Dictionary<string, DocQuirurgicoItem> _docsQuirurgicos = new()
+    {
+        ["anest"] = new DocQuirurgicoItem { Clave = "anest", Tipo = "CIRUGIA", NombreContiene = "Anestesia", Titulo = "Autorizacion de Anestesia" },
+        ["cir"] = new DocQuirurgicoItem { Clave = "cir", Tipo = "CIRUGIA", NombreContiene = "Cirug", Titulo = "Consentimiento Informado de Cirugía" }
+    };
+
+    private bool _mostrarModalEditorDoc;
+    private bool _inicializarEditorDoc;
+    private bool _procesandoDoc;
+    private string _claveDocEditando = string.Empty;
+    private string _tituloDocEditando = string.Empty;
+    private string _htmlDocEditando = string.Empty;
+
     private List<OrdenActivaResumenDto> _ordenesActivas = [];
     private List<CirugiaOperacionResumenDto> _cirugiasOrden = [];
     private int _idCirugiaActiva;
@@ -986,6 +1213,11 @@ else if (_paciente != null)
             _borradorPendienteRestaurar = false;
             await IntentarRestaurarBorradorAsync();
         }
+        if (_inicializarEditorDoc && _mostrarModalEditorDoc)
+        {
+            _inicializarEditorDoc = false;
+            try { await JS.InvokeVoidAsync("hosvetEditor.setContent", "editorDocMonAnest", _htmlDocEditando); } catch { }
+        }
     }
 
     private async Task OnOrdenSelectChangedAsync(ChangeEventArgs e)
@@ -1062,6 +1294,13 @@ else if (_paciente != null)
         _procDesdeProgramacion = false;
         _procProgramadoOriginal = string.Empty;
         _datosDesdeSoap = false;
+
+        if (string.IsNullOrWhiteSpace(loaded.PreparadoPor) && !string.IsNullOrWhiteSpace(Session.CurrentUser?.NombreCompleto))
+            loaded.PreparadoPor = Session.CurrentUser.NombreCompleto;
+
+        await CargarDocumentosQuirurgicosAsync(IdOrden, Nhcl);
+        loaded.CheckFormulariosConsentimiento = _docsQuirurgicos.Values.Any(d => d.Autorizacion?.AutorizacionId > 0);
+        loaded.ConsentimientoFirmado = _docsQuirurgicos.Values.All(d => !string.IsNullOrWhiteSpace(d.Autorizacion?.ArchivoUrl));
 
         var cirugiaActiva = _cirugiasOrden.FirstOrDefault(c => c.IdCirugia == _idCirugiaActiva);
         if (cirugiaActiva != null)
@@ -1217,6 +1456,17 @@ else if (_paciente != null)
         try { await JS.InvokeVoidAsync("hosvetDraft.remove", ClaveBorrador); } catch { }
         _borradorRecuperado = false;
         await CargarDatosAsync(navegar: false);
+    }
+
+    private string ImcCalculadoTexto =>
+        (_dto.PesoKg ?? 0m) > 0m && (_dto.TallaCm ?? 0m) > 0m
+            ? Math.Round(_dto.PesoKg!.Value / ((_dto.TallaCm!.Value / 100m) * (_dto.TallaCm!.Value / 100m)), 2, MidpointRounding.AwayFromZero).ToString("0.00", CultureInfo.InvariantCulture)
+            : "0.00";
+
+    private async Task OnHoraMiccionChangedAsync(ChangeEventArgs e)
+    {
+        _dto.HoraMiccion = e.Value?.ToString() ?? string.Empty;
+        await GuardarBorradorAutoAsync();
     }
 
     private async Task SetBalonAsync(string val) { _dto.BalonInflado = _dto.BalonInflado == val ? "" : val; await GuardarBorradorAutoAsync(); }
@@ -1628,6 +1878,220 @@ else if (_paciente != null)
             _dto.Intervalos[i].Hora = $"{h.Hours:D2}:{h.Minutes:D2}";
         }
         await GuardarBorradorAutoAsync();
+    }
+
+    private async Task CargarDocumentosQuirurgicosAsync(int idOrden, int nhcl)
+    {
+        try
+        {
+            var autorizaciones = await ConsultaService.ObtenerAutorizacionesPacienteAsync(nhcl);
+            foreach (var item in _docsQuirurgicos.Values)
+            {
+                var existente = autorizaciones.FirstOrDefault(a =>
+                    a.Orden == idOrden &&
+                    (item.NombreContiene != null
+                        ? a.Documento.Contains(item.NombreContiene, StringComparison.OrdinalIgnoreCase)
+                        : a.Tipo.Equals(item.Tipo, StringComparison.OrdinalIgnoreCase)));
+
+                if (existente != null)
+                {
+                    item.Autorizacion = existente;
+                    item.Titulo = string.IsNullOrWhiteSpace(existente.Documento) ? item.Titulo : existente.Documento;
+                    item.Html = existente.DetalleHtml;
+                }
+                else
+                {
+                    item.Autorizacion = null;
+                    var plantilla = await ConsultaService.ObtenerPlantillaPorTipoONombreAsync(item.Tipo, item.NombreContiene);
+                    item.Titulo = plantilla?.FormNombre ?? (item.Clave == "anest" ? "Autorizacion de Anestesia" : "Consentimiento Informado de Cirugía");
+                    item.Html = plantilla != null
+                        ? await ConsultaService.ProcesarPlantillaConDatosPacienteAsync(plantilla.FormId, nhcl)
+                        : string.Empty;
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task<AutorizacionClinicaDto?> AsegurarAutorizacionDocAsync(string clave)
+    {
+        if (_paciente == null || !_docsQuirurgicos.TryGetValue(clave, out var doc)) return null;
+        if (doc.Autorizacion?.AutorizacionId > 0) return doc.Autorizacion;
+
+        var nueva = new AutorizacionClinicaDto
+        {
+            Nhcl = Nhcl,
+            Orden = IdOrden,
+            Cliente = _paciente.ClienteCodigo,
+            IdUser = Session.CurrentUser?.UserNumero ?? Session.IdUser,
+            Documento = doc.Titulo,
+            Tipo = doc.Tipo,
+            DetalleHtml = doc.Html
+        };
+        await ConsultaService.GuardarAutorizacionAsync(nueva);
+        await CargarDocumentosQuirurgicosAsync(IdOrden, Nhcl);
+        return doc.Autorizacion;
+    }
+
+    private async Task ImprimirDocumentoQuirAsync(string clave)
+    {
+        if (!_docsQuirurgicos.TryGetValue(clave, out var doc)) return;
+        _procesandoDoc = true;
+        try
+        {
+            await AsegurarAutorizacionDocAsync(clave);
+            await JS.InvokeVoidAsync("hosvetEditor.printDocument", doc.Titulo, doc.Html);
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al imprimir documento: {ex.Message}";
+        }
+        finally { _procesandoDoc = false; }
+    }
+
+    private void AbrirModalEditorDocAsync(string clave)
+    {
+        if (!_docsQuirurgicos.TryGetValue(clave, out var doc)) return;
+        _claveDocEditando = clave;
+        _tituloDocEditando = doc.Titulo;
+        _htmlDocEditando = doc.Html;
+        _mostrarModalEditorDoc = true;
+        _inicializarEditorDoc = true;
+    }
+
+    private void CerrarModalEditorDoc()
+    {
+        if (_procesandoDoc) return;
+        _mostrarModalEditorDoc = false;
+        _inicializarEditorDoc = false;
+    }
+
+    private async Task InsertarCampoDocAsync(string token)
+    {
+        if (Nhcl <= 0) return;
+        try
+        {
+            var campos = await ConsultaService.ObtenerCamposDocumentoAsync(Nhcl);
+            if (campos.TryGetValue(token, out var valor))
+                await JS.InvokeVoidAsync("hosvetEditor.insertToken", "editorDocMonAnest", token, valor);
+        }
+        catch { }
+    }
+
+    private async Task SubirImagenEditorDocAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file is null || file.Size > 5 * 1024 * 1024) return;
+            var uploadsFolder = Path.Combine(Env.WebRootPath, "imagenes", "documentos");
+            if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+            var ext = Path.GetExtension(file.Name);
+            if (string.IsNullOrWhiteSpace(ext)) ext = ".png";
+            var fileName = $"doc_img_{Guid.NewGuid():N}{ext}";
+            var filePath = Path.Combine(uploadsFolder, fileName);
+            await using (var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024))
+            await using (var fs = new FileStream(filePath, FileMode.Create))
+                await stream.CopyToAsync(fs);
+            await JS.InvokeVoidAsync("hosvetEditor.insertImage", "editorDocMonAnest", $"/imagenes/documentos/{fileName}");
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"No se pudo insertar la imagen: {ex.Message}";
+        }
+    }
+
+    private async Task GuardarDocDesdeModalAsync()
+    {
+        if (!_docsQuirurgicos.TryGetValue(_claveDocEditando, out var doc)) return;
+        _procesandoDoc = true;
+        try
+        {
+            var html = await JS.InvokeAsync<string>("hosvetEditor.getContent", "editorDocMonAnest");
+            if (!string.IsNullOrWhiteSpace(html)) _htmlDocEditando = html;
+            doc.Titulo = _tituloDocEditando;
+            doc.Html = _htmlDocEditando;
+
+            if (doc.Autorizacion?.AutorizacionId > 0)
+            {
+                await ConsultaService.ActualizarDetalleAutorizacionAsync(doc.Autorizacion.AutorizacionId, doc.Titulo, doc.Html);
+                await CargarDocumentosQuirurgicosAsync(IdOrden, Nhcl);
+            }
+            else
+            {
+                await AsegurarAutorizacionDocAsync(_claveDocEditando);
+            }
+
+            _mostrarModalEditorDoc = false;
+            _esError = false;
+            _mensajeAlerta = $"Documento '{doc.Titulo}' guardado correctamente.";
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al guardar documento: {ex.Message}";
+        }
+        finally { _procesandoDoc = false; }
+    }
+
+    private async Task SubirDocumentoFirmadoAsync(InputFileChangeEventArgs e, string clave)
+    {
+        if (!_docsQuirurgicos.TryGetValue(clave, out var doc)) return;
+        _procesandoDoc = true;
+        try
+        {
+            var file = e.File;
+            if (file is null) return;
+            if (file.Size > 25 * 1024 * 1024)
+            {
+                _esError = true;
+                _mensajeAlerta = "El archivo firmado no puede superar los 25MB.";
+                return;
+            }
+            var auth = await AsegurarAutorizacionDocAsync(clave);
+            if (auth is null || auth.AutorizacionId <= 0)
+            {
+                _esError = true;
+                _mensajeAlerta = "No se pudo registrar el documento para adjuntar el escaneo.";
+                return;
+            }
+
+            var uploadsFolder = Path.Combine(Env.WebRootPath, "archivosPacientes", Nhcl.ToString(), "autorizaciones");
+            if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+            var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(ext)) ext = ".pdf";
+            var fileName = $"Firmado_{auth.AutorizacionId}_{clave}_{DateTime.Now:yyyyMMddHHmmss}{ext}";
+            var filePath = Path.Combine(uploadsFolder, fileName);
+
+            await using (var stream = file.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024))
+            await using (var fs = new FileStream(filePath, FileMode.Create))
+                await stream.CopyToAsync(fs);
+
+            var fileUrl = $"/archivosPacientes/{Nhcl}/autorizaciones/{fileName}";
+            var ok = await ConsultaService.ActualizarArchivoAutorizacionAsync(auth.AutorizacionId, fileUrl, file.Name);
+            if (ok)
+            {
+                await CargarDocumentosQuirurgicosAsync(IdOrden, Nhcl);
+                _dto.CheckFormulariosConsentimiento = true;
+                _dto.ConsentimientoFirmado = _docsQuirurgicos.Values.All(d => !string.IsNullOrWhiteSpace(d.Autorizacion?.ArchivoUrl));
+                _esError = false;
+                _mensajeAlerta = $"Documento firmado '{file.Name}' subido y vinculado correctamente.";
+                if (OnGuardado.HasDelegate) await OnGuardado.InvokeAsync();
+            }
+            else
+            {
+                _esError = true;
+                _mensajeAlerta = "No se pudo vincular el archivo firmado en la base de datos.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensajeAlerta = $"Error al subir documento firmado: {ex.Message}";
+        }
+        finally { _procesandoDoc = false; }
     }
 
     private async Task ImprimirHojaAsync()
