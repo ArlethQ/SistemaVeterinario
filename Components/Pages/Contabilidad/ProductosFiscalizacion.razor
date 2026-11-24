@@ -1,13 +1,22 @@
 @page "/contabilidad/inventarios/fiscalizacion"
 @using System.Globalization
+@using System.Security.Claims
 @using ClosedXML.Excel
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
+@using QuestPDF.Fluent
+@using QuestPDF.Helpers
+@using QuestPDF.Infrastructure
 @using Simetric.Data
 @using Simetric.Models
 @using Simetric.Models.EContax
+@using Simetric.Services.EContax
 @inject IDbContextFactory<AppDbContext> DbFactory
+@inject EContaxTenantService TenantService
+@inject AuthenticationStateProvider AuthStateProvider
 @inject HosvetKardex.Web.Services.SessionStateService Session
 @inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>Productos sujetos a fiscalización | e-ForVets</PageTitle>
 
@@ -31,8 +40,8 @@
                 <button type="button" class="btn btn-sm btn-light fw-semibold text-success" @onclick="ExportarExcelAsync" disabled="@(_cargando || _resumenProductos.Count == 0)">
                     <i class="bi bi-file-earmark-excel-fill me-1"></i>Exportar Excel Mensual
                 </button>
-                <button type="button" class="btn btn-sm btn-outline-light fw-semibold" @onclick="ImprimirAsync">
-                    <i class="bi bi-printer me-1"></i>Imprimir / PDF
+                <button type="button" class="btn btn-sm btn-danger fw-semibold" @onclick="ExportarPdfAsync" disabled="@(_cargando || _resumenProductos.Count == 0)">
+                    <i class="bi bi-file-earmark-pdf-fill me-1"></i>Generar Informe PDF
                 </button>
             </div>
         </div>
@@ -427,9 +436,45 @@
                 || (m.Observacion ?? string.Empty).Contains(_filtroTexto.Trim(), StringComparison.OrdinalIgnoreCase)))
         .ToList();
 
+    private string _nombreEmpresa = "Clínica Veterinaria";
+    private string _rucEmpresa = string.Empty;
+    private string _direccionEmpresa = string.Empty;
+    private bool _sucursalInicializada;
+    private int _ultimaLocalidadSesion;
+
     protected override async Task OnInitializedAsync()
     {
+        Session.OnChange += OnSesionCambiada;
+        _ultimaLocalidadSesion = Session.Localidad;
         await CargarDatosAsync();
+    }
+
+    private async void OnSesionCambiada()
+    {
+        if (Session.Localidad == _ultimaLocalidadSesion) return;
+        _ultimaLocalidadSesion = Session.Localidad;
+        _sucursalInicializada = false;
+        await InvokeAsync(async () =>
+        {
+            await CargarDatosAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        Session.OnChange -= OnSesionCambiada;
+    }
+
+    private async Task<int> ResolverUserIdAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var claim = auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? auth.User.FindFirst("sub")?.Value
+            ?? auth.User.FindFirst("idusuario")?.Value;
+        if (int.TryParse(claim, out var uid) && uid > 0) return uid;
+        if (Session.Localidad > 0) return 1_000_000 + Session.Localidad;
+        return 1_000_001;
     }
 
     private async Task OnMesChangedAsync(ChangeEventArgs e)
@@ -464,18 +509,49 @@
         {
             await using var db = await DbFactory.CreateDbContextAsync();
 
+            var userId = await ResolverUserIdAsync();
+            var userContext = await TenantService.GetContextAsync(db, userId);
+            var idEmpresa = userContext.IdEmpresa;
+
+            var emp = await db.EContaxEmpresas
+                .AsNoTracking()
+                .FirstOrDefaultAsync(e => e.IdEmpresa == idEmpresa);
+            if (emp != null)
+            {
+                _nombreEmpresa = !string.IsNullOrWhiteSpace(emp.Nombre) ? emp.Nombre : "Clínica Veterinaria";
+                _rucEmpresa = emp.Ruc ?? string.Empty;
+                _direccionEmpresa = string.Empty;
+            }
+
             var sucursalesDb = await db.EContaxSucursales
                 .AsNoTracking()
-                .Where(s => s.Estado)
+                .Where(s => s.Estado && s.IdEmpresa == idEmpresa)
                 .OrderBy(s => s.Nombre)
                 .Select(s => new SucursalOpt(s.IdSucursal, s.Nombre))
                 .ToListAsync();
             _sucursales = sucursalesDb;
-            var sucMap = sucursalesDb.ToDictionary(x => x.IdSucursal, x => x.Nombre);
+            var sucMap = sucursalesDb
+                .GroupBy(x => x.IdSucursal)
+                .ToDictionary(g => g.Key, g => g.First().Nombre);
 
-            var bodegasMap = await db.EContaxBodegas
+            if (!_sucursalInicializada)
+            {
+                _sucursalInicializada = true;
+                var matchLocalidad = sucursalesDb.FirstOrDefault(s => s.IdSucursal == Session.Localidad);
+                if (matchLocalidad != null)
+                    _idSucursalFiltro = matchLocalidad.IdSucursal;
+                else if (userContext.IdSucursal is int idSucCtx && idSucCtx > 0 && sucMap.ContainsKey(idSucCtx))
+                    _idSucursalFiltro = idSucCtx;
+            }
+
+            var bodegasDb = await db.EContaxBodegas
                 .AsNoTracking()
-                .ToDictionaryAsync(b => b.IdBodega, b => b.Nombre);
+                .Where(b => b.IdEmpresa == idEmpresa)
+                .Select(b => new { b.IdBodega, b.Nombre })
+                .ToListAsync();
+            var bodegasMap = bodegasDb
+                .GroupBy(b => b.IdBodega)
+                .ToDictionary(g => g.Key, g => g.First().Nombre);
 
             var prods = await db.Productos
                 .AsNoTracking()
@@ -492,7 +568,7 @@
 
             _productosCatalogo = prods;
             var codigos = prods.Select(p => p.Codigo).ToList();
-            var prodMap = prods.ToDictionary(p => p.Codigo);
+            var prodMap = prods.GroupBy(p => p.Codigo).ToDictionary(g => g.Key, g => g.First());
 
             if (codigos.Count == 0)
             {
@@ -506,14 +582,14 @@
 
             var exQuery = db.EContaxInventarioExistencias
                 .AsNoTracking()
-                .Where(e => codigos.Contains(e.CodigoProducto));
+                .Where(e => e.IdEmpresa == idEmpresa && codigos.Contains(e.CodigoProducto));
             if (_idSucursalFiltro > 0)
                 exQuery = exQuery.Where(e => e.IdSucursal == _idSucursalFiltro);
             var existencias = await exQuery.ToListAsync();
 
             var movQuery = db.EContaxInventarioMovimientos
                 .AsNoTracking()
-                .Where(m => codigos.Contains(m.CodigoProducto) && m.FechaMovimiento >= desdeUtc && m.FechaMovimiento < hastaUtcExcl);
+                .Where(m => m.IdEmpresa == idEmpresa && codigos.Contains(m.CodigoProducto) && m.FechaMovimiento >= desdeUtc && m.FechaMovimiento < hastaUtcExcl);
             if (_idSucursalFiltro > 0)
                 movQuery = movQuery.Where(m => m.IdSucursal == _idSucursalFiltro);
 
@@ -524,7 +600,7 @@
 
             var saldoPrevioQuery = db.EContaxInventarioMovimientos
                 .AsNoTracking()
-                .Where(m => codigos.Contains(m.CodigoProducto) && m.FechaMovimiento < desdeUtc);
+                .Where(m => m.IdEmpresa == idEmpresa && codigos.Contains(m.CodigoProducto) && m.FechaMovimiento < desdeUtc);
             if (_idSucursalFiltro > 0)
                 saldoPrevioQuery = saldoPrevioQuery.Where(m => m.IdSucursal == _idSucursalFiltro);
 
@@ -532,7 +608,9 @@
                 .GroupBy(m => new { m.CodigoProducto, m.IdSucursal })
                 .Select(g => g.OrderByDescending(x => x.FechaMovimiento).ThenByDescending(x => x.IdMovimiento).First())
                 .ToListAsync();
-            var saldoPrevioMap = ultimosPrevios.ToDictionary(x => (x.CodigoProducto, x.IdSucursal), x => x.SaldoCantidad);
+            var saldoPrevioMap = ultimosPrevios
+                .GroupBy(x => (x.CodigoProducto, x.IdSucursal))
+                .ToDictionary(g => g.Key, g => g.First().SaldoCantidad);
 
             _movimientos = movsDb.Select(m =>
             {
@@ -706,8 +784,225 @@
         }
     }
 
-    private async Task ImprimirAsync()
+    private async Task ExportarPdfAsync()
     {
-        try { await JS.InvokeVoidAsync("print"); } catch { }
+        try
+        {
+            var resumen = ResumenFiltrado;
+            var movs = MovimientosFiltrados;
+            var sucursalTexto = _idSucursalFiltro > 0
+                ? (_sucursales.FirstOrDefault(s => s.IdSucursal == _idSucursalFiltro)?.Nombre ?? $"Sucursal #{_idSucursalFiltro}")
+                : "Todas las sucursales";
+            var emisor = string.IsNullOrWhiteSpace(Session.CurrentUser?.NombreCompleto) ? "Administrador" : Session.CurrentUser.NombreCompleto;
+            var totalEntradas = movs.Where(m => m.EsEntrada).Sum(m => m.Cantidad);
+            var totalSalidas = movs.Where(m => !m.EsEntrada).Sum(m => m.Cantidad);
+            var totalStock = resumen.Sum(r => r.StockActual);
+            var conStock = resumen.Count(r => r.StockActual > 0);
+            var fechaGen = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+
+            var pdfBytes = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(24);
+                    page.DefaultTextStyle(x => x.FontSize(8.5f).FontColor("#1e293b"));
+
+                    page.Header().Column(col =>
+                    {
+                        col.Item().Background("#0f3a60").Padding(10).Row(row =>
+                        {
+                            row.RelativeItem().Column(c =>
+                            {
+                                c.Item().Text(_nombreEmpresa.ToUpperInvariant()).Bold().FontSize(11).FontColor("#ffffff");
+                                if (!string.IsNullOrWhiteSpace(_rucEmpresa) || !string.IsNullOrWhiteSpace(_direccionEmpresa))
+                                    c.Item().Text($"RUC: {_rucEmpresa}  ·  {_direccionEmpresa}".Trim(' ', '·')).FontSize(8).FontColor("#cbd5e1");
+                                c.Item().PaddingTop(3).Text("INFORME MENSUAL DE MOVIMIENTO DE MEDICAMENTOS SUJETOS A FISCALIZACIÓN").Bold().FontSize(12).FontColor("#ffffff");
+                            });
+                            row.ConstantItem(200).AlignRight().Column(c =>
+                            {
+                                c.Item().AlignRight().Text($"Período: {_desde:dd/MM/yyyy} – {_hasta:dd/MM/yyyy}").Bold().FontSize(8.5f).FontColor("#ffffff");
+                                c.Item().AlignRight().Text($"Sucursal: {sucursalTexto}").FontSize(8).FontColor("#e2e8f0");
+                                c.Item().AlignRight().Text($"Emitido: {fechaGen}").FontSize(7.5f).FontColor("#cbd5e1");
+                                c.Item().AlignRight().Text($"Usuario: {emisor}").FontSize(7.5f).FontColor("#cbd5e1");
+                            });
+                        });
+                        col.Item().PaddingBottom(6);
+                    });
+
+                    page.Content().Column(col =>
+                    {
+                        // Resumen KPIs
+                        col.Item().PaddingBottom(8).Row(row =>
+                        {
+                            row.Spacing(8);
+                            void Kpi(string titulo, string valor, string sub, string borde)
+                            {
+                                row.RelativeItem().Border(1).BorderColor(borde).Background("#f8fafc").Padding(6).Column(c =>
+                                {
+                                    c.Item().Text(titulo).FontSize(7.5f).FontColor("#64748b").Bold();
+                                    c.Item().Text(valor).FontSize(12).Bold().FontColor("#0f172a");
+                                    c.Item().Text(sub).FontSize(7).FontColor("#64748b");
+                                });
+                            }
+                            Kpi("PRODUCTOS FISCALIZADOS", resumen.Count.ToString(), $"{conStock} con stock vigente", "#cbd5e1");
+                            Kpi("EXISTENCIA FINAL TOTAL", totalStock.ToString("N2"), $"Reservado: {resumen.Sum(r => r.StockReservado):N2}", "#93c5fd");
+                            Kpi("ENTRADAS DEL PERÍODO", $"+{totalEntradas:N2}", $"{movs.Count(m => m.EsEntrada)} movimientos de ingreso", "#86efac");
+                            Kpi("SALIDAS DEL PERÍODO", $"-{totalSalidas:N2}", $"{movs.Count(m => !m.EsEntrada)} movimientos de egreso", "#fca5a5");
+                        });
+
+                        // Sección 1: Balance Mensual / Inventario
+                        col.Item().PaddingBottom(4).Text("1. INVENTARIO Y BALANCE MENSUAL DE PRODUCTOS CONTROLADOS").Bold().FontSize(9.5f).FontColor("#0f3a60");
+                        col.Item().PaddingBottom(10).Table(table =>
+                        {
+                            table.ColumnsDefinition(cols =>
+                            {
+                                cols.ConstantColumn(62);   // Código
+                                cols.RelativeColumn(2.6f); // Producto
+                                cols.RelativeColumn(1.5f); // Sucursal/Bodega
+                                cols.ConstantColumn(52);   // Unidad
+                                cols.ConstantColumn(62);   // Saldo Ini
+                                cols.ConstantColumn(58);   // Entradas
+                                cols.ConstantColumn(58);   // Salidas
+                                cols.ConstantColumn(66);   // Stock Actual
+                                cols.ConstantColumn(64);   // Disponible
+                            });
+
+                            static IContainer Th(IContainer c) => c.Background("#0f3a60").PaddingVertical(4).PaddingHorizontal(4);
+                            table.Header(h =>
+                            {
+                                h.Cell().Element(Th).Text("Código").Bold().FontSize(7.5f).FontColor("#ffffff");
+                                h.Cell().Element(Th).Text("Medicamento / Producto").Bold().FontSize(7.5f).FontColor("#ffffff");
+                                h.Cell().Element(Th).Text("Sucursal / Bodega").Bold().FontSize(7.5f).FontColor("#ffffff");
+                                h.Cell().Element(Th).AlignCenter().Text("Unidad").Bold().FontSize(7.5f).FontColor("#ffffff");
+                                h.Cell().Element(Th).AlignRight().Text("Saldo Ini.").Bold().FontSize(7.5f).FontColor("#ffffff");
+                                h.Cell().Element(Th).AlignRight().Text("Entradas").Bold().FontSize(7.5f).FontColor("#ffffff");
+                                h.Cell().Element(Th).AlignRight().Text("Salidas").Bold().FontSize(7.5f).FontColor("#ffffff");
+                                h.Cell().Element(Th).AlignRight().Text("Stock Actual").Bold().FontSize(7.5f).FontColor("#ffffff");
+                                h.Cell().Element(Th).AlignRight().Text("Disponible").Bold().FontSize(7.5f).FontColor("#ffffff");
+                            });
+
+                            int idx = 0;
+                            foreach (var r in resumen)
+                            {
+                                var bg = idx++ % 2 == 0 ? "#ffffff" : "#f8fafc";
+                                IContainer Td(IContainer c) => c.Background(bg).BorderBottom(0.5f).BorderColor("#e2e8f0").PaddingVertical(3).PaddingHorizontal(4);
+                                var ubic = string.IsNullOrWhiteSpace(r.Bodega) ? r.Sucursal : $"{r.Sucursal} / {r.Bodega}";
+                                table.Cell().Element(Td).Text(r.CodigoPrincipal).FontSize(7.5f);
+                                table.Cell().Element(Td).Text(r.Nombre).Bold().FontSize(7.5f);
+                                table.Cell().Element(Td).Text(ubic).FontSize(7.5f).FontColor("#475569");
+                                table.Cell().Element(Td).AlignCenter().Text(r.UnidadMedida).FontSize(7.5f);
+                                table.Cell().Element(Td).AlignRight().Text(r.SaldoInicial.ToString("N2")).FontSize(7.5f);
+                                table.Cell().Element(Td).AlignRight().Text(r.EntradasPeriodo > 0 ? $"+{r.EntradasPeriodo:N2}" : "0.00").FontSize(7.5f).FontColor("#15803d");
+                                table.Cell().Element(Td).AlignRight().Text(r.SalidasPeriodo > 0 ? $"-{r.SalidasPeriodo:N2}" : "0.00").FontSize(7.5f).FontColor("#b91c1c");
+                                table.Cell().Element(Td).AlignRight().Text(r.StockActual.ToString("N2")).Bold().FontSize(7.5f).FontColor("#0f3a60");
+                                table.Cell().Element(Td).AlignRight().Text(r.StockDisponible.ToString("N2")).FontSize(7.5f);
+                            }
+                        });
+
+                        // Sección 2: Kardex Completo de Entradas y Salidas
+                        col.Item().PaddingBottom(4).Text($"2. KARDEX COMPLETO DE ENTRADAS Y SALIDAS DEL PERÍODO ({movs.Count} MOVIMIENTOS)").Bold().FontSize(9.5f).FontColor("#0f3a60");
+                        if (movs.Count == 0)
+                        {
+                            col.Item().Border(0.5f).BorderColor("#cbd5e1").Background("#f8fafc").Padding(8)
+                                .Text($"No se registran movimientos de entrada o salida de medicamentos sujetos a fiscalización entre el {_desde:dd/MM/yyyy} y el {_hasta:dd/MM/yyyy}.")
+                                .Italic().FontSize(8).FontColor("#475569");
+                        }
+                        else
+                        {
+                            col.Item().Table(table =>
+                            {
+                                table.ColumnsDefinition(cols =>
+                                {
+                                    cols.ConstantColumn(72);   // Fecha
+                                    cols.ConstantColumn(54);   // Código
+                                    cols.RelativeColumn(2.1f); // Producto
+                                    cols.ConstantColumn(68);   // Sucursal
+                                    cols.ConstantColumn(62);   // Tipo
+                                    cols.ConstantColumn(64);   // Lote
+                                    cols.RelativeColumn(1.2f); // Referencia
+                                    cols.ConstantColumn(48);   // Entrada
+                                    cols.ConstantColumn(48);   // Salida
+                                    cols.ConstantColumn(48);   // Saldo
+                                    cols.RelativeColumn(1.5f); // Observación
+                                });
+
+                                static IContainer Th(IContainer c) => c.Background("#1e3a5f").PaddingVertical(4).PaddingHorizontal(3);
+                                table.Header(h =>
+                                {
+                                    h.Cell().Element(Th).Text("Fecha / Hora").Bold().FontSize(7).FontColor("#ffffff");
+                                    h.Cell().Element(Th).Text("Código").Bold().FontSize(7).FontColor("#ffffff");
+                                    h.Cell().Element(Th).Text("Producto").Bold().FontSize(7).FontColor("#ffffff");
+                                    h.Cell().Element(Th).Text("Sucursal").Bold().FontSize(7).FontColor("#ffffff");
+                                    h.Cell().Element(Th).Text("Tipo").Bold().FontSize(7).FontColor("#ffffff");
+                                    h.Cell().Element(Th).Text("Lote / Venc.").Bold().FontSize(7).FontColor("#ffffff");
+                                    h.Cell().Element(Th).Text("Referencia").Bold().FontSize(7).FontColor("#ffffff");
+                                    h.Cell().Element(Th).AlignRight().Text("Entrada").Bold().FontSize(7).FontColor("#ffffff");
+                                    h.Cell().Element(Th).AlignRight().Text("Salida").Bold().FontSize(7).FontColor("#ffffff");
+                                    h.Cell().Element(Th).AlignRight().Text("Saldo").Bold().FontSize(7).FontColor("#ffffff");
+                                    h.Cell().Element(Th).Text("Observación").Bold().FontSize(7).FontColor("#ffffff");
+                                });
+
+                                int idx = 0;
+                                foreach (var m in movs.OrderBy(x => x.FechaMovimiento).ThenBy(x => x.IdMovimiento))
+                                {
+                                    var bg = idx++ % 2 == 0 ? "#ffffff" : "#f8fafc";
+                                    IContainer Td(IContainer c) => c.Background(bg).BorderBottom(0.5f).BorderColor("#e2e8f0").PaddingVertical(2.5f).PaddingHorizontal(3);
+                                    var loteTxt = string.IsNullOrWhiteSpace(m.NumeroLote)
+                                        ? "-"
+                                        : (m.FechaVencimiento.HasValue ? $"{m.NumeroLote} ({m.FechaVencimiento:dd/MM/yy})" : m.NumeroLote);
+                                    var refTxt = string.IsNullOrWhiteSpace(m.Referencia) ? (m.ReferenciaTipo ?? "-") : $"{m.ReferenciaTipo} {m.Referencia}".Trim();
+
+                                    table.Cell().Element(Td).Text(m.FechaMovimiento.ToLocalTime().ToString("dd/MM/yy HH:mm")).FontSize(7);
+                                    table.Cell().Element(Td).Text(m.CodigoPrincipal).FontSize(7);
+                                    table.Cell().Element(Td).Text($"{m.NombreProducto} ({m.UnidadMedida})").FontSize(7);
+                                    table.Cell().Element(Td).Text(m.Sucursal).FontSize(7).FontColor("#475569");
+                                    table.Cell().Element(Td).Text(m.TipoMovimiento).Bold().FontSize(7).FontColor(m.EsEntrada ? "#15803d" : "#b91c1c");
+                                    table.Cell().Element(Td).Text(loteTxt).FontSize(7);
+                                    table.Cell().Element(Td).Text(refTxt).FontSize(7);
+                                    table.Cell().Element(Td).AlignRight().Text(m.EsEntrada ? $"+{m.Cantidad:N2}" : "").FontSize(7).FontColor("#15803d");
+                                    table.Cell().Element(Td).AlignRight().Text(!m.EsEntrada ? $"-{m.Cantidad:N2}" : "").FontSize(7).FontColor("#b91c1c");
+                                    table.Cell().Element(Td).AlignRight().Text(m.SaldoCantidad.ToString("N2")).Bold().FontSize(7);
+                                    table.Cell().Element(Td).Text(string.IsNullOrWhiteSpace(m.Observacion) ? "-" : m.Observacion).FontSize(7).FontColor("#475569");
+                                }
+                            });
+                        }
+
+                        // Bloque de firmas
+                        col.Item().PaddingTop(24).Row(row =>
+                        {
+                            row.Spacing(40);
+                            row.RelativeItem().Column(c =>
+                            {
+                                c.Item().BorderBottom(1).BorderColor("#475569").Height(24);
+                                c.Item().PaddingTop(3).AlignCenter().Text("Responsable de Farmacia / Bodega").Bold().FontSize(8);
+                                c.Item().AlignCenter().Text($"Emitido por: {emisor}").FontSize(7).FontColor("#64748b");
+                            });
+                            row.RelativeItem().Column(c =>
+                            {
+                                c.Item().BorderBottom(1).BorderColor("#475569").Height(24);
+                                c.Item().PaddingTop(3).AlignCenter().Text("Director Técnico / Médico Veterinario Responsable").Bold().FontSize(8);
+                                c.Item().AlignCenter().Text("Firma y Sello · Control ARCSA").FontSize(7).FontColor("#64748b");
+                            });
+                        });
+                    });
+
+                    page.Footer().AlignRight().Text(t =>
+                    {
+                        t.Span("Informe de Medicamentos Sujetos a Fiscalización · Página ").FontSize(7.5f).FontColor("#64748b");
+                        t.CurrentPageNumber().FontSize(7.5f).FontColor("#334155").Bold();
+                        t.Span(" de ").FontSize(7.5f).FontColor("#64748b");
+                        t.TotalPages().FontSize(7.5f).FontColor("#334155").Bold();
+                    });
+                });
+            }).GeneratePdf();
+
+            var nombre = $"Informe_Fiscalizacion_{_desde:yyyyMMdd}_{_hasta:yyyyMMdd}.pdf";
+            await JS.InvokeVoidAsync("hosvetDownloadFile", nombre, "application/pdf", Convert.ToBase64String(pdfBytes));
+        }
+        catch (Exception ex)
+        {
+            _error = $"No se pudo generar el informe PDF: {ex.Message}";
+        }
     }
 }

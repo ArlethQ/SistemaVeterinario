@@ -294,7 +294,13 @@
                                     <td data-label="Nombre">
                                         <div class="cell-main cell-main-stacked">
                                             <strong>@(string.IsNullOrWhiteSpace(p.Nombre) ? "Sin nombre" : p.Nombre)</strong>
-                                            <span>@(string.IsNullOrWhiteSpace(p.TipoCompravena) ? "Sin tipo" : p.TipoCompravena)</span>
+                                            <span>
+                                                @(string.IsNullOrWhiteSpace(p.TipoCompravena) ? "Sin tipo" : p.TipoCompravena)
+                                                @if (p.SujetoFiscalizacion)
+                                                {
+                                                    <span class="badge text-bg-warning text-dark ms-1" style="font-size:10px;" title="Medicamento sujeto a fiscalización ARCSA"><i class="bi bi-shield-lock-fill me-1"></i>Fiscalización</span>
+                                                }
+                                            </span>
                                         </div>
                                     </td>
                                     <td data-label="Clasificación">
@@ -448,6 +454,11 @@
                                         <div class="detail-item">
                                             <span>Estado</span>
                                             <strong>@GetEstadoProductoDescripcion(productoEnVista.Estado)</strong>
+                                        </div>
+
+                                        <div class="detail-item">
+                                            <span>Sujeto a fiscalización</span>
+                                            <strong>@(productoEnVista.SujetoFiscalizacion ? "Sí (Controlado ARCSA)" : "No")</strong>
                                         </div>
                                     </div>
                                 </section>
