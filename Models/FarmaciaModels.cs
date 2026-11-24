@@ -124,6 +124,7 @@ public class FarmaciaRecetaSoapItemDto
     public decimal CantidadRecetada { get; set; }
     public string CantidadLetras { get; set; } = string.Empty;
     public decimal CantidadReservadaLinea { get; set; }
+    public decimal ReservadoRealLinea { get; set; }
     public string Estado { get; set; } = "Por Entregar"; // "Por Entregar", "Entregado", "Parcial", "No Comprado"
     public string Observaciones { get; set; } = string.Empty;
     public string UnidadMedida { get; set; } = "UNIDAD";
@@ -142,7 +143,7 @@ public class FarmaciaRecetaSoapItemDto
 
     // Máximo disponible para esta línea = lo que sigue libre en la sede + lo que ya tiene reservado esta línea
     public decimal MaximoDisponibleParaEstaLinea =>
-        Math.Min(StockFisicoSede, StockLibreSede + (EstaEnCola ? CantidadReservadaLinea : 0m));
+        Math.Min(StockFisicoSede, StockLibreSede + (EstaEnCola ? (ReservadoRealLinea > 0 ? ReservadoRealLinea : CantidadReservadaLinea) : 0m));
 
     public bool TieneProductoEnCatalogo => CodigoProductoInt > 0;
     public bool CubrePedidoCompleto => TieneProductoEnCatalogo && MaximoDisponibleParaEstaLinea >= CantidadRecetada;

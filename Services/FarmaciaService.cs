@@ -992,6 +992,12 @@ public class FarmaciaService : IFarmaciaService
                 CAST(ISNULL(m.med_cantidad, 1) AS DECIMAL(18,4)) AS CantidadRecetada,
                 ISNULL(m.med_cantidadLetras, '') AS CantidadLetras,
                 CAST(ISNULL(m.med_cantidad1, 0) AS DECIMAL(18,4)) AS CantidadReservadaLinea,
+                CASE
+                    WHEN CHARINDEX('[RES:', ISNULL(m.med_observaciones, '')) > 0
+                     AND CHARINDEX(']', ISNULL(m.med_observaciones, ''), CHARINDEX('[RES:', ISNULL(m.med_observaciones, ''))) > CHARINDEX('[RES:', ISNULL(m.med_observaciones, '')) + 5
+                    THEN COALESCE(TRY_CAST(SUBSTRING(m.med_observaciones, CHARINDEX('[RES:', m.med_observaciones) + 5, CHARINDEX(']', m.med_observaciones, CHARINDEX('[RES:', m.med_observaciones)) - CHARINDEX('[RES:', m.med_observaciones) - 5) AS DECIMAL(18,4)), CAST(ISNULL(m.med_cantidad1, 0) AS DECIMAL(18,4)))
+                    ELSE CAST(ISNULL(m.med_cantidad1, 0) AS DECIMAL(18,4))
+                END AS ReservadoRealLinea,
                 ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') AS Estado,
                 ISNULL(m.med_observaciones, '') AS Observaciones,
                 ISNULL(NULLIF(LTRIM(RTRIM(COALESCE(p.UNIDAD_MEDIDA, pMatch.UNIDAD_MEDIDA))), ''), 'UNIDAD') AS UnidadMedida,
@@ -1137,11 +1143,13 @@ public class FarmaciaService : IFarmaciaService
             DECLARE @CodAnterior INT = 0;
             DECLARE @ReservadoAnterior DECIMAL(18,4) = 0;
             DECLARE @EstadoActual VARCHAR(30) = '';
+            DECLARE @ObsActual NVARCHAR(300) = '';
 
             SELECT TOP 1
                 @CodAnterior = ISNULL(med_idProdu, 0),
                 @ReservadoAnterior = CAST(ISNULL(med_cantidad1, 0) AS DECIMAL(18,4)),
-                @EstadoActual = ISNULL(NULLIF(LTRIM(RTRIM(med_estado)), ''), 'Por Entregar')
+                @EstadoActual = ISNULL(NULLIF(LTRIM(RTRIM(med_estado)), ''), 'Por Entregar'),
+                @ObsActual = ISNULL(med_observaciones, '')
             FROM dbo.vt_medicinas WITH (UPDLOCK, HOLDLOCK)
             WHERE sec = @Sec;
 
@@ -1149,6 +1157,35 @@ public class FarmaciaService : IFarmaciaService
             BEGIN
                 ROLLBACK TRANSACTION;
                 SELECT 0;
+                RETURN;
+            END
+
+            DECLARE @ResTagPos INT = CHARINDEX('[RES:', @ObsActual);
+            IF @ResTagPos > 0
+            BEGIN
+                DECLARE @ResTagFin INT = CHARINDEX(']', @ObsActual, @ResTagPos);
+                IF @ResTagFin > @ResTagPos + 5
+                BEGIN
+                    DECLARE @ResParsed DECIMAL(18,4) = TRY_CAST(SUBSTRING(@ObsActual, @ResTagPos + 5, @ResTagFin - @ResTagPos - 5) AS DECIMAL(18,4));
+                    IF @ResParsed IS NOT NULL
+                        SET @ReservadoAnterior = @ResParsed;
+                END
+            END
+
+            -- Al enviar a Facturación (@MarcarPorFacturar = 1), mantenemos intacta la reserva original en stock_reservado
+            -- hasta que Caja genere la factura (evita conflictos si el cliente decide llevarse todo en Caja).
+            IF @MarcarPorFacturar = 1
+            BEGIN
+                DECLARE @CantAEnviar DECIMAL(18,4) = CASE WHEN @CantidadDeseada > 0 THEN @CantidadDeseada ELSE 0 END;
+                UPDATE dbo.vt_medicinas
+                SET med_idProdu = @NuevoCodProd,
+                    med_cantidad1 = @CantAEnviar,
+                    med_estado = 'Por Facturar',
+                    med_observaciones = LEFT('Farmacia->Caja (' + CONVERT(VARCHAR(16), GETDATE(), 120) + '): ' + CAST(@CantAEnviar AS VARCHAR(20)) + ' a cobrar · ' + @Despachador + ' [RES:' + CAST(@ReservadoAnterior AS VARCHAR(20)) + ']', 240)
+                WHERE sec = @Sec;
+
+                COMMIT TRANSACTION;
+                SELECT 1;
                 RETURN;
             END
 
@@ -1219,7 +1256,7 @@ public class FarmaciaService : IFarmaciaService
 
             _inventarioService.InvalidarCacheCatalogo();
             return marcarPorFacturar
-                ? (true, $"Receta Orden #{receta.IdOrden} enviada a Facturación con reserva temporal. El stock definitivo se descargará cuando se genere la factura.")
+                ? (true, $"Receta Orden #{receta.IdOrden} enviada a Facturación. Se mantiene la reserva original intacta hasta que se genere la factura.")
                 : (true, $"Reserva en cola actualizada para la Receta de la Orden #{receta.IdOrden}. Las unidades no seleccionadas quedaron libres.");
         }
         catch (Exception ex)
@@ -1362,12 +1399,14 @@ public class FarmaciaService : IFarmaciaService
             DECLARE @CantRecetada DECIMAL(18,4) = 0;
             DECLARE @ReservadoAnterior DECIMAL(18,4) = 0;
             DECLARE @EstadoActual VARCHAR(30) = '';
+            DECLARE @ObsActual NVARCHAR(300) = '';
 
             SELECT TOP 1
                 @CodAnterior = ISNULL(med_idProdu, 0),
                 @CantRecetada = CAST(ISNULL(med_cantidad, 0) AS DECIMAL(18,4)),
                 @ReservadoAnterior = CAST(ISNULL(med_cantidad1, 0) AS DECIMAL(18,4)),
-                @EstadoActual = ISNULL(NULLIF(LTRIM(RTRIM(med_estado)), ''), 'Por Entregar')
+                @EstadoActual = ISNULL(NULLIF(LTRIM(RTRIM(med_estado)), ''), 'Por Entregar'),
+                @ObsActual = ISNULL(med_observaciones, '')
             FROM dbo.vt_medicinas WITH (UPDLOCK, HOLDLOCK)
             WHERE sec = @Sec;
 
@@ -1376,6 +1415,18 @@ public class FarmaciaService : IFarmaciaService
                 ROLLBACK TRANSACTION;
                 SELECT 0;
                 RETURN;
+            END
+
+            DECLARE @ResTagPos INT = CHARINDEX('[RES:', @ObsActual);
+            IF @ResTagPos > 0
+            BEGIN
+                DECLARE @ResTagFin INT = CHARINDEX(']', @ObsActual, @ResTagPos);
+                IF @ResTagFin > @ResTagPos + 5
+                BEGIN
+                    DECLARE @ResParsed DECIMAL(18,4) = TRY_CAST(SUBSTRING(@ObsActual, @ResTagPos + 5, @ResTagFin - @ResTagPos - 5) AS DECIMAL(18,4));
+                    IF @ResParsed IS NOT NULL
+                        SET @ReservadoAnterior = @ResParsed;
+                END
             END
 
             -- 1. Liberar primero la reserva temporal anterior (@ReservadoAnterior)
