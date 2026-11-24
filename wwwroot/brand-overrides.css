@@ -525,9 +525,9 @@ body .quote-kpi::after {
 .diagnostic-orders-patient-field strong { font-size: .83rem; }
 .diagnostic-orders-patient-field small { margin-top: 3px; color: #465970; }
 .diagnostic-orders-patient-name { color: #064ac1; }
-.diagnostic-orders-patient .buscador-orden-clinica .form-control { width: 68px !important; min-width: 56px !important; }
-.diagnostic-orders-patient .buscador-orden-clinica .input-group-text { padding-inline: 5px; }
-.diagnostic-orders-patient .buscador-orden-clinica > .list-group {
+:is(.diagnostic-orders-patient, .results-patient) .buscador-orden-clinica .form-control { width: 68px !important; min-width: 56px !important; }
+:is(.diagnostic-orders-patient, .results-patient) .buscador-orden-clinica .input-group-text { padding-inline: 5px; }
+:is(.diagnostic-orders-patient, .results-patient) .buscador-orden-clinica > .list-group {
     inset-inline: 0 auto !important;
     width: min(340px, calc(100vw - 110px));
     min-width: 100% !important;
@@ -643,3 +643,58 @@ body .quote-kpi::after {
     padding: .6rem .7rem;
     background: #edf6ff;
 }
+
+.diagnostic-tabs {
+    gap: 6px;
+    padding: 5px;
+    border: 1px solid #c5d9ee;
+    border-radius: 12px;
+    background: #eaf3fc;
+    width: fit-content;
+    max-width: 100%;
+}
+
+.diagnostic-tabs .nav-link {
+    padding: 7px 13px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: #123e70;
+    font-size: .84rem;
+    font-weight: 750;
+}
+
+.diagnostic-tabs .nav-link:hover { background: #d8eaff; }
+.diagnostic-tabs .nav-link.active {
+    border-color: #07568c;
+    background: #07568c;
+    color: #fff;
+    box-shadow: 0 2px 4px #173b6724;
+}
+
+.results-view {
+    --diag-ink: #102952;
+    --diag-border: #c5d9ee;
+    color: var(--diag-ink);
+}
+
+.results-hero { --diag-blue: #07568c; }
+.results-patient {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+    gap: 6px 0;
+    padding: 10px 14px;
+}
+.results-view .diagnostic-orders-chip {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: #d4edff;
+    color: #064c8c;
+    font-size: .69rem;
+    font-weight: 750;
+}
+.results-table-wrap { overflow: auto; border-radius: 0 0 11px 11px; }
+.results-view .diagnostic-orders-table th { background: #cfe4f9; color: var(--diag-ink); }
+.results-row-actions { display: flex; justify-content: flex-end; gap: 5px; }
+.results-row-actions .btn { border-radius: 7px; min-height: 28px; white-space: nowrap; }
+.results-upload { border: 1px dashed #9dc4ed; border-radius: 8px; background: #edf6ff; }
