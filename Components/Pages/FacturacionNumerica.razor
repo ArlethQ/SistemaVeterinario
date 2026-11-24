@@ -840,7 +840,7 @@
                                 var ivaFila = GetIvaDetalle(d);
                                 var totalFila = GetTotalDetalle(d);
 
-                                <tr class="@(EsDetalleFacturaVacio(d) ? "n-detail-empty-row" : null)">
+                                <tr @key="d" class="@(EsDetalleFacturaVacio(d) ? "n-detail-empty-row" : null)">
                                     <td style="width: 68px; max-width: 78px;">
                                         @if (d.Codproducto > 0)
                                         {
@@ -872,17 +872,27 @@
                                                   @onkeydown="@((KeyboardEventArgs e) => OnKeyDownConceptoDetalleAsync(d, e))"
                                                   maxlength="150"
                                                   placeholder="@(EsDetalleFacturaVacio(d) ? "Buscar producto o servicio" : "Concepto o nombre manual")"></textarea>
-                                        @if (ReferenceEquals(filaBusquedaProductoActiva, d) && sugerenciasProductos != null && sugerenciasProductos.Any())
+                                        @if (ReferenceEquals(filaBusquedaProductoActiva, d) && sugerenciasProductos != null)
                                         {
                                             <ul class="n-suggestions n-suggestions-inline n-detail-suggestions-floating">
-                                                @for (var idx = 0; idx < sugerenciasProductos.Count; idx++)
+                                                @if (sugerenciasProductos.Any())
                                                 {
-                                                    var p = sugerenciasProductos[idx];
-                                                    <li @onmousedown="() => PrepararSeleccionProducto()"
-                                                        class="@(indiceSugerenciaProductoActiva == idx ? "is-active" : null)"
-                                                        @onclick="async () => await SeleccionarProductoEnFilaDesdeListaAsync(d, p)">
-                                                        <strong>@p.Descripcion</strong><br />
-                                                        <small>Cód: @p.Codprincipal | @ObtenerResumenProductoBusqueda(p) | PVP: $@p.PrecioUnitario</small>
+                                                    @for (var idx = 0; idx < sugerenciasProductos.Count; idx++)
+                                                    {
+                                                        var p = sugerenciasProductos[idx];
+                                                        <li @onmousedown:preventDefault
+                                                            @onmousedown="() => PrepararSeleccionProducto()"
+                                                            class="@(indiceSugerenciaProductoActiva == idx ? "is-active" : null)"
+                                                            @onclick="async () => await SeleccionarProductoEnFilaDesdeListaAsync(d, p)">
+                                                            <strong>@p.Descripcion</strong><br />
+                                                            <small>Cód: @p.Codprincipal | @ObtenerResumenProductoBusqueda(p) | PVP: $@p.PrecioUnitario.ToString("N2")</small>
+                                                        </li>
+                                                    }
+                                                }
+                                                else if (!string.IsNullOrWhiteSpace(d.Descripcion))
+                                                {
+                                                    <li class="text-muted small py-2 px-3" style="cursor: default;">
+                                                        No se encontraron productos ni servicios para "@d.Descripcion.Trim()".
                                                     </li>
                                                 }
                                             </ul>
@@ -5493,20 +5503,37 @@
         seleccionandoProductoDesdeLista = true;
     }
 
+    private long revisionBusquedaProductoDetalle;
+
     private async Task OnConceptoDetalleEditadoAsync(DetalleFacturaDto detalle)
     {
-        AsegurarFilaVaciaDespuesDeEdicion();
+        if (detalle.Codproducto > 0 && string.IsNullOrWhiteSpace(detalle.Descripcion))
+        {
+            detalle.Codproducto = 0;
+            detalle.Codprincipal = null;
+            detalle.Codauxiliar = null;
+            metadataUnidadDetalle.Remove(detalle);
+        }
 
         if (sinCaja || detalle.Codproducto > 0)
+        {
+            AsegurarFilaVaciaDespuesDeEdicion();
             return;
+        }
 
+        var revision = ++revisionBusquedaProductoDetalle;
         filaBusquedaProductoActiva = detalle;
         var filtro = (detalle.Descripcion ?? string.Empty).Trim();
         nuevoCodProducto = filtro;
         productoLookup = null;
 
-        sugerenciasProductos = await FacturacionService.BuscarProductosFiltroAsync(UsuarioProductos, filtro, EsContextoBackOffice);
+        var resultados = await FacturacionService.BuscarProductosFiltroAsync(UsuarioProductos, filtro, EsContextoBackOffice);
+        if (revision != revisionBusquedaProductoDetalle || !ReferenceEquals(filaBusquedaProductoActiva, detalle))
+            return;
+
+        sugerenciasProductos = resultados;
         indiceSugerenciaProductoActiva = ObtenerIndiceInicial(sugerenciasProductos);
+        AsegurarFilaVaciaDespuesDeEdicion();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -5515,10 +5542,15 @@
         if (sinCaja || detalle.Codproducto > 0)
             return;
 
+        var revision = ++revisionBusquedaProductoDetalle;
         filaBusquedaProductoActiva = detalle;
         var filtro = (detalle.Descripcion ?? string.Empty).Trim();
         nuevoCodProducto = filtro;
-        sugerenciasProductos = await FacturacionService.BuscarProductosFiltroAsync(UsuarioProductos, filtro, EsContextoBackOffice);
+        var resultados = await FacturacionService.BuscarProductosFiltroAsync(UsuarioProductos, filtro, EsContextoBackOffice);
+        if (revision != revisionBusquedaProductoDetalle || !ReferenceEquals(filaBusquedaProductoActiva, detalle))
+            return;
+
+        sugerenciasProductos = resultados;
         indiceSugerenciaProductoActiva = ObtenerIndiceInicial(sugerenciasProductos);
         await InvokeAsync(StateHasChanged);
     }
