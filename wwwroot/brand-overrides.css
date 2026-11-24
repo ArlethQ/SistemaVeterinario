@@ -49,6 +49,34 @@ body :is(button, a).app-doc-action.app-doc-icon:not([hidden]) {
 .app-doc-action:is(:disabled, .disabled, [aria-disabled="true"]) { opacity: .63; }
 .app-doc-action i { color: inherit !important; flex-shrink: 0; }
 
+.app-workflow-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: var(--app-action-height);
+    padding: 6px 12px;
+    border: 1px solid var(--workflow-border, transparent);
+    border-radius: var(--app-action-radius);
+    background: var(--workflow-bg);
+    color: var(--workflow-text);
+    font: inherit;
+    font-size: .8rem;
+    font-weight: 750;
+    line-height: 1.2;
+    text-align: center;
+    text-decoration: none;
+}
+.app-workflow-action > i { flex-shrink: 0; }
+.app-workflow-action:hover:not(:disabled) { color: var(--workflow-text); filter: brightness(.94); }
+.app-workflow-action:focus-visible { outline: 2px solid #075ca0; outline-offset: 2px; }
+.app-workflow-action:disabled { opacity: .63; cursor: not-allowed; }
+.app-workflow-save { --workflow-bg: #075ca0; --workflow-text: #fff; }
+.app-workflow-checklist { --workflow-bg: #fff1cf; --workflow-text: #694500; --workflow-border: #e9cb7f; }
+.app-workflow-anesthesia { --workflow-bg: #f0e8fc; --workflow-text: #603898; --workflow-border: #d8c5ed; }
+.app-workflow-protocol { --workflow-bg: #dcf4f7; --workflow-text: #12606a; --workflow-border: #b5dfe4; }
+.app-workflow-recovery { --workflow-bg: #e0f4e9; --workflow-text: #17613c; --workflow-border: #b9ddcb; }
+
 @media screen {
     table > thead > tr > :is(th, td),
     .workspace-content .table-head,

@@ -6,8 +6,6 @@
 }
 
 .pausa-hero {
-    position: relative;
-    isolation: isolate;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -18,16 +16,6 @@
     margin-bottom: 12px;
     border-radius: 12px;
     background: linear-gradient(110deg, #f8fbff 30%, #e9f5ff 70%, #f5faff);
-}
-
-.pausa-hero::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    inset: 0 24% 0 44%;
-    opacity: .42;
-    background: url("/imagenes/dashboard-mascotas.png") center 20% / auto 175% no-repeat;
-    mask-image: linear-gradient(to right, transparent, #000 25% 74%, transparent);
 }
 
 .pausa-heading { display: flex; align-items: center; gap: 12px; }
@@ -44,15 +32,16 @@
 }
 
 .pausa-toolbar {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px 16px;
+    display: grid;
+    gap: 10px;
     padding: 9px 13px;
     margin-bottom: 12px;
 }
-.pausa-toolbar > div { min-width: 0; max-width: 100%; }
-.pausa-toolbar select { width: min(320px, 50vw); }
+.pausa-order { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.pausa-order select { width: min(320px, 100%); }
+.pausa-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 8px; }
+.pausa-order + .pausa-actions { padding-top: 10px; border-top: 1px solid var(--pausa-border); }
+.pausa-embedded .pausa-actions { display: flex; justify-content: flex-end; }
 .pausa-view ::deep .buscador-orden-clinica .form-control { width: 74px !important; min-width: 58px !important; }
 
 .pausa-patient {
@@ -73,11 +62,15 @@
     min-height: 38px;
     padding: 8px 13px;
     border-radius: 11px 11px 0 0;
-    background: #064369;
-    color: #fff;
+    background: var(--paso-header);
+    color: var(--paso-text, #fff);
     font-size: .85rem;
     font-weight: 800;
 }
+.pausa-step { background: var(--paso-body); border-color: var(--paso-border); }
+.pausa-step-entry { --paso-header: #075ca0; --paso-body: #f2f8ff; --paso-border: #b9d6f0; }
+.pausa-step-pause { --paso-header: #ffd465; --paso-text: #412900; --paso-body: #fffbef; --paso-border: #ead39a; }
+.pausa-step-exit { --paso-header: #146847; --paso-body: #f1faf5; --paso-border: #b9ddcb; }
 .pausa-view .form-control, .pausa-view .form-select { border-color: var(--pausa-border); border-radius: 7px; }
 
 @media (max-width: 1050px) {
@@ -86,13 +79,11 @@
 }
 
 @media (max-width: 600px) {
-    .pausa-hero::before { display: none; }
     .pausa-patient { grid-template-columns: minmax(0, 1fr); }
     .pausa-patient > div + div { border-inline-start: 0; border-top: 1px solid var(--pausa-border); padding-top: 8px; }
 }
 
 .pausa-section h2 { margin: 3px 0; color: inherit; font-size: .95rem; font-weight: 800; }
-.pausa-section small { color: #d6e9f9; }
+.pausa-section small { color: inherit; }
 .pausa-embedded .pausa-hero { min-height: 0; }
-.pausa-embedded .pausa-hero::before { display: none; }
 .pausa-toolbar:empty { display: none; }
