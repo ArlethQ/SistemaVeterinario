@@ -41,7 +41,7 @@ public interface IReportExportService
     byte[] GenerarOrdenImagenPdf(PacienteHeaderDto paciente, List<OrdenImagenItemDto> ordenes, List<DiagnosticoCie10Dto> diagnosticos);
     byte[] GenerarOrdenFisioterapiaPdf(PacienteHeaderDto paciente, List<FisioterapiaOrdenDto> ordenes, List<DiagnosticoCie10Dto> diagnosticos);
     byte[] GenerarInformeDiagnosticoPdf(PacienteHeaderDto paciente, InformeDiagnosticoDto informe);
-    byte[] GenerarBandejaLaboratorioExcel(List<BandejaTrabajoDiagnosticoDto> bandeja, DateTime desde, DateTime hasta);
+    byte[] GenerarBandejaLaboratorioExcel(List<BandejaTrabajoDiagnosticoDto> bandeja, DateTime desde, DateTime hasta, int? idOrden = null);
     byte[] GenerarProformaConsolidadaPdf(OrdenProformaResumenDto proforma);
     byte[] GenerarProformaConsolidadaExcel(OrdenProformaResumenDto proforma);
     byte[] GenerarAgendaCitasPdf(List<CitaMedicaDto> citas, DateTime desde, DateTime hasta);
@@ -3038,12 +3038,12 @@ public class ReportExportService : IReportExportService
     // ========================================================================
     // 16. EXPORTACIÓN EXCEL DE BANDEJA DE LABORATORIO E IMAGENOLOGÍA
     // ========================================================================
-    public byte[] GenerarBandejaLaboratorioExcel(List<BandejaTrabajoDiagnosticoDto> bandeja, DateTime desde, DateTime hasta)
+    public byte[] GenerarBandejaLaboratorioExcel(List<BandejaTrabajoDiagnosticoDto> bandeja, DateTime desde, DateTime hasta, int? idOrden = null)
     {
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add("Bandeja Diagnóstica");
 
-        ws.Cell(1, 1).Value = $"e-ForVets - BANDEJA CENTRAL DE LABORATORIO E IMAGENOLOGÍA ({desde:yyyy-MM-dd} al {hasta:yyyy-MM-dd})";
+        ws.Cell(1, 1).Value = idOrden is int orden ? $"e-ForVets - BANDEJA DIAGNÓSTICA (Orden #{orden})" : $"e-ForVets - BANDEJA CENTRAL DE LABORATORIO E IMAGENOLOGÍA ({desde:yyyy-MM-dd} al {hasta:yyyy-MM-dd})";
         ws.Range(1, 1, 1, 10).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
 
         string[] headers = ["Sec", "Área", "Fecha", "Orden", "NHCL", "Paciente", "Propietario", "Examen / Estudio", "Prioridad", "Estado", "Médico Solicitante", "Observaciones"];

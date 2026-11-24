@@ -20,7 +20,10 @@
             <small class="text-muted">Recepción de órdenes diagnósticas, redacción de informes especializados y carga de resultados.</small>
         </div>
         <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
-            <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPacientePorInputAsync" MostrarTextoBoton="false" />
+            @if (!NhclExpediente.HasValue)
+            {
+                <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPacientePorInputAsync" MostrarTextoBoton="false" />
+            }
             <button class="btn btn-sm btn-outline-success app-doc-action app-doc-excel" @onclick="ExportarBandejaExcelAsync">
                 <i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i>Exportar Bandeja Excel
             </button>
@@ -67,14 +70,17 @@
         <div class="card shadow-sm border-0 mb-3">
             <div class="card-body py-2">
                 <div class="row g-2 align-items-end">
-                    <div class="col-md-2">
-                        <label class="form-label small fw-semibold mb-1">Desde</label>
-                        <input type="date" class="form-control form-control-sm" @bind="FechaDesde" @bind:after="CargarBandejaAsync" />
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small fw-semibold mb-1">Hasta</label>
-                        <input type="date" class="form-control form-control-sm" @bind="FechaHasta" @bind:after="CargarBandejaAsync" />
-                    </div>
+                    @if (!OrdenExpediente.HasValue)
+                    {
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold mb-1">Desde</label>
+                            <input type="date" class="form-control form-control-sm" @bind="FechaDesde" @bind:after="CargarBandejaAsync" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold mb-1">Hasta</label>
+                            <input type="date" class="form-control form-control-sm" @bind="FechaHasta" @bind:after="CargarBandejaAsync" />
+                        </div>
+                    }
                     <div class="col-md-2">
                         <label class="form-label small fw-semibold mb-1">Área Diagnóstica</label>
                         <select class="form-select form-select-sm" @bind="AreaFiltro" @bind:after="CargarBandejaAsync">
@@ -271,7 +277,7 @@
             <div class="col-lg-6">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-folder2-open me-1"></i>Repositorio de Informes del Paciente (NHCL #@Nhcl)</span>
+                        <span><i class="bi bi-folder2-open me-1"></i>@(OrdenExpediente is int orden ? $"Informes de la orden #{orden}" : $"Repositorio de Informes del Paciente (NHCL #{Nhcl})")</span>
                         <span class="badge bg-secondary">@InformesPaciente.Count informe(s)</span>
                     </div>
                     <div class="card-body">
@@ -340,6 +346,8 @@
 @code {
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
+    [Parameter] public int? NhclExpediente { get; set; }
+    [Parameter] public int? OrdenExpediente { get; set; }
 
     private int IdOrdenInput { get; set; }
     private int NhclInput { get; set; }
@@ -367,7 +375,16 @@
 
         try
         {
-            if (IdOrden <= 0 && Session.OrdenActiva.HasValue)
+            if (NhclExpediente.HasValue)
+            {
+                Nhcl = NhclExpediente.Value;
+                if (Nhcl <= 0 || OrdenExpediente is <= 0)
+                {
+                    MensajeAlerta = "El expediente necesita una historia clínica y una orden válidas.";
+                    return;
+                }
+            }
+            else if (IdOrden <= 0 && Session.OrdenActiva.HasValue)
             {
                 IdOrden = Session.OrdenActiva.Value;
                 Nhcl = Session.NhclActivo ?? 0;
@@ -412,7 +429,7 @@
     {
         try
         {
-            BandejaItems = await LabService.ObtenerBandejaTrabajoAsync(FechaDesde, FechaHasta, AreaFiltro, CriterioFiltro, ValorFiltro);
+            BandejaItems = await LabService.ObtenerBandejaTrabajoAsync(FechaDesde, FechaHasta, AreaFiltro, CriterioFiltro, ValorFiltro, NhclExpediente, OrdenExpediente);
         }
         catch (Exception ex)
         {
@@ -437,7 +454,7 @@
 
             if (Nhcl > 0)
             {
-                InformesPaciente = await LabService.ObtenerInformesPacienteAsync(Nhcl);
+                InformesPaciente = await LabService.ObtenerInformesPacienteAsync(Nhcl, idOrden: OrdenExpediente);
                 await AplicarPlantillaSeleccionadaAsync();
             }
         }
@@ -517,14 +534,18 @@
 
     private async Task GuardarInformeAsync()
     {
-        if (Nhcl <= 0) return;
+        if (Nhcl <= 0 || OrdenExpediente is <= 0) return;
         NuevoInforme.Nhcl = Nhcl;
-        NuevoInforme.IdOrden = IdOrden;
+        NuevoInforme.IdOrden = OrdenExpediente ?? IdOrden;
         NuevoInforme.IdUser = Session.CurrentUser?.UserNumero ?? 1;
         NuevoInforme.Localidad = Session.Localidad;
 
-        await LabService.GuardarInformeDiagnosticoAsync(NuevoInforme);
-        InformesPaciente = await LabService.ObtenerInformesPacienteAsync(Nhcl);
+        if (!await LabService.GuardarInformeDiagnosticoAsync(NuevoInforme))
+        {
+            MensajeAlerta = "No se pudo guardar el informe.";
+            return;
+        }
+        InformesPaciente = await LabService.ObtenerInformesPacienteAsync(Nhcl, idOrden: OrdenExpediente);
         await CargarBandejaAsync();
         MensajeAlerta = $"Informe de {NuevoInforme.TipoInforme} registrado exitosamente para NHCL #{Nhcl}.";
     }
@@ -547,7 +568,7 @@
     private async Task AnularInformeAsync(InformeDiagnosticoDto inf)
     {
         await LabService.AnularInformeDiagnosticoAsync(inf.IdInforme, inf.TipoInforme);
-        InformesPaciente = await LabService.ObtenerInformesPacienteAsync(Nhcl);
+        InformesPaciente = await LabService.ObtenerInformesPacienteAsync(Nhcl, idOrden: OrdenExpediente);
     }
 
     private async Task ExportarInformePdfAsync(InformeDiagnosticoDto inf)
@@ -564,8 +585,11 @@
 
     private async Task ExportarBandejaExcelAsync()
     {
-        var xlsxBytes = ReportService.GenerarBandejaLaboratorioExcel(BandejaItems, FechaDesde, FechaHasta);
-        await JS.InvokeVoidAsync("descargarArchivoBase64", $"BandejaDiagnostica_{FechaDesde:yyyyMMdd}_{FechaHasta:yyyyMMdd}.xlsx",
+        var xlsxBytes = ReportService.GenerarBandejaLaboratorioExcel(BandejaItems, FechaDesde, FechaHasta, OrdenExpediente);
+        var nombreArchivo = OrdenExpediente is int orden
+            ? $"BandejaDiagnostica_Orden_{orden}.xlsx"
+            : $"BandejaDiagnostica_{FechaDesde:yyyyMMdd}_{FechaHasta:yyyyMMdd}.xlsx";
+        await JS.InvokeVoidAsync("descargarArchivoBase64", nombreArchivo,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(xlsxBytes));
     }
 }

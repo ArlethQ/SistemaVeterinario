@@ -29,11 +29,13 @@ public interface ILaboratorioImagenService
         DateTime hasta,
         string area = "TODOS",
         string criterioBusqueda = "",
-        string valorBusqueda = "");
+        string valorBusqueda = "",
+        int? nhcl = null,
+        int? idOrden = null);
     Task<bool> MarcarExamenRealizadoAsync(int sec, int idOrden, string codigoProd, string area, int idUsuario);
 
     // 5. Informes y Resultados Diagnósticos (vt_labInformes, vt_rxInformes, vt_ecoInformes, vt_endoInformes, vt_medInformes)
-    Task<List<InformeDiagnosticoDto>> ObtenerInformesPacienteAsync(int nhcl, string? tipoInforme = null);
+    Task<List<InformeDiagnosticoDto>> ObtenerInformesPacienteAsync(int nhcl, string? tipoInforme = null, int? idOrden = null);
     Task<string> ProcesarPlantillaInformeAsync(int idFormato, int nhcl, string nombreUsuario);
     Task<bool> GuardarInformeDiagnosticoAsync(InformeDiagnosticoDto dto);
     Task<bool> AnularInformeDiagnosticoAsync(int idInforme, string tipoInforme);
@@ -440,9 +442,13 @@ public class LaboratorioImagenService : ILaboratorioImagenService
         DateTime hasta,
         string area = "TODOS",
         string criterioBusqueda = "",
-        string valorBusqueda = "")
+        string valorBusqueda = "",
+        int? nhcl = null,
+        int? idOrden = null)
     {
         var resultado = new List<BandejaTrabajoDiagnosticoDto>();
+        if (nhcl is <= 0 || idOrden is <= 0) return resultado;
+
         DateTime ini = desde.Date;
         DateTime fin = hasta.Date.AddDays(1).AddSeconds(-1);
         string val = valorBusqueda?.Trim() ?? "";
@@ -473,11 +479,13 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 INNER JOIN vt_clientes c ON o.ordenAten_idcliente = c.pa_codigo
                 LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
                 LEFT JOIN vt_especialidades e ON o.ordenAten_esp_numero = e.es_id
-                WHERE l.labO_fecha >= @Desde AND l.labO_fecha <= @Hasta";
+                WHERE ((@IdOrden IS NULL AND l.labO_fecha >= @Desde AND l.labO_fecha <= @Hasta)
+                       OR l.labO_id_orden = @IdOrden)
+                  AND (@Nhcl IS NULL OR l.labO_nhcl = @Nhcl)";
 
             try
             {
-                var labs = await _db.QueryAsync<BandejaTrabajoDiagnosticoDto>(sqlLab, new { Desde = ini, Hasta = fin });
+                var labs = await _db.QueryAsync<BandejaTrabajoDiagnosticoDto>(sqlLab, new { Desde = ini, Hasta = fin, Nhcl = nhcl, IdOrden = idOrden });
                 resultado.AddRange(labs);
             }
             catch (Exception ex)
@@ -512,11 +520,13 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 INNER JOIN vt_clientes c ON o.ordenAten_idcliente = c.pa_codigo
                 LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
                 LEFT JOIN vt_especialidades e ON o.ordenAten_esp_numero = e.es_id
-                WHERE r.rxO_fecha >= @Desde AND r.rxO_fecha <= @Hasta";
+                WHERE ((@IdOrden IS NULL AND r.rxO_fecha >= @Desde AND r.rxO_fecha <= @Hasta)
+                       OR r.rxO_id_orden = @IdOrden)
+                  AND (@Nhcl IS NULL OR r.rxO_nhcl = @Nhcl)";
 
             try
             {
-                var rxs = await _db.QueryAsync<BandejaTrabajoDiagnosticoDto>(sqlRx, new { Desde = ini, Hasta = fin });
+                var rxs = await _db.QueryAsync<BandejaTrabajoDiagnosticoDto>(sqlRx, new { Desde = ini, Hasta = fin, Nhcl = nhcl, IdOrden = idOrden });
                 resultado.AddRange(rxs);
             }
             catch (Exception ex)
@@ -572,15 +582,48 @@ public class LaboratorioImagenService : ILaboratorioImagenService
     // ========================================================================
     // 5. INFORMES Y RESULTADOS DIAGNÓSTICOS (vt_labInformes, vt_rxInformes, etc.)
     // ========================================================================
-    public async Task<List<InformeDiagnosticoDto>> ObtenerInformesPacienteAsync(int nhcl, string? tipoInforme = null)
+    private bool _ordenInformesInicializada;
+
+    private async Task InicializarOrdenInformesAsync()
+    {
+        if (_ordenInformesInicializada) return;
+
+        await _db.ExecuteAsync(@"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+            DECLARE @Resultado int;
+            EXEC @Resultado = sys.sp_getapplock @Resource = 'BlazorOrdenInformes',
+                @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000;
+            IF @Resultado < 0 THROW 50001, 'No se pudo preparar el vínculo entre informes y órdenes.', 1;
+
+            IF OBJECT_ID('dbo.vt_labInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_labInformes', 'blazor_id_orden') IS NULL
+                ALTER TABLE dbo.vt_labInformes ADD blazor_id_orden int NULL;
+            IF OBJECT_ID('dbo.vt_rxInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_rxInformes', 'blazor_id_orden') IS NULL
+                ALTER TABLE dbo.vt_rxInformes ADD blazor_id_orden int NULL;
+            IF OBJECT_ID('dbo.vt_ecoInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_ecoInformes', 'blazor_id_orden') IS NULL
+                ALTER TABLE dbo.vt_ecoInformes ADD blazor_id_orden int NULL;
+            IF OBJECT_ID('dbo.vt_endoInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_endoInformes', 'blazor_id_orden') IS NULL
+                ALTER TABLE dbo.vt_endoInformes ADD blazor_id_orden int NULL;
+            IF OBJECT_ID('dbo.vt_medInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_medInformes', 'blazor_id_orden') IS NULL
+                ALTER TABLE dbo.vt_medInformes ADD blazor_id_orden int NULL;
+            COMMIT TRANSACTION;");
+
+        _ordenInformesInicializada = true;
+    }
+
+    public async Task<List<InformeDiagnosticoDto>> ObtenerInformesPacienteAsync(int nhcl, string? tipoInforme = null, int? idOrden = null)
     {
         var lista = new List<InformeDiagnosticoDto>();
+
+        if (idOrden is <= 0) return lista;
+        if (idOrden.HasValue) await InicializarOrdenInformesAsync();
 
         async Task CargarTablaAsync(string tipo, string tabla, string prefijo)
         {
             if (!string.IsNullOrWhiteSpace(tipoInforme) && !string.Equals(tipoInforme, "TODOS", StringComparison.OrdinalIgnoreCase) && !string.Equals(tipoInforme, tipo, StringComparison.OrdinalIgnoreCase))
                 return;
 
+            var filtroOrden = idOrden.HasValue ? "AND i.blazor_id_orden = @IdOrden" : "";
             string sql = $@"
                 SELECT
                     CAST(i.{prefijo}_id AS INT) AS IdInforme,
@@ -599,12 +642,12 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 FROM {tabla} i
                 LEFT JOIN vt_formatos f ON i.{prefijo}_idFormato = f.form_id
                 LEFT JOIN vt_usuarios u ON i.{prefijo}_idUser = u.user_numero
-                WHERE i.{prefijo}_nhcl = @Nhcl AND ISNULL(i.estado, 'A') = 'A'
+                WHERE i.{prefijo}_nhcl = @Nhcl AND ISNULL(i.estado, 'A') = 'A' {filtroOrden}
                 ORDER BY i.{prefijo}_fechaMod DESC";
 
             try
             {
-                var filas = await _db.QueryAsync<InformeDiagnosticoDto>(sql, new { Nhcl = nhcl });
+                var filas = await _db.QueryAsync<InformeDiagnosticoDto>(sql, new { Nhcl = nhcl, IdOrden = idOrden });
                 lista.AddRange(filas);
             }
             catch { }
@@ -687,17 +730,19 @@ public class LaboratorioImagenService : ILaboratorioImagenService
     {
         try
         {
+            await InicializarOrdenInformesAsync();
+
             if (dto.TipoInforme.Equals("Laboratorio", StringComparison.OrdinalIgnoreCase))
             {
                 const string sqlLab = @"
                     INSERT INTO vt_labInformes (
                         labI_nhcl, labI_edadanios, labI_edadmeses, labI_idFormato,
                         labI_informe, labI_fecha, labI_idUser, labI_fechaMod,
-                        labI_html, labI_localidad, estado
+                        labI_html, labI_localidad, estado, blazor_id_orden
                     ) VALUES (
                         @Nhcl, @EdadAnios, @EdadMeses, @IdFormato,
                         @RutaArchivo, GETDATE(), @IdUser, GETDATE(),
-                        @ContenidoHtml, @Localidad, 'A'
+                        @ContenidoHtml, @Localidad, 'A', NULLIF(@IdOrden, 0)
                     )";
                 await _db.ExecuteAsync(sqlLab, dto);
 
@@ -722,11 +767,11 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                     INSERT INTO {tabla} (
                         {prefijo}_nhcl, {prefijo}_edadanios, {prefijo}_edadmeses, {prefijo}_idFormato,
                         {prefijo}_informe, {prefijo}_fecha, {prefijo}_idUser, {prefijo}_fechaMod,
-                        {prefijo}_html, {prefijo}_localidad, estado
+                        {prefijo}_html, {prefijo}_localidad, estado, blazor_id_orden
                     ) VALUES (
                         @Nhcl, @EdadAnios, @EdadMeses, @IdFormato,
                         @RutaArchivo, GETDATE(), @IdUser, GETDATE(),
-                        @ContenidoHtml, @Localidad, 'A'
+                        @ContenidoHtml, @Localidad, 'A', NULLIF(@IdOrden, 0)
                     )";
                 await _db.ExecuteAsync(sqlGen, dto);
 
