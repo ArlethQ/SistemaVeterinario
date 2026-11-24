@@ -1,5 +1,3 @@
-@page "/diagnostico/imagenologia"
-@page "/diagnostico/imagenologia/{IdOrden:int}/{Nhcl:int}"
 @inject ILaboratorioImagenService LabService
 @inject IConsultaExternaService ConsultaService
 @inject IKardexService KardexService
@@ -8,9 +6,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 
-<PageTitle>e-ForVets - Órdenes de Imagenología (Rayos X y Ecografía)</PageTitle>
-
-<div class="container-fluid py-3 diagnostic-orders">
+<div class="diagnostic-orders">
     <!-- Encabezado y Acciones -->
     <header class="diagnostic-orders-hero">
         <div class="diagnostic-orders-heading">
@@ -20,7 +16,7 @@
                 <p>Solicitud y despacho de estudios de radiología digital y ecografía diagnóstica.</p>
             </div>
         </div>
-        <div class="diagnostic-orders-actions">
+        <div class="diagnostic-orders-toolbar">
             <div class="diagnostic-orders-order-select">
                 <label for="orden-activa-imagenologia">Orden / Historia (NHCL)</label>
                 <select id="orden-activa-imagenologia" class="form-select form-select-sm" value="@IdOrden" @onchange="SeleccionarOrdenActivaAsync" disabled="@CargandoInicial">
@@ -35,15 +31,17 @@
                     }
                 </select>
             </div>
-            <SaveButton class="btn btn-sm btn-success" OnClick="GuardarCambiosOrdenAsync" Disabled="@(CargandoInicial || !OrdenesActuales.Any())">
-                <i class="bi bi-floppy-fill me-1"></i>Guardar Orden RX/Eco
-            </SaveButton>
-            <button class="btn btn-sm btn-danger app-doc-action app-doc-pdf" @onclick="ExportarPdfAsync" disabled="@(CargandoInicial || !OrdenesActuales.Any())">
-                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Pedido Imagen PDF + QR
-            </button>
-            <button class="btn btn-sm btn-outline-dark" disabled="@CargandoInicial" @onclick='() => Nav.NavigateTo($"/diagnostico/bandeja/{IdOrden}/{Nhcl}")'>
-                <i class="bi bi-inbox-fill me-1"></i>Bandeja e Informes
-            </button>
+            <div class="diagnostic-orders-actions">
+                <SaveButton class="btn btn-sm btn-success" OnClick="GuardarCambiosOrdenAsync" Disabled="@(CargandoInicial || !OrdenesActuales.Any())">
+                    <i class="bi bi-floppy-fill me-1"></i>Guardar Orden RX/Eco
+                </SaveButton>
+                <button class="btn btn-sm btn-danger app-doc-action app-doc-pdf" @onclick="ExportarPdfAsync" disabled="@(CargandoInicial || !OrdenesActuales.Any())">
+                    <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Pedido Imagen PDF + QR
+                </button>
+                <button class="btn btn-sm btn-outline-dark" disabled="@CargandoInicial" @onclick='() => Nav.NavigateTo($"/diagnostico/bandeja/{IdOrden}/{Nhcl}")'>
+                    <i class="bi bi-inbox-fill me-1"></i>Bandeja e Informes
+                </button>
+            </div>
         </div>
     </header>
 
@@ -64,6 +62,17 @@
     }
 
     <section class="diagnostic-orders-panel diagnostic-orders-patient mb-3" aria-label="Datos de la orden y del paciente">
+        <div class="diagnostic-orders-patient-field">
+            <i class="bi bi-clipboard" aria-hidden="true"></i>
+            <div>
+                <span>Orden / Historia (NHCL)</span>
+                <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPorInputAsync" MostrarTextoBoton="false" />
+                @if (Paciente != null)
+                {
+                    <small>Orden #@IdOrden · NHCL #@Paciente.Nhcl</small>
+                }
+            </div>
+        </div>
         @if (Paciente != null)
         {
             <div class="diagnostic-orders-patient-field">
@@ -91,17 +100,6 @@
                 </div>
             </div>
         }
-        <div class="diagnostic-orders-patient-field diagnostic-orders-patient-search">
-            <i class="bi bi-clipboard" aria-hidden="true"></i>
-            <div>
-                <span>Orden / Historia (NHCL)</span>
-                <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPorInputAsync" MostrarTextoBoton="false" />
-                @if (Paciente != null)
-                {
-                    <small>Orden #@IdOrden · NHCL #@Paciente.Nhcl</small>
-                }
-            </div>
-        </div>
     </section>
 
     <div class="row g-3">

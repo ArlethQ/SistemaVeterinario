@@ -1,6 +1,7 @@
 
 @inject IAuthService AuthService
 @inject SessionStateService Session
+@inject NavigationManager Navigation
 
 <div class="nav-shell">
     <input id="menu-toggle" type="checkbox" class="menu-toggle" />
@@ -225,13 +226,9 @@
                     <details>
                         <summary><MenuIcon Name="diagnostic" /><span>Laboratorio e imagen</span><i>⌄</i></summary>
                         <div class="submenu">
-                            @if (TienePermiso("diagnostico/laboratorio"))
+                            @if (TieneAlguno("diagnostico/laboratorio", "diagnostico/imagenologia"))
                             {
-                                <NavLink href="diagnostico/laboratorio">Órdenes de laboratorio</NavLink>
-                            }
-                            @if (TienePermiso("diagnostico/imagenologia"))
-                            {
-                                <NavLink href="diagnostico/imagenologia">Rayos X y ecografía</NavLink>
+                                <NavLink href="@RutaOrdenesDiagnostico">Órdenes de diagnóstico</NavLink>
                             }
                             @if (TienePermiso("diagnostico/bandeja"))
                             {
@@ -870,6 +867,15 @@
     ];
 
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+
+    private string RutaOrdenesDiagnostico =>
+        !TienePermiso("diagnostico/laboratorio") ||
+        (TienePermiso("diagnostico/imagenologia") &&
+         Navigation.ToBaseRelativePath(Navigation.Uri).Split('/', '?', '#').ElementAtOrDefault(1)
+             ?.Equals("imagenologia", StringComparison.OrdinalIgnoreCase) == true &&
+         Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("diagnostico/", StringComparison.OrdinalIgnoreCase))
+            ? "diagnostico/imagenologia"
+            : "diagnostico/laboratorio";
 
     private bool TienePermiso(string ruta) => Permisos.Permite(ruta);
 
