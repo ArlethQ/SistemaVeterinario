@@ -967,6 +967,16 @@
                                                value="@GetCantidadVisual(d)"
                                                @oninput="@((ChangeEventArgs e) => OnCantidadDetalleInput(d, e.Value?.ToString()))"
                                                @onblur="@(() => OnCantidadDetalleBlur(d))" />
+                                        @{
+                                            var etiquetaUnidad = ObtenerEtiquetaUnidadCantidadDetalle(d);
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(etiquetaUnidad))
+                                        {
+                                            <small class="d-block text-center fw-semibold mt-1 @(etiquetaUnidad.Contains("Paq", StringComparison.OrdinalIgnoreCase) ? "text-primary" : "text-muted")"
+                                                   style="font-size:.7rem; line-height:1.1;">
+                                                @etiquetaUnidad
+                                            </small>
+                                        }
                                     </td>
 
                                     <td>
@@ -2081,6 +2091,8 @@
     private bool cargandoRecetaOrdenFactura;
     private bool recetaOrdenModificadaEnPanel;
     private string? mensajeRecetaOrdenFactura;
+    private readonly Dictionary<DetalleFacturaDto, (bool EsBien, string UnidadMedida, decimal FactorConversion)> metadataUnidadDetalle = new();
+    private readonly Dictionary<int, (int Tarifa, string CodigoImpuestoSri, int TipoProducto, int? SubtipoProducto)> cacheFiscalFarmaciaOrden = new();
     private string NombreSucursalFactura => string.IsNullOrWhiteSpace(Session.LocalidadDescripcion) ? "Sucursal actual" : Session.LocalidadDescripcion;
     private bool usarPropietarioFactura;
     private int? codigoPropietarioFactura;
@@ -2784,6 +2796,7 @@
         recetaOrdenFactura = null;
         recetaOrdenModificadaEnPanel = false;
         mensajeRecetaOrdenFactura = null;
+        cacheFiscalFarmaciaOrden.Clear();
         RemoverItemsOrigenOrden();
         LimpiarPropietarioFactura();
         ordenFactura = null;
@@ -2795,10 +2808,108 @@
             _ = CargarOrdenesPendientesColaFacturaAsync();
     }
 
+    private string? ObtenerEtiquetaUnidadCantidadDetalle(DetalleFacturaDto d)
+    {
+        if (EsDetalleFacturaVacio(d))
+            return null;
+
+        if (origenesDetalleOrden.TryGetValue(d, out var org) &&
+            string.Equals(org.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase))
+        {
+            var itemRec = recetaOrdenFactura?.Items.FirstOrDefault(x => x.Sec == org.SecOrigen);
+            if (itemRec is not null)
+            {
+                if (itemRec.VenderPorPaquete && itemRec.FactorConversion > 1m)
+                    return $"{itemRec.CantidadVisibleVenta:0.##} Paquete ({itemRec.UnidadMedida})";
+                return itemRec.UnidadMedida;
+            }
+        }
+
+        if (metadataUnidadDetalle.TryGetValue(d, out var meta) && meta.EsBien)
+        {
+            return string.IsNullOrWhiteSpace(meta.UnidadMedida) ? "UNIDAD" : meta.UnidadMedida;
+        }
+
+        return null;
+    }
+
     private void MarcarRecetaOrdenModificada()
     {
         recetaOrdenModificadaEnPanel = true;
-        mensajeRecetaOrdenFactura = "Tienes cambios sin aplicar en la receta.";
+        mensajeRecetaOrdenFactura = "Cambios reflejados en vivo en el detalle (pendientes de guardar en Farmacia).";
+        SincronizarRecetaHaciaDetalleFacturaEnVivo();
+    }
+
+    private void SincronizarRecetaHaciaDetalleFacturaEnVivo()
+    {
+        if (recetaOrdenFactura is null)
+            return;
+
+        foreach (var item in recetaOrdenFactura.Items)
+        {
+            var detalleExistente = origenesDetalleOrden
+                .FirstOrDefault(kv => string.Equals(kv.Value.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase) && kv.Value.SecOrigen == item.Sec)
+                .Key;
+
+            bool debeEstarEnDetalle = item.EstaEnCola && item.SeVende && item.CantidadAVender > 0m && item.TieneProductoEnCatalogo;
+            if (!debeEstarEnDetalle)
+            {
+                if (detalleExistente is not null)
+                {
+                    detallesDto.Remove(detalleExistente);
+                    valoresTemporalesCantidad.Remove(detalleExistente);
+                    valoresTemporalesPrecio.Remove(detalleExistente);
+                    valoresTemporalesPorcentaje.Remove(detalleExistente);
+                    valoresTemporalesDescuentoMoneda.Remove(detalleExistente);
+                    modosDescuentoDetalle.Remove(detalleExistente);
+                    origenesDetalleOrden.Remove(detalleExistente);
+                    metadataUnidadDetalle.Remove(detalleExistente);
+                }
+                continue;
+            }
+
+            if (detalleExistente is not null)
+            {
+                detalleExistente.Cantidad = item.CantidadAVender;
+                valoresTemporalesCantidad[detalleExistente] = detalleExistente.Cantidad.ToString("0.##", CultureInfo.InvariantCulture);
+                if (detalleExistente.PorcentajeDescuento > 0)
+                {
+                    var bruto = detalleExistente.Cantidad * detalleExistente.Precio;
+                    detalleExistente.Descuento = Math.Round(bruto * (detalleExistente.PorcentajeDescuento / 100m), 2);
+                }
+                metadataUnidadDetalle[detalleExistente] = (true, item.UnidadMedida, item.FactorConversion);
+            }
+            else
+            {
+                cacheFiscalFarmaciaOrden.TryGetValue(item.Sec, out var fiscal);
+                var nuevoDetalle = new DetalleFacturaDto
+                {
+                    Codproducto = item.CodigoProductoInt,
+                    Codprincipal = string.IsNullOrWhiteSpace(item.CodigoPrincipal) ? null : item.CodigoPrincipal,
+                    Cantidad = item.CantidadAVender,
+                    Descripcion = string.IsNullOrWhiteSpace(item.NombreProductoInventario) ? item.NombreRecetado : item.NombreProductoInventario,
+                    Detalle = string.IsNullOrWhiteSpace(item.Indicaciones) ? null : item.Indicaciones,
+                    PorcentajeDescuento = 0m,
+                    Precio = item.PrecioUnitario,
+                    Descuento = 0m,
+                    Tarifa = fiscal.Tarifa,
+                    TarifaPersonalizada = false,
+                    TarifaManual = null,
+                    TipoProducto = fiscal.TipoProducto,
+                    SubtipoProducto = fiscal.SubtipoProducto,
+                    CodigoImpuestoSri = string.IsNullOrWhiteSpace(fiscal.CodigoImpuestoSri) ? "2" : fiscal.CodigoImpuestoSri
+                };
+                detallesDto.RemoveAll(EsDetalleFacturaVacio);
+                detallesDto.Add(nuevoDetalle);
+                modosDescuentoDetalle[nuevoDetalle] = ModoDescuento.Porcentaje;
+                origenesDetalleOrden[nuevoDetalle] = ("FARMACIA", item.Sec);
+                metadataUnidadDetalle[nuevoDetalle] = (true, item.UnidadMedida, item.FactorConversion);
+            }
+        }
+
+        AsegurarFilaVaciaDetalle();
+        CalcularTotalesFactura();
+        StateHasChanged();
     }
 
     private async Task CargarRecetaOrdenFacturaAsync(int idOrden)
@@ -2874,11 +2985,15 @@
             valoresTemporalesDescuentoMoneda.Remove(d);
             modosDescuentoDetalle.Remove(d);
             origenesDetalleOrden.Remove(d);
+            metadataUnidadDetalle.Remove(d);
         }
 
         detallesDto.RemoveAll(EsDetalleFacturaVacio);
         foreach (var item in items.Where(i => string.Equals(i.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase)))
         {
+            var tarifa = (int)Math.Max(0m, decimal.Round(item.TarifaIva, 0, MidpointRounding.AwayFromZero));
+            var codImp = string.IsNullOrWhiteSpace(item.CodigoImpuestoSri) ? "2" : item.CodigoImpuestoSri;
+            cacheFiscalFarmaciaOrden[item.SecOrigen] = (tarifa, codImp, item.TipoProducto ?? 0, item.SubtipoProducto);
             var detalle = new DetalleFacturaDto
             {
                 Codproducto = item.CodProducto,
@@ -2890,16 +3005,17 @@
                 PorcentajeDescuento = 0m,
                 Precio = item.PrecioUnitario,
                 Descuento = 0m,
-                Tarifa = (int)Math.Max(0m, decimal.Round(item.TarifaIva, 0, MidpointRounding.AwayFromZero)),
+                Tarifa = tarifa,
                 TarifaPersonalizada = false,
                 TarifaManual = null,
                 TipoProducto = item.TipoProducto ?? 0,
                 SubtipoProducto = item.SubtipoProducto,
-                CodigoImpuestoSri = string.IsNullOrWhiteSpace(item.CodigoImpuestoSri) ? "2" : item.CodigoImpuestoSri
+                CodigoImpuestoSri = codImp
             };
             detallesDto.Add(detalle);
             modosDescuentoDetalle[detalle] = ModoDescuento.Porcentaje;
             origenesDetalleOrden[detalle] = (item.Origen, item.SecOrigen);
+            metadataUnidadDetalle[detalle] = (item.EsBien, item.UnidadMedida, item.FactorConversion);
         }
 
         AsegurarFilaVaciaDetalle();
@@ -2919,6 +3035,7 @@
             valoresTemporalesPorcentaje.Remove(d);
             valoresTemporalesDescuentoMoneda.Remove(d);
             modosDescuentoDetalle.Remove(d);
+            metadataUnidadDetalle.Remove(d);
         }
         origenesDetalleOrden.Clear();
     }
@@ -3040,6 +3157,15 @@
                 detallesDto.Add(detalle);
                 modosDescuentoDetalle[detalle] = ModoDescuento.Porcentaje;
                 origenesDetalleOrden[detalle] = (item.Origen, item.SecOrigen);
+                metadataUnidadDetalle[detalle] = (item.EsBien, item.UnidadMedida, item.FactorConversion);
+                if (string.Equals(item.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase))
+                {
+                    cacheFiscalFarmaciaOrden[item.SecOrigen] = (
+                        detalle.Tarifa,
+                        detalle.CodigoImpuestoSri ?? "2",
+                        detalle.TipoProducto,
+                        detalle.SubtipoProducto);
+                }
             }
 
             AsegurarFilaVaciaDetalle();
@@ -3124,6 +3250,8 @@
         recetaOrdenFactura = null;
         recetaOrdenModificadaEnPanel = false;
         mensajeRecetaOrdenFactura = null;
+        metadataUnidadDetalle.Clear();
+        cacheFiscalFarmaciaOrden.Clear();
         textoBusquedaOrdenFactura = "";
         mensajeOrdenFactura = null;
         usarPropietarioFactura = false;
@@ -3656,6 +3784,11 @@
         detalle.TarifaPersonalizada = false;
         detalle.TarifaManual = null;
         modosDescuentoDetalle[detalle] = modoDescuento;
+        bool esBien = string.Equals(producto.TipoCompravena?.Trim(), "PRODUCTO", StringComparison.OrdinalIgnoreCase);
+        metadataUnidadDetalle[detalle] = (
+            esBien,
+            string.IsNullOrWhiteSpace(producto.UnidadMedida) ? "UNIDAD" : producto.UnidadMedida.Trim().ToUpperInvariant(),
+            producto.FactorConversion > 0m ? producto.FactorConversion : 1m);
     }
 
     private string GetCodigoVisualDetalle(DetalleFacturaDto d)
@@ -3824,6 +3957,20 @@
             return;
 
         d.Cantidad = Math.Max(0.01m, decimal.Round(cant, 2, MidpointRounding.AwayFromZero));
+
+        if (origenesDetalleOrden.TryGetValue(d, out var orgFarmacia) &&
+            string.Equals(orgFarmacia.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase))
+        {
+            var itemRec = recetaOrdenFactura?.Items.FirstOrDefault(x => x.Sec == orgFarmacia.SecOrigen);
+            if (itemRec is not null)
+            {
+                var cantClamped = Math.Min(d.Cantidad, itemRec.MaximoDisponibleParaEstaLinea);
+                itemRec.SeVende = cantClamped > 0m;
+                itemRec.CantidadAVender = cantClamped;
+                recetaOrdenModificadaEnPanel = true;
+                mensajeRecetaOrdenFactura = "Cambios reflejados en vivo en el detalle (pendientes de guardar en Farmacia).";
+            }
+        }
 
         if (d.PorcentajeDescuento > 0)
         {
@@ -5617,6 +5764,19 @@
             if (EsDetalleBloqueadoOrden(detalle))
                 return;
 
+            if (origenesDetalleOrden.TryGetValue(detalle, out var org) &&
+                string.Equals(org.Origen, "FARMACIA", StringComparison.OrdinalIgnoreCase))
+            {
+                var itemRec = recetaOrdenFactura?.Items.FirstOrDefault(x => x.Sec == org.SecOrigen);
+                if (itemRec is not null)
+                {
+                    itemRec.SeVende = false;
+                    itemRec.CantidadAVender = 0m;
+                    recetaOrdenModificadaEnPanel = true;
+                    mensajeRecetaOrdenFactura = "Cambios reflejados en vivo en el detalle (pendientes de guardar en Farmacia).";
+                }
+            }
+
             detallesDto.RemoveAt(index);
             valoresTemporalesCantidad.Remove(detalle);
             valoresTemporalesPrecio.Remove(detalle);
@@ -5624,6 +5784,7 @@
             valoresTemporalesDescuentoMoneda.Remove(detalle);
             modosDescuentoDetalle.Remove(detalle);
             origenesDetalleOrden.Remove(detalle);
+            metadataUnidadDetalle.Remove(detalle);
             AsegurarFilaVaciaDetalle();
             CalcularTotalesFactura();
             StateHasChanged();

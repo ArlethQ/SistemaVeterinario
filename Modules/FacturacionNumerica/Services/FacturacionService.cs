@@ -977,7 +977,10 @@ namespace Simetric.Services
                 TipoProducto = p.TipoProducto ?? 0,
                 SubtipoProducto = p.Idsubtipo ?? 0,
                 CodigoImpuestoSri = p.Codigoimpuesto,
-                TarifaIva = ObtenerTarifaIvaProducto(p)
+                TarifaIva = ObtenerTarifaIvaProducto(p),
+                TipoCompravena = p.Tipocompravena,
+                UnidadMedida = string.IsNullOrWhiteSpace(p.UnidadMedida) ? "UNIDAD" : p.UnidadMedida.Trim().ToUpperInvariant(),
+                FactorConversion = p.FactorConversionInventario > 0m ? p.FactorConversionInventario : 1m
             };
         }
 

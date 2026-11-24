@@ -3110,7 +3110,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
                 ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
                 pr.TIPO_PRODUCTO AS TipoProducto,
-                pr.IDSUBTIPO AS SubtipoProducto
+                pr.IDSUBTIPO AS SubtipoProducto,
+                CAST(CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(pr.TIPOCOMPRAVENA, 'PRODUCTO')))) LIKE '%SERV%' THEN 0 ELSE 1 END AS bit) AS EsBien,
+                ISNULL(NULLIF(LTRIM(RTRIM(pr.UNIDAD_MEDIDA)), ''), 'UNIDAD') AS UnidadMedida,
+                CAST(CASE WHEN ISNULL(pr.FACTOR_CONVERSION_INVENTARIO, 1) > 0 THEN ISNULL(pr.FACTOR_CONVERSION_INVENTARIO, 1) ELSE 1 END AS decimal(18,4)) AS FactorConversion
             FROM dbo.vt_medicinas m
             OUTER APPLY (
                 SELECT TOP 1 pm.CODIGO
@@ -3144,7 +3147,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
                 ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
                 pr.TIPO_PRODUCTO AS TipoProducto,
-                pr.IDSUBTIPO AS SubtipoProducto
+                pr.IDSUBTIPO AS SubtipoProducto,
+                CAST(CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(pr.TIPOCOMPRAVENA, 'PRODUCTO')))) LIKE '%SERV%' THEN 0 ELSE 1 END AS bit) AS EsBien,
+                ISNULL(NULLIF(LTRIM(RTRIM(pr.UNIDAD_MEDIDA)), ''), 'UNIDAD') AS UnidadMedida,
+                CAST(CASE WHEN ISNULL(pr.FACTOR_CONVERSION_INVENTARIO, 1) > 0 THEN ISNULL(pr.FACTOR_CONVERSION_INVENTARIO, 1) ELSE 1 END AS decimal(18,4)) AS FactorConversion
             FROM dbo.vt_medicinas m
             LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO = m.med_idProdu
             WHERE m.med_id_orden = @IdOrden
@@ -3170,7 +3176,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 TarifaIva = NormalizarTarifaIvaProducto(row.PorcentajeImpuestoRaw),
                 CodigoImpuestoSri = !string.IsNullOrWhiteSpace(row.CodigoImpuestoSri) ? row.CodigoImpuestoSri : "2",
                 TipoProducto = row.TipoProducto,
-                SubtipoProducto = row.SubtipoProducto
+                SubtipoProducto = row.SubtipoProducto,
+                EsBien = row.EsBien,
+                UnidadMedida = string.IsNullOrWhiteSpace(row.UnidadMedida) ? "UNIDAD" : row.UnidadMedida.Trim().ToUpperInvariant(),
+                FactorConversion = row.FactorConversion > 0m ? row.FactorConversion : 1m
             });
         }
 
@@ -3265,6 +3274,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         public string PorcentajeImpuestoRaw { get; set; } = string.Empty;
         public int? TipoProducto { get; set; }
         public int? SubtipoProducto { get; set; }
+        public bool EsBien { get; set; }
+        public string UnidadMedida { get; set; } = "UNIDAD";
+        public decimal FactorConversion { get; set; } = 1m;
     }
 }
 

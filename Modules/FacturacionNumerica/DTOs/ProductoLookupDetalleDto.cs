@@ -16,5 +16,8 @@
         public decimal Costo { get; set; }
         public string? CodigoImpuestoSri { get; set; } // CODIGOIMPUESTO (SRI)
         public int TarifaIva { get; set; }             // 0, 12, etc
+        public string? TipoCompravena { get; set; }    // PRODUCTO o SERVICIO
+        public string? UnidadMedida { get; set; }
+        public decimal FactorConversion { get; set; } = 1m;
     }
 }

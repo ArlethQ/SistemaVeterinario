@@ -405,4 +405,7 @@ public sealed class ItemOrdenParaFacturaDto
     public string? CodigoImpuestoSri { get; set; }
     public int? TipoProducto { get; set; }
     public int? SubtipoProducto { get; set; }
+    public bool EsBien { get; set; }
+    public string UnidadMedida { get; set; } = "UNIDAD";
+    public decimal FactorConversion { get; set; } = 1m;
 }
