@@ -9,16 +9,21 @@
 
 <PageTitle>Pausa de Seguridad Quirúrgica - e-ForVets</PageTitle>
 
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-    <div>
-        <h4 class="mb-0 fw-bold text-primary">Pausa de Seguridad Quirúrgica (Checklist OMS)</h4>
-        <small class="text-muted">Lista de chequeo y verificación de cirugía segura: Entrada, Pausa Quirúrgica y Salida.</small>
-    </div>
+<div class="pausa-view @(ModoModal ? "pausa-embedded" : "")">
+    <header class="pausa-hero">
+        <div class="pausa-heading">
+            <i class="bi bi-shield-check" aria-hidden="true"></i>
+            <div>
+                <h1>Pausa de seguridad quirúrgica</h1>
+                <p>Checklist OMS · Entrada, pausa quirúrgica y salida.</p>
+            </div>
+        </div>
+    </header>
 
-    <div class="d-flex flex-wrap gap-2 align-items-center">
+    <div class="pausa-panel pausa-toolbar">
         @if (!ModoModal)
         {
-            <select class="form-select form-select-sm" style="min-width: 280px; max-width: 360px;" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
+            <select class="form-select form-select-sm" aria-label="Orden activa" value="@IdOrden" @onchange="OnOrdenSelectChangedAsync">
                 <option value="0">-- Seleccionar Orden Activa --</option>
                 @foreach (var ord in ordenesActivas)
                 {
@@ -31,8 +36,8 @@
 
         @if (paciente != null)
         {
-            <SaveButton class="btn btn-sm btn-success fw-semibold" OnClick="GuardarPausaAsync" Disabled="@guardando">
-                @(guardando ? "Guardando..." : "Guardar Pausa de Seguridad")
+            <SaveButton class="btn btn-sm btn-primary fw-semibold" OnClick="GuardarPausaAsync" Disabled="@guardando">
+                <i class="bi bi-floppy" aria-hidden="true"></i> @(guardando ? "Guardando..." : "Guardar Pausa de Seguridad")
             </SaveButton>
             @if (!ModoModal)
             {
@@ -55,7 +60,6 @@
             }
         }
     </div>
-</div>
 
 @if (_borradorRecuperado)
 {
@@ -87,39 +91,42 @@ else if (paciente != null)
                               ModuloClave="pausa"
                               OnCirugiaCambiada="CambiarCirugiaActivaAsync" />
 
-    <!-- Cabecera del Paciente -->
-    <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
-        <div class="card-body py-2 px-3">
-            <div class="row g-2 align-items-center small">
-                <div class="col-md-3">
-                    <span class="text-muted">Orden / NHCL:</span>
-                    <strong class="ms-1 text-primary">#@paciente.OrdenAtencionId / @paciente.Nhcl</strong>
-                </div>
-                <div class="col-md-3">
-                    <span class="text-muted">Paciente:</span>
-                    <strong class="ms-1">@paciente.PacienteNombre</strong> (@paciente.Especie - @paciente.Raza)
-                </div>
-                <div class="col-md-3">
-                    <span class="text-muted">Edad / Sexo:</span>
-                    <strong class="ms-1">@paciente.EdadTexto / @paciente.Sexo</strong>
-                </div>
-                <div class="col-md-3">
-                    <span class="text-muted">Propietario:</span>
-                    <strong class="ms-1">@paciente.PropietarioNombre</strong>
-                </div>
+    <section class="pausa-panel pausa-patient" aria-label="Datos del paciente">
+        <div>
+            <i class="bi bi-clipboard" aria-hidden="true"></i>
+            <div><small>Orden / Historia (NHCL)</small><strong>#@paciente.OrdenAtencionId / @paciente.Nhcl</strong></div>
+        </div>
+        <div>
+            <i class="bi bi-heart-pulse" aria-hidden="true"></i>
+            <div>
+                <small>Paciente / Especie</small>
+                <strong class="pausa-name">@paciente.PacienteNombre</strong>
+                <span class="pausa-chip">@paciente.Especie</span>
+                <small>@paciente.Raza</small>
             </div>
         </div>
-    </div>
+        <div>
+            <i class="bi bi-gender-ambiguous" aria-hidden="true"></i>
+            <div>
+                <small>Edad / Sexo</small>
+                <strong>@(paciente.FechaNacimiento.HasValue ? paciente.EdadTexto : "Sin registrar") / @paciente.Sexo</strong>
+            </div>
+        </div>
+        <div>
+            <i class="bi bi-person" aria-hidden="true"></i>
+            <div><small>Propietario</small><strong>@paciente.PropietarioNombre</strong></div>
+        </div>
+    </section>
 
     <!-- 3 FASES DE LA PAUSA DE SEGURIDAD (OMS) -->
     <div class="row g-3">
         <!-- FASE 1: ENTRADA (Antes de la inducción) -->
         <div class="col-lg-4">
-            <div class="card shadow-sm border-0 h-100 border-top border-4 border-primary">
-                <div class="card-header bg-white py-2">
+            <div class="card pausa-panel h-100">
+                <div class="card-header pausa-section">
                     <span class="badge bg-primary mb-1">1. ENTRADA</span>
-                    <h6 class="mb-0 fw-bold text-primary">Antes de la Inducción de Anestesia</h6>
-                    <small class="text-muted">Con el enfermero y el anestesista, como mínimo</small>
+                    <h2>Antes de la Inducción de Anestesia</h2>
+                    <small>Con el enfermero y el anestesista, como mínimo</small>
                 </div>
                 <div class="card-body small d-flex flex-column gap-3">
                     <div>
@@ -183,11 +190,11 @@ else if (paciente != null)
 
         <!-- FASE 2: PAUSA QUIRÚRGICA (Antes de la incisión) -->
         <div class="col-lg-4">
-            <div class="card shadow-sm border-0 h-100 border-top border-4 border-warning">
-                <div class="card-header bg-white py-2">
+            <div class="card pausa-panel h-100">
+                <div class="card-header pausa-section">
                     <span class="badge bg-warning text-dark mb-1">2. PAUSA QUIRÚRGICA</span>
-                    <h6 class="mb-0 fw-bold text-warning-emphasis">Antes de la Incisión Cutánea</h6>
-                    <small class="text-muted">Con el enfermero, el anestesista y el cirujano</small>
+                    <h2>Antes de la Incisión Cutánea</h2>
+                    <small>Con el enfermero, el anestesista y el cirujano</small>
                 </div>
                 <div class="card-body small d-flex flex-column gap-2">
                     <div>
@@ -286,11 +293,11 @@ else if (paciente != null)
 
         <!-- FASE 3: SALIDA (Antes de salir de quirófano) -->
         <div class="col-lg-4">
-            <div class="card shadow-sm border-0 h-100 border-top border-4 border-success">
-                <div class="card-header bg-white py-2">
+            <div class="card pausa-panel h-100">
+                <div class="card-header pausa-section">
                     <span class="badge bg-success mb-1">3. SALIDA</span>
-                    <h6 class="mb-0 fw-bold text-success">Antes de Salir de Quirófano</h6>
-                    <small class="text-muted">Con el enfermero, el anestesista y el cirujano</small>
+                    <h2>Antes de Salir de Quirófano</h2>
+                    <small>Con el enfermero, el anestesista y el cirujano</small>
                 </div>
                 <div class="card-body small d-flex flex-column gap-3">
                     <div class="bg-light p-2 rounded">
@@ -337,7 +344,7 @@ else if (paciente != null)
 
                     <div class="mt-auto d-grid">
                         <SaveButton class="btn btn-success fw-bold py-2" OnClick="GuardarPausaAsync" Disabled="@guardando">
-                            @(guardando ? "Guardando..." : "✓ Registrar Pausa de Seguridad")
+                            <i class="bi bi-floppy" aria-hidden="true"></i> @(guardando ? "Guardando..." : "✓ Registrar Pausa de Seguridad")
                         </SaveButton>
                     </div>
                 </div>
@@ -345,6 +352,8 @@ else if (paciente != null)
         </div>
     </div>
 }
+
+</div>
 
 @code {
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);

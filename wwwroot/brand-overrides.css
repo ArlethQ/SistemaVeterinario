@@ -138,3 +138,218 @@ body :is(button, a).app-doc-action.app-doc-icon:not([hidden]) {
         width: 100% !important;
     }
 }
+
+/* Indicadores de e-ForVets */
+body :is(
+    .bandeja-estado, .agenda-kpi, .triage-kpis .kpi-card,
+    .stats-row .stat-card, .app-kpi, .summary-card:where(:has(> .app-kpi-icon)), .mini-stat-card,
+    .bodega-kpi, .inventory-kpi, .inventory-report-kpis > article, .quote-kpi,
+    .purchase-kpi, .tutorial-stat-card, .cartera-metric
+) {
+    --kpi-ink: #095da3;
+    --kpi-tint: #d9edff;
+    --kpi-border: #99c7eb;
+    position: relative;
+    min-width: 0;
+    padding: .85rem 1rem;
+    border: 1.5px solid var(--kpi-border);
+    border-radius: 1rem;
+    background: radial-gradient(ellipse at 100% 0%, var(--kpi-tint), transparent 85%), #fcfdff;
+    box-shadow: 0 3px 10px #11294b0d;
+    color: #102544;
+    overflow-wrap: anywhere;
+
+    &:is(.amber, .orange, .pendientes, .is-orange, .purchase-kpi-warning, .quote-kpi-pending, .summary-card-warning),
+    &:has(> .is-orange) {
+        --kpi-ink: #985400;
+        --kpi-tint: #ffedc9;
+        --kpi-border: #e5bc75;
+    }
+
+    &:is(.green, .teal, .hospital, .is-green, .purchase-kpi-success, .quote-kpi-approved, .summary-card-success, .cartera-metric-success),
+    &:has(> :is(.teal, .is-green, .is-teal)),
+    &:where(.inventory-report-kpis > article:first-child) {
+        --kpi-ink: #08745d;
+        --kpi-tint: #d0f2e8;
+        --kpi-border: #8fcfbd;
+    }
+
+    &:is(.violet, .purple, .cirugia, .purchase-kpi-total, .quote-kpi-total),
+    &:has(> :is(.violet, .is-purple)) {
+        --kpi-ink: #6533aa;
+        --kpi-tint: #ece1ff;
+        --kpi-border: #c8b0ef;
+    }
+
+    &:is(.red, .cartera-metric-danger),
+    &:has(> .is-red),
+    &:where(.inventory-report-kpis > article:nth-child(2)) {
+        --kpi-ink: #a13b48;
+        --kpi-tint: #fce4e8;
+        --kpi-border: #e8acb6;
+    }
+
+    & strong {
+        color: var(--kpi-ink);
+        font-variant-numeric: tabular-nums;
+    }
+}
+
+body :is(
+    .agenda-kpi, .triage-kpis .kpi-card, .stats-row .stat-card,
+    .inventory-kpi, .purchase-kpi, .quote-kpi, .inventory-report-kpis > article,
+    .summary-card:where(:has(> .app-kpi-icon)), .bodega-kpi
+) {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    min-height: 7.4rem;
+    gap: .25rem;
+    text-align: start;
+
+    & > :is(span, div):has(> strong) {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .2rem;
+        flex: 1;
+        min-width: 0;
+    }
+
+    & > strong,
+    & > :is(span, div) > strong {
+        order: -1;
+        width: 100%;
+        font-size: clamp(1.3rem, 2.2vw, 2rem);
+        font-weight: 800;
+        line-height: 1.1;
+        margin: 0 0 .45rem;
+    }
+
+    & > :is(span, div):has(> strong) > :is(b, span, small:first-child),
+    & > :is(.summary-label, span:first-child):not(:has(> strong)) {
+        color: #102544;
+        font-weight: 700;
+    }
+
+    & > :is(.metric-icon, .stat-icon, .inventory-kpi-icon, .bodega-kpi-icon, .kpi-symbol),
+    &.agenda-kpi > span,
+    &.purchase-kpi > i,
+    &.quote-kpi > span > i {
+        position: absolute;
+        inset: .85rem .85rem auto auto;
+        display: grid;
+        place-items: center;
+        width: 2.45rem;
+        height: 2.45rem;
+        border: 1px solid var(--kpi-border);
+        border-radius: .8rem;
+        background: #ffffffcf;
+        color: var(--kpi-ink);
+        font-size: 1.15rem;
+    }
+
+    &:has(> :is(.metric-icon, .stat-icon, .inventory-kpi-icon, .bodega-kpi-icon, .kpi-symbol, i), > span > i) {
+        & > strong,
+        & > :is(span, div) > strong {
+            padding-inline-end: 2.85rem;
+        }
+    }
+}
+
+body .bandeja-estados .bandeja-estado {
+    --estado-color: var(--kpi-ink);
+    min-height: 7.4rem;
+
+    & i {
+        border-color: var(--kpi-border);
+        width: 2.45rem;
+        height: 2.45rem;
+    }
+}
+
+body .app-kpi.card {
+    min-height: 7.4rem;
+
+    & > .card-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: .35rem;
+        padding: 0 !important;
+    }
+
+    & .align-items-baseline {
+        order: -1;
+        flex-wrap: wrap;
+        gap: .3rem;
+    }
+
+    & h3 {
+        color: var(--kpi-ink) !important;
+    }
+
+    & .badge {
+        white-space: normal;
+    }
+}
+
+body .app-kpi-amount {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+    height: 100%;
+    gap: .55rem;
+
+    & > .fs-5 {
+        color: var(--kpi-ink) !important;
+    }
+}
+
+@media (max-width: 600px) {
+    body :is(.agenda-kpi, .triage-kpis .kpi-card, .stats-row .stat-card) {
+        min-height: 6.75rem;
+        padding: .7rem;
+
+        & > :is(.stat-icon, .kpi-symbol),
+        &.agenda-kpi > span {
+            inset: .65rem .65rem auto auto;
+            width: 1.9rem;
+            height: 1.9rem;
+            font-size: 1rem;
+        }
+    }
+}
+
+body :is(.app-kpi > .app-kpi-icon, .summary-card > .app-kpi-icon) {
+    position: absolute;
+    inset: .85rem .85rem auto auto;
+    display: grid;
+    place-items: center;
+    width: 2.45rem;
+    height: 2.45rem;
+    background: #ffffffcf;
+    border: 1px solid var(--kpi-border);
+    border-radius: .8rem;
+    color: var(--kpi-ink);
+    font-size: 1.15rem;
+}
+
+body .app-kpi:has(> .app-kpi-icon) {
+    min-height: 7.4rem;
+
+    & > :is(strong, .fs-5, .fs-6),
+    & .align-items-baseline {
+        padding-inline-end: 2.7rem;
+    }
+}
+
+body .purchase-kpi:has(> b) {
+    padding-bottom: 1.55rem;
+}
+
+body .quote-kpi::before,
+body .quote-kpi::after {
+    content: none;
+}
