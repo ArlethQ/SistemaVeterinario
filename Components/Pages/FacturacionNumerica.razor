@@ -254,47 +254,6 @@
     <SaveForm Model="@factura" OnValidSubmit="ProcesarGuardado">
         <DataAnnotationsValidator />
         <ValidationSummary class="text-danger mb-3" />
-        <section class="n-client-search-strip" data-tour="invoice.client-search">
-            <div class="n-client-search-strip-copy">
-                <span class="n-client-search-eyebrow">Buscador de cliente</span>
-                <strong>Encuentra o completa el cliente de la factura</strong>
-            </div>
-
-            <div class="n-client-search-input position-relative">
-                <div class="n-input-wrapper">
-                    <i class="bi bi-search n-input-icon"></i>
-                    <input type="text" class="n-input n-input-with-icon n-input-with-toggle"
-                           @bind:get="textoBusqueda"
-                           @bind:set="OnInputBusqueda" @bind:event="oninput"
-                           @onfocus="MostrarSugerenciasClientesAsync"
-                           @onkeydown="OnKeyDownBusquedaNombre"
-                           @onblur="OnBlurBusqueda"
-                           placeholder="Buscar por identificacion, nombres, apellidos o razon social"
-                           autocomplete="off" />
-                    <button type="button"
-                            class="n-input-toggle-btn"
-                            @onmousedown:preventDefault @onclick="ToggleSugerenciasClientesAsync"
-                            aria-label="Mostrar sugerencias de cliente">
-                        <i class="bi @((sugerencias != null && sugerencias.Any()) ? "bi-chevron-up" : "bi-chevron-down")"></i>
-                    </button>
-                </div>
-                @if (sugerencias != null && sugerencias.Any())
-                {
-                    <ul class="n-suggestions">
-                        @for (var i = 0; i < sugerencias.Count; i++)
-                        {
-                            var c = sugerencias[i];
-                            <li @onmousedown:preventDefault
-                                class="@(indiceSugerenciaClienteActiva == i ? "is-active" : null)"
-                                @onclick="() => SeleccionarCliente(c)">
-                                <strong>@ObtenerNombreClienteVisual(c)</strong><br />
-                                <small>@c.Numeroidentificacion @ObtenerBadgeNotificacionCliente(c)</small>
-                            </li>
-                        }
-                    </ul>
-                }
-            </div>
-        </section>
 
         @if (ClienteIngresadoSinRegistro)
         {
@@ -880,16 +839,15 @@
                     <table class="table table-hover align-middle mb-0">
                         <thead class="n-table-header bg-light">
                             <tr>
-                                <th style="width: 80px;">Cód.</th>
-                                <th style="min-width: 180px;">Concepto</th>
-                                <th style="min-width: 260px;">Detalle</th>
-                                <th class="text-center" style="width: 80px;">Cant.</th>
-                                <th class="text-end" style="width: 100px;">Precio</th>
-                                <th class="text-center" style="width: 168px;">Descuento</th>
-                                <th class="text-end" style="width: 96px;" title="Descuento aplicado">Desc. apl.</th>
-                                <th class="text-end" style="width: 100px;">Base Imp.</th>
-                                <th class="text-end" style="width: 120px;">IVA</th>
-                                <th class="text-end" style="width: 110px;">Total</th>
+                                <th style="width: 68px; max-width: 78px;">Cód.</th>
+                                <th style="min-width: 190px;">Concepto</th>
+                                <th class="text-center" style="width: 84px;">Cant.</th>
+                                <th class="text-end" style="width: 92px;">Precio</th>
+                                <th class="text-center" style="width: 124px;">Descuento</th>
+                                <th class="text-end" style="width: 88px;" title="Descuento aplicado">Desc. apl.</th>
+                                <th class="text-end" style="width: 92px;">Base Imp.</th>
+                                <th class="text-center" style="width: 78px;">IVA</th>
+                                <th class="text-end" style="width: 96px;">Total</th>
                                 <th class="text-center" style="width: 40px;"></th>
                             </tr>
                         </thead>
@@ -905,20 +863,23 @@
                                 var totalFila = GetTotalDetalle(d);
 
                                 <tr class="@(EsDetalleFacturaVacio(d) ? "n-detail-empty-row" : null)">
-                                    <td>
+                                    <td style="width: 68px; max-width: 78px;">
                                         @if (d.Codproducto > 0)
                                         {
-                                            <span class="text-muted small fw-bold">@GetCodigoVisualDetalle(d)</span>
+                                            <span class="text-muted fw-bold d-inline-block text-truncate"
+                                                  style="max-width: 72px; font-size: 0.76rem;"
+                                                  title="@GetCodigoVisualDetalle(d)">@GetCodigoVisualDetalle(d)</span>
                                         }
                                         else
                                         {
                                             <input type="text"
-                                                   class="n-input-sm text-center fw-bold"
+                                                   class="n-input-sm text-center fw-bold px-1"
+                                                   style="font-size: 0.76rem;"
                                                    @bind="d.Codprincipal"
                                                    @bind:event="oninput"
                                                    @bind:after="AsegurarFilaVaciaDespuesDeEdicion"
                                                    maxlength="50"
-                                                   placeholder="Codigo" />
+                                                   placeholder="Cód." />
                                         }
                                     </td>
                                     <td class="position-relative">
@@ -947,15 +908,6 @@
                                                 }
                                             </ul>
                                         }
-                                    </td>
-                                    <td>
-                                        <textarea class="n-input-sm n-detail-extra-input"
-                                                  @bind="d.Detalle"
-                                                  @bind:event="oninput"
-                                                  @bind:after="AsegurarFilaVaciaDespuesDeEdicion"
-                                                  maxlength="250"
-                                                  rows="2"
-                                                  placeholder="Detalle adicional o concepto extendido"></textarea>
                                     </td>
 
                                     <td>
@@ -1021,8 +973,8 @@
 
                                     <td>
                                         <div class="d-flex justify-content-center">
-                                            <select class="form-select form-select-sm text-center fw-semibold border-0 bg-white shadow-sm"
-                                                    style="min-width: 92px; max-width: 110px;"
+                                            <select class="form-select form-select-sm text-center fw-semibold border-0 bg-white shadow-sm px-1"
+                                                    style="min-width: 64px; max-width: 74px; font-size: 0.8rem;"
                                                     @onchange="@((ChangeEventArgs e) => OnDetalleIvaSelectChanged(d, e.Value?.ToString()))">
                                                 <option value="0" selected="@(tarifaEfectiva == 0)">0%</option>
                                                 @foreach (var iva in modalIvas)
@@ -1063,7 +1015,7 @@
                                 {
                                     <tr class="n-detail-suggestions-row">
                                         <td class="n-detail-suggestions-spacer"></td>
-                                        <td class="n-detail-suggestions-cell" colspan="10">
+                                        <td class="n-detail-suggestions-cell" colspan="9">
                                             <ul class="n-suggestions n-suggestions-inline">
                                                 @for (var idx = 0; idx < sugerenciasProductos.Count; idx++)
                                                 {
