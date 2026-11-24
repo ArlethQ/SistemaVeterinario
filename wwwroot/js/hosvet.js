@@ -717,7 +717,7 @@ window.hosvetEditor = {
 <html>
 <head>
     <meta charset="utf-8">
-    <title>${title || 'Documento Clínico'}</title>
+    <title>${(title || 'Documento Clínico').replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;

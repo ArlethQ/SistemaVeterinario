@@ -598,14 +598,30 @@ public class LaboratorioImagenService : ILaboratorioImagenService
 
             IF OBJECT_ID('dbo.vt_labInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_labInformes', 'blazor_id_orden') IS NULL
                 ALTER TABLE dbo.vt_labInformes ADD blazor_id_orden int NULL;
+            IF OBJECT_ID('dbo.vt_labInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_labInformes', 'blazor_titulo') IS NULL
+                ALTER TABLE dbo.vt_labInformes ADD blazor_titulo nvarchar(250) NULL;
+            IF OBJECT_ID('dbo.vt_labInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_labInformes', 'blazor_sec_examen') IS NULL
+                ALTER TABLE dbo.vt_labInformes ADD blazor_sec_examen int NULL;
             IF OBJECT_ID('dbo.vt_rxInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_rxInformes', 'blazor_id_orden') IS NULL
                 ALTER TABLE dbo.vt_rxInformes ADD blazor_id_orden int NULL;
+            IF OBJECT_ID('dbo.vt_rxInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_rxInformes', 'blazor_titulo') IS NULL
+                ALTER TABLE dbo.vt_rxInformes ADD blazor_titulo nvarchar(250) NULL;
+            IF OBJECT_ID('dbo.vt_rxInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_rxInformes', 'blazor_sec_examen') IS NULL
+                ALTER TABLE dbo.vt_rxInformes ADD blazor_sec_examen int NULL;
             IF OBJECT_ID('dbo.vt_ecoInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_ecoInformes', 'blazor_id_orden') IS NULL
                 ALTER TABLE dbo.vt_ecoInformes ADD blazor_id_orden int NULL;
+            IF OBJECT_ID('dbo.vt_ecoInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_ecoInformes', 'blazor_titulo') IS NULL
+                ALTER TABLE dbo.vt_ecoInformes ADD blazor_titulo nvarchar(250) NULL;
+            IF OBJECT_ID('dbo.vt_ecoInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_ecoInformes', 'blazor_sec_examen') IS NULL
+                ALTER TABLE dbo.vt_ecoInformes ADD blazor_sec_examen int NULL;
             IF OBJECT_ID('dbo.vt_endoInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_endoInformes', 'blazor_id_orden') IS NULL
                 ALTER TABLE dbo.vt_endoInformes ADD blazor_id_orden int NULL;
+            IF OBJECT_ID('dbo.vt_endoInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_endoInformes', 'blazor_titulo') IS NULL
+                ALTER TABLE dbo.vt_endoInformes ADD blazor_titulo nvarchar(250) NULL;
             IF OBJECT_ID('dbo.vt_medInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_medInformes', 'blazor_id_orden') IS NULL
                 ALTER TABLE dbo.vt_medInformes ADD blazor_id_orden int NULL;
+            IF OBJECT_ID('dbo.vt_medInformes', 'U') IS NOT NULL AND COL_LENGTH('dbo.vt_medInformes', 'blazor_titulo') IS NULL
+                ALTER TABLE dbo.vt_medInformes ADD blazor_titulo nvarchar(250) NULL;
             COMMIT TRANSACTION;");
 
         _ordenInformesInicializada = true;
@@ -616,7 +632,7 @@ public class LaboratorioImagenService : ILaboratorioImagenService
         var lista = new List<InformeDiagnosticoDto>();
 
         if (idOrden is <= 0) return lista;
-        if (idOrden.HasValue) await InicializarOrdenInformesAsync();
+        await InicializarOrdenInformesAsync();
 
         async Task CargarTablaAsync(string tipo, string tabla, string prefijo)
         {
@@ -624,15 +640,20 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                 return;
 
             var filtroOrden = idOrden.HasValue ? "AND i.blazor_id_orden = @IdOrden" : "";
+            var columnaExamen = tipo is "Laboratorio" or "Imagen" or "Ecografia"
+                ? "ISNULL(i.blazor_sec_examen, 0)"
+                : "0";
             string sql = $@"
                 SELECT
+                    ISNULL(i.blazor_id_orden, 0) AS IdOrden,
+                    {columnaExamen} AS SecOrden,
                     CAST(i.{prefijo}_id AS INT) AS IdInforme,
                     '{tipo}' AS TipoInforme,
                     CAST(ISNULL(i.{prefijo}_nhcl, 0) AS INT) AS Nhcl,
                     ISNULL(i.{prefijo}_edadanios, 0) AS EdadAnios,
                     ISNULL(i.{prefijo}_edadmeses, 0) AS EdadMeses,
                     CAST(ISNULL(i.{prefijo}_idFormato, 0) AS INT) AS IdFormato,
-                    RTRIM(ISNULL(f.form_nombre, '{tipo}')) AS NombreFormato,
+                    COALESCE(NULLIF(LTRIM(RTRIM(i.blazor_titulo)), ''), RTRIM(f.form_nombre), '{tipo}') AS NombreFormato,
                     ISNULL(CAST(i.{prefijo}_informe AS VARCHAR(MAX)), '') AS RutaArchivo,
                     ISNULL(i.{prefijo}_html, '') AS ContenidoHtml,
                     ISNULL(i.{prefijo}_fecha, GETDATE()) AS Fecha,
@@ -738,11 +759,11 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                     INSERT INTO vt_labInformes (
                         labI_nhcl, labI_edadanios, labI_edadmeses, labI_idFormato,
                         labI_informe, labI_fecha, labI_idUser, labI_fechaMod,
-                        labI_html, labI_localidad, estado, blazor_id_orden
+                        labI_html, labI_localidad, estado, blazor_id_orden, blazor_titulo, blazor_sec_examen
                     ) VALUES (
                         @Nhcl, @EdadAnios, @EdadMeses, @IdFormato,
                         @RutaArchivo, GETDATE(), @IdUser, GETDATE(),
-                        @ContenidoHtml, @Localidad, 'A', NULLIF(@IdOrden, 0)
+                        @ContenidoHtml, @Localidad, 'A', NULLIF(@IdOrden, 0), NULLIF(LEFT(LTRIM(RTRIM(@NombreFormato)), 250), ''), NULLIF(@SecOrden, 0)
                     )";
                 await _db.ExecuteAsync(sqlLab, dto);
 
@@ -763,15 +784,18 @@ public class LaboratorioImagenService : ILaboratorioImagenService
                     _ => ("vt_medInformes", "medI")
                 };
 
+                var vincularExamen = dto.TipoInforme is "Imagen" or "Ecografia";
+                var columnaExamen = vincularExamen ? ", blazor_sec_examen" : "";
+                var valorExamen = vincularExamen ? ", NULLIF(@SecOrden, 0)" : "";
                 string sqlGen = $@"
                     INSERT INTO {tabla} (
                         {prefijo}_nhcl, {prefijo}_edadanios, {prefijo}_edadmeses, {prefijo}_idFormato,
                         {prefijo}_informe, {prefijo}_fecha, {prefijo}_idUser, {prefijo}_fechaMod,
-                        {prefijo}_html, {prefijo}_localidad, estado, blazor_id_orden
+                        {prefijo}_html, {prefijo}_localidad, estado, blazor_id_orden, blazor_titulo{columnaExamen}
                     ) VALUES (
                         @Nhcl, @EdadAnios, @EdadMeses, @IdFormato,
                         @RutaArchivo, GETDATE(), @IdUser, GETDATE(),
-                        @ContenidoHtml, @Localidad, 'A', NULLIF(@IdOrden, 0)
+                        @ContenidoHtml, @Localidad, 'A', NULLIF(@IdOrden, 0), NULLIF(LEFT(LTRIM(RTRIM(@NombreFormato)), 250), ''){valorExamen}
                     )";
                 await _db.ExecuteAsync(sqlGen, dto);
 

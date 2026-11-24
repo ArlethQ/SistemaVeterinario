@@ -20,6 +20,12 @@
             </div>
         </div>
         <div class="diagnostic-orders-actions">
+            @if (Nhcl > 0)
+            {
+                <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_consultandoInformes" @onclick="() => ConsultarInformesAsync()">
+                    <i class="bi bi-folder2-open me-1" aria-hidden="true"></i>Historial de informes
+                </button>
+            }
             <button type="button" class="btn btn-sm btn-outline-success app-doc-action app-doc-excel" @onclick="ExportarBandejaExcelAsync">
                 <i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i>Exportar Excel
             </button>
@@ -74,306 +80,320 @@
         </div>
     }
 
-    <!-- Pestañas -->
-    <ul class="nav diagnostic-tabs mb-3">
-        <li class="nav-item">
-            <button class="nav-link @(TabActiva == 1 ? "active" : "")" @onclick="() => TabActiva = 1">
-                <i class="bi bi-inbox-fill me-1"></i>Bandeja operativa (@BandejaItems.Count)
-                @if (BandejaItems.Any(x => x.Prioridad == "Emergente" && x.Estado != "REALIZADO"))
+    <div class="diagnostic-orders-panel mb-3">
+        <div class="diagnostic-orders-section"><h2><i class="bi bi-funnel me-2" aria-hidden="true"></i>Filtros de órdenes</h2></div>
+        <div class="diagnostic-orders-body">
+            <div class="row g-2 align-items-end">
+                @if (!OrdenExpediente.HasValue)
                 {
-                    <span class="badge bg-danger ms-1">🚨 @BandejaItems.Count(x => x.Prioridad == "Emergente" && x.Estado != "REALIZADO") Urgente(s)</span>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold mb-1">Desde</label>
+                        <input type="date" class="form-control form-control-sm" @bind="FechaDesde" @bind:after="CargarBandejaAsync" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold mb-1">Hasta</label>
+                        <input type="date" class="form-control form-control-sm" @bind="FechaHasta" @bind:after="CargarBandejaAsync" />
+                    </div>
                 }
-            </button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link @(TabActiva == 2 ? "active" : "")" @onclick="() => TabActiva = 2">
-                <i class="bi bi-file-earmark-medical-fill me-1"></i>Informes y archivos (@InformesPaciente.Count)
-            </button>
-        </li>
-    </ul>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Área Diagnóstica</label>
+                    <select class="form-select form-select-sm" @bind="AreaFiltro" @bind:after="CargarBandejaAsync">
+                        <option value="TODOS">Todas (LAB + RX/Eco)</option>
+                        <option value="LAB">Laboratorio Clínico</option>
+                        <option value="RX">Imagenología (RX/Eco)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Filtrar Por</label>
+                    <select class="form-select form-select-sm" @bind="CriterioFiltro" @bind:after="CargarBandejaAsync">
+                        <option value="">Todos los Campos</option>
+                        <option value="PACIENTE">Paciente</option>
+                        <option value="CLIENTE">Propietario / Cliente</option>
+                        <option value="MEDICO">Médico Solicitante</option>
+                        <option value="ORDEN">N° Orden</option>
+                        <option value="NHCL">N° Historia (NHCL)</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold mb-1">Valor Búsqueda</label>
+                    <input type="text" class="form-control form-control-sm" autocomplete="off" @bind="ValorFiltro" @bind:event="oninput" @bind:after="CargarBandejaAsync" placeholder="Escriba para filtrar..." />
+                </div>
+            </div>
+        </div>
+    </div>
 
-    <!-- TAB 1: BANDEJA OPERATIVA DE LABORATORIO E IMAGENOLOGÍA -->
-    @if (TabActiva == 1)
-    {
-        <div class="diagnostic-orders-panel mb-3">
-            <div class="diagnostic-orders-section"><h2><i class="bi bi-funnel me-2" aria-hidden="true"></i>Filtros de órdenes</h2></div>
-            <div class="diagnostic-orders-body">
-                <div class="row g-2 align-items-end">
-                    @if (!OrdenExpediente.HasValue)
+    <div class="diagnostic-orders-panel">
+        <div class="diagnostic-orders-section"><h2><i class="bi bi-inbox me-2" aria-hidden="true"></i>Órdenes diagnósticas</h2></div>
+        <div class="table-responsive results-table-wrap" style="max-height: 540px;">
+            <table class="table table-sm table-hover align-middle mb-0 diagnostic-orders-table results-orders-table">
+                <thead class="table-light sticky-top">
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Orden / NHCL</th>
+                        <th>Paciente / Propietario</th>
+                        <th>Examen / Estudio Solicitado</th>
+                        <th>Médico Solicitante</th>
+                        <th class="text-center">Estado</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!BandejaItems.Any())
                     {
-                        <div class="col-md-2">
-                            <label class="form-label small fw-semibold mb-1">Desde</label>
-                            <input type="date" class="form-control form-control-sm" @bind="FechaDesde" @bind:after="CargarBandejaAsync" />
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-semibold mb-1">Hasta</label>
-                            <input type="date" class="form-control form-control-sm" @bind="FechaHasta" @bind:after="CargarBandejaAsync" />
-                        </div>
-                    }
-                    <div class="col-md-2">
-                        <label class="form-label small fw-semibold mb-1">Área Diagnóstica</label>
-                        <select class="form-select form-select-sm" @bind="AreaFiltro" @bind:after="CargarBandejaAsync">
-                            <option value="TODOS">Todas (LAB + RX/Eco)</option>
-                            <option value="LAB">Laboratorio Clínico</option>
-                            <option value="RX">Imagenología (RX/Eco)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small fw-semibold mb-1">Filtrar Por</label>
-                        <select class="form-select form-select-sm" @bind="CriterioFiltro" @bind:after="CargarBandejaAsync">
-                            <option value="">Todos los Campos</option>
-                            <option value="PACIENTE">Paciente</option>
-                            <option value="CLIENTE">Propietario / Cliente</option>
-                            <option value="MEDICO">Médico Solicitante</option>
-                            <option value="ORDEN">N° Orden</option>
-                            <option value="NHCL">N° Historia (NHCL)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small fw-semibold mb-1">Valor Búsqueda</label>
-                        <input type="text" class="form-control form-control-sm" autocomplete="off" @bind="ValorFiltro" @bind:event="oninput" @bind:after="CargarBandejaAsync" placeholder="Escriba para filtrar..." />
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="diagnostic-orders-panel">
-            <div class="diagnostic-orders-section"><h2><i class="bi bi-inbox me-2" aria-hidden="true"></i>Órdenes diagnósticas</h2></div>
-            <div class="table-responsive results-table-wrap" style="max-height: 540px;">
-                <table class="table table-sm table-hover align-middle mb-0 diagnostic-orders-table">
-                    <thead class="table-light sticky-top">
                         <tr>
-                            <th>Área</th>
-                            <th>Fecha</th>
-                            <th>Orden / NHCL</th>
-                            <th>Paciente / Propietario</th>
-                            <th>Examen / Estudio Solicitado</th>
-                            <th class="text-center">Prioridad</th>
-                            <th>Médico Solicitante</th>
-                            <th class="text-center">Estado</th>
-                            <th class="text-end">Acciones Operativas</th>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                No se encontraron órdenes de Laboratorio o Imagenología con los filtros actuales.
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        @if (!BandejaItems.Any())
-                        {
-                            <tr>
-                                <td colspan="9" class="text-center text-muted py-4">
-                                    No se encontraron órdenes de Laboratorio o Imagenología con los filtros actuales.
-                                </td>
-                            </tr>
-                        }
-                        @foreach (var item in BandejaItems)
-                        {
-                            <tr class="@(item.Prioridad == "Emergente" && item.Estado != "REALIZADO" ? "table-danger" : "")">
-                                <td>
-                                    <span class="badge @(item.AreaOrigen == "LAB" ? "bg-primary" : "bg-info text-dark")">@item.AreaOrigen</span>
-                                </td>
-                                <td>@item.FechaTexto</td>
-                                <td>
-                                    <strong>#@item.IdOrden</strong>
-                                    <span class="badge bg-dark ms-1">NHCL #@item.Nhcl</span>
-                                </td>
-                                <td>
-                                    <strong class="text-primary">@item.Paciente</strong>
-                                    <div class="text-muted" style="font-size: 0.72rem;">@item.Cliente</div>
-                                </td>
-                                <td>
-                                    <div class="fw-semibold">@item.Examen</div>
-                                    @if (!string.IsNullOrWhiteSpace(item.Observaciones))
+                    }
+                    @foreach (var item in BandejaItems)
+                    {
+                        <tr class="@(item.Prioridad == "Emergente" && item.Estado != "REALIZADO" ? "table-danger" : "")">
+                            <td class="text-nowrap">@item.FechaTexto</td>
+                            <td>
+                                <strong>#@item.IdOrden</strong>
+                                <small class="d-block text-muted text-nowrap">NHCL #@item.Nhcl</small>
+                            </td>
+                            <td>
+                                <strong class="text-primary">@item.Paciente</strong>
+                                <div class="text-muted" style="font-size: 0.72rem;">@item.Cliente</div>
+                            </td>
+                            <td>
+                                <div class="fw-semibold"><span class="badge @(item.AreaOrigen == "LAB" ? "bg-primary" : "bg-info text-dark") me-1">@item.AreaOrigen</span>@item.Examen</div>
+                                @if (!string.IsNullOrWhiteSpace(item.Observaciones) && !string.Equals(item.Examen?.Trim(), item.Observaciones.Trim(), StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <small class="text-muted"><i class="bi bi-chat-left-text me-1"></i>@item.Observaciones</small>
+                                }
+                            </td>
+                            <td>
+                                <div>@item.Medico</div>
+                                <small class="text-muted">@item.Especialidad</small>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge @(item.Estado == "REALIZADO" ? "bg-success" : "bg-warning text-dark")">
+                                    @item.Estado
+                                </span>
+                                <small class="d-block mt-1 @(item.Prioridad == "Emergente" ? "text-danger fw-bold" : "text-muted")">@item.Prioridad</small>
+                            </td>
+                            <td class="text-end">
+                                <div class="results-row-actions">
+                                    @if (item.Estado != "REALIZADO")
                                     {
-                                        <small class="text-muted"><i class="bi bi-chat-left-text me-1"></i>@item.Observaciones</small>
-                                    }
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge @(item.Prioridad == "Emergente" ? "bg-danger" : "bg-secondary")">
-                                        @item.Prioridad
-                                    </span>
-                                </td>
-                                <td>
-                                    <div>@item.Medico</div>
-                                    <small class="text-muted">@item.Especialidad</small>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge @(item.Estado == "REALIZADO" ? "bg-success" : "bg-warning text-dark")">
-                                        @item.Estado
-                                    </span>
-                                </td>
-                                <td class="text-end">
-                                    <div class="results-row-actions">
-                                        @if (item.Estado != "REALIZADO")
-                                        {
-                                            <button class="btn btn-outline-success py-0 px-2"
-                                                    @onclick="() => MarcarComoRealizadoAsync(item)"
-                                                    title="Marcar Examen como Realizado">
-                                                <i class="bi bi-check2-circle"></i> Atendido
-                                            </button>
-                                        }
-                                        <button class="btn btn-primary py-0 px-2"
-                                                @onclick="() => AbrirSubidaInformeAsync(item)"
-                                                title="Subir PDF o Redactar Informe">
-                                            <i class="bi bi-cloud-arrow-up-fill me-1"></i>Subir Resultado
+                                        <button class="results-action results-action-attended"
+                                                @onclick="() => MarcarComoRealizadoAsync(item)"
+                                                title="Marcar como atendido" aria-label="Marcar como atendido">
+                                            <i class="bi bi-check2-circle" aria-hidden="true"></i>
                                         </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+                                    }
+                                    <button class="results-action results-action-upload"
+                                            @onclick="() => AbrirSubidaInformeAsync(item)"
+                                            disabled="@_abriendoResultado" title="Subir resultado" aria-label="Subir resultado">
+                                        <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> Subir resultado
+                                    </button>
+                                    <button type="button" class="results-action results-action-view" title="Ver resultado" aria-label="Ver resultado" disabled="@_consultandoInformes" @onclick="() => ConsultarInformesAsync(item)">
+                                        <i class="bi bi-eye" aria-hidden="true"></i>
+                                    </button>
+                                    <button type="button" class="results-action results-action-pdf" title="Descargar PDF" aria-label="Descargar PDF" disabled="@_consultandoInformes" @onclick="() => ConsultarInformesAsync(item, descargar: true)">
+                                        <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
         </div>
-    }
+    </div>
 
-    <!-- TAB 2: EMISIÓN DE INFORMES Y CARGA DE RESULTADOS -->
-    @if (TabActiva == 2)
-    {
-        <div class="row g-3">
-            <!-- Columna Izquierda: Editor de Informe y Subida de Archivo -->
-            <div class="col-lg-6">
-                <div class="diagnostic-orders-panel h-100">
-                    <div class="diagnostic-orders-section">
-                        <h2><i class="bi bi-file-earmark-plus-fill me-1" aria-hidden="true"></i>Registrar informe o adjuntar resultado</h2>
-                        @if (Paciente != null)
+    <dialog @ref="_dialogResultado" class="results-dialog results-document-dialog" aria-labelledby="results-dialog-title">
+        <header class="diagnostic-orders-section">
+            <h2 id="results-dialog-title"><i class="bi bi-cloud-arrow-up me-2" aria-hidden="true"></i>Subir resultado</h2>
+            <button type="button" class="btn-close btn-close-white" aria-label="Cerrar" disabled="@(_subiendoArchivo || _guardandoInforme)" @onclick="CerrarResultadoAsync"></button>
+        </header>
+        @if (_resultadoSeleccionado is { } resultado)
+        {
+            <div class="diagnostic-orders-body results-dialog-body">
+                <div class="results-dialog-context">
+                    <strong>@resultado.Examen</strong>
+                    <small>@resultado.Paciente · Orden #@resultado.IdOrden · NHCL #@resultado.Nhcl</small>
+                </div>
+                @if (!string.IsNullOrEmpty(MensajeAlerta))
+                {
+                    <div class="alert alert-danger py-2" role="alert">@MensajeAlerta</div>
+                }
+                @CamposInforme
+            </div>
+            <footer class="results-dialog-footer">
+                <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(_subiendoArchivo || _guardandoInforme)" @onclick="CerrarResultadoAsync">Cancelar</button>
+                <SaveButton class="btn btn-sm btn-success" Disabled="@(_subiendoArchivo || _guardandoInforme)" OnClick="GuardarInformeAsync">
+                    <i class="bi bi-floppy me-1" aria-hidden="true"></i>Guardar resultado
+                </SaveButton>
+            </footer>
+        }
+    </dialog>
+    <dialog @ref="_dialogInformes" class="results-dialog" aria-labelledby="@(_editorInformeId + "-consulta")">
+        <header class="diagnostic-orders-section">
+            <h2 id="@(_editorInformeId + "-consulta")">@_tituloConsulta</h2>
+            <button type="button" class="btn-close btn-close-white" aria-label="Cerrar" @onclick="CerrarConsultaInformesAsync"></button>
+        </header>
+        <div class="diagnostic-orders-body results-dialog-body">
+            @if (!string.IsNullOrEmpty(MensajeAlerta))
+            {
+                <div class="alert alert-danger py-2" role="alert">@MensajeAlerta</div>
+            }
+            @if (_informesConsulta.Count == 0)
+            {
+                <p class="text-muted mb-0">No hay informes registrados para esta consulta.</p>
+            }
+            @foreach (var informe in _informesConsulta)
+            {
+                <article class="results-dialog-context">
+                    <strong>@informe.NombreFormato</strong>
+                    <small>@informe.TipoInforme · @informe.FechaMod.ToString("dd/MM/yyyy HH:mm") · @informe.NombreUsuario</small>
+                    @if (_examenConsulta != null && informe.SecOrden == 0)
+                    {
+                        <small>Informe de la orden sin examen vinculado</small>
+                    }
+                    <div class="results-row-actions mt-2">
+                        <button type="button" class="results-action results-action-view" @onclick="() => _informeVisible = informe">
+                            <i class="bi bi-eye" aria-hidden="true"></i> Ver informe
+                        </button>
+                        @if (!string.IsNullOrWhiteSpace(informe.RutaArchivo))
                         {
-                            <span class="badge bg-primary">@Paciente.PacienteNombre (NHCL #@Nhcl)</span>
+                            <a href="/@informe.RutaArchivo" target="_blank" rel="noopener" class="results-action text-decoration-none">
+                                <i class="bi bi-paperclip" aria-hidden="true"></i> Ver adjunto
+                            </a>
                         }
+                        <button type="button" class="results-action results-action-pdf" @onclick="() => ExportarInformePdfAsync(informe, _examenConsulta)">
+                            <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Descargar PDF
+                        </button>
+                        <button type="button" class="results-action results-action-cancel" @onclick="() => AnularInformeAsync(informe)">
+                            <i class="bi bi-trash" aria-hidden="true"></i> Anular
+                        </button>
                     </div>
-                    <div class="diagnostic-orders-body">
-                        <div class="row g-2 mb-3">
-                            <div class="col-md-5">
-                                <label class="form-label small fw-semibold">Categoría de Informe</label>
-                                <select class="form-select form-select-sm" @bind="NuevoInforme.TipoInforme" @bind:after="CargarPlantillasPorTipoAsync">
-                                    <option value="Laboratorio">Laboratorio Clínico</option>
-                                    <option value="Imagen">Rayos X / Imagen</option>
-                                    <option value="Ecografia">Ecografía / Eco Doppler</option>
-                                    <option value="Endoscopia">Endoscopía</option>
-                                    <option value="Medicos">Informes Médicos</option>
-                                </select>
-                            </div>
-                            <div class="col-md-7">
-                                <label class="form-label small fw-semibold">Plantilla de Formato</label>
-                                <select class="form-select form-select-sm" @bind="NuevoInforme.IdFormato" @bind:after="AplicarPlantillaSeleccionadaAsync">
-                                    <option value="0">-- Plantilla estándar e-ForVets --</option>
-                                    @foreach (var f in PlantillasDisponibles)
-                                    {
-                                        <option value="@f.FormId">@f.FormNombre</option>
-                                    }
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Subida de Archivo PDF o Imagen a wwwroot/InformesUpload/{Tipo}/ -->
-                        <div class="mb-3 p-3 results-upload">
-                            <label class="form-label small fw-bold text-primary mb-1">
-                                <i class="bi bi-paperclip me-1"></i>Adjuntar Archivo de Resultado (PDF, Imagen o Excel)
-                            </label>
-                            <InputFile OnChange="SubirArchivoResultadoAsync" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.xlsx" />
-                            @if (!string.IsNullOrWhiteSpace(NuevoInforme.RutaArchivo))
-                            {
-                                <div class="small text-success mt-1 fw-semibold">
-                                    <i class="bi bi-check-circle-fill me-1"></i>Archivo listo: <code>@NuevoInforme.RutaArchivo</code>
-                                </div>
-                            }
-                        </div>
-
-                        <!-- Redactor de Contenido del Informe -->
-                        <div class="mb-3">
-                            <label class="form-label small fw-semibold d-flex justify-content-between">
-                                <span>Desarrollo del Informe Diagnóstico (Hallazgos y Conclusiones)</span>
-                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" @onclick="() => VistaPreviaHtml = !VistaPreviaHtml">
-                                    @(VistaPreviaHtml ? "Editar Texto/HTML" : "Vista Previa")
-                                </button>
-                            </label>
-                            @if (VistaPreviaHtml)
-                            {
-                                <div class="border rounded p-3 bg-white small" style="min-height: 220px; max-height: 280px; overflow-y: auto;">
-                                    @((MarkupString)NuevoInforme.ContenidoHtml)
-                                </div>
-                            }
-                            else
-                            {
-                                <textarea class="form-control form-control-sm font-monospace" rows="9" @bind="NuevoInforme.ContenidoHtml"></textarea>
-                            }
-                        </div>
-
-                        <SaveButton class="btn btn-sm btn-success w-100" OnClick="GuardarInformeAsync">
-                            <i class="bi bi-floppy-fill me-1"></i>Guardar Informe y Marcar Orden como Realizada
-                        </SaveButton>
-                    </div>
+                </article>
+            }
+            @if (_informeVisible is { } informeVisible)
+            {
+                <div class="results-editor border rounded">
+                    @((MarkupString)informeVisible.ContenidoHtml)
                 </div>
-            </div>
-
-            <!-- Columna Derecha: Historial de Informes del Paciente -->
-            <div class="col-lg-6">
-                <div class="diagnostic-orders-panel h-100">
-                    <div class="diagnostic-orders-section">
-                        <h2><i class="bi bi-folder2-open me-1" aria-hidden="true"></i>@(OrdenExpediente is int orden ? $"Informes de la orden #{orden}" : "Historial de informes")</h2>
-                        <span class="badge bg-secondary">@InformesPaciente.Count informe(s)</span>
-                    </div>
-                    <div class="diagnostic-orders-body">
-                        <div class="table-responsive results-table-wrap diagnostic-orders-table-wrap" style="max-height: 500px;">
-                            <table class="table table-sm table-hover align-middle mb-0 diagnostic-orders-table">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        <th>Categoría</th>
-                                        <th>Fecha</th>
-                                        <th>Formato / Archivo</th>
-                                        <th>Especialista</th>
-                                        <th class="text-end">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @if (!InformesPaciente.Any())
-                                    {
-                                        <tr>
-                                            <td colspan="5" class="text-center text-muted py-4">
-                                                No existen informes diagnósticos registrados para este paciente.
-                                            </td>
-                                        </tr>
-                                    }
-                                    @foreach (var inf in InformesPaciente)
-                                    {
-                                        <tr>
-                                            <td>
-                                                <span class="badge bg-info text-dark">@inf.TipoInforme</span>
-                                            </td>
-                                            <td>@inf.FechaMod.ToString("yyyy-MM-dd HH:mm")</td>
-                                            <td>
-                                                <div class="fw-semibold">@inf.NombreFormato</div>
-                                                @if (!string.IsNullOrWhiteSpace(inf.RutaArchivo))
-                                                {
-                                                    <a href="/@inf.RutaArchivo" target="_blank" class="small text-decoration-none">
-                                                        <i class="bi bi-file-earmark-arrow-down me-1"></i>Abrir adjunto
-                                                    </a>
-                                                }
-                                            </td>
-                                            <td>@inf.NombreUsuario</td>
-                                            <td class="text-end">
-                                                <div class="results-row-actions">
-                                                    <button class="btn btn-outline-primary py-0 px-2" @onclick="() => SeleccionarInformeExistente(inf)" title="Ver Contenido">
-                                                        <i class="bi bi-eye"></i>
-                                                    </button>
-                                                    <button class="btn btn-outline-danger py-0 px-2 app-doc-action app-doc-pdf app-doc-icon" @onclick="() => ExportarInformePdfAsync(inf)" title="Descargar PDF">
-                                                        <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
-                                                    </button>
-                                                    <button class="btn btn-outline-secondary py-0 px-2" @onclick="() => AnularInformeAsync(inf)" title="Anular">
-                                                        <i class="bi bi-trash"></i>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            }
         </div>
-    }
+    </dialog>
 </div>
 
 @code {
+    private ElementReference _dialogResultado;
+    private BandejaTrabajoDiagnosticoDto? _resultadoSeleccionado;
+    private bool _abriendoResultado;
+    private bool _subiendoArchivo;
+    private bool _guardandoInforme;
+
+    private RenderFragment CamposInforme => @<div>
+        <div class="row g-2 mb-3">
+            <div class="col-md-5">
+                <label class="form-label small fw-semibold">Categoría de Informe</label>
+                <select class="form-select form-select-sm" @bind="NuevoInforme.TipoInforme" @bind:after="CargarPlantillasPorTipoAsync">
+                    @if (_resultadoSeleccionado?.AreaOrigen != "RX")
+                    {
+                        <option value="Laboratorio">Laboratorio Clínico</option>
+                    }
+                    @if (_resultadoSeleccionado?.AreaOrigen != "LAB")
+                    {
+                        <option value="Imagen">Rayos X / Imagen</option>
+                        <option value="Ecografia">Ecografía / Eco Doppler</option>
+                    }
+                    @if (_resultadoSeleccionado == null)
+                    {
+                        <option value="Endoscopia">Endoscopía</option>
+                        <option value="Medicos">Informes Médicos</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-7">
+                <label class="form-label small fw-semibold">Plantilla de Formato</label>
+                <select class="form-select form-select-sm" @bind="NuevoInforme.IdFormato" @bind:after="AplicarPlantillaSeleccionadaAsync">
+                    <option value="0">-- Plantilla estándar e-ForVets --</option>
+                    @foreach (var f in PlantillasDisponibles)
+                    {
+                        <option value="@f.FormId">@f.FormNombre</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold" for="@(_editorInformeId + "-titulo")">Título del documento</label>
+            <input id="@(_editorInformeId + "-titulo")" class="form-control form-control-sm"
+                   maxlength="250" @bind="NuevoInforme.NombreFormato" @bind:event="oninput" />
+        </div>
+        <div class="mb-3">
+            <div class="d-flex flex-wrap gap-2 align-items-baseline mb-1">
+                <span id="@(_editorInformeId + "-label")" class="small fw-semibold">Contenido del documento</span>
+                <small class="text-muted">Escribe y edita directamente en el informe.</small>
+            </div>
+            <div class="results-editor-toolbar" role="group" aria-label="Formato del informe">
+                @foreach (var (comando, valor, icono, etiqueta) in FormatosInforme)
+                {
+                    <button type="button" class="results-action" title="@etiqueta" aria-label="@etiqueta"
+                            onmousedown="event.preventDefault()" onclick="@($"window.hosvetEditor.format('{comando}', '{valor}')")">
+                        @if (icono.StartsWith("bi-"))
+                        {
+                            <i class="bi @icono" aria-hidden="true"></i>
+                        }
+                        else
+                        {
+                            @icono
+                        }
+                    </button>
+                }
+                <label class="results-editor-tool" for="@(_editorInformeId + "-imagen")">
+                    <i class="bi bi-image" aria-hidden="true"></i> Insertar imagen
+                </label>
+                <InputFile id="@(_editorInformeId + "-imagen")" OnChange="SubirImagenInformeAsync" class="visually-hidden"
+                           accept=".png,.jpg,.jpeg" disabled="@(_subiendoArchivo || _guardandoInforme)" />
+                <button type="button" class="results-action" data-editor-id="@_editorInformeId"
+                        onclick="window.hosvetEditor.printDocument(document.getElementById(this.dataset.editorId + '-titulo').value, window.hosvetEditor.getContent(this.dataset.editorId))">
+                    <i class="bi bi-printer" aria-hidden="true"></i> Imprimir / PDF
+                </button>
+            </div>
+            @if (_resultadoSeleccionado is { } resultado)
+            {
+                <div class="results-editor-fields" role="group" aria-label="Campos automáticos">
+                    <span><i class="bi bi-magic me-1" aria-hidden="true"></i>Campos automáticos</span>
+                    @foreach (var (token, etiqueta, valor) in CamposAutomaticos(resultado))
+                    {
+                        <button type="button" class="results-action" onmousedown="event.preventDefault()"
+                                @onclick='() => JS.InvokeVoidAsync("hosvetEditor.insertToken", _editorInformeId, token, valor).AsTask()'>
+                            + @etiqueta
+                        </button>
+                    }
+                </div>
+            }
+            <div id="@_editorInformeId" class="results-editor" contenteditable="true" role="textbox"
+                 aria-multiline="true" aria-labelledby="@(_editorInformeId + "-label")"></div>
+        </div>
+        <!-- Subida de Archivo PDF o Imagen a wwwroot/InformesUpload/{Tipo}/ -->
+        <div class="mb-3 p-3 results-upload">
+            <label class="form-label small fw-bold text-primary mb-1">
+                <i class="bi bi-paperclip me-1"></i>Adjuntar Archivo de Resultado (PDF, Imagen o Excel)
+            </label>
+            <InputFile OnChange="SubirArchivoResultadoAsync" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.xlsx" disabled="@(_subiendoArchivo || _guardandoInforme)" />
+            @if (!string.IsNullOrWhiteSpace(NuevoInforme.RutaArchivo))
+            {
+                <div class="small text-success mt-1 fw-semibold">
+                    <i class="bi bi-check-circle-fill me-1"></i>Archivo adjunto
+                    @if (!string.IsNullOrEmpty(_nombreArchivoInforme))
+                    {
+                        <span> · @_nombreArchivoInforme</span>
+                    }
+                </div>
+            }
+        </div>
+
+    </div>;
+
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
     [Parameter] public int? NhclExpediente { get; set; }
@@ -381,8 +401,38 @@
 
     private int IdOrdenInput { get; set; }
     private int NhclInput { get; set; }
-    private int TabActiva { get; set; } = 1;
-    private bool VistaPreviaHtml { get; set; } = true;
+    private readonly string _editorInformeId = $"editor-informe-{Guid.NewGuid():N}";
+    private bool _cargarContenidoEditor = true;
+    private string? _nombreArchivoInforme;
+    private static readonly (string Comando, string Valor, string Icono, string Etiqueta)[] FormatosInforme =
+    [
+        ("bold", "", "bi-type-bold", "Negrita"),
+        ("italic", "", "bi-type-italic", "Cursiva"),
+        ("underline", "", "bi-type-underline", "Subrayado"),
+        ("strikeThrough", "", "bi-type-strikethrough", "Tachado"),
+        ("formatBlock", "h2", "H2", "Título"),
+        ("formatBlock", "h3", "H3", "Subtítulo"),
+        ("formatBlock", "p", "P", "Párrafo"),
+        ("justifyLeft", "", "bi-text-left", "Alinear a la izquierda"),
+        ("justifyCenter", "", "bi-text-center", "Centrar"),
+        ("justifyRight", "", "bi-text-right", "Alinear a la derecha"),
+        ("insertUnorderedList", "", "bi-list-ul", "Lista con viñetas"),
+        ("insertOrderedList", "", "bi-list-ol", "Lista numerada"),
+        ("justifyFull", "", "bi-justify", "Justificar"),
+        ("insertHorizontalRule", "", "bi-hr", "Separador"),
+        ("undo", "", "bi-arrow-counterclockwise", "Deshacer"),
+        ("redo", "", "bi-arrow-clockwise", "Rehacer"),
+        ("removeFormat", "", "bi-eraser", "Limpiar formato")
+    ];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_cargarContenidoEditor || _resultadoSeleccionado == null) return;
+
+        _cargarContenidoEditor = false;
+        await JS.InvokeVoidAsync("hosvetEditor.setContent", _editorInformeId, NuevoInforme.ContenidoHtml);
+    }
+
     private bool CargandoInicial { get; set; } = true;
     private string? MensajeAlerta { get; set; }
 
@@ -395,7 +445,6 @@
     private PacienteHeaderDto? Paciente { get; set; }
     private List<BandejaTrabajoDiagnosticoDto> BandejaItems { get; set; } = new();
     private List<FormatoPlantillaDto> PlantillasDisponibles { get; set; } = new();
-    private List<InformeDiagnosticoDto> InformesPaciente { get; set; } = new();
     private InformeDiagnosticoDto NuevoInforme { get; set; } = new();
 
     protected override async Task OnParametersSetAsync()
@@ -410,7 +459,7 @@
                 Nhcl = NhclExpediente.Value;
                 if (Nhcl <= 0 || OrdenExpediente is <= 0)
                 {
-                    MensajeAlerta = "El expediente necesita una historia clínica y una orden válidas.";
+                    MensajeAlerta = "El expediente necesita una historia cl├¡nica y una orden v├ílidas.";
                     return;
                 }
             }
@@ -484,7 +533,6 @@
 
             if (Nhcl > 0)
             {
-                InformesPaciente = await LabService.ObtenerInformesPacienteAsync(Nhcl, idOrden: OrdenExpediente);
                 await AplicarPlantillaSeleccionadaAsync();
             }
         }
@@ -503,6 +551,7 @@
     {
         string usuario = Session.NombreUsuario;
         NuevoInforme.ContenidoHtml = await LabService.ProcesarPlantillaInformeAsync(NuevoInforme.IdFormato, Nhcl, usuario);
+        _cargarContenidoEditor = true;
     }
 
     private async Task MarcarComoRealizadoAsync(BandejaTrabajoDiagnosticoDto item)
@@ -515,6 +564,11 @@
 
     private async Task AbrirSubidaInformeAsync(BandejaTrabajoDiagnosticoDto item)
     {
+        if (_abriendoResultado || _resultadoSeleccionado != null) return;
+        _abriendoResultado = true;
+        MensajeAlerta = null;
+        _cargarContenidoEditor = true;
+        _nombreArchivoInforme = null;
         IdOrden = item.IdOrden;
         Nhcl = item.Nhcl;
         IdOrdenInput = IdOrden;
@@ -530,85 +584,225 @@
             NombreFormato = item.Examen
         };
 
-        await CargarDatosPacienteAsync();
-        TabActiva = 2;
+        try
+        {
+            await CargarDatosPacienteAsync();
+            _resultadoSeleccionado = item;
+            await JS.InvokeVoidAsync("hosvetDialog.open", _dialogResultado);
+        }
+        finally
+        {
+            _abriendoResultado = false;
+        }
     }
 
-    private async Task SubirArchivoResultadoAsync(InputFileChangeEventArgs e)
+    private async Task CerrarResultadoAsync()
     {
-        var archivo = e.File;
-        if (archivo == null) return;
+        if (_subiendoArchivo || _guardandoInforme) return;
 
-        string carpetaTipo = NuevoInforme.TipoInforme switch
+        await JS.InvokeVoidAsync("hosvetDialog.close", _dialogResultado);
+        _resultadoSeleccionado = null;
+        NuevoInforme = new() { Nhcl = Nhcl, IdOrden = IdOrden };
+        MensajeAlerta = null;
+    }
+
+    private IEnumerable<(string Token, string Etiqueta, string Valor)> CamposAutomaticos(BandejaTrabajoDiagnosticoDto resultado)
+    {
+        yield return ("[NOMBRECLIENTE]", "Dueño", resultado.Cliente);
+        yield return ("[NOMBREMASCOTA]", "Mascota", resultado.Paciente);
+        yield return ("[NHCL]", "NHCL", resultado.Nhcl.ToString());
+        yield return ("[ORDEN]", "Orden", resultado.IdOrden.ToString());
+        if (Paciente is { } paciente && paciente.Nhcl == resultado.Nhcl)
         {
-            "Laboratorio" => "Laboratorio",
-            "Imagen" => "Imagen",
-            "Ecografia" => "Ecografia",
-            "Endoscopia" => "Endoscopia",
-            _ => "Medicos"
-        };
+            yield return ("[CEDULA]", "Cédula", paciente.ClienteCedula);
+            yield return ("[ESPECIE]", "Especie", paciente.Especie);
+            yield return ("[RAZA]", "Raza", paciente.Raza);
+            yield return ("[SEXO]", "Sexo", paciente.Sexo);
+            if (paciente.FechaNacimiento.HasValue)
+                yield return ("[EDAD]", "Edad", paciente.EdadTexto);
+        }
+        yield return ("[MEDICO]", "Médico", resultado.Medico);
+        yield return ("[FECHADIA]", "Fecha", DateTime.Today.ToString("dd/MM/yyyy"));
+    }
 
-        string dirRelativo = $"InformesUpload/{carpetaTipo}";
-        string dirFisico = Path.Combine(Env.WebRootPath, "InformesUpload", carpetaTipo);
-        Directory.CreateDirectory(dirFisico);
+    private Task SubirArchivoResultadoAsync(InputFileChangeEventArgs e) => CargarArchivoInformeAsync(e.File, insertarImagen: false);
+    private Task SubirImagenInformeAsync(InputFileChangeEventArgs e) => CargarArchivoInformeAsync(e.File, insertarImagen: true);
 
-        string nombreSeguro = $"{DateTime.Now:yyyyMMddHHmmss}_{IdOrden}_{Path.GetFileName(archivo.Name)}";
-        string rutaFisica = Path.Combine(dirFisico, nombreSeguro);
+    private async Task CargarArchivoInformeAsync(IBrowserFile archivo, bool insertarImagen)
+    {
+        if (_subiendoArchivo || _guardandoInforme) return;
+        var extension = Path.GetExtension(archivo.Name).ToLowerInvariant();
+        var imagen = extension is ".png" or ".jpg" or ".jpeg";
+        if (!imagen && (insertarImagen || extension is not (".pdf" or ".xlsx")))
+        {
+            MensajeAlerta = "El formato del archivo no está permitido.";
+            return;
+        }
 
-        await using var stream = archivo.OpenReadStream(maxAllowedSize: 15 * 1024 * 1024);
-        await using var fs = new FileStream(rutaFisica, FileMode.Create);
-        await stream.CopyToAsync(fs);
+        _subiendoArchivo = true;
+        MensajeAlerta = null;
+        try
+        {
+            string carpetaTipo = NuevoInforme.TipoInforme switch
+            {
+                "Laboratorio" => "Laboratorio",
+                "Imagen" => "Imagen",
+                "Ecografia" => "Ecografia",
+                "Endoscopia" => "Endoscopia",
+                _ => "Medicos"
+            };
 
-        NuevoInforme.RutaArchivo = $"{dirRelativo}/{nombreSeguro}";
+            string dirRelativo = $"InformesUpload/{carpetaTipo}";
+            string dirFisico = Path.Combine(Env.WebRootPath, "InformesUpload", carpetaTipo);
+            Directory.CreateDirectory(dirFisico);
+
+            string nombreSeguro = $"{Guid.NewGuid():N}{extension}";
+            string rutaFisica = Path.Combine(dirFisico, nombreSeguro);
+
+            await using var stream = archivo.OpenReadStream(maxAllowedSize: 15 * 1024 * 1024);
+            await using (var fs = new FileStream(rutaFisica, FileMode.CreateNew))
+            {
+                await stream.CopyToAsync(fs);
+            }
+
+            var rutaArchivo = $"{dirRelativo}/{nombreSeguro}";
+            if (insertarImagen)
+            {
+                await JS.InvokeVoidAsync("hosvetEditor.insertImage", _editorInformeId, $"/{rutaArchivo}");
+            }
+            else
+            {
+                NuevoInforme.RutaArchivo = rutaArchivo;
+                _nombreArchivoInforme = archivo.Name;
+            }
+        }
+        catch (IOException)
+        {
+            MensajeAlerta = "No se pudo cargar el archivo. Comprueba que no supere los 15 MB.";
+        }
+        finally
+        {
+            _subiendoArchivo = false;
+        }
     }
 
     private async Task GuardarInformeAsync()
     {
-        if (Nhcl <= 0 || OrdenExpediente is <= 0) return;
+        if (_subiendoArchivo || _guardandoInforme || Nhcl <= 0 || OrdenExpediente is <= 0) return;
         NuevoInforme.Nhcl = Nhcl;
         NuevoInforme.IdOrden = OrdenExpediente ?? IdOrden;
         NuevoInforme.IdUser = Session.CurrentUser?.UserNumero ?? 1;
         NuevoInforme.Localidad = Session.Localidad;
 
-        if (!await LabService.GuardarInformeDiagnosticoAsync(NuevoInforme))
+        _guardandoInforme = true;
+        try
         {
-            MensajeAlerta = "No se pudo guardar el informe.";
+            NuevoInforme.ContenidoHtml = await JS.InvokeAsync<string>("hosvetEditor.getContent", _editorInformeId);
+            if (!await LabService.GuardarInformeDiagnosticoAsync(NuevoInforme))
+            {
+                MensajeAlerta = "No se pudo guardar el informe.";
+                return;
+            }
+            if (_resultadoSeleccionado != null)
+            {
+                await JS.InvokeVoidAsync("hosvetDialog.close", _dialogResultado);
+                _resultadoSeleccionado = null;
+            }
+            await CargarBandejaAsync();
+            MensajeAlerta = $"Informe de {NuevoInforme.TipoInforme} registrado exitosamente para NHCL #{Nhcl}.";
+            NuevoInforme = new() { Nhcl = Nhcl, IdOrden = IdOrden };
+            _nombreArchivoInforme = null;
+            _cargarContenidoEditor = true;
+        }
+        finally
+        {
+            _guardandoInforme = false;
+        }
+    }
+
+    private ElementReference _dialogInformes;
+    private bool _consultandoInformes;
+    private string _tituloConsulta = "Historial de informes";
+    private BandejaTrabajoDiagnosticoDto? _examenConsulta;
+    private InformeDiagnosticoDto? _informeVisible;
+    private List<InformeDiagnosticoDto> _informesConsulta = [];
+
+    private async Task ConsultarInformesAsync(BandejaTrabajoDiagnosticoDto? examen = null, bool descargar = false)
+    {
+        if (_consultandoInformes) return;
+
+        _consultandoInformes = true;
+        MensajeAlerta = null;
+        try
+        {
+            var informes = await LabService.ObtenerInformesPacienteAsync(examen?.Nhcl ?? Nhcl,
+                idOrden: examen?.IdOrden ?? OrdenExpediente);
+
+            if (examen != null)
+            {
+                informes = informes.Where(informe =>
+                    (examen.AreaOrigen == "LAB"
+                        ? informe.TipoInforme == "Laboratorio"
+                        : informe.TipoInforme is "Imagen" or "Ecografia")
+                    && (informe.SecOrden == examen.Secuencial || informe.SecOrden == 0))
+                    .OrderByDescending(informe => informe.SecOrden > 0)
+                    .ToList();
+
+                if (descargar && informes.Count(informe => informe.SecOrden > 0) == 1)
+                {
+                    await ExportarInformePdfAsync(informes.First(informe => informe.SecOrden > 0), examen);
+                    return;
+                }
+            }
+
+            _examenConsulta = examen;
+            _tituloConsulta = examen is null ? "Historial de informes" : $"Resultados · {examen.Examen}";
+            _informesConsulta = informes;
+            _informeVisible = descargar ? null : informes.FirstOrDefault(informe => examen == null || informe.SecOrden > 0);
+            await JS.InvokeVoidAsync("hosvetDialog.open", _dialogInformes);
+        }
+        catch (Exception)
+        {
+            MensajeAlerta = "No se pudieron consultar los informes.";
+        }
+        finally
+        {
+            _consultandoInformes = false;
+        }
+    }
+
+    private async Task CerrarConsultaInformesAsync()
+    {
+        await JS.InvokeVoidAsync("hosvetDialog.close", _dialogInformes);
+        _informesConsulta = [];
+        _informeVisible = null;
+    }
+
+    private async Task AnularInformeAsync(InformeDiagnosticoDto informe)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "¿Anular este informe?")) return;
+
+        if (!await LabService.AnularInformeDiagnosticoAsync(informe.IdInforme, informe.TipoInforme))
+        {
+            MensajeAlerta = "No se pudo anular el informe.";
             return;
         }
-        InformesPaciente = await LabService.ObtenerInformesPacienteAsync(Nhcl, idOrden: OrdenExpediente);
-        await CargarBandejaAsync();
-        MensajeAlerta = $"Informe de {NuevoInforme.TipoInforme} registrado exitosamente para NHCL #{Nhcl}.";
+        _informesConsulta.Remove(informe);
+        if (_informeVisible == informe) _informeVisible = null;
     }
 
-    private void SeleccionarInformeExistente(InformeDiagnosticoDto inf)
+    private async Task ExportarInformePdfAsync(InformeDiagnosticoDto inf, BandejaTrabajoDiagnosticoDto? examen)
     {
-        NuevoInforme = new InformeDiagnosticoDto
+        var orden = examen?.IdOrden ?? inf.IdOrden;
+        var pac = orden > 0
+            ? await KardexService.ObtenerEncabezadoPacienteAsync(orden, inf.Nhcl)
+            : Paciente?.Nhcl == inf.Nhcl ? Paciente : null;
+        if (pac is null || pac.Nhcl != inf.Nhcl)
         {
-            IdInforme = inf.IdInforme,
-            TipoInforme = inf.TipoInforme,
-            Nhcl = inf.Nhcl,
-            IdFormato = inf.IdFormato,
-            NombreFormato = inf.NombreFormato,
-            RutaArchivo = inf.RutaArchivo,
-            ContenidoHtml = inf.ContenidoHtml
-        };
-        VistaPreviaHtml = true;
-    }
-
-    private async Task AnularInformeAsync(InformeDiagnosticoDto inf)
-    {
-        await LabService.AnularInformeDiagnosticoAsync(inf.IdInforme, inf.TipoInforme);
-        InformesPaciente = await LabService.ObtenerInformesPacienteAsync(Nhcl, idOrden: OrdenExpediente);
-    }
-
-    private async Task ExportarInformePdfAsync(InformeDiagnosticoDto inf)
-    {
-        var pac = Paciente;
-        if (pac is null || pac.Nhcl <= 0)
-        {
-            MensajeAlerta = "No se pudo generar el PDF: faltan los datos reales del paciente.";
+            MensajeAlerta = "No se pudo generar el PDF: faltan los datos del paciente.";
             return;
         }
+
         var pdfBytes = ReportService.GenerarInformeDiagnosticoPdf(pac, inf);
         await JS.InvokeVoidAsync("descargarArchivoBase64", $"Informe_{inf.TipoInforme}_{inf.IdInforme}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
     }
