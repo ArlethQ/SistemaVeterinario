@@ -7,6 +7,7 @@
 @inject ILaboratorioImagenService LabImagenService
 @inject IAdministracionClinicaService AdminClinicaService
 @inject IEFactCatalogService EFactCatalog
+@inject IFarmaciaService FarmaciaService
 @inject ILogger<FichaMedica> Logger
 @inject IReportExportService ReportService
 @inject SessionStateService Session
@@ -691,6 +692,120 @@
                 </div>
             </div>
 
+            <!-- Sección 1B: Medicación / Insumos Administrados en Consulta -->
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-bold text-primary d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <span><i class="bi bi-eyedropper me-1"></i>Medicación / Insumos Administrados en Consulta</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-primary">@AplicadosConsultaItems.Count ítem(s)</span>
+                            <small class="text-muted fw-normal">Descuenta stock inmediato y va directo a factura (no se puede borrar)</small>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2 mb-3 p-2 bg-light rounded border align-items-end">
+                            <div class="col-md-5 position-relative">
+                                <label class="form-label small fw-semibold">Medicamento / Insumo en stock *</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" autocomplete="off"
+                                           @bind="_filtroAplicado"
+                                           @bind:event="oninput"
+                                           @bind:after="OnAplicadoInputChanged"
+                                           @onfocus="OnAplicadoFocus"
+                                           placeholder="Buscar producto con stock en la sucursal..." />
+                                    @if (!string.IsNullOrWhiteSpace(_filtroAplicado))
+                                    {
+                                        <button type="button" class="btn btn-outline-secondary" title="Limpiar" @onclick="LimpiarProductoAplicado">
+                                            <i class="bi bi-x"></i>
+                                        </button>
+                                    }
+                                </div>
+                                @if (_mostrarSugerenciasAplicado && _sugerenciasAplicado.Any())
+                                {
+                                    <div class="list-group position-absolute w-100 shadow-sm mt-1" style="z-index: 1050; max-height: 190px; overflow-y: auto;">
+                                        @foreach (var prod in _sugerenciasAplicado)
+                                        {
+                                            <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center"
+                                                    @onclick="() => SeleccionarProductoAplicado(prod)">
+                                                <span>
+                                                    <strong>[@prod.CodigoPrincipal]</strong> @prod.NombreProducto
+                                                    <small class="text-success ms-1">(Disp: @prod.StockLibre.ToString("0.##") @prod.UnidadMedida@(prod.FactorConversion > 1m ? $" · Paq. ×{prod.FactorConversion:G29}" : ""))</small>
+                                                </span>
+                                                <span class="text-muted ms-2">$@prod.PrecioUnitario.ToString("F2")</span>
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Cant. y Presentación</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" min="1" step="1" class="form-control" style="max-width: 72px;" onkeydown="return event.key !== '-'"
+                                           @bind="_cantidadAplicado" />
+                                    <select class="form-select" @bind="_modoAplicado">
+                                        <option value="UNIDAD">@UnidadProductoAplicado</option>
+                                        @if (FactorProductoAplicado > 1m)
+                                        {
+                                            <option value="PAQUETE">Paquete (×@FactorProductoAplicado.ToString("G29") @UnidadProductoAplicado)</option>
+                                        }
+                                    </select>
+                                </div>
+                                @if (_modoAplicado == "PAQUETE" && FactorProductoAplicado > 1m)
+                                {
+                                    <small class="text-primary d-block mt-1 fw-semibold" style="font-size:.72rem;">
+                                        = @CantidadBaseAplicadoCalculada.ToString("0.##") @UnidadProductoAplicado a descontar
+                                    </small>
+                                }
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-semibold">Vía / Detalle</label>
+                                <input type="text" class="form-control form-control-sm" @bind="_indicacionAplicado"
+                                       placeholder="Ej: IV 2 ml en consulta" />
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <SaveButton Type="button" class="btn btn-sm btn-primary w-100" OnClick="AgregarAplicadoConsultaAsync">
+                                    <i class="bi bi-check2-circle me-1"></i>Aplicar
+                                </SaveButton>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle small mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Medicamento / Insumo</th>
+                                        <th class="text-center">Cant.</th>
+                                        <th>Vía / Detalle</th>
+                                        <th>Fecha</th>
+                                        <th class="text-end">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!AplicadosConsultaItems.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center text-muted py-3">Sin medicación o insumos aplicados directamente en esta consulta.</td></tr>
+                                    }
+                                    @foreach (var ap in AplicadosConsultaItems)
+                                    {
+                                        <tr>
+                                            <td class="fw-semibold">@ap.Descripcionamento</td>
+                                            <td class="text-center fw-bold">@ap.Cantidad.ToString("0.##")</td>
+                                            <td>@ap.Indicaciones</td>
+                                            <td class="text-muted">@ap.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                                            <td class="text-end">
+                                                <span class="badge bg-light text-secondary border" title="Administrado en consulta (no se puede eliminar)">
+                                                    <i class="bi bi-lock-fill me-1"></i>En factura
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Sección 2: Órdenes de Servicio (Laboratorio, Imagenología, Fisioterapia desde PRODUCTO) -->
             <div class="col-12">
                 <div class="card shadow-sm border-0">
@@ -1200,6 +1315,7 @@
     private List<DiagnosticoCie10Dto> Diagnosticos { get; set; } = new();
     private List<CatalogoCie10ItemDto> ResultadosCie10 { get; set; } = new();
     private List<RecetaMedicamentoItemDto> RecetaItems { get; set; } = new();
+    private List<RecetaMedicamentoItemDto> AplicadosConsultaItems { get; set; } = new();
     private List<AntecedenteClinicoDto> Antecedentes { get; set; } = new();
     private List<VacunaPacienteDto> Vacunas { get; set; } = new();
     private List<CatalogoItemGenericoDto> CatalogoVacunas { get; set; } = new();
@@ -1527,6 +1643,7 @@
         var tFicha = ConsultaService.ObtenerFichaMedicaAsync(IdOrden, Nhcl);
         var tDiag = ConsultaService.ObtenerDiagnosticosOrdenAsync(IdOrden);
         var tRec = ConsultaService.ObtenerRecetaOrdenAsync(IdOrden);
+        var tAplicados = ConsultaService.ObtenerAplicadosConsultaOrdenAsync(IdOrden);
         var tAnt = ConsultaService.ObtenerAntecedentesPacienteAsync(Nhcl);
         var tVac = ConsultaService.ObtenerVacunasPacienteAsync(Nhcl);
         var tCatalogoVac = ConsultaService.ObtenerCatalogoVacunasAsync();
@@ -1534,7 +1651,7 @@
         var tLab = LabImagenService.ObtenerOrdenesLaboratorioAsync(IdOrden, Nhcl);
         var tImg = LabImagenService.ObtenerOrdenesImagenAsync(IdOrden, Nhcl);
         var tFisio = AdminClinicaService.ObtenerFisioterapiaAsync(IdOrden, Nhcl);
-        await Task.WhenAll(tFicha, tDiag, tRec, tAnt, tVac, tCatalogoVac, tTiposConsulta, tLab, tImg, tFisio);
+        await Task.WhenAll(tFicha, tDiag, tRec, tAplicados, tAnt, tVac, tCatalogoVac, tTiposConsulta, tLab, tImg, tFisio);
 
         Ficha = await tFicha;
         if (Ficha.MedOrden <= 0) Ficha.MedOrden = IdOrden;
@@ -1543,6 +1660,7 @@
         if (string.IsNullOrEmpty(Ficha.MedEspecie) && Paciente != null) Ficha.MedEspecie = Paciente.Especie;
         Diagnosticos = await tDiag;
         RecetaItems = await tRec;
+        AplicadosConsultaItems = await tAplicados;
         Antecedentes = await tAnt;
         Vacunas = await tVac;
         CatalogoVacunas = await tCatalogoVac;
@@ -1567,7 +1685,27 @@
             }
         }
 
+        if (_stockAplicadoSede.Count == 0)
+        {
+            await RecargarStockAplicadoSedeAsync();
+        }
+
         await CargarCatalogoServicioCategoriaAsync(_categoriaServicio);
+    }
+
+    private async Task RecargarStockAplicadoSedeAsync()
+    {
+        try
+        {
+            int sede = Session.Localidad > 0 ? Session.Localidad : 1;
+            _stockAplicadoSede = (await FarmaciaService.ObtenerStockSedeDetalladoAsync(sede))
+                .Where(x => x.StockLibre > 0)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se pudo cargar el stock disponible de la sucursal para medicación aplicada en consulta.");
+        }
     }
 
     private async Task OnFechaControlChanged(ChangeEventArgs e)
@@ -1997,6 +2135,143 @@
         _sugerenciasMedicamento.Clear();
         _mostrarSugerenciasMed = false;
         ActualizarCantidadLetras();
+    }
+
+    // Medicación / Insumos aplicados directamente en consulta
+    private List<FarmaciaStockSedeItemDto> _stockAplicadoSede = new();
+    private List<FarmaciaStockSedeItemDto> _sugerenciasAplicado = new();
+    private bool _mostrarSugerenciasAplicado;
+    private FarmaciaStockSedeItemDto? _productoAplicadoSeleccionado;
+    private string _filtroAplicado = string.Empty;
+    private string _modoAplicado = "UNIDAD";
+    private decimal _cantidadAplicado = 1m;
+    private string _indicacionAplicado = string.Empty;
+
+    private string UnidadProductoAplicado => string.IsNullOrWhiteSpace(_productoAplicadoSeleccionado?.UnidadMedida)
+        ? "UNIDAD"
+        : _productoAplicadoSeleccionado!.UnidadMedida.Trim().ToUpperInvariant();
+    private decimal FactorProductoAplicado => _productoAplicadoSeleccionado is { FactorConversion: > 1m } p ? p.FactorConversion : 1m;
+    private decimal CantidadBaseAplicadoCalculada => _modoAplicado == "PAQUETE" && FactorProductoAplicado > 1m
+        ? Math.Round(_cantidadAplicado * FactorProductoAplicado, 4)
+        : _cantidadAplicado;
+
+    private async Task OnAplicadoFocus()
+    {
+        if (_stockAplicadoSede.Count == 0)
+            await RecargarStockAplicadoSedeAsync();
+        FiltrarSugerenciasAplicado();
+        _mostrarSugerenciasAplicado = _sugerenciasAplicado.Any();
+    }
+
+    private async Task OnAplicadoInputChanged()
+    {
+        _productoAplicadoSeleccionado = null;
+        _modoAplicado = "UNIDAD";
+        if (_stockAplicadoSede.Count == 0)
+            await RecargarStockAplicadoSedeAsync();
+        FiltrarSugerenciasAplicado();
+        _mostrarSugerenciasAplicado = _sugerenciasAplicado.Any();
+    }
+
+    private void FiltrarSugerenciasAplicado()
+    {
+        var texto = (_filtroAplicado ?? string.Empty).Trim();
+        _sugerenciasAplicado = string.IsNullOrWhiteSpace(texto)
+            ? _stockAplicadoSede.Take(15).ToList()
+            : _stockAplicadoSede
+                .Where(p => p.NombreProducto.Contains(texto, StringComparison.OrdinalIgnoreCase)
+                         || p.CodigoPrincipal.Contains(texto, StringComparison.OrdinalIgnoreCase)
+                         || p.CodigoProducto.ToString().Contains(texto, StringComparison.OrdinalIgnoreCase))
+                .Take(20)
+                .ToList();
+    }
+
+    private void SeleccionarProductoAplicado(FarmaciaStockSedeItemDto prod)
+    {
+        _productoAplicadoSeleccionado = prod;
+        _modoAplicado = "UNIDAD";
+        _filtroAplicado = prod.NombreProducto;
+        _mostrarSugerenciasAplicado = false;
+    }
+
+    private void LimpiarProductoAplicado()
+    {
+        _productoAplicadoSeleccionado = null;
+        _modoAplicado = "UNIDAD";
+        _filtroAplicado = string.Empty;
+        _cantidadAplicado = 1m;
+        _indicacionAplicado = string.Empty;
+        _sugerenciasAplicado.Clear();
+        _mostrarSugerenciasAplicado = false;
+    }
+
+    private async Task AgregarAplicadoConsultaAsync()
+    {
+        if (!FichaEditable || Guardando) return;
+
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
+
+        if (ordenTarget <= 0 || nhclTarget <= 0)
+        {
+            EsError = true;
+            MensajeAlerta = "No hay una orden activa válida para registrar medicación aplicada.";
+            return;
+        }
+
+        if (_productoAplicadoSeleccionado is null)
+        {
+            var texto = (_filtroAplicado ?? string.Empty).Trim();
+            _productoAplicadoSeleccionado = _stockAplicadoSede.FirstOrDefault(p =>
+                string.Equals(p.NombreProducto.Trim(), texto, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(p.CodigoPrincipal.Trim(), texto, StringComparison.OrdinalIgnoreCase) ||
+                p.CodigoProducto.ToString() == texto);
+        }
+
+        if (_productoAplicadoSeleccionado is null)
+        {
+            EsError = true;
+            MensajeAlerta = "Selecciona un producto con stock disponible en la sucursal actual.";
+            return;
+        }
+
+        if (_cantidadAplicado <= 0)
+        {
+            EsError = true;
+            MensajeAlerta = "La cantidad aplicada debe ser mayor a cero.";
+            return;
+        }
+
+        decimal cantidadBase = CantidadBaseAplicadoCalculada;
+        if (cantidadBase > _productoAplicadoSeleccionado.StockLibre)
+        {
+            EsError = true;
+            MensajeAlerta = $"Stock insuficiente: disponible {_productoAplicadoSeleccionado.StockLibre:0.##} {_productoAplicadoSeleccionado.UnidadMedida}.";
+            return;
+        }
+
+        var nuevoAplicado = new RecetaMedicamentoItemDto
+        {
+            IdOrden = ordenTarget,
+            Nhcl = nhclTarget,
+            CodigoProd = _productoAplicadoSeleccionado.CodigoProducto.ToString(),
+            Descripcionamento = _productoAplicadoSeleccionado.NombreProducto,
+            Cantidad = cantidadBase,
+            CantidadLetras = $"{cantidadBase:0.##} {UnidadProductoAplicado}",
+            Indicaciones = string.IsNullOrWhiteSpace(_indicacionAplicado) ? "Aplicado en consulta" : _indicacionAplicado.Trim(),
+            Tipo = "C"
+        };
+
+        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        var res = await ConsultaService.AgregarAplicadoConsultaAsync(nuevoAplicado, idUser, Session.Localidad);
+        EsError = !res.Exito;
+        MensajeAlerta = res.Mensaje;
+        if (res.Exito)
+        {
+            LimpiarProductoAplicado();
+            AplicadosConsultaItems = await ConsultaService.ObtenerAplicadosConsultaOrdenAsync(ordenTarget);
+            await RecargarStockAplicadoSedeAsync();
+        }
     }
 
     private void ActualizarCantidadLetras()

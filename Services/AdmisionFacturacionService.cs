@@ -3122,13 +3122,38 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr
                 ON pr.CODIGO = COALESCE(NULLIF(m.med_idProdu, 0), pMatch.CODIGO)
             WHERE m.med_id_orden = @IdOrden
+              AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_tipo)), ''), 'M') <> 'C'
               AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') IN ('Por Entregar', 'Por Facturar')
               AND CAST(ISNULL(m.med_cantidad1, 0) AS decimal(18,4)) > 0
               AND ISNULL(pr.CODIGO, 0) > 0
             ORDER BY m.sec;
             """, new { IdOrden = idOrden });
 
-        foreach (var row in procedimientos.Concat(laboratorios).Concat(imagenes).Concat(fisioterapias).Concat(medicinas))
+        var aplicadosConsulta = await _db.QueryAsync<OrdenProductoQueryRow>("""
+            SELECT
+                'CONSULTA_INSUMO' AS Origen,
+                m.sec AS SecOrigen,
+                ISNULL(pr.CODIGO, 0) AS CodProducto,
+                ISNULL(RTRIM(pr.CODIGO_PRINCIPAL), '') AS CodPrincipal,
+                ISNULL(RTRIM(pr.COD_AUXILIAR), '') AS CodAuxiliar,
+                COALESCE(NULLIF(RTRIM(pr.NOMBRE), ''), NULLIF(LTRIM(RTRIM(m.med_otroMedicamento)), ''), 'Medicamento aplicado en consulta') AS Descripcion,
+                COALESCE(NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(250), m.med_indicaciones))), ''), 'Administrado en consulta') AS Detalle,
+                CAST(ISNULL(m.med_cantidad, 0) AS decimal(18,4)) AS Cantidad,
+                CAST(ISNULL(pr.VALOR_UNITARIO, 0) AS decimal(18,4)) AS PrecioUnitario,
+                ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
+                ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
+                pr.TIPO_PRODUCTO AS TipoProducto,
+                pr.IDSUBTIPO AS SubtipoProducto
+            FROM dbo.vt_medicinas m
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO = m.med_idProdu
+            WHERE m.med_id_orden = @IdOrden
+              AND LTRIM(RTRIM(ISNULL(m.med_tipo, ''))) = 'C'
+              AND CAST(ISNULL(m.med_cantidad, 0) AS decimal(18,4)) > 0
+              AND ISNULL(pr.CODIGO, 0) > 0
+            ORDER BY m.sec;
+            """, new { IdOrden = idOrden });
+
+        foreach (var row in procedimientos.Concat(aplicadosConsulta).Concat(laboratorios).Concat(imagenes).Concat(fisioterapias).Concat(medicinas))
         {
             resultado.Add(new ItemOrdenParaFacturaDto
             {

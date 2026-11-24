@@ -40,6 +40,8 @@ public interface IConsultaExternaService
     Task<bool> RegistrarAdvertenciaMedicamentoAsync(int nhcl, int orden, int sec, string motivo, DateTime inicio, DateTime? fin, int usuario);
     Task<string> ObtenerIndicacionesGeneralesAsync(int idOrden);
     Task<bool> AgregarMedicamentoRecetaAsync(RecetaMedicamentoItemDto item, int idUsuario, int idLocalidad);
+    Task<List<RecetaMedicamentoItemDto>> ObtenerAplicadosConsultaOrdenAsync(int idOrden);
+    Task<(bool Exito, string Mensaje)> AgregarAplicadoConsultaAsync(RecetaMedicamentoItemDto item, int idUsuario, int idLocalidad);
     Task<bool> EliminarMedicamentoRecetaAsync(int sec);
     Task<bool> GuardarIndicacionesGeneralesAsync(int idOrden, int nhcl, string indicaciones);
     Task<List<RecetaResumenListadoDto>> BuscarRecetasPorFechasAsync(DateTime desde, DateTime hasta, int? nhcl = null);
@@ -1196,6 +1198,7 @@ public class ConsultaExternaService : IConsultaExternaService
             FROM vt_medicinas m
             LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON m.med_idProdu = p.CODIGO
             WHERE m.med_id_orden = @IdOrden
+              AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_tipo)), ''), 'M') IN ('M', 'I')
             ORDER BY m.sec ASC";
 
         var lista = await _db.QueryAsync<RecetaMedicamentoItemDto>(sql, new { IdOrden = idOrden });
@@ -1372,12 +1375,166 @@ public class ConsultaExternaService : IConsultaExternaService
                 END
             END
 
-            DELETE FROM vt_medicinas WHERE sec = @Sec;
+            DELETE FROM vt_medicinas WHERE sec = @Sec AND ISNULL(NULLIF(LTRIM(RTRIM(med_tipo)), ''), 'M') <> 'C';
 
             COMMIT TRANSACTION;";
 
         await _db.ExecuteAsync(sql, new { Sec = sec });
         return true;
+    }
+
+    public async Task<List<RecetaMedicamentoItemDto>> ObtenerAplicadosConsultaOrdenAsync(int idOrden)
+    {
+        if (idOrden <= 0)
+            return [];
+
+        const string sql = @"
+            SELECT
+                m.sec AS Sec,
+                ISNULL(m.med_id_orden, 0) AS IdOrden,
+                ISNULL(m.med_nhcl, 0) AS Nhcl,
+                CAST(ISNULL(m.med_idProdu, '') AS VARCHAR(50)) AS CodigoProd,
+                COALESCE(
+                    NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(m.med_otroMedicamento, '')), CHAR(13), ''), CHAR(10), ''), ''),
+                    NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), ''), ''),
+                    ''
+                ) AS Descripcionamento,
+                ISNULL(m.med_cantidad, 1) AS Cantidad,
+                ISNULL(m.med_cantidadLetras, '') AS CantidadLetras,
+                ISNULL(m.med_indicaciones, '') AS Indicaciones,
+                ISNULL(m.med_observaciones, '') AS Observaciones,
+                ISNULL(m.med_fecha, GETDATE()) AS Fecha,
+                'C' AS Tipo
+            FROM vt_medicinas m
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON m.med_idProdu = p.CODIGO
+            WHERE m.med_id_orden = @IdOrden
+              AND LTRIM(RTRIM(ISNULL(m.med_tipo, ''))) = 'C'
+            ORDER BY m.sec ASC;";
+
+        var lista = await _db.QueryAsync<RecetaMedicamentoItemDto>(sql, new { IdOrden = idOrden });
+        return lista.ToList();
+    }
+
+    public async Task<(bool Exito, string Mensaje)> AgregarAplicadoConsultaAsync(RecetaMedicamentoItemDto item, int idUsuario, int idLocalidad)
+    {
+        if (item.IdOrden <= 0 || item.Nhcl <= 0 || item.Cantidad <= 0 ||
+            !int.TryParse(item.CodigoProd, out var codProdInt) || codProdInt <= 0)
+            return (false, "Selecciona un medicamento o insumo válido en stock de la sucursal.");
+
+        int sedeId = idLocalidad > 0 ? idLocalidad : 1;
+        int userId = idUsuario > 0 ? idUsuario : 1;
+
+        const string sql = @"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            DECLARE @IdEmpresa INT = NULL;
+            DECLARE @StockActual DECIMAL(18,4) = 0;
+            DECLARE @StockReservado DECIMAL(18,4) = 0;
+            DECLARE @CostoPromedio DECIMAL(18,4) = 0;
+
+            SELECT TOP 1
+                @IdEmpresa = e.id_empresa,
+                @StockActual = e.stock_actual,
+                @StockReservado = ISNULL(e.stock_reservado, 0),
+                @CostoPromedio = ISNULL(e.costo_promedio, 0)
+            FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+            WHERE e.codigo_producto = @CodProdInt
+              AND e.id_sucursal = @IdLocalidad
+            ORDER BY e.stock_actual DESC;
+
+            DECLARE @Disponible DECIMAL(18,4) = CASE WHEN @StockActual - @StockReservado > 0 THEN @StockActual - @StockReservado ELSE 0 END;
+            IF @IdEmpresa IS NULL OR @Disponible < @Cantidad
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT -1;
+                RETURN;
+            END
+
+            DECLARE @NuevoStock DECIMAL(18,4) = @StockActual - @Cantidad;
+
+            UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+            SET stock_actual = @NuevoStock,
+                fecha_actualizacion = SYSUTCDATETIME()
+            WHERE codigo_producto = @CodProdInt
+              AND id_sucursal = @IdLocalidad
+              AND id_empresa = @IdEmpresa;
+
+            DECLARE @RestanteLote DECIMAL(18,4) = @Cantidad;
+            DECLARE @IdLote BIGINT, @DispLote DECIMAL(18,4), @TomarLote DECIMAL(18,4);
+            WHILE @RestanteLote > 0
+            BEGIN
+                SET @IdLote = NULL;
+                SELECT TOP 1 @IdLote = l.id_lote, @DispLote = l.cantidad_disponible
+                FROM dbo.ECONTAX_INVENTARIO_LOTE l WITH (UPDLOCK, HOLDLOCK)
+                WHERE l.codigo_producto = @CodProdInt
+                  AND l.id_sucursal = @IdLocalidad
+                  AND l.id_empresa = @IdEmpresa
+                  AND l.cantidad_disponible > 0
+                ORDER BY ISNULL(l.fecha_vencimiento, '9999-12-31'), l.fecha_ingreso, l.id_lote;
+
+                IF @IdLote IS NULL BREAK;
+
+                SET @TomarLote = CASE WHEN @DispLote <= @RestanteLote THEN @DispLote ELSE @RestanteLote END;
+                UPDATE dbo.ECONTAX_INVENTARIO_LOTE
+                SET cantidad_disponible = cantidad_disponible - @TomarLote
+                WHERE id_lote = @IdLote;
+
+                SET @RestanteLote = @RestanteLote - @TomarLote;
+            END
+
+            INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+            ) VALUES (
+                @CodProdInt, @IdEmpresa, @IdLocalidad, 'SALIDA',
+                @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
+                'PROMEDIO', 'CONSULTA_APLICADA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
+                'Medicamento/insumo aplicado en consulta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) + ' · Cantidad: ' + CAST(@Cantidad AS VARCHAR(20))
+            );
+
+            INSERT INTO dbo.vt_medicinas (
+                med_nhcl, med_idProdu, med_indicaciones, med_cantidad, med_id_orden,
+                med_otroMedicamento, med_estado, med_cantidad1, med_cantidadLetras,
+                med_fecha, med_tipo, med_observaciones, med_utilizado
+            ) VALUES (
+                @Nhcl, @CodProdInt, LEFT(ISNULL(@Indicaciones, ''), 250), @Cantidad, @IdOrden,
+                LEFT(ISNULL(@Descripcionamento, ''), 250), 'Administrado', @Cantidad, LEFT(ISNULL(@CantidadLetras, ''), 120),
+                GETDATE(), 'C', 'Administrado en consulta (directo a factura)', 1
+            );
+
+            COMMIT TRANSACTION;
+            SELECT 1;";
+
+        try
+        {
+            int res = await _db.ExecuteScalarAsync<int>(sql, new
+            {
+                item.Nhcl,
+                CodProdInt = codProdInt,
+                item.Cantidad,
+                item.IdOrden,
+                item.Descripcionamento,
+                Indicaciones = string.IsNullOrWhiteSpace(item.Indicaciones) ? "Aplicado en consulta" : item.Indicaciones.Trim(),
+                item.CantidadLetras,
+                IdUsuario = userId,
+                IdLocalidad = sedeId
+            });
+
+            if (res == -1)
+                return (false, "Stock libre insuficiente en la sucursal actual para aplicar esa cantidad.");
+
+            return res > 0
+                ? (true, "Medicamento / insumo registrado como administrado en consulta y descontado de stock.")
+                : (false, "No se pudo registrar el medicamento administrado en consulta.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al registrar medicamento administrado en consulta Orden {IdOrden}", item.IdOrden);
+            return (false, $"Error al registrar medicamento aplicado: {ex.Message}");
+        }
     }
 
     public async Task<bool> GuardarIndicacionesGeneralesAsync(int idOrden, int nhcl, string indicaciones)

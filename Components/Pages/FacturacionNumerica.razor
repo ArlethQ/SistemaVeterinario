@@ -941,6 +941,7 @@
                                                class="n-input-sm text-center fw-bold border-primary"
                                                style="background-color: #f3f4f6;"
                                                inputmode="decimal"
+                                               disabled="@EsDetalleBloqueadoOrden(d)"
                                                value="@GetCantidadVisual(d)"
                                                @oninput="@((ChangeEventArgs e) => OnCantidadDetalleInput(d, e.Value?.ToString()))"
                                                @onblur="@(() => OnCantidadDetalleBlur(d))" />
@@ -949,6 +950,7 @@
                                     <td>
                                         <input type="text"
                                                class="n-input-sm text-end bg-white border-0 fw-medium"
+                                               disabled="@EsDetalleBloqueadoOrden(d)"
                                                value="@GetPrecioVisual(d)"
                                                @oninput="@((ChangeEventArgs e) => OnPrecioDetalleInput(d, e.Value?.ToString()))" />
                                     </td>
@@ -1006,12 +1008,22 @@
                                     <td class="text-end fw-bold" style="color: var(--n-blue);">@totalFila.ToString("N2")</td>
 
                                     <td class="text-center">
-                                        <button type="button"
-                                                class="n-btn-primary p-0 d-flex justify-content-center align-items-center mx-auto"
-                                                style="height: 30px; width: 30px; border-radius: 6px;"
-                                                @onclick="() => QuitarDetalle(index)">
-                                            <i class="bi bi-trash3"></i>
-                                        </button>
+                                        @if (EsDetalleBloqueadoOrden(d))
+                                        {
+                                            <span class="badge bg-light text-secondary border"
+                                                  title="Incluido en la atención clínica (no se puede eliminar)">
+                                                <i class="bi bi-lock-fill"></i>
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <button type="button"
+                                                    class="n-btn-primary p-0 d-flex justify-content-center align-items-center mx-auto"
+                                                    style="height: 30px; width: 30px; border-radius: 6px;"
+                                                    @onclick="() => QuitarDetalle(index)">
+                                                <i class="bi bi-trash3"></i>
+                                            </button>
+                                        }
                                     </td>
                                 </tr>
 
@@ -5418,11 +5430,19 @@
         StateHasChanged();
     }
 
+    private bool EsDetalleBloqueadoOrden(DetalleFacturaDto detalle) =>
+        origenesDetalleOrden.TryGetValue(detalle, out var org) &&
+        (string.Equals(org.Origen, "CONSULTA", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(org.Origen, "CONSULTA_INSUMO", StringComparison.OrdinalIgnoreCase));
+
     private void QuitarDetalle(int index)
     {
         if (index >= 0 && index < detallesDto.Count)
         {
             var detalle = detallesDto[index];
+            if (EsDetalleBloqueadoOrden(detalle))
+                return;
+
             detallesDto.RemoveAt(index);
             valoresTemporalesCantidad.Remove(detalle);
             valoresTemporalesPrecio.Remove(detalle);

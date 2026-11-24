@@ -1016,6 +1016,7 @@ public class FarmaciaService : IFarmaciaService
             ) pMatch
             LEFT JOIN ExistenciasSede ex ON ex.codigo_producto = COALESCE(NULLIF(m.med_idProdu, 0), pMatch.CODIGO, 0)
             WHERE ISNULL(m.med_id_orden, 0) > 0
+              AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_tipo)), ''), 'M') <> 'C'
               AND ISNULL(o.ordenAten_idlocalidad, 0) IN (0, @IdLocalidad)
             ORDER BY
                 CASE WHEN ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') IN ('Por Entregar', 'Por Facturar') THEN 0 ELSE 1 END,
