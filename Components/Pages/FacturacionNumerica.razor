@@ -2576,6 +2576,7 @@
         if (!await FacturacionPageAccess.EnsureConfiguredAsync()) return;
         InicializarModelos();
         EmisionControlService.Changed += OnEmisionChanged;
+        Session.OnChange += OnSessionChangedFactura;
         isDemoMode = EsRutaDemoFactura();
 
         if (isDemoMode)
@@ -2694,9 +2695,23 @@
             await CargarOrdenesPendientesColaFacturaAsync();
     }
 
+    private void OnSessionChangedFactura()
+    {
+        if (!PuedeBuscarOrdenesFactura || Session.IdUser <= 0 || ordenFactura is not null)
+            return;
+        if (!string.IsNullOrWhiteSpace(textoBusquedaOrdenFactura))
+            return;
+
+        _ = InvokeAsync(async () =>
+        {
+            await CargarOrdenesPendientesColaFacturaAsync();
+            StateHasChanged();
+        });
+    }
+
     private async Task CargarOrdenesPendientesColaFacturaAsync()
     {
-        if (!PuedeBuscarOrdenesFactura) return;
+        if (!PuedeBuscarOrdenesFactura || Session.IdUser <= 0) return;
         var revision = ++revisionBusquedaOrdenFactura;
         try
         {
@@ -2708,6 +2723,7 @@
             mensajeOrdenFactura = encontradas.Count == 0
                 ? "No hay órdenes pendientes en cola para facturar."
                 : null;
+            await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
@@ -6038,6 +6054,9 @@
             await ActualizarNumeroFacturaParaSerieAsync();
         }
 
+        if (PuedeBuscarOrdenesFactura && Session.IdUser > 0)
+            await CargarOrdenesPendientesColaFacturaAsync();
+
         StateHasChanged();
     }
 
@@ -6322,6 +6341,7 @@
     {
         revisionBusquedaOrdenFactura++;
         EmisionControlService.Changed -= OnEmisionChanged;
+        Session.OnChange -= OnSessionChangedFactura;
 
         if (!productoModalScrollLockApplied)
             return;
