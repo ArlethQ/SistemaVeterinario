@@ -1236,47 +1236,59 @@ public class ConsultaExternaService : IConsultaExternaService
             END
 
             DECLARE @ReservadoLinea DECIMAL(18,4) = 0;
+            DECLARE @ControlaInv BIT = 1;
 
             IF @CodProdInt IS NOT NULL AND @CodProdInt > 0
             BEGIN
-                DECLARE @IdEmpresa INT = NULL;
-                DECLARE @StockActual DECIMAL(18,4) = 0;
-                DECLARE @StockReservado DECIMAL(18,4) = 0;
-                DECLARE @CostoPromedio DECIMAL(18,4) = 0;
+                SELECT TOP 1 @ControlaInv = CAST(ISNULL(INVENTARIO, 1) AS BIT)
+                FROM dbo.PRODUCTO
+                WHERE CODIGO = @CodProdInt;
 
-                SELECT TOP 1
-                    @IdEmpresa = e.id_empresa,
-                    @StockActual = e.stock_actual,
-                    @StockReservado = ISNULL(e.stock_reservado, 0),
-                    @CostoPromedio = ISNULL(e.costo_promedio, 0)
-                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
-                WHERE e.codigo_producto = @CodProdInt
-                  AND e.id_sucursal = @IdLocalidad
-                ORDER BY e.stock_actual DESC;
-
-                DECLARE @Disponible DECIMAL(18,4) = CASE WHEN @StockActual - @StockReservado > 0 THEN @StockActual - @StockReservado ELSE 0 END;
-                SET @ReservadoLinea = CASE WHEN @Disponible >= @Cantidad THEN @Cantidad ELSE @Disponible END;
-
-                IF @IdEmpresa IS NOT NULL AND @ReservadoLinea > 0
+                IF @ControlaInv = 0
                 BEGIN
-                    UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
-                    SET stock_reservado = @StockReservado + @ReservadoLinea,
-                        fecha_actualizacion = SYSUTCDATETIME()
-                    WHERE codigo_producto = @CodProdInt
-                      AND id_sucursal = @IdLocalidad
-                      AND id_empresa = @IdEmpresa;
+                    SET @ReservadoLinea = @Cantidad;
+                END
+                ELSE
+                BEGIN
+                    DECLARE @IdEmpresa INT = NULL;
+                    DECLARE @StockActual DECIMAL(18,4) = 0;
+                    DECLARE @StockReservado DECIMAL(18,4) = 0;
+                    DECLARE @CostoPromedio DECIMAL(18,4) = 0;
 
-                    INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
-                        codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
-                        cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
-                        metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
-                    ) VALUES (
-                        @CodProdInt, @IdEmpresa, @IdLocalidad, 'RESERVA',
-                        @ReservadoLinea, @CostoPromedio, ROUND(@ReservadoLinea * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
-                        'PROMEDIO', 'FARMACIA_RECETA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
-                        'Reserva temporal en cola por Receta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
-                        ' (Recetado: ' + CAST(@Cantidad AS VARCHAR(20)) + ', Reservado: ' + CAST(@ReservadoLinea AS VARCHAR(20)) + ')'
-                    );
+                    SELECT TOP 1
+                        @IdEmpresa = e.id_empresa,
+                        @StockActual = e.stock_actual,
+                        @StockReservado = ISNULL(e.stock_reservado, 0),
+                        @CostoPromedio = ISNULL(e.costo_promedio, 0)
+                    FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+                    WHERE e.codigo_producto = @CodProdInt
+                      AND e.id_sucursal = @IdLocalidad
+                    ORDER BY e.stock_actual DESC;
+
+                    DECLARE @Disponible DECIMAL(18,4) = CASE WHEN @StockActual - @StockReservado > 0 THEN @StockActual - @StockReservado ELSE 0 END;
+                    SET @ReservadoLinea = CASE WHEN @Disponible >= @Cantidad THEN @Cantidad ELSE @Disponible END;
+
+                    IF @IdEmpresa IS NOT NULL AND @ReservadoLinea > 0
+                    BEGIN
+                        UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                        SET stock_reservado = @StockReservado + @ReservadoLinea,
+                            fecha_actualizacion = SYSUTCDATETIME()
+                        WHERE codigo_producto = @CodProdInt
+                          AND id_sucursal = @IdLocalidad
+                          AND id_empresa = @IdEmpresa;
+
+                        INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                            codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                            cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                            metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                        ) VALUES (
+                            @CodProdInt, @IdEmpresa, @IdLocalidad, 'RESERVA',
+                            @ReservadoLinea, @CostoPromedio, ROUND(@ReservadoLinea * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
+                            'PROMEDIO', 'FARMACIA_RECETA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
+                            'Reserva temporal en cola por Receta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                            ' (Recetado: ' + CAST(@Cantidad AS VARCHAR(20)) + ', Reservado: ' + CAST(@ReservadoLinea AS VARCHAR(20)) + ')'
+                        );
+                    END
                 END
             END
 
@@ -1428,47 +1440,55 @@ public class ConsultaExternaService : IConsultaExternaService
             SET XACT_ABORT ON;
             BEGIN TRANSACTION;
 
-            DECLARE @IdEmpresa INT = NULL;
-            DECLARE @StockActual DECIMAL(18,4) = 0;
-            DECLARE @StockReservado DECIMAL(18,4) = 0;
-            DECLARE @CostoPromedio DECIMAL(18,4) = 0;
+            DECLARE @ControlaInv BIT = 1;
+            SELECT TOP 1 @ControlaInv = CAST(ISNULL(INVENTARIO, 1) AS BIT)
+            FROM dbo.PRODUCTO
+            WHERE CODIGO = @CodProdInt;
 
-            SELECT TOP 1
-                @IdEmpresa = e.id_empresa,
-                @StockActual = e.stock_actual,
-                @StockReservado = ISNULL(e.stock_reservado, 0),
-                @CostoPromedio = ISNULL(e.costo_promedio, 0)
-            FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
-            WHERE e.codigo_producto = @CodProdInt
-              AND e.id_sucursal = @IdLocalidad
-            ORDER BY e.stock_actual DESC;
-
-            DECLARE @Disponible DECIMAL(18,4) = CASE WHEN @StockActual - @StockReservado > 0 THEN @StockActual - @StockReservado ELSE 0 END;
-            IF @IdEmpresa IS NULL OR @Disponible < @Cantidad
+            IF @ControlaInv = 1
             BEGIN
-                ROLLBACK TRANSACTION;
-                SELECT -1;
-                RETURN;
+                DECLARE @IdEmpresa INT = NULL;
+                DECLARE @StockActual DECIMAL(18,4) = 0;
+                DECLARE @StockReservado DECIMAL(18,4) = 0;
+                DECLARE @CostoPromedio DECIMAL(18,4) = 0;
+
+                SELECT TOP 1
+                    @IdEmpresa = e.id_empresa,
+                    @StockActual = e.stock_actual,
+                    @StockReservado = ISNULL(e.stock_reservado, 0),
+                    @CostoPromedio = ISNULL(e.costo_promedio, 0)
+                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+                WHERE e.codigo_producto = @CodProdInt
+                  AND e.id_sucursal = @IdLocalidad
+                ORDER BY e.stock_actual DESC;
+
+                DECLARE @Disponible DECIMAL(18,4) = CASE WHEN @StockActual - @StockReservado > 0 THEN @StockActual - @StockReservado ELSE 0 END;
+                IF @IdEmpresa IS NULL OR @Disponible < @Cantidad
+                BEGIN
+                    ROLLBACK TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END
+
+                UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                SET stock_reservado = @StockReservado + @Cantidad,
+                    fecha_actualizacion = SYSUTCDATETIME()
+                WHERE codigo_producto = @CodProdInt
+                  AND id_sucursal = @IdLocalidad
+                  AND id_empresa = @IdEmpresa;
+
+                INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                    codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                    cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                    metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                ) VALUES (
+                    @CodProdInt, @IdEmpresa, @IdLocalidad, 'RESERVA',
+                    @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
+                    'PROMEDIO', 'CONSULTA_APLICADA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
+                    'Reserva en consulta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
+                    ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) + ' · Cantidad: ' + CAST(@Cantidad AS VARCHAR(20))
+                );
             END
-
-            UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
-            SET stock_reservado = @StockReservado + @Cantidad,
-                fecha_actualizacion = SYSUTCDATETIME()
-            WHERE codigo_producto = @CodProdInt
-              AND id_sucursal = @IdLocalidad
-              AND id_empresa = @IdEmpresa;
-
-            INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
-                codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
-                cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
-                metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
-            ) VALUES (
-                @CodProdInt, @IdEmpresa, @IdLocalidad, 'RESERVA',
-                @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
-                'PROMEDIO', 'CONSULTA_APLICADA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
-                'Reserva en consulta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
-                ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) + ' · Cantidad: ' + CAST(@Cantidad AS VARCHAR(20))
-            );
 
             INSERT INTO dbo.vt_medicinas (
                 med_nhcl, med_idProdu, med_indicaciones, med_cantidad, med_id_orden,
@@ -1477,7 +1497,7 @@ public class ConsultaExternaService : IConsultaExternaService
             ) VALUES (
                 @Nhcl, @CodProdInt, LEFT(ISNULL(@Indicaciones, ''), 250), @Cantidad, @IdOrden,
                 LEFT(ISNULL(@Descripcionamento, ''), 250), 'Administrado', @Cantidad, LEFT(ISNULL(@CantidadLetras, ''), 120),
-                GETDATE(), 'C', 'Administrado en consulta (reservado hasta facturar)', 0
+                GETDATE(), 'C', CASE WHEN @ControlaInv = 1 THEN 'Administrado en consulta (reservado hasta facturar)' ELSE 'Administrado en consulta (sin control de inventario)' END, 0
             );
 
             COMMIT TRANSACTION;

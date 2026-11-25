@@ -211,6 +211,20 @@
                                     </InputSelect>
                                     <ValidationMessage For="@(() => productModel.Porcentajeimpuesto)" class="text-danger small" />
                                 </div>
+                                @if (productModel.TipoCompravena == "PRODUCTO")
+                                {
+                                    <div class="col-12">
+                                        <div class="form-check mt-1">
+                                            <InputCheckbox id="pcm-inventario-check" class="form-check-input" @bind-Value="productModel.Inventario" />
+                                            <label class="form-check-label small fw-semibold" for="pcm-inventario-check">
+                                                Controla inventario (Kardex / stock)
+                                            </label>
+                                            <div class="text-muted" style="font-size: 0.74rem;">
+                                                Déjalo desmarcado si este producto se vende o receta sin llevar stock (ej. anestesia inhalatoria).
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
                             </div>
                         </aside>
                     </div>
@@ -482,6 +496,7 @@
                 productModel.Codigoimpuesto,
                 Porcentajeimpuesto = productModel.Porcentajeimpuesto,
                 Estado = true,
+                Inventario = productModel.TipoCompravena == "PRODUCTO" && productModel.Inventario,
                 Margen = (decimal?)null,
                 Facturable = true
             });
@@ -524,7 +539,8 @@
         TipoCompravena = "PRODUCTO",
         Codigoimpuesto = string.Empty,
         Porcentajeimpuesto = string.Empty,
-        Facturable = true
+        Facturable = true,
+        Inventario = false
     };
 
     private class LookupsResponse
@@ -579,6 +595,7 @@
         public string? Codigoimpuesto { get; set; }
         public string? Porcentajeimpuesto { get; set; }
         public bool Facturable { get; set; } = true;
+        public bool Inventario { get; set; } = false;
 
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {

@@ -99,6 +99,7 @@ public class FarmaciaStockSedeItemDto
     public decimal StockLibre => Math.Max(0, StockFisico - StockReservado);
     public decimal PrecioUnitario { get; set; }
     public decimal CostoPromedio { get; set; }
+    public bool ControlaInventario { get; set; } = true;
 }
 
 public class FarmaciaRecetaSoapOrdenDto
@@ -143,6 +144,7 @@ public class FarmaciaRecetaSoapItemDto
     public decimal PrecioUnitario { get; set; }
     public decimal StockFisicoSede { get; set; }
     public decimal StockReservadoTotalSede { get; set; }
+    public bool ControlaInventario { get; set; } = true;
     public decimal StockLibreSede => Math.Max(0, StockFisicoSede - StockReservadoTotalSede);
 
     public bool EstaEnCola =>
@@ -151,14 +153,16 @@ public class FarmaciaRecetaSoapItemDto
 
     public bool EstaPorFacturar => string.Equals(Estado, "Por Facturar", StringComparison.OrdinalIgnoreCase);
 
-    // Máximo disponible para esta línea = lo que sigue libre en la sede + lo que ya tiene reservado esta línea
+    // Máximo disponible para esta línea = lo que sigue libre en la sede + lo que ya tiene reservado esta línea (o ilimitado si no controla inventario)
     public decimal MaximoDisponibleParaEstaLinea =>
-        Math.Min(StockFisicoSede, StockLibreSede + (EstaEnCola ? (ReservadoRealLinea > 0 ? ReservadoRealLinea : CantidadReservadaLinea) : 0m));
+        !ControlaInventario && TieneProductoEnCatalogo
+            ? 999999m
+            : Math.Min(StockFisicoSede, StockLibreSede + (EstaEnCola ? (ReservadoRealLinea > 0 ? ReservadoRealLinea : CantidadReservadaLinea) : 0m));
 
     public bool TieneProductoEnCatalogo => CodigoProductoInt > 0;
-    public bool CubrePedidoCompleto => TieneProductoEnCatalogo && MaximoDisponibleParaEstaLinea >= CantidadRecetada;
-    public bool StockParcial => TieneProductoEnCatalogo && MaximoDisponibleParaEstaLinea > 0 && MaximoDisponibleParaEstaLinea < CantidadRecetada;
-    public bool SinStockEnSede => !TieneProductoEnCatalogo || MaximoDisponibleParaEstaLinea <= 0;
+    public bool CubrePedidoCompleto => TieneProductoEnCatalogo && (!ControlaInventario || MaximoDisponibleParaEstaLinea >= CantidadRecetada);
+    public bool StockParcial => TieneProductoEnCatalogo && ControlaInventario && MaximoDisponibleParaEstaLinea > 0 && MaximoDisponibleParaEstaLinea < CantidadRecetada;
+    public bool SinStockEnSede => !TieneProductoEnCatalogo || (ControlaInventario && MaximoDisponibleParaEstaLinea <= 0);
     public decimal FaltanteParaPedido => Math.Max(0, CantidadRecetada - MaximoDisponibleParaEstaLinea);
 
     // Campos editables por el encargado de Farmacia antes de completar la compra

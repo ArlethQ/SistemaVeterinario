@@ -15,7 +15,7 @@ public interface IFarmaciaService
     Task<bool> LiberarStockDirectoAsync(string codigoProducto, decimal cantidad, int idLocalidad, int idOrden, int idUsuario, string modulo);
     Task<(bool Exito, string Mensaje)> RegistrarVentaMostradorAsync(FarmaciaVentaMostradorInputDto venta, int idLocalidad, int idUsuario, string nombreUsuario, string inicialesUsuario);
     Task<List<FarmaciaVentaHistorialDto>> ObtenerHistorialVentasAsync(int idLocalidad, string? filtro = null);
-    Task<List<FarmaciaStockSedeItemDto>> ObtenerStockSedeDetalladoAsync(int idLocalidad, string? filtro = null);
+    Task<List<FarmaciaStockSedeItemDto>> ObtenerStockSedeDetalladoAsync(int idLocalidad, string? filtro = null, bool incluirSinInventario = false);
     Task<List<FarmaciaRecetaSoapOrdenDto>> ObtenerRecetasSoapColaAsync(int idLocalidad, string? filtro = null, string estadoFiltro = "PENDIENTE");
     Task<(bool Exito, string Mensaje)> ActualizarReservaRecetaSoapAsync(FarmaciaRecetaSoapOrdenDto receta, int idLocalidad, int idUsuario);
     Task<(bool Exito, string Mensaje)> EnviarRecetaAFacturacionAsync(FarmaciaRecetaSoapOrdenDto receta, int idLocalidad, int idUsuario, string nombreUsuario);
@@ -1043,7 +1043,7 @@ public class FarmaciaService : IFarmaciaService
         }
     }
 
-    public async Task<List<FarmaciaStockSedeItemDto>> ObtenerStockSedeDetalladoAsync(int idLocalidad, string? filtro = null)
+    public async Task<List<FarmaciaStockSedeItemDto>> ObtenerStockSedeDetalladoAsync(int idLocalidad, string? filtro = null, bool incluirSinInventario = false)
     {
         int sedeId = idLocalidad > 0 ? idLocalidad : 1;
         const string sql = @"
@@ -1065,12 +1065,14 @@ public class FarmaciaService : IFarmaciaService
                 CAST(SUM(e.stock_actual) AS DECIMAL(18,4)) AS StockFisico,
                 CAST(SUM(ISNULL(e.stock_reservado, 0)) AS DECIMAL(18,4)) AS StockReservado,
                 CAST(MAX(CASE WHEN ISNULL(p.VALOR_UNITARIO, 0) > 0 THEN p.VALOR_UNITARIO ELSE ISNULL(e.costo_promedio, 0) END) AS DECIMAL(18,4)) AS PrecioUnitario,
-                CAST(MAX(ISNULL(e.costo_promedio, 0)) AS DECIMAL(18,4)) AS CostoPromedio
+                CAST(MAX(ISNULL(e.costo_promedio, 0)) AS DECIMAL(18,4)) AS CostoPromedio,
+                CAST(1 AS BIT) AS ControlaInventario
             FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e
             INNER JOIN dbo.PRODUCTO p ON p.CODIGO = e.codigo_producto
             LEFT JOIN dbo.ECONTAX_BODEGA b ON b.id_bodega = e.id_bodega
             WHERE e.id_sucursal = @IdLocalidad
               AND ISNULL(p.ESTADO, 1) <> 0
+              AND ISNULL(p.INVENTARIO, 1) = 1
               AND ISNULL(UPPER(p.TIPOCOMPRAVENA), 'B') NOT IN ('SERVICIO', 'S')
             GROUP BY
                 p.CODIGO,
@@ -1079,11 +1081,32 @@ public class FarmaciaService : IFarmaciaService
                 p.UNIDAD_MEDIDA,
                 p.FACTOR_CONVERSION_INVENTARIO
             HAVING SUM(e.stock_actual) > 0 OR SUM(ISNULL(e.stock_reservado, 0)) > 0
-            ORDER BY p.NOMBRE;";
+
+            UNION ALL
+
+            SELECT
+                p.CODIGO AS CodigoProducto,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.CODIGO_PRINCIPAL)), ''), CAST(p.CODIGO AS VARCHAR(50))) AS CodigoPrincipal,
+                ISNULL(p.NOMBRE, '') AS NombreProducto,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.UNIDAD_MEDIDA)), ''), 'UNIDAD') AS UnidadMedida,
+                CAST(CASE WHEN ISNULL(p.FACTOR_CONVERSION_INVENTARIO, 0) <= 0 THEN 1 ELSE p.FACTOR_CONVERSION_INVENTARIO END AS DECIMAL(18,4)) AS FactorConversion,
+                'Sin inventario' AS Bodega,
+                CAST(0 AS DECIMAL(18,4)) AS StockFisico,
+                CAST(0 AS DECIMAL(18,4)) AS StockReservado,
+                CAST(ISNULL(p.VALOR_UNITARIO, 0) AS DECIMAL(18,4)) AS PrecioUnitario,
+                CAST(0 AS DECIMAL(18,4)) AS CostoPromedio,
+                CAST(0 AS BIT) AS ControlaInventario
+            FROM dbo.PRODUCTO p
+            WHERE @IncluirSinInventario = 1
+              AND ISNULL(p.ESTADO, 1) <> 0
+              AND ISNULL(p.INVENTARIO, 1) = 0
+              AND ISNULL(UPPER(p.TIPOCOMPRAVENA), 'B') NOT IN ('SERVICIO', 'S')
+
+            ORDER BY NombreProducto;";
 
         try
         {
-            var lista = (await _db.QueryAsync<FarmaciaStockSedeItemDto>(sql, new { IdLocalidad = sedeId })).ToList();
+            var lista = (await _db.QueryAsync<FarmaciaStockSedeItemDto>(sql, new { IdLocalidad = sedeId, IncluirSinInventario = incluirSinInventario ? 1 : 0 })).ToList();
             if (!string.IsNullOrWhiteSpace(filtro))
             {
                 var term = filtro.Trim();
@@ -1159,7 +1182,8 @@ public class FarmaciaService : IFarmaciaService
                 COALESCE(NULLIF(ex.BodegaExistencia, ''), NULLIF((SELECT TOP 1 NombreBodegaSede FROM BodegaPorDefecto), ''), 'Bodega de la sucursal') AS Bodega,
                 CAST(CASE WHEN ISNULL(COALESCE(p.VALOR_UNITARIO, pMatch.VALOR_UNITARIO), 0) > 0 THEN COALESCE(p.VALOR_UNITARIO, pMatch.VALOR_UNITARIO) ELSE ISNULL(ex.CostoPromedio, 0) END AS DECIMAL(18,4)) AS PrecioUnitario,
                 CAST(ISNULL(ex.StockFisico, 0) AS DECIMAL(18,4)) AS StockFisicoSede,
-                CAST(ISNULL(ex.StockReservado, 0) AS DECIMAL(18,4)) AS StockReservadoTotalSede
+                CAST(ISNULL(ex.StockReservado, 0) AS DECIMAL(18,4)) AS StockReservadoTotalSede,
+                CAST(ISNULL(COALESCE(p.INVENTARIO, pMatch.INVENTARIO), 1) AS BIT) AS ControlaInventario
             FROM dbo.vt_medicinas m
             LEFT JOIN dbo.vt_ordenAtencion o ON o.ordenAten_id = m.med_id_orden
             LEFT JOIN dbo.vt_pacientes mas ON mas.mas_nhcl = m.med_nhcl
@@ -1168,7 +1192,7 @@ public class FarmaciaService : IFarmaciaService
             LEFT JOIN dbo.vt_usuarios u ON u.user_numero = o.ordenAten_idMedico
             LEFT JOIN dbo.PRODUCTO p ON p.CODIGO = m.med_idProdu AND m.med_idProdu > 0
             OUTER APPLY (
-                SELECT TOP 1 pm.CODIGO, pm.CODIGO_PRINCIPAL, pm.NOMBRE, pm.UNIDAD_MEDIDA, pm.FACTOR_CONVERSION_INVENTARIO, pm.VALOR_UNITARIO
+                SELECT TOP 1 pm.CODIGO, pm.CODIGO_PRINCIPAL, pm.NOMBRE, pm.UNIDAD_MEDIDA, pm.FACTOR_CONVERSION_INVENTARIO, pm.VALOR_UNITARIO, pm.INVENTARIO
                 FROM dbo.PRODUCTO pm
                 WHERE (m.med_idProdu IS NULL OR m.med_idProdu <= 0)
                   AND NULLIF(LTRIM(RTRIM(ISNULL(m.med_otroMedicamento, ''))), '') IS NOT NULL
@@ -1360,25 +1384,37 @@ public class FarmaciaService : IFarmaciaService
             DECLARE @NuevoReservadoLinea DECIMAL(18,4) = 0;
             IF @NuevoCodProd > 0 AND @CantidadDeseada > 0
             BEGIN
-                DECLARE @IdEmpresa INT, @StockActual DECIMAL(18,4), @StockReservado DECIMAL(18,4);
-                SELECT TOP 1
-                    @IdEmpresa = e.id_empresa,
-                    @StockActual = e.stock_actual,
-                    @StockReservado = ISNULL(e.stock_reservado, 0)
-                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
-                WHERE e.codigo_producto = @NuevoCodProd AND e.id_sucursal = @IdLocalidad;
+                DECLARE @ControlaInvNuevo BIT = 1;
+                SELECT TOP 1 @ControlaInvNuevo = CAST(ISNULL(INVENTARIO, 1) AS BIT)
+                FROM dbo.PRODUCTO
+                WHERE CODIGO = @NuevoCodProd;
 
-                IF @IdEmpresa IS NOT NULL
+                IF @ControlaInvNuevo = 0
                 BEGIN
-                    DECLARE @Disp DECIMAL(18,4) = CASE WHEN @StockActual - @StockReservado > 0 THEN @StockActual - @StockReservado ELSE 0 END;
-                    SET @NuevoReservadoLinea = CASE WHEN @Disp >= @CantidadDeseada THEN @CantidadDeseada ELSE @Disp END;
+                    SET @NuevoReservadoLinea = @CantidadDeseada;
+                END
+                ELSE
+                BEGIN
+                    DECLARE @IdEmpresa INT, @StockActual DECIMAL(18,4), @StockReservado DECIMAL(18,4);
+                    SELECT TOP 1
+                        @IdEmpresa = e.id_empresa,
+                        @StockActual = e.stock_actual,
+                        @StockReservado = ISNULL(e.stock_reservado, 0)
+                    FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+                    WHERE e.codigo_producto = @NuevoCodProd AND e.id_sucursal = @IdLocalidad;
 
-                    IF @NuevoReservadoLinea > 0
+                    IF @IdEmpresa IS NOT NULL
                     BEGIN
-                        UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
-                        SET stock_reservado = @StockReservado + @NuevoReservadoLinea,
-                            fecha_actualizacion = SYSUTCDATETIME()
-                        WHERE codigo_producto = @NuevoCodProd AND id_sucursal = @IdLocalidad AND id_empresa = @IdEmpresa;
+                        DECLARE @Disp DECIMAL(18,4) = CASE WHEN @StockActual - @StockReservado > 0 THEN @StockActual - @StockReservado ELSE 0 END;
+                        SET @NuevoReservadoLinea = CASE WHEN @Disp >= @CantidadDeseada THEN @CantidadDeseada ELSE @Disp END;
+
+                        IF @NuevoReservadoLinea > 0
+                        BEGIN
+                            UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                            SET stock_reservado = @StockReservado + @NuevoReservadoLinea,
+                                fecha_actualizacion = SYSUTCDATETIME()
+                            WHERE codigo_producto = @NuevoCodProd AND id_sucursal = @IdLocalidad AND id_empresa = @IdEmpresa;
+                        END
                     END
                 END
             END
@@ -1644,8 +1680,12 @@ public class FarmaciaService : IFarmaciaService
                 WHERE codigo_producto = @CodAnterior AND id_sucursal = @IdLocalidad;
             END
 
-            -- 2. Si se compró cantidad > 0, descargar SOLO lo comprado (@CantidadComprada) del stock_actual y Kardex
-            IF @CodProdFinal > 0 AND @CantidadComprada > 0
+            -- 2. Si se compró cantidad > 0 y el producto controla inventario, descargar SOLO lo comprado (@CantidadComprada) del stock_actual y Kardex
+            DECLARE @ControlaInvFinal BIT = 1;
+            IF @CodProdFinal > 0
+                SELECT TOP 1 @ControlaInvFinal = CAST(ISNULL(INVENTARIO, 1) AS BIT) FROM dbo.PRODUCTO WHERE CODIGO = @CodProdFinal;
+
+            IF @CodProdFinal > 0 AND @CantidadComprada > 0 AND @ControlaInvFinal = 1
             BEGIN
                 DECLARE @IdEmpresa INT = NULL;
                 DECLARE @StockActual DECIMAL(18,4) = 0;

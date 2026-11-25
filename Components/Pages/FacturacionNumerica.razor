@@ -955,10 +955,16 @@
                                                     <span class="input-group-text px-1" style="font-size:.7rem;">@itemRecetaDetalle.UnidadMedida</span>
                                                 </div>
                                             }
-                                            @if (!itemRecetaDetalle.TieneProductoEnCatalogo || itemRecetaDetalle.MaximoDisponibleParaEstaLinea <= 0m)
+                                            @if (!itemRecetaDetalle.TieneProductoEnCatalogo || (itemRecetaDetalle.ControlaInventario && itemRecetaDetalle.MaximoDisponibleParaEstaLinea <= 0m))
                                             {
                                                 <span class="badge bg-danger-subtle text-danger border mt-1" style="font-size:.68rem;">
                                                     <i class="ri-error-warning-line me-1"></i>Sin stock
+                                                </span>
+                                            }
+                                            else if (!itemRecetaDetalle.ControlaInventario)
+                                            {
+                                                <span class="badge bg-info-subtle text-info-emphasis border mt-1" style="font-size:.68rem;">
+                                                    <i class="ri-checkbox-circle-line me-1"></i>Sin inventario
                                                 </span>
                                             }
                                             else if (itemRecetaDetalle.CubrePedidoCompleto)
@@ -1707,6 +1713,18 @@
                                         </InputSelect>
                                     </div>
                                 </div>
+
+                                @if (string.Equals(productoModal.TipoCompravena, "PRODUCTO", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            <InputCheckbox class="form-check-input" id="chkInventarioFactModal" @bind-Value="productoModal.Inventario" />
+                                            <label class="form-check-label small fw-semibold" for="chkInventarioFactModal">
+                                                Entra a inventario <span class="text-muted fw-normal">(desactiva para bienes sin stock, ej. anestesia inhalatoria)</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                }
 
                             </div>
                         </section>
@@ -2521,6 +2539,7 @@
         public string? Codigoimpuesto { get; set; }
         public string? Porcentajeimpuesto { get; set; }
         public bool Facturable { get; set; } = true;
+        public bool Inventario { get; set; } = true;
 
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
@@ -6159,6 +6178,7 @@
         {
             TipoCompravena = "PRODUCTO",
             Facturable = true,
+            Inventario = true,
             TipoProducto = null,
             Codigoimpuesto = string.Empty,
             Porcentajeimpuesto = string.Empty,
@@ -6182,6 +6202,7 @@
     private void CambiarTipoCompravenaProductoModal(string tipo)
     {
         productoModal.TipoCompravena = tipo;
+        productoModal.Inventario = string.Equals(tipo, "PRODUCTO", StringComparison.OrdinalIgnoreCase);
     }
 
     private void SeleccionarTipoProductoModal() => CambiarTipoCompravenaProductoModal("PRODUCTO");
@@ -6270,6 +6291,7 @@
                 Precio2 = productoModal.Precio2,
                 Precio3 = productoModal.Precio3,
                 Tipo = productoModal.TipoCompravena ?? "PRODUCTO",
+                Inventario = string.Equals(productoModal.TipoCompravena, "PRODUCTO", StringComparison.OrdinalIgnoreCase) && productoModal.Inventario,
                 IdGrupo = productoModal.TipoProducto,
                 IdSubgrupo = productoModal.Idsubtipo,
                 CodigoImpuesto = productoModal.Codigoimpuesto ?? string.Empty,

@@ -43,6 +43,7 @@ public class ProductosController : ControllerBase
         public string? Codigoimpuesto { get; set; }
         public string? Porcentajeimpuesto { get; set; }
         public bool? Estado { get; set; }
+        public bool? Inventario { get; set; }
         public string? Observacion { get; set; }
         public int? Idusuario { get; set; }
     }
@@ -61,6 +62,7 @@ public class ProductosController : ControllerBase
         public string? Codigoimpuesto { get; set; }
         public string? Porcentajeimpuesto { get; set; }
         public bool? Estado { get; set; }
+        public bool? Inventario { get; set; }
         public string? Observacion { get; set; }
     }
 
@@ -255,6 +257,7 @@ public class ProductosController : ControllerBase
             Codigoimpuesto = model.Codigoimpuesto,
             Porcentajeimpuesto = model.Porcentajeimpuesto,
             Estado = model.Estado ?? true,
+            Inventario = string.Equals(model.TipoCompravena, "PRODUCTO", StringComparison.OrdinalIgnoreCase) && (model.Inventario ?? false),
             Observacion = model.Observacion,
             Idusuario = ownerId.Value // âœ… Se guarda para el Jefe
         };
@@ -501,6 +504,8 @@ public class ProductosController : ControllerBase
         existente.Idsubtipo = model.Idsubtipo;
         existente.Codigoimpuesto = model.Codigoimpuesto;
         existente.Porcentajeimpuesto = model.Porcentajeimpuesto;
+        if (model.Inventario.HasValue || string.Equals(model.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase))
+            existente.Inventario = string.Equals(model.TipoCompravena, "PRODUCTO", StringComparison.OrdinalIgnoreCase) && (model.Inventario ?? false);
         existente.Observacion = model.Observacion;
 
         if (model.Estado is not null) existente.Estado = model.Estado;

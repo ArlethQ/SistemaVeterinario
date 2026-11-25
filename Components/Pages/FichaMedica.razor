@@ -729,7 +729,14 @@
                                                     @onclick="() => SeleccionarProductoAplicado(prod)">
                                                 <span>
                                                     <strong>[@prod.CodigoPrincipal]</strong> @prod.NombreProducto
-                                                    <small class="text-success ms-1">(Disp: @prod.StockLibre.ToString("0.##") @prod.UnidadMedida@(prod.FactorConversion > 1m ? $" · Paq. ×{prod.FactorConversion:G29}" : ""))</small>
+                                                    @if (!prod.ControlaInventario)
+                                                    {
+                                                        <small class="text-info ms-1">(Sin control de inventario · @prod.UnidadMedida)</small>
+                                                    }
+                                                    else
+                                                    {
+                                                        <small class="text-success ms-1">(Disp: @prod.StockLibre.ToString("0.##") @prod.UnidadMedida@(prod.FactorConversion > 1m ? $" · Paq. ×{prod.FactorConversion:G29}" : ""))</small>
+                                                    }
                                                 </span>
                                                 <span class="text-muted ms-2">$@prod.PrecioUnitario.ToString("F2")</span>
                                             </button>
@@ -1698,8 +1705,8 @@
         try
         {
             int sede = Session.Localidad > 0 ? Session.Localidad : 1;
-            _stockAplicadoSede = (await FarmaciaService.ObtenerStockSedeDetalladoAsync(sede))
-                .Where(x => x.StockLibre > 0)
+            _stockAplicadoSede = (await FarmaciaService.ObtenerStockSedeDetalladoAsync(sede, incluirSinInventario: true))
+                .Where(x => !x.ControlaInventario || x.StockLibre > 0)
                 .ToList();
         }
         catch (Exception ex)
@@ -2243,7 +2250,7 @@
         }
 
         decimal cantidadBase = CantidadBaseAplicadoCalculada;
-        if (cantidadBase > _productoAplicadoSeleccionado.StockLibre)
+        if (_productoAplicadoSeleccionado.ControlaInventario && cantidadBase > _productoAplicadoSeleccionado.StockLibre)
         {
             EsError = true;
             MensajeAlerta = $"Stock insuficiente: disponible {_productoAplicadoSeleccionado.StockLibre:0.##} {_productoAplicadoSeleccionado.UnidadMedida}.";
