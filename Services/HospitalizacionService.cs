@@ -1515,13 +1515,88 @@ public class HospitalizacionService : IHospitalizacionService
                 fechaIngreso DATETIME NOT NULL CONSTRAINT DF_hvt_ingHosp_fecha DEFAULT(GETDATE()),
                 idUsuario INT NOT NULL DEFAULT(0),
                 estado CHAR(1) NOT NULL CONSTRAINT DF_hvt_ingHosp_est DEFAULT('A'),
+                reqHospitalizacionOverride BIT NULL,
+                reqCirugiaOverride BIT NULL,
                 CONSTRAINT UQ_hvt_ingHosp_orden UNIQUE (idOrden)
-            );");
+            );
+            IF COL_LENGTH('dbo.hvt_ingresoHospitalizacion', 'reqHospitalizacionOverride') IS NULL
+                ALTER TABLE dbo.hvt_ingresoHospitalizacion ADD reqHospitalizacionOverride BIT NULL;
+            IF COL_LENGTH('dbo.hvt_ingresoHospitalizacion', 'reqCirugiaOverride') IS NULL
+                ALTER TABLE dbo.hvt_ingresoHospitalizacion ADD reqCirugiaOverride BIT NULL;
+            IF OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL AND COL_LENGTH('dbo.qvt_calendario_cirugias', 'id_orden') IS NULL
+                ALTER TABLE dbo.qvt_calendario_cirugias ADD id_orden INT NULL;");
+    }
+
+    private async Task SincronizarOrdenesCirugiasProgramadasSinOrdenAsync()
+    {
+        await _db.ExecuteAsync(@"
+            IF OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL
+               AND COL_LENGTH('dbo.qvt_calendario_cirugias', 'id_orden') IS NOT NULL
+            BEGIN
+                DECLARE @Sec INT, @Nhcl INT, @CodMed INT, @Loc INT, @Fecha DATE, @Hora VARCHAR(20), @UserIng INT;
+                DECLARE cur_cir CURSOR LOCAL FAST_FORWARD FOR
+                    SELECT sec, nhcl, codmed, ISNULL(NULLIF(localidad, 0), 1), CAST(fechacirugia AS DATE), RTRIM(ISNULL(horainicio, '08:00')), ISNULL(NULLIF(usering, 0), 1)
+                    FROM dbo.qvt_calendario_cirugias
+                    WHERE ISNULL(estado, 'A') = 'A'
+                      AND (id_orden IS NULL OR id_orden <= 0)
+                      AND nhcl > 0
+                      AND CAST(fechacirugia AS DATE) >= CAST(GETDATE() AS DATE);
+
+                OPEN cur_cir;
+                FETCH NEXT FROM cur_cir INTO @Sec, @Nhcl, @CodMed, @Loc, @Fecha, @Hora, @UserIng;
+                WHILE @@FETCH_STATUS = 0
+                BEGIN
+                    DECLARE @IdCliente INT = 0, @NombreProp NVARCHAR(200) = '', @TipoOrigen VARCHAR(5) = 'M', @IdEsp INT = 0, @Prefijo VARCHAR(10) = 'CIR', @SigNum INT = 1;
+                    SELECT TOP 1
+                        @IdCliente = ISNULL(p.mas_idcliente, 0),
+                        @NombreProp = LTRIM(RTRIM(ISNULL(c.pa_apellidos, '') + ' ' + ISNULL(c.pa_nombres, ''))),
+                        @TipoOrigen = ISNULL(NULLIF(RTRIM(p.mas_tipo), ''), 'M')
+                    FROM dbo.vt_pacientes p
+                    LEFT JOIN dbo.vt_clientes c ON c.pa_codigo = p.mas_idcliente
+                    WHERE p.mas_nhcl = @Nhcl;
+
+                    SELECT TOP 1 @IdEsp = es_id, @Prefijo = ISNULL(NULLIF(RTRIM(es_codigo), ''), 'CIR')
+                    FROM dbo.vt_especialidades
+                    WHERE ISNULL(es_estado, 'A') = 'A'
+                      AND (UPPER(RTRIM(ISNULL(es_codigo, ''))) = 'CIR' OR UPPER(ISNULL(es_descripcion, '')) LIKE '%CIRUG%');
+                    IF ISNULL(@IdEsp, 0) <= 0
+                        SELECT TOP 1 @IdEsp = ISNULL(user_esp_numero, 1) FROM dbo.vt_usuarios WHERE user_numero = @CodMed;
+                    IF ISNULL(@IdEsp, 0) <= 0 SET @IdEsp = 1;
+
+                    SELECT @SigNum = COUNT(1) + 1
+                    FROM dbo.vt_ordenAtencion
+                    WHERE CAST(ordenAten_fecha AS DATE) = @Fecha AND ordenAten_esp_numero = @IdEsp;
+
+                    DECLARE @TurnoCodigo VARCHAR(20) = @Prefijo + '-' + RIGHT('00' + CAST(@SigNum AS VARCHAR(10)), CASE WHEN @SigNum < 100 THEN 2 ELSE LEN(CAST(@SigNum AS VARCHAR(10))) END);
+
+                    INSERT INTO dbo.vt_ordenAtencion (
+                        ordenAten_nombre, ordenAten_idcliente, ordenAten_nhcl, ordenAten_idMedico,
+                        ordenAten_estado, ordenAten_fecha, ordenAten_esp_numero, ordenAten_idlocalidad,
+                        ordenAten_hora, ordenAten_IdUsuario, ordenaten_IPOrigen, ordenAten_etapa,
+                        ordenAten_Tipo, ordenAten_Despacho, ordenAten_turno,
+                        ordenAten_esProcedimiento, ordenAten_triajeMedico, ordenAten_tipoConsulta
+                    ) VALUES (
+                        @NombreProp, @IdCliente, @Nhcl, @CodMed,
+                        'A', @Fecha, @IdEsp, @Loc,
+                        @Hora, @UserIng, 'AgendaCirugia', 'Quirófano',
+                        @TipoOrigen, 4, @TurnoCodigo,
+                        0, 0, 3
+                    );
+
+                    DECLARE @NuevaOrd INT = CAST(SCOPE_IDENTITY() AS INT);
+                    UPDATE dbo.qvt_calendario_cirugias SET id_orden = @NuevaOrd WHERE sec = @Sec;
+
+                    FETCH NEXT FROM cur_cir INTO @Sec, @Nhcl, @CodMed, @Loc, @Fecha, @Hora, @UserIng;
+                END
+                CLOSE cur_cir;
+                DEALLOCATE cur_cir;
+            END");
     }
 
     public async Task<List<OrdenHospitalizacionColaDto>> ObtenerColaHospitalizacionAsync(string? filtro = null, int? idLocalidad = null)
     {
         await AsegurarTablaIngresoHospitalizacionAsync();
+        await SincronizarOrdenesCirugiasProgramadasSinOrdenAsync();
         var tieneFiltro = !string.IsNullOrWhiteSpace(filtro);
         var filtroWhere = tieneFiltro
             ? "AND (p.mas_nombre LIKE @Filtro OR c.pa_apellidos LIKE @Filtro OR c.pa_nombres LIKE @Filtro OR CAST(o.ordenAten_id AS VARCHAR(20)) LIKE @Filtro OR CAST(p.mas_nhcl AS VARCHAR(20)) LIKE @Filtro)"
@@ -1546,16 +1621,26 @@ public class HospitalizacionService : IHospitalizacionService
                 ing.idJaula AS JaulaId,
                 ISNULL(ing.ubicacionJaula, '') AS JaulaCodigo,
                 CAST(CASE WHEN ing.id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS YaIngresado,
-                CAST(CASE WHEN EXISTS (
-                    SELECT 1 FROM vt_fichamedica fm1
-                    WHERE fm1.med_orden = o.ordenAten_id
-                      AND ISNULL(fm1.med_requiereHospitalizacion, 0) = 1
-                ) THEN 1 ELSE 0 END AS BIT) AS RequiereHospitalizacion,
-                CAST(CASE WHEN EXISTS (
-                    SELECT 1 FROM vt_fichamedica fm2
-                    WHERE fm2.med_orden = o.ordenAten_id
-                      AND UPPER(RTRIM(ISNULL(fm2.med_pregunta, 'N'))) = 'S'
-                ) THEN 1 ELSE 0 END AS BIT) AS RequiereCirugia
+                CAST(CASE WHEN fm.sec IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS TieneSoap,
+                CAST(COALESCE(
+                    ing.reqHospitalizacionOverride,
+                    CAST(ISNULL(fm.med_requiereHospitalizacion, 0) AS BIT),
+                    0
+                ) AS BIT) AS RequiereHospitalizacion,
+                CAST(COALESCE(
+                    ing.reqCirugiaOverride,
+                    CASE WHEN fm.sec IS NOT NULL
+                         THEN CAST(CASE WHEN UPPER(RTRIM(ISNULL(fm.med_pregunta, 'N'))) = 'S' THEN 1 ELSE 0 END AS BIT)
+                         ELSE NULL END,
+                    CASE WHEN fm.sec IS NULL
+                              AND (ISNULL(o.ordenAten_tipoConsulta, 0) = 3
+                                   OR ISNULL(o.ordenAten_Despacho, 0) = 4
+                                   OR RTRIM(ISNULL(o.ordenAten_etapa, '')) = 'Quirófano'
+                                   OR (OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL
+                                       AND COL_LENGTH('dbo.qvt_calendario_cirugias', 'id_orden') IS NOT NULL
+                                       AND EXISTS (SELECT 1 FROM qvt_calendario_cirugias q WHERE q.id_orden = o.ordenAten_id AND q.estado = 'A')))
+                         THEN 1 ELSE 0 END
+                ) AS BIT) AS RequiereCirugia
             FROM vt_ordenAtencion o
             INNER JOIN vt_pacientes p ON o.ordenAten_nhcl = p.mas_nhcl
             INNER JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
@@ -1563,11 +1648,26 @@ public class HospitalizacionService : IHospitalizacionService
             LEFT JOIN vt_usuarios u ON o.ordenAten_idMedico = u.user_numero
             LEFT JOIN vt_especialidades esp ON o.ordenAten_esp_numero = esp.es_id
             LEFT JOIN hvt_ingresoHospitalizacion ing ON ing.idOrden = o.ordenAten_id AND ing.estado = 'A'
-            WHERE EXISTS (
-                SELECT 1 FROM vt_fichamedica fm
-                WHERE fm.med_orden = o.ordenAten_id
-                  AND (ISNULL(fm.med_requiereHospitalizacion, 0) = 1
-                       OR UPPER(RTRIM(ISNULL(fm.med_pregunta, 'N'))) = 'S')
+            OUTER APPLY (
+                SELECT TOP (1) fmTop.sec, fmTop.med_requiereHospitalizacion, fmTop.med_pregunta
+                FROM vt_fichamedica fmTop
+                WHERE fmTop.med_orden = o.ordenAten_id
+                ORDER BY fmTop.sec DESC
+            ) fm
+            WHERE (
+                (fm.sec IS NOT NULL AND ISNULL(fm.med_requiereHospitalizacion, 0) = 1)
+                OR ing.id IS NOT NULL
+                OR (
+                    fm.sec IS NULL
+                    AND (
+                        ISNULL(o.ordenAten_tipoConsulta, 0) = 3
+                        OR ISNULL(o.ordenAten_Despacho, 0) = 4
+                        OR RTRIM(ISNULL(o.ordenAten_etapa, '')) = 'Quirófano'
+                        OR (OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL
+                            AND COL_LENGTH('dbo.qvt_calendario_cirugias', 'id_orden') IS NOT NULL
+                            AND EXISTS (SELECT 1 FROM qvt_calendario_cirugias q WHERE q.id_orden = o.ordenAten_id AND q.estado = 'A'))
+                    )
+                )
             )
               AND ISNULL(o.ordenAten_estado, 'A') <> 'I'
               AND ISNULL(o.cierrehospi, 'N') <> 'S'
@@ -1640,8 +1740,14 @@ public class HospitalizacionService : IHospitalizacionService
                     (@IdOrden, @Nhcl, @IdJaula, @UbicacionJaula, @Indicaciones, @HidratacionFluidoterapia, @DietaCuidados, @IdUsuario, 'A');
             END
 
+            DECLARE @EsHosp BIT = COALESCE(
+                (SELECT TOP 1 reqHospitalizacionOverride FROM hvt_ingresoHospitalizacion WHERE idOrden = @IdOrden),
+                (SELECT TOP 1 CAST(ISNULL(med_requiereHospitalizacion, 0) AS BIT) FROM vt_fichamedica WHERE med_orden = @IdOrden ORDER BY sec DESC),
+                0
+            );
+
             UPDATE vt_ordenAtencion
-            SET ordenAten_etapa = 'Hospitalización'
+            SET ordenAten_etapa = CASE WHEN @EsHosp = 1 THEN 'Hospitalización' ELSE 'Quirófano' END
             WHERE ordenAten_id = @IdOrden AND ISNULL(cierrehospi, 'N') <> 'S';
 
             IF OBJECT_ID('dbo.vt_jaulas', 'U') IS NOT NULL
@@ -1677,7 +1783,10 @@ public class HospitalizacionService : IHospitalizacionService
             SELECT
                 CAST(CASE WHEN
                     (OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL AND EXISTS (
-                        SELECT 1 FROM qvt_calendario_cirugias WHERE nhcl = @Nhcl AND estado = 'A' AND fechacirugia >= CAST(GETDATE() AS date)))
+                        SELECT 1 FROM qvt_calendario_cirugias
+                        WHERE estado = 'A'
+                          AND ((COL_LENGTH('dbo.qvt_calendario_cirugias', 'id_orden') IS NOT NULL AND id_orden = @IdOrden)
+                               OR ((COL_LENGTH('dbo.qvt_calendario_cirugias', 'id_orden') IS NULL OR id_orden IS NULL) AND nhcl = @Nhcl AND fechacirugia >= CAST(GETDATE() AS date)))))
                     OR EXISTS (SELECT 1 FROM qvt_preanestesia WHERE orden = @IdOrden)
                     OR EXISTS (SELECT 1 FROM qvt_verificacion WHERE fichamedr = @IdOrden)
                     OR (OBJECT_ID('dbo.qvt_monitorizacion_anestesia', 'U') IS NOT NULL AND EXISTS (SELECT 1 FROM qvt_monitorizacion_anestesia WHERE id_orden = @IdOrden))
@@ -1687,7 +1796,11 @@ public class HospitalizacionService : IHospitalizacionService
                     OR EXISTS (SELECT 1 FROM qvt_enfFechas WHERE idOrdenAtencion = @IdOrden AND diaPostquirurgico IS NOT NULL AND diaPostquirurgico > 0)
                 THEN 1 ELSE 0 END AS BIT) AS TieneCirugia,
                 CAST(CASE WHEN
-                    EXISTS (SELECT 1 FROM hvt_ingresoHospitalizacion WHERE idOrden = @IdOrden AND estado = 'A')
+                    EXISTS (
+                        SELECT 1 FROM hvt_ingresoHospitalizacion
+                        WHERE idOrden = @IdOrden AND estado = 'A'
+                          AND NULLIF(LTRIM(RTRIM(ISNULL(indicaciones, '') + ISNULL(hidratacionFluidoterapia, '') + ISNULL(dietaCuidados, ''))), '') IS NOT NULL
+                    )
                     OR EXISTS (SELECT 1 FROM qvt_enfSignosVitales WHERE idOrdenAtencion = @IdOrden)
                     OR EXISTS (SELECT 1 FROM hvt_bloque1ficha WHERE idorden = @IdOrden AND NULLIF(LTRIM(RTRIM(ISNULL(medicacion, ''))), '') IS NOT NULL)
                     OR EXISTS (SELECT 1 FROM hvt_bloque2ficha WHERE idorden = @IdOrden AND NULLIF(LTRIM(RTRIM(ISNULL(alimentacion, ''))), '') IS NOT NULL)
@@ -1719,6 +1832,7 @@ public class HospitalizacionService : IHospitalizacionService
     {
         if (idOrden <= 0 || nhcl <= 0) return false;
         await ValidarOrdenPacienteAsync(idOrden, nhcl);
+        await AsegurarTablaIngresoHospitalizacionAsync();
 
         var actuales = await VerificarDatosModulosOrdenAsync(idOrden, nhcl);
         if (!requiereCirugia && actuales.TieneDatosCirugia)
@@ -1726,39 +1840,74 @@ public class HospitalizacionService : IHospitalizacionService
         if (!requiereHospitalizacion && actuales.TieneDatosHospitalizacion)
             throw new InvalidOperationException("No se puede deshabilitar Hospitalización porque ya existen registros en sus módulos.");
 
-        var filas = await _db.ExecuteAsync(@"
-            UPDATE vt_fichamedica
-            SET med_pregunta = @Pregunta,
-                med_requiereHospitalizacion = @ReqHosp,
-                med_idmodifica = @IdUsuario,
-                med_fechamodifica = GETDATE()
-            WHERE med_orden = @IdOrden AND med_nhcl = @Nhcl;",
+        await _db.ExecuteAsync(@"
+            IF EXISTS (SELECT 1 FROM vt_fichamedica WHERE med_orden = @IdOrden AND med_nhcl = @Nhcl)
+            BEGIN
+                UPDATE vt_fichamedica
+                SET med_pregunta = @Pregunta,
+                    med_requiereHospitalizacion = @ReqHosp,
+                    med_idmodifica = @IdUsuario,
+                    med_fechamodifica = GETDATE()
+                WHERE med_orden = @IdOrden AND med_nhcl = @Nhcl;
+            END
+
+            IF EXISTS (SELECT 1 FROM hvt_ingresoHospitalizacion WHERE idOrden = @IdOrden)
+            BEGIN
+                UPDATE hvt_ingresoHospitalizacion
+                SET reqHospitalizacionOverride = @ReqHospBit,
+                    reqCirugiaOverride = @ReqCirBit,
+                    idUsuario = @IdUsuario,
+                    estado = 'A'
+                WHERE idOrden = @IdOrden;
+            END
+            ELSE
+            BEGIN
+                INSERT INTO hvt_ingresoHospitalizacion
+                    (idOrden, nhcl, idUsuario, estado, reqHospitalizacionOverride, reqCirugiaOverride)
+                VALUES
+                    (@IdOrden, @Nhcl, @IdUsuario, 'A', @ReqHospBit, @ReqCirBit);
+            END
+
+            UPDATE vt_ordenAtencion
+            SET ordenAten_etapa = CASE WHEN @ReqHospBit = 1 THEN 'Hospitalización' WHEN @ReqCirBit = 1 THEN 'Quirófano' ELSE ordenAten_etapa END
+            WHERE ordenAten_id = @IdOrden AND ISNULL(cierrehospi, 'N') <> 'S';",
             new
             {
                 IdOrden = idOrden,
                 Nhcl = nhcl,
                 Pregunta = requiereCirugia ? "S" : "N",
                 ReqHosp = requiereHospitalizacion ? 1 : 0,
+                ReqHospBit = requiereHospitalizacion,
+                ReqCirBit = requiereCirugia,
                 IdUsuario = idUsuario
             });
 
-        if (filas > 0)
-        {
-            await _db.RegistrarBitacoraAsync(
-                $"Actualizó indicaciones desde bandeja Orden={idOrden} Cirugía={requiereCirugia} Hosp={requiereHospitalizacion}",
-                idUsuario, "Hosp_BandejaOrdenes");
-        }
-        return filas > 0;
+        await _db.RegistrarBitacoraAsync(
+            $"Actualizó indicaciones desde bandeja Orden={idOrden} Cirugía={requiereCirugia} Hosp={requiereHospitalizacion}",
+            idUsuario, "Hosp_BandejaOrdenes");
+        return true;
     }
 
     public async Task<bool> OrdenRequiereCirugiaAsync(int idOrden)
     {
         if (idOrden <= 0) return false;
-        var count = await _db.ExecuteScalarAsync<int>(@"
-            SELECT COUNT(1) FROM vt_fichamedica
-            WHERE med_orden = @IdOrden
-              AND UPPER(RTRIM(ISNULL(med_pregunta, 'N'))) = 'S'",
+        await AsegurarTablaIngresoHospitalizacionAsync();
+        var req = await _db.ExecuteScalarAsync<bool>(@"
+            SELECT CAST(COALESCE(
+                (SELECT TOP 1 reqCirugiaOverride FROM hvt_ingresoHospitalizacion WHERE idOrden = @IdOrden AND estado = 'A'),
+                (SELECT TOP 1 CAST(CASE WHEN UPPER(RTRIM(ISNULL(med_pregunta, 'N'))) = 'S' THEN 1 ELSE 0 END AS BIT)
+                 FROM vt_fichamedica WHERE med_orden = @IdOrden ORDER BY sec DESC),
+                (SELECT TOP 1 CAST(CASE WHEN ISNULL(o.ordenAten_tipoConsulta, 0) = 3
+                                          OR ISNULL(o.ordenAten_Despacho, 0) = 4
+                                          OR RTRIM(ISNULL(o.ordenAten_etapa, '')) = 'Quirófano'
+                                          OR (OBJECT_ID('dbo.qvt_calendario_cirugias', 'U') IS NOT NULL
+                                              AND COL_LENGTH('dbo.qvt_calendario_cirugias', 'id_orden') IS NOT NULL
+                                              AND EXISTS (SELECT 1 FROM qvt_calendario_cirugias q WHERE q.id_orden = o.ordenAten_id AND q.estado = 'A'))
+                                        THEN 1 ELSE 0 END AS BIT)
+                 FROM vt_ordenAtencion o WHERE o.ordenAten_id = @IdOrden),
+                0
+            ) AS BIT)",
             new { IdOrden = idOrden });
-        return count > 0;
+        return req;
     }
 }

@@ -407,6 +407,7 @@ public sealed class OrdenHospitalizacionColaDto
     public int? JaulaId { get; set; }
     public string JaulaCodigo { get; set; } = string.Empty;
     public bool YaIngresado { get; set; }
+    public bool TieneSoap { get; set; } = true;
     public bool RequiereHospitalizacion { get; set; }
     public bool RequiereCirugia { get; set; }
 

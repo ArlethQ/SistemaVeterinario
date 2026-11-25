@@ -2532,14 +2532,37 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             return [];
 
         var cols = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
+        var colsIng = await ObtenerColumnasTablaAsync("hvt_ingresoHospitalizacion");
+        var colsCir = await ObtenerColumnasTablaAsync("qvt_calendario_cirugias");
+        string ingApplySql = colsIng.Contains("reqHospitalizacionOverride") && colsIng.Contains("reqCirugiaOverride")
+            ? @"OUTER APPLY (
+                    SELECT TOP (1) h.reqHospitalizacionOverride AS ReqHospOverride, h.reqCirugiaOverride AS ReqCirOverride
+                    FROM dbo.hvt_ingresoHospitalizacion h
+                    WHERE h.idOrden = o.ordenAten_id AND h.estado = 'A'
+                ) ing"
+            : "OUTER APPLY (SELECT CAST(NULL AS bit) AS ReqHospOverride, CAST(NULL AS bit) AS ReqCirOverride) ing";
+        string cirOrdCondSql = colsCir.Contains("id_orden")
+            ? "OR EXISTS (SELECT 1 FROM dbo.qvt_calendario_cirugias q WHERE q.id_orden = o.ordenAten_id AND q.estado = 'A')"
+            : string.Empty;
         string colFactura = cols.Contains("ordenaten_factura") && cols.Contains("ordenaten_numfacbc") ? "CASE WHEN o.ordenaten_numfacBC LIKE 'PROF-%' THEN 'N' ELSE RTRIM(ISNULL(o.ordenaten_factura, 'N')) END" : cols.Contains("ordenaten_factura") ? "RTRIM(ISNULL(o.ordenaten_factura, 'N'))" : "'N'";
         string colNumFac = cols.Contains("ordenaten_numfacBC") ? "RTRIM(ISNULL(o.ordenaten_numfacBC, ''))" : "''";
         string exprNoFacturada = $"CASE WHEN {colFactura} = 'S' THEN 1 ELSE 0 END";
         string sqlOrden = $@"
             SELECT TOP (30)
                 o.ordenAten_id AS IdOrden,
-                CAST(ISNULL(f.med_requiereHospitalizacion, 0) AS bit) AS RequiereHospitalizacion,
-                CAST(CASE WHEN f.med_pregunta = 'S' THEN 1 ELSE 0 END AS bit) AS RequiereCirugia,
+                CAST(COALESCE(ing.ReqHospOverride, CAST(ISNULL(f.med_requiereHospitalizacion, 0) AS bit), 0) AS bit) AS RequiereHospitalizacion,
+                CAST(COALESCE(
+                    ing.ReqCirOverride,
+                    CASE WHEN f.med_pregunta IS NOT NULL
+                         THEN CAST(CASE WHEN f.med_pregunta = 'S' THEN 1 ELSE 0 END AS bit)
+                         ELSE NULL END,
+                    CASE WHEN f.med_pregunta IS NULL
+                              AND (ISNULL(o.ordenAten_tipoConsulta, 0) = 3
+                                   OR ISNULL(o.ordenAten_Despacho, 0) = 4
+                                   OR RTRIM(ISNULL(o.ordenAten_etapa, '')) = 'Quirófano'
+                                   {cirOrdCondSql})
+                         THEN 1 ELSE 0 END
+                ) AS bit) AS RequiereCirugia,
                 o.ordenAten_nhcl AS Nhcl,
                 o.ordenAten_idcliente AS IdCliente,
                 RTRIM(ISNULL(c.pa_apellidos, '')) + ' ' + RTRIM(ISNULL(c.pa_nombres, '')) AS ClienteNombre,
@@ -2565,10 +2588,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 WHERE f.med_orden = o.ordenAten_id AND f.med_nhcl = o.ordenAten_nhcl
                 ORDER BY f.sec DESC
             ) f
-            WHERE ((@SoloProcesos = 1 AND o.ordenAten_estado = 'T')
+            {ingApplySql}
+            WHERE ((@SoloProcesos = 1 AND o.ordenAten_estado IN ('A', 'E', 'T'))
                    OR (@SoloProcesos = 0 AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E', 'T')))
               AND {AlcanceOrden}
-              AND (@SoloProcesos = 0 OR f.med_requiereHospitalizacion = 1 OR f.med_pregunta = 'S')
+              AND (@SoloProcesos = 0
+                   OR COALESCE(ing.ReqHospOverride, CAST(ISNULL(f.med_requiereHospitalizacion, 0) AS bit), 0) = 1
+                   OR f.med_pregunta = 'S'
+                   OR (f.med_pregunta IS NULL AND (ISNULL(o.ordenAten_tipoConsulta, 0) = 3 OR ISNULL(o.ordenAten_Despacho, 0) = 4 OR RTRIM(ISNULL(o.ordenAten_etapa, '')) = 'Quirófano' {cirOrdCondSql})))
               AND (@IdOrden IS NULL OR o.ordenAten_id = @IdOrden)
               AND (@SoloProcesos = 1 OR @IdOrden IS NOT NULL OR @Filtro <> '' OR {exprNoFacturada} = 0)
               AND (@Desde IS NULL OR o.ordenAten_fecha >= @Desde)
@@ -2971,8 +2998,21 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
         var resultado = new List<ItemOrdenParaFacturaDto>();
         int idUsuarioCatalogo = 1_000_000 + (idLocalidad > 0 ? idLocalidad : header.IdLocalidad);
+        var colsCirFact = await ObtenerColumnasTablaAsync("qvt_calendario_cirugias");
+        bool esCitaCirugiaSinSoap = await _db.ExecuteScalarAsync<bool>($"""
+            SELECT CAST(CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.vt_fichamedica WHERE med_orden = @IdOrden)
+                              AND EXISTS (
+                                  SELECT 1 FROM dbo.vt_ordenAtencion o
+                                  WHERE o.ordenAten_id = @IdOrden
+                                    AND (ISNULL(o.ordenAten_tipoConsulta, 0) = 3
+                                         OR ISNULL(o.ordenAten_Despacho, 0) = 4
+                                         OR RTRIM(ISNULL(o.ordenAten_etapa, '')) = 'Quirófano'
+                                         {(colsCirFact.Contains("id_orden") ? "OR EXISTS (SELECT 1 FROM dbo.qvt_calendario_cirugias q WHERE q.id_orden = o.ordenAten_id AND q.estado = 'A')" : string.Empty)})
+                              )
+                        THEN 1 ELSE 0 END AS bit)
+            """, new { IdOrden = idOrden });
 
-        if (!header.EsProcedimiento)
+        if (!header.EsProcedimiento && !esCitaCirugiaSinSoap)
         {
             var prodConsulta = await _db.QueryFirstOrDefaultAsync<OrdenProductoQueryRow>("""
                 SELECT TOP (1)
@@ -3027,7 +3067,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             ? "AND UPPER(LTRIM(RTRIM(ISNULL(p.proc_estado, '')))) NOT IN ('ANULADO', 'ELIMINADO', 'CANCELADO')"
             : string.Empty;
 
-        var procedimientos = await _db.QueryAsync<OrdenProductoQueryRow>($"""
+        var procedimientos = (await _db.QueryAsync<OrdenProductoQueryRow>($"""
             SELECT
                 'PROCEDIMIENTO' AS Origen,
                 {secProcCol} AS SecOrigen,
@@ -3047,7 +3087,39 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             WHERE p.proc_idOrden = @IdOrden
               {estadoProcFilter}
             ORDER BY p.proc_fecha, p.proc_idProdu;
-            """, new { IdOrden = idOrden });
+            """, new { IdOrden = idOrden })).ToList();
+
+        if (colsCirFact.Contains("id_orden"))
+        {
+            var cirugiasAgendadas = await _db.QueryAsync<OrdenProductoQueryRow>("""
+                SELECT
+                    'CIRUGIA_PROGRAMADA' AS Origen,
+                    q.sec AS SecOrigen,
+                    ISNULL(pr.CODIGO, ISNULL(q.codprocedimiento, 0)) AS CodProducto,
+                    ISNULL(RTRIM(pr.CODIGO_PRINCIPAL), '') AS CodPrincipal,
+                    ISNULL(RTRIM(pr.COD_AUXILIAR), '') AS CodAuxiliar,
+                    COALESCE(NULLIF(RTRIM(pr.NOMBRE), ''), NULLIF(RTRIM(q.nomprocedimiento), ''), 'Procedimiento quirúrgico') AS Descripcion,
+                    CONCAT('Cirugía programada ', CONVERT(varchar(10), q.fechacirugia, 103), ' ', RTRIM(ISNULL(q.horainicio, ''))) AS Detalle,
+                    CAST(1 AS decimal(18,4)) AS Cantidad,
+                    CAST(ISNULL(pr.VALOR_UNITARIO, 0) AS decimal(18,4)) AS PrecioUnitario,
+                    ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
+                    ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
+                    pr.TIPO_PRODUCTO AS TipoProducto,
+                    pr.IDSUBTIPO AS SubtipoProducto
+                FROM dbo.qvt_calendario_cirugias q
+                LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO = q.codprocedimiento
+                WHERE q.id_orden = @IdOrden AND q.estado = 'A'
+                ORDER BY q.sec;
+                """, new { IdOrden = idOrden });
+
+            foreach (var cir in cirugiasAgendadas)
+            {
+                if (!procedimientos.Any(p => p.CodProducto > 0 && p.CodProducto == cir.CodProducto))
+                {
+                    procedimientos.Add(cir);
+                }
+            }
+        }
 
         var laboratorios = await _db.QueryAsync<OrdenProductoQueryRow>("""
             SELECT
@@ -3150,8 +3222,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
               AND NOT EXISTS (
                   SELECT 1 FROM dbo.vt_fichamedica fm
                   WHERE fm.med_orden = @IdOrden
-                    AND (ISNULL(fm.med_requiereHospitalizacion, 0) = 1
-                         OR LTRIM(RTRIM(ISNULL(fm.med_pregunta, ''))) = 'S')
+                    AND ISNULL(fm.med_requiereHospitalizacion, 0) = 1
               )
               AND (CAST(ISNULL(m.med_cantidad1, 0) AS decimal(18,4)) > 0
                    OR (ISNULL(pr.INVENTARIO, 1) = 0 AND CAST(ISNULL(m.med_cantidad, 0) AS decimal(18,4)) > 0))

@@ -487,10 +487,106 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         string? nomAnest = null;
         if (idAnest.HasValue)
             nomAnest = await db.QueryFirstOrDefaultAsync<string>("SELECT RTRIM(ISNULL(user_nombre,'')) FROM vt_usuarios WHERE user_numero=@Id", new { Id = idAnest.Value });
+
+        int? idOrdenVinculada = x.IdOrden is > 0 ? x.IdOrden : null;
+        if (x.Id <= 0 && idOrdenVinculada is null)
+        {
+            idOrdenVinculada = await db.QueryFirstOrDefaultAsync<int?>(@"
+                DECLARE @IdCliente INT = 0;
+                DECLARE @NombreProp NVARCHAR(200) = '';
+                DECLARE @TipoOrigen VARCHAR(5) = 'M';
+                DECLARE @IdEsp INT = 0;
+                DECLARE @Prefijo VARCHAR(10) = 'CIR';
+                DECLARE @SigNum INT = 1;
+
+                SELECT TOP 1
+                    @IdCliente = ISNULL(p.mas_idcliente, 0),
+                    @NombreProp = LTRIM(RTRIM(ISNULL(c.pa_apellidos, '') + ' ' + ISNULL(c.pa_nombres, ''))),
+                    @TipoOrigen = ISNULL(NULLIF(RTRIM(p.mas_tipo), ''), 'M')
+                FROM vt_pacientes p
+                LEFT JOIN vt_clientes c ON c.pa_codigo = p.mas_idcliente
+                WHERE p.mas_nhcl = @Nhcl;
+
+                SELECT TOP 1 @IdEsp = es_id, @Prefijo = ISNULL(NULLIF(RTRIM(es_codigo), ''), 'CIR')
+                FROM vt_especialidades
+                WHERE ISNULL(es_estado, 'A') = 'A'
+                  AND (UPPER(RTRIM(ISNULL(es_codigo, ''))) = 'CIR' OR UPPER(ISNULL(es_descripcion, '')) LIKE '%CIRUG%');
+
+                IF ISNULL(@IdEsp, 0) <= 0
+                    SELECT TOP 1 @IdEsp = ISNULL(user_esp_numero, 1) FROM vt_usuarios WHERE user_numero = @IdMedico;
+                IF ISNULL(@IdEsp, 0) <= 0 SET @IdEsp = 1;
+
+                SELECT @SigNum = COUNT(1) + 1
+                FROM vt_ordenAtencion
+                WHERE CAST(ordenAten_fecha AS DATE) = CAST(@Fecha AS DATE)
+                  AND ordenAten_esp_numero = @IdEsp;
+
+                DECLARE @TurnoCodigo VARCHAR(20) = @Prefijo + '-' + RIGHT('00' + CAST(@SigNum AS VARCHAR(10)), CASE WHEN @SigNum < 100 THEN 2 ELSE LEN(CAST(@SigNum AS VARCHAR(10))) END);
+
+                INSERT INTO vt_ordenAtencion (
+                    ordenAten_nombre, ordenAten_idcliente, ordenAten_nhcl, ordenAten_idMedico,
+                    ordenAten_estado, ordenAten_fecha, ordenAten_esp_numero, ordenAten_idlocalidad,
+                    ordenAten_hora, ordenAten_IdUsuario, ordenaten_IPOrigen, ordenAten_etapa,
+                    ordenAten_Tipo, ordenAten_Despacho, ordenAten_turno,
+                    ordenAten_esProcedimiento, ordenAten_triajeMedico, ordenAten_tipoConsulta
+                ) VALUES (
+                    @NombreProp, @IdCliente, @Nhcl, @IdMedico,
+                    'A', CAST(@Fecha AS DATE), @IdEsp, @IdLocalidad,
+                    @HoraInicio, @Usuario, 'AgendaCirugia', 'Quirófano',
+                    @TipoOrigen, 4, @TurnoCodigo,
+                    0, 0, 3
+                );
+                SELECT CAST(SCOPE_IDENTITY() AS INT);",
+                new { x.Nhcl, x.IdMedico, x.Fecha, x.IdLocalidad, x.HoraInicio, Usuario = idUsuario });
+            x.IdOrden = idOrdenVinculada;
+        }
+
         var sql=x.Id>0?@"UPDATE q SET id_orden=@IdOrden,codmed=@IdMedico,codanestesiologo=@IdAnestesiologo,nomanestesiologo=@NomAnestesiologo,nhcl=@Nhcl,codprocedimiento=@IdProcedimiento,fechacirugia=@Fecha,horainicio=@HoraInicio,horafinalizacion=@HoraFin,localidad=@IdLocalidad,nommedico=u.user_nombre,nompaciente=p.mas_nombre,nomprocedimiento=RTRIM(ISNULL(pr.NOMBRE,'')),idcliente=p.mas_idcliente FROM qvt_calendario_cirugias q INNER JOIN vt_usuarios u ON u.user_numero=@IdMedico INNER JOIN vt_pacientes p ON p.mas_nhcl=@Nhcl INNER JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO=@IdProcedimiento WHERE q.sec=@Id":@"INSERT INTO qvt_calendario_cirugias(id_orden,codmed,codanestesiologo,nomanestesiologo,nhcl,codprocedimiento,idcliente,fechacirugia,horainicio,horafinalizacion,usering,localidad,nommedico,nompaciente,nomprocedimiento,estado) SELECT @IdOrden,@IdMedico,@IdAnestesiologo,@NomAnestesiologo,@Nhcl,@IdProcedimiento,p.mas_idcliente,@Fecha,@HoraInicio,@HoraFin,@Usuario,@IdLocalidad,u.user_nombre,p.mas_nombre,RTRIM(ISNULL(pr.NOMBRE,'')),'A' FROM vt_pacientes p CROSS JOIN vt_usuarios u CROSS JOIN VeterinariaFacturacion.dbo.PRODUCTO pr WHERE p.mas_nhcl=@Nhcl AND u.user_numero=@IdMedico AND pr.CODIGO=@IdProcedimiento";
-        var ok=await db.ExecuteAsync(sql,new{x.Id,IdOrden=x.IdOrden is > 0 ? x.IdOrden : null,x.IdMedico,IdAnestesiologo=idAnest,NomAnestesiologo=nomAnest,x.Nhcl,x.IdProcedimiento,x.Fecha,x.HoraInicio,x.HoraFin,x.IdLocalidad,Usuario=idUsuario})>0;if(ok)await db.RegistrarBitacoraAsync($"Programación de cirugía NHCL {x.Nhcl}",idUsuario);return ok;
+        var ok=await db.ExecuteAsync(sql,new{x.Id,IdOrden=idOrdenVinculada,x.IdMedico,IdAnestesiologo=idAnest,NomAnestesiologo=nomAnest,x.Nhcl,x.IdProcedimiento,x.Fecha,x.HoraInicio,x.HoraFin,x.IdLocalidad,Usuario=idUsuario})>0;
+        if(ok)
+        {
+            await db.ExecuteAsync(@"
+                IF OBJECT_ID('dbo.vt_cirugia_ordenes', 'U') IS NOT NULL
+                BEGIN
+                    UPDATE TOP (1) dbo.vt_cirugia_ordenes
+                    SET cirO_estado = 'AGENDADA'
+                    WHERE cirO_nhcl = @Nhcl
+                      AND cirO_estado = 'PENDIENTE_CITA'
+                      AND (cirO_idProdu = @IdProcedimiento OR cirO_idProdu = 0);
+                END", new { x.Nhcl, x.IdProcedimiento });
+            await db.RegistrarBitacoraAsync($"Programación de cirugía NHCL {x.Nhcl} Orden #{idOrdenVinculada}",idUsuario);
+        }
+        return ok;
     }
-    public async Task<bool> CancelarCirugiaAsync(int id,int idUsuario){var ok=await db.ExecuteAsync("UPDATE qvt_calendario_cirugias SET estado='I',fechaelimina=GETDATE(),quienelimina=@Usuario WHERE sec=@Id AND estado='A'",new{Id=id,Usuario=idUsuario})>0;if(ok)await db.RegistrarBitacoraAsync($"Cancela cirugía programada {id}",idUsuario);return ok;}
+    public async Task<bool> CancelarCirugiaAsync(int id,int idUsuario)
+    {
+        await AsegurarColumnasAnestesiologoCirugiaAsync();
+        var info = await db.QueryFirstOrDefaultAsync<(int? IdOrden, int Nhcl, int IdProcedimiento)?>(
+            "SELECT id_orden AS IdOrden, nhcl AS Nhcl, codprocedimiento AS IdProcedimiento FROM qvt_calendario_cirugias WHERE sec=@Id AND estado='A'",
+            new { Id = id });
+        var ok=await db.ExecuteAsync("UPDATE qvt_calendario_cirugias SET estado='I',fechaelimina=GETDATE(),quienelimina=@Usuario WHERE sec=@Id AND estado='A'",new{Id=id,Usuario=idUsuario})>0;
+        if(ok)
+        {
+            if (info is { IdOrden: > 0 } reg)
+            {
+                await db.ExecuteAsync(@"
+                    IF NOT EXISTS (SELECT 1 FROM vt_fichamedica WHERE med_orden = @IdOrden)
+                       AND (OBJECT_ID('dbo.hvt_ingresoHospitalizacion', 'U') IS NULL OR NOT EXISTS (SELECT 1 FROM hvt_ingresoHospitalizacion WHERE idOrden = @IdOrden AND estado = 'A'))
+                       AND NOT EXISTS (SELECT 1 FROM qvt_calendario_cirugias WHERE id_orden = @IdOrden AND estado = 'A')
+                    BEGIN
+                        UPDATE vt_ordenAtencion SET ordenAten_estado = 'I' WHERE ordenAten_id = @IdOrden;
+                    END
+                    IF OBJECT_ID('dbo.vt_cirugia_ordenes', 'U') IS NOT NULL
+                    BEGIN
+                        UPDATE TOP (1) dbo.vt_cirugia_ordenes
+                        SET cirO_estado = 'PENDIENTE_CITA'
+                        WHERE cirO_nhcl = @Nhcl AND cirO_idProdu = @IdProcedimiento AND cirO_estado = 'AGENDADA';
+                    END", new { IdOrden = reg.IdOrden.Value, reg.Nhcl, reg.IdProcedimiento });
+            }
+            await db.RegistrarBitacoraAsync($"Cancela cirugía programada {id}",idUsuario);
+        }
+        return ok;
+    }
 
     public async Task<List<SelectorClinicoDto>> ObtenerMedicosAsync()=>(await db.QueryAsync<SelectorClinicoDto>(@"
         SELECT CONVERT(int,u.user_numero) Id,

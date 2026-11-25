@@ -33,6 +33,11 @@ public interface IConsultaExternaService
     Task<List<OrdenExamenEvolucionDto>> ObtenerOrdenesExamenAsync(int idOrden, int? idEvolucion = null);
     Task<bool> AgregarOrdenExamenAsync(OrdenExamenEvolucionDto orden);
     Task<bool> EliminarOrdenExamenAsync(int sec, string tipoCategoria);
+    Task<List<OrdenCirugiaItemDto>> ObtenerCatalogoCirugiasAsync(string filtro = "");
+    Task<List<OrdenCirugiaItemDto>> ObtenerOrdenesCirugiaAsync(int idOrden, int nhcl);
+    Task<List<OrdenCirugiaItemDto>> ObtenerOrdenesCirugiaPendientesAsync(int? nhcl = null);
+    Task<bool> AgregarOrdenCirugiaAsync(OrdenCirugiaItemDto item, int idUsuario, int idLocalidad);
+    Task<bool> EliminarOrdenCirugiaAsync(int sec);
 
     // 5. Recetario MÃ©dico e Indicaciones Generales (vt_medicinas + vt_IndicacionesGenerales)
     Task<List<RecetaMedicamentoItemDto>> ObtenerRecetaOrdenAsync(int idOrden);
@@ -2770,5 +2775,155 @@ public class ConsultaExternaService : IConsultaExternaService
             _logger.LogError(ex, "Error consultando atenciones para impresiÃ³n por lotes NHCL {Nhcl}", nhcl);
             return [];
         }
+    }
+
+    private async Task AsegurarTablaOrdenesCirugiaAsync()
+    {
+        const string sql = @"
+            IF OBJECT_ID('dbo.vt_cirugia_ordenes', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.vt_cirugia_ordenes (
+                    sec INT IDENTITY(1,1) PRIMARY KEY,
+                    cirO_id_orden INT NOT NULL,
+                    cirO_nhcl INT NOT NULL,
+                    cirO_idProdu INT NOT NULL DEFAULT(0),
+                    cirO_codigo_principal VARCHAR(50) NULL,
+                    cirO_descripcion NVARCHAR(300) NOT NULL,
+                    cirO_observaciones NVARCHAR(500) NULL,
+                    cirO_precio DECIMAL(18,2) NOT NULL DEFAULT(0),
+                    cirO_estado VARCHAR(30) NOT NULL DEFAULT('PENDIENTE_CITA'),
+                    cirO_fecha DATETIME NOT NULL DEFAULT(GETDATE()),
+                    cirO_id_usuario INT NULL,
+                    cirO_id_localidad INT NULL
+                );
+                CREATE INDEX IX_vt_cirugia_ordenes_orden ON dbo.vt_cirugia_ordenes (cirO_id_orden, cirO_nhcl);
+                CREATE INDEX IX_vt_cirugia_ordenes_nhcl ON dbo.vt_cirugia_ordenes (cirO_nhcl, cirO_estado);
+            END";
+        await _db.ExecuteAsync(sql);
+    }
+
+    public async Task<List<OrdenCirugiaItemDto>> ObtenerCatalogoCirugiasAsync(string filtro = "")
+    {
+        const string sql = @"
+            SELECT TOP (60)
+                p.CODIGO AS IdProducto,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.CODIGO_PRINCIPAL)), ''), CAST(p.CODIGO AS VARCHAR(50))) AS CodigoPrincipal,
+                RTRIM(ISNULL(p.NOMBRE, '')) AS DescripcionCirugia,
+                CAST(ISNULL(p.VALOR_UNITARIO, 0) AS DECIMAL(18,2)) AS Precio
+            FROM VeterinariaFacturacion.dbo.PRODUCTO p
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+            WHERE ISNULL(p.ESTADO, 1) = 1
+              AND p.IDUSUARIO >= 1000000
+              AND (UPPER(LTRIM(RTRIM(ISNULL(p.TIPOCOMPRAVENA, '')))) IN ('S', 'SERVICIO')
+                   OR UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) IN ('SERVICIOS', 'PROCEDIMIENTOS'))
+              AND (@Filtro = '' OR p.NOMBRE LIKE '%' + @Filtro + '%' OR ISNULL(p.CODIGO_PRINCIPAL, '') LIKE '%' + @Filtro + '%' OR CAST(p.CODIGO AS VARCHAR(20)) LIKE '%' + @Filtro + '%')
+            ORDER BY CASE
+                WHEN UPPER(ISNULL(p.NOMBRE, '')) LIKE '%CASTRAC%'
+                  OR UPPER(ISNULL(p.NOMBRE, '')) LIKE '%PROFILAX%'
+                  OR UPPER(ISNULL(p.NOMBRE, '')) LIKE '%ESTERIL%'
+                  OR UPPER(ISNULL(p.NOMBRE, '')) LIKE '%CIRUG%'
+                  OR UPPER(ISNULL(p.NOMBRE, '')) LIKE '%OVARIO%' THEN 0 ELSE 1 END, p.NOMBRE;";
+
+        var lista = await _db.QueryAsync<OrdenCirugiaItemDto>(sql, new { Filtro = (filtro ?? string.Empty).Trim() });
+        return lista.ToList();
+    }
+
+    public async Task<List<OrdenCirugiaItemDto>> ObtenerOrdenesCirugiaAsync(int idOrden, int nhcl)
+    {
+        if (idOrden <= 0 && nhcl <= 0) return [];
+        await AsegurarTablaOrdenesCirugiaAsync();
+
+        const string sql = @"
+            SELECT
+                sec AS Sec,
+                cirO_id_orden AS IdOrden,
+                cirO_nhcl AS Nhcl,
+                cirO_idProdu AS IdProducto,
+                ISNULL(cirO_codigo_principal, '') AS CodigoPrincipal,
+                ISNULL(cirO_descripcion, '') AS DescripcionCirugia,
+                ISNULL(cirO_observaciones, '') AS Observaciones,
+                ISNULL(cirO_precio, 0) AS Precio,
+                ISNULL(cirO_estado, 'PENDIENTE_CITA') AS Estado,
+                ISNULL(cirO_fecha, GETDATE()) AS Fecha
+            FROM dbo.vt_cirugia_ordenes
+            WHERE cirO_id_orden = @IdOrden
+              AND (@Nhcl <= 0 OR cirO_nhcl = @Nhcl)
+              AND ISNULL(cirO_estado, 'PENDIENTE_CITA') <> 'ANULADA'
+            ORDER BY sec ASC;";
+
+        var lista = await _db.QueryAsync<OrdenCirugiaItemDto>(sql, new { IdOrden = idOrden, Nhcl = nhcl });
+        return lista.ToList();
+    }
+
+    public async Task<List<OrdenCirugiaItemDto>> ObtenerOrdenesCirugiaPendientesAsync(int? nhcl = null)
+    {
+        await AsegurarTablaOrdenesCirugiaAsync();
+
+        const string sql = @"
+            SELECT TOP (60)
+                co.sec AS Sec,
+                co.cirO_id_orden AS IdOrden,
+                co.cirO_nhcl AS Nhcl,
+                co.cirO_idProdu AS IdProducto,
+                ISNULL(co.cirO_codigo_principal, '') AS CodigoPrincipal,
+                ISNULL(co.cirO_descripcion, '') AS DescripcionCirugia,
+                ISNULL(co.cirO_observaciones, '') AS Observaciones,
+                ISNULL(co.cirO_precio, 0) AS Precio,
+                ISNULL(co.cirO_estado, 'PENDIENTE_CITA') AS Estado,
+                ISNULL(co.cirO_fecha, GETDATE()) AS Fecha,
+                RTRIM(ISNULL(p.mas_nombre, '')) AS PacienteNombre,
+                LTRIM(RTRIM(ISNULL(c.pa_apellidos, '') + ' ' + ISNULL(c.pa_nombres, ''))) AS ClienteNombre
+            FROM dbo.vt_cirugia_ordenes co
+            INNER JOIN dbo.vt_pacientes p ON p.mas_nhcl = co.cirO_nhcl
+            LEFT JOIN dbo.vt_clientes c ON c.pa_codigo = p.mas_idcliente
+            WHERE ISNULL(co.cirO_estado, 'PENDIENTE_CITA') = 'PENDIENTE_CITA'
+              AND (@Nhcl IS NULL OR @Nhcl <= 0 OR co.cirO_nhcl = @Nhcl)
+            ORDER BY co.sec DESC;";
+
+        var lista = await _db.QueryAsync<OrdenCirugiaItemDto>(sql, new { Nhcl = nhcl });
+        return lista.ToList();
+    }
+
+    public async Task<bool> AgregarOrdenCirugiaAsync(OrdenCirugiaItemDto item, int idUsuario, int idLocalidad)
+    {
+        if (item.IdOrden <= 0 || item.Nhcl <= 0 || string.IsNullOrWhiteSpace(item.DescripcionCirugia))
+            return false;
+
+        await AsegurarTablaOrdenesCirugiaAsync();
+
+        const string sql = @"
+            INSERT INTO dbo.vt_cirugia_ordenes (
+                cirO_id_orden, cirO_nhcl, cirO_idProdu, cirO_codigo_principal,
+                cirO_descripcion, cirO_observaciones, cirO_precio, cirO_estado,
+                cirO_fecha, cirO_id_usuario, cirO_id_localidad
+            ) VALUES (
+                @IdOrden, @Nhcl, @IdProducto, LEFT(ISNULL(@CodigoPrincipal, ''), 50),
+                LEFT(@DescripcionCirugia, 300), LEFT(ISNULL(@Observaciones, ''), 500), @Precio, 'PENDIENTE_CITA',
+                GETDATE(), @IdUsuario, @IdLocalidad
+            );";
+
+        var filas = await _db.ExecuteAsync(sql, new
+        {
+            item.IdOrden,
+            item.Nhcl,
+            item.IdProducto,
+            item.CodigoPrincipal,
+            DescripcionCirugia = item.DescripcionCirugia.Trim(),
+            Observaciones = (item.Observaciones ?? string.Empty).Trim(),
+            item.Precio,
+            IdUsuario = idUsuario > 0 ? idUsuario : 1,
+            IdLocalidad = idLocalidad > 0 ? idLocalidad : 1
+        });
+        return filas > 0;
+    }
+
+    public async Task<bool> EliminarOrdenCirugiaAsync(int sec)
+    {
+        if (sec <= 0) return false;
+        await AsegurarTablaOrdenesCirugiaAsync();
+        var filas = await _db.ExecuteAsync(
+            "UPDATE dbo.vt_cirugia_ordenes SET cirO_estado = 'ANULADA' WHERE sec = @Sec;",
+            new { Sec = sec });
+        return filas > 0;
     }
 }

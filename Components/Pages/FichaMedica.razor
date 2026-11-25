@@ -466,6 +466,105 @@
                             </label>
                         </div>
                     </div>
+
+                    @if (string.Equals(Ficha.RequiereCirugia?.Trim(), "S", StringComparison.OrdinalIgnoreCase) && !Ficha.RequiereHospitalizacion)
+                    {
+                        <div class="col-12 mt-2">
+                            <div class="border rounded bg-white">
+                                <div class="px-3 py-2 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2" style="background:#f5f3ff;">
+                                    <div>
+                                        <span class="fw-bold small" style="color:#6d28d9;">
+                                            <i class="bi bi-scissors me-1"></i>Orden de Cirugía (sin hospitalización)
+                                            <span class="badge ms-1" style="background:#6d28d9;color:#fff;">@OrdenesCirugia.Count</span>
+                                        </span>
+                                        <small class="d-block text-muted">Al no requerir hospitalización, el paciente no entra a Bandeja de Órdenes: genera aquí la orden para agendar su cita quirúrgica (la receta pasará normal a factura).</small>
+                                    </div>
+                                    <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 app-doc-action app-doc-print"
+                                            @onclick="ImprimirOrdenCirugiaPdfAsync">
+                                        <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Orden de Cirugía
+                                    </button>
+                                </div>
+                                <div class="p-2">
+                                    <div class="row g-2 mb-2 p-2 bg-light rounded border align-items-end">
+                                        <div class="col-md-6 position-relative">
+                                            <label class="form-label small fw-semibold">Tipo de Operación / Cirugía (Catálogo PRODUCTO) *</label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" class="form-control" autocomplete="off"
+                                                       @bind="_filtroCirugia"
+                                                       @bind:event="oninput"
+                                                       @bind:after="OnFiltroCirugiaChangedAsync"
+                                                       @onfocus="OnCirugiaFocusAsync"
+                                                       placeholder="Buscar operación (ej. profilaxis, castración...)" />
+                                                @if (!string.IsNullOrWhiteSpace(_filtroCirugia))
+                                                {
+                                                    <button type="button" class="btn btn-outline-secondary" title="Limpiar" @onclick="LimpiarSeleccionCirugia">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                }
+                                            </div>
+                                            @if (_mostrarSugerenciasCirugia && _sugerenciasCirugia.Any())
+                                            {
+                                                <div class="list-group position-absolute w-100 shadow-sm mt-1" style="z-index: 1055; max-height: 210px; overflow-y: auto;">
+                                                    @foreach (var cir in _sugerenciasCirugia)
+                                                    {
+                                                        <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center"
+                                                                @onclick="() => SeleccionarCirugia(cir)">
+                                                            <span><strong>[@cir.CodigoPrincipal]</strong> @cir.DescripcionCirugia</span>
+                                                            <span class="text-muted ms-2">$@cir.Precio.ToString("N2")</span>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-semibold">Indicaciones / Observaciones</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="_observacionCirugia" placeholder="Ej: Ayuno 8h, exámenes prequirúrgicos..." />
+                                        </div>
+                                        <div class="col-md-2">
+                                            <SaveButton Type="button" class="btn btn-sm btn-primary w-100" OnClick="AgregarOrdenCirugiaAsync" Disabled="@_agregandoCirugia">
+                                                <i class="bi bi-plus-circle me-1"></i>Agregar
+                                            </SaveButton>
+                                        </div>
+                                    </div>
+
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle small mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Operación / Cirugía</th>
+                                                    <th>Indicaciones / Observaciones</th>
+                                                    <th class="text-end">Valor Ref.</th>
+                                                    <th>Estado</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @if (!OrdenesCirugia.Any())
+                                                {
+                                                    <tr><td colspan="5" class="text-center text-muted py-2">Sin operaciones agregadas en la orden de cirugía.</td></tr>
+                                                }
+                                                @foreach (var oc in OrdenesCirugia)
+                                                {
+                                                    <tr>
+                                                        <td class="fw-semibold">[@(string.IsNullOrWhiteSpace(oc.CodigoPrincipal) ? oc.IdProducto.ToString() : oc.CodigoPrincipal)] @oc.DescripcionCirugia</td>
+                                                        <td>@oc.Observaciones</td>
+                                                        <td class="text-end">$@oc.Precio.ToString("N2")</td>
+                                                        <td><span class="badge bg-light text-dark border">@(oc.Estado == "PENDIENTE_CITA" ? "Pendiente de cita" : oc.Estado)</span></td>
+                                                        <td class="text-end">
+                                                            <button type="button" class="btn btn-sm btn-link text-danger p-0" title="Eliminar orden de cirugía"
+                                                                    @onclick="() => EliminarOrdenCirugiaAsync(oc.Sec)">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
         </div>
@@ -567,11 +666,11 @@
                     <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
                         <span>
                             <i class="bi bi-capsule me-1"></i>Prescripción Médica
-                            @if (Ficha.RequiereHospitalizacion || string.Equals(Ficha.RequiereCirugia?.Trim(), "S", StringComparison.OrdinalIgnoreCase))
+                            @if (Ficha.RequiereHospitalizacion)
                             {
                                 <span class="badge bg-warning text-dark ms-1 fw-normal" style="font-size:.72rem;"
-                                      title="Por requerir hospitalización o cirugía, lo recetado aquí solo se reserva y pasará a factura al confirmar la Evolución Médica.">
-                                    <i class="bi bi-lock-fill me-1"></i>Solo reserva (Hosp./Cirugía)
+                                      title="Por requerir hospitalización, lo recetado aquí solo se reserva y pasará a factura al confirmar la Evolución Médica.">
+                                    <i class="bi bi-lock-fill me-1"></i>Solo reserva (Hospitalización)
                                 </span>
                             }
                         </span>
@@ -1389,6 +1488,13 @@
     private List<OrdenLaboratorioItemDto> OrdenesLab { get; set; } = new();
     private List<OrdenImagenItemDto> OrdenesImagen { get; set; } = new();
     private List<FisioterapiaOrdenDto> OrdenesFisio { get; set; } = new();
+    private List<OrdenCirugiaItemDto> OrdenesCirugia { get; set; } = new();
+    private List<OrdenCirugiaItemDto> _sugerenciasCirugia = new();
+    private OrdenCirugiaItemDto? _cirugiaSeleccionada;
+    private string _filtroCirugia = string.Empty;
+    private string _observacionCirugia = string.Empty;
+    private bool _mostrarSugerenciasCirugia;
+    private bool _agregandoCirugia;
 
     private bool _ordenActualCerrada;
 
@@ -1409,6 +1515,8 @@
         OrdenesLab = [];
         OrdenesImagen = [];
         OrdenesFisio = [];
+        OrdenesCirugia = [];
+        LimpiarSeleccionCirugia();
         _cacheServiciosPorCategoria.Remove("Procedimientos");
         _subcategoriaProcedimiento = 0;
         if (_categoriaServicio == "Procedimientos")
@@ -1667,7 +1775,8 @@
         var tLab = LabImagenService.ObtenerOrdenesLaboratorioAsync(IdOrden, Nhcl);
         var tImg = LabImagenService.ObtenerOrdenesImagenAsync(IdOrden, Nhcl);
         var tFisio = AdminClinicaService.ObtenerFisioterapiaAsync(IdOrden, Nhcl);
-        await Task.WhenAll(tFicha, tDiag, tRec, tAplicados, tAnt, tVac, tCatalogoVac, tTiposConsulta, tLab, tImg, tFisio);
+        var tCir = ConsultaService.ObtenerOrdenesCirugiaAsync(IdOrden, Nhcl);
+        await Task.WhenAll(tFicha, tDiag, tRec, tAplicados, tAnt, tVac, tCatalogoVac, tTiposConsulta, tLab, tImg, tFisio, tCir);
 
         Ficha = await tFicha;
         if (Ficha.MedOrden <= 0) Ficha.MedOrden = IdOrden;
@@ -1684,6 +1793,7 @@
         OrdenesLab = await tLab;
         OrdenesImagen = await tImg;
         OrdenesFisio = await tFisio;
+        OrdenesCirugia = await tCir;
     }
 
     private async Task CargarCatalogosPrescripcionAsync()
@@ -2830,6 +2940,113 @@
         int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
         var pdfBytes = ReportService.GenerarOrdenImagenPdf(pac, OrdenesImagen, Diagnosticos);
         await DescargarPdfDocumentoAsync(pdfBytes, $"Orden_Imagenologia_Orden_{ordenTarget}.pdf");
+    }
+
+    private async Task OnCirugiaFocusAsync()
+    {
+        _sugerenciasCirugia = await ConsultaService.ObtenerCatalogoCirugiasAsync(_filtroCirugia);
+        _mostrarSugerenciasCirugia = _sugerenciasCirugia.Any();
+    }
+
+    private async Task OnFiltroCirugiaChangedAsync()
+    {
+        _cirugiaSeleccionada = null;
+        _sugerenciasCirugia = await ConsultaService.ObtenerCatalogoCirugiasAsync(_filtroCirugia);
+        _mostrarSugerenciasCirugia = _sugerenciasCirugia.Any();
+    }
+
+    private void SeleccionarCirugia(OrdenCirugiaItemDto cir)
+    {
+        _cirugiaSeleccionada = cir;
+        _filtroCirugia = cir.DescripcionCirugia;
+        _mostrarSugerenciasCirugia = false;
+    }
+
+    private void LimpiarSeleccionCirugia()
+    {
+        _cirugiaSeleccionada = null;
+        _filtroCirugia = string.Empty;
+        _observacionCirugia = string.Empty;
+        _sugerenciasCirugia.Clear();
+        _mostrarSugerenciasCirugia = false;
+    }
+
+    private async Task AgregarOrdenCirugiaAsync()
+    {
+        if (!FichaEditable || Guardando || _agregandoCirugia) return;
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
+        if (ordenTarget <= 0 || nhclTarget <= 0) return;
+
+        if (_cirugiaSeleccionada is null && !string.IsNullOrWhiteSpace(_filtroCirugia))
+        {
+            var texto = _filtroCirugia.Trim();
+            _cirugiaSeleccionada = _sugerenciasCirugia.FirstOrDefault(c =>
+                string.Equals(c.DescripcionCirugia.Trim(), texto, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(c.CodigoPrincipal.Trim(), texto, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (_cirugiaSeleccionada is null)
+        {
+            EsError = true;
+            MensajeAlerta = "Seleccione un tipo de operación válido del catálogo de servicios.";
+            return;
+        }
+
+        _agregandoCirugia = true;
+        try
+        {
+            var nueva = new OrdenCirugiaItemDto
+            {
+                IdOrden = ordenTarget,
+                Nhcl = nhclTarget,
+                IdProducto = _cirugiaSeleccionada.IdProducto,
+                CodigoPrincipal = _cirugiaSeleccionada.CodigoPrincipal,
+                DescripcionCirugia = _cirugiaSeleccionada.DescripcionCirugia,
+                Observaciones = _observacionCirugia.Trim(),
+                Precio = _cirugiaSeleccionada.Precio
+            };
+            int idUser = Session.CurrentUser?.UserNumero ?? 1;
+            if (await ConsultaService.AgregarOrdenCirugiaAsync(nueva, idUser, Session.Localidad))
+            {
+                OrdenesCirugia = await ConsultaService.ObtenerOrdenesCirugiaAsync(ordenTarget, nhclTarget);
+                LimpiarSeleccionCirugia();
+                EsError = false;
+                MensajeAlerta = "Orden de cirugía agregada correctamente.";
+            }
+            else
+            {
+                EsError = true;
+                MensajeAlerta = "No se pudo guardar la orden de cirugía.";
+            }
+        }
+        finally
+        {
+            _agregandoCirugia = false;
+        }
+    }
+
+    private async Task EliminarOrdenCirugiaAsync(int sec)
+    {
+        if (!FichaEditable || Guardando) return;
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        int nhclTarget = Ficha.MedNhcl > 0 ? Ficha.MedNhcl : Nhcl;
+        await ConsultaService.EliminarOrdenCirugiaAsync(sec);
+        OrdenesCirugia = await ConsultaService.ObtenerOrdenesCirugiaAsync(ordenTarget, nhclTarget);
+    }
+
+    private async Task ImprimirOrdenCirugiaPdfAsync()
+    {
+        if (!ValidarPacienteParaPdf(out var pac)) return;
+        if (!OrdenesCirugia.Any())
+        {
+            EsError = true;
+            MensajeAlerta = "Agregue al menos una operación antes de imprimir la orden de cirugía.";
+            return;
+        }
+        int ordenTarget = Ficha.MedOrden > 0 ? Ficha.MedOrden : IdOrden;
+        var pdfBytes = ReportService.GenerarOrdenCirugiaPdf(pac, OrdenesCirugia, Diagnosticos);
+        await DescargarPdfDocumentoAsync(pdfBytes, $"Orden_Cirugia_Orden_{ordenTarget}.pdf");
     }
 
     private async Task ImprimirOrdenFisioterapiaPdfAsync()

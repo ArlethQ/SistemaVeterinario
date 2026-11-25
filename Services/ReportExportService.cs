@@ -40,6 +40,7 @@ public interface IReportExportService
     byte[] GenerarOrdenLaboratorioPdf(PacienteHeaderDto paciente, List<OrdenLaboratorioItemDto> ordenes, List<DiagnosticoCie10Dto> diagnosticos);
     byte[] GenerarOrdenImagenPdf(PacienteHeaderDto paciente, List<OrdenImagenItemDto> ordenes, List<DiagnosticoCie10Dto> diagnosticos);
     byte[] GenerarOrdenFisioterapiaPdf(PacienteHeaderDto paciente, List<FisioterapiaOrdenDto> ordenes, List<DiagnosticoCie10Dto> diagnosticos);
+    byte[] GenerarOrdenCirugiaPdf(PacienteHeaderDto paciente, List<OrdenCirugiaItemDto> ordenes, List<DiagnosticoCie10Dto> diagnosticos);
     byte[] GenerarInformeDiagnosticoPdf(PacienteHeaderDto paciente, InformeDiagnosticoDto informe);
     byte[] GenerarBandejaLaboratorioExcel(List<BandejaTrabajoDiagnosticoDto> bandeja, DateTime desde, DateTime hasta, int? idOrden = null);
     byte[] GenerarProformaConsolidadaPdf(OrdenProformaResumenDto proforma);
@@ -2972,6 +2973,51 @@ public class ReportExportService : IReportExportService
                         t.Cell().Border(0.5f).Padding(4).Text(item.Descripcion).Bold();
                         t.Cell().Border(0.5f).Padding(4).AlignCenter().Text($"{item.Cantidad:0.##}");
                         t.Cell().Border(0.5f).Padding(4).Text(item.Observaciones);
+                    }
+                });
+            });
+    }
+
+    public byte[] GenerarOrdenCirugiaPdf(
+        PacienteHeaderDto paciente,
+        List<OrdenCirugiaItemDto> ordenes,
+        List<DiagnosticoCie10Dto> diagnosticos)
+    {
+        return GenerarDocumentoClinicoOrdenPdf(
+            paciente,
+            "ORDEN DE CIRUGÍA / PROCEDIMIENTO QUIRÚRGICO",
+            "Presente esta orden en recepción o caja para agendar la cita quirúrgica.",
+            "#6D28D9",
+            diagnosticos,
+            DateTime.Now,
+            col =>
+            {
+                col.Item().PaddingBottom(3).Text("PROCEDIMIENTOS QUIRÚRGICOS SOLICITADOS:").Bold().FontColor("#6D28D9");
+                col.Item().Table(t =>
+                {
+                    t.ColumnsDefinition(c =>
+                    {
+                        c.RelativeColumn(1.4f);
+                        c.RelativeColumn(3.8f);
+                        c.RelativeColumn(3.4f);
+                        c.RelativeColumn(1.2f);
+                    });
+
+                    t.Header(h =>
+                    {
+                        h.Cell().Border(0.5f).Background(Colors.DeepPurple.Lighten4).Padding(4).Text("Código").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.DeepPurple.Lighten4).Padding(4).Text("Cirugía / Operación").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.DeepPurple.Lighten4).Padding(4).Text("Indicaciones / Observaciones").Bold();
+                        h.Cell().Border(0.5f).Background(Colors.DeepPurple.Lighten4).Padding(4).AlignRight().Text("Valor Ref.").Bold();
+                    });
+
+                    foreach (var item in ordenes)
+                    {
+                        var cod = string.IsNullOrWhiteSpace(item.CodigoPrincipal) ? $"{item.IdProducto}" : item.CodigoPrincipal;
+                        t.Cell().Border(0.5f).Padding(4).Text(cod);
+                        t.Cell().Border(0.5f).Padding(4).Text(item.DescripcionCirugia).Bold();
+                        t.Cell().Border(0.5f).Padding(4).Text(string.IsNullOrWhiteSpace(item.Observaciones) ? "—" : item.Observaciones);
+                        t.Cell().Border(0.5f).Padding(4).AlignRight().Text($"${item.Precio:N2}");
                     }
                 });
             });

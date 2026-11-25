@@ -569,11 +569,11 @@
                         <input @key="(_ordenModal.OrdenAtencionId, _ordenModal.RequiereCirugia, _switchCirugiaVersion)"
                                class="form-check-input" type="checkbox" id="chkModalCirugia"
                                checked="@_ordenModal.RequiereCirugia"
-                               disabled="@(_guardandoChecksModal || (_tieneDatosCirugia && _ordenModal.RequiereCirugia))"
-                               title="@(_tieneDatosCirugia && _ordenModal.RequiereCirugia ? "No se puede deshabilitar porque ya hay registros en módulos de cirugía" : "Habilitar o deshabilitar módulos de cirugía")"
+                               disabled="@(_guardandoChecksModal || (_tieneDatosCirugia && _ordenModal.RequiereCirugia) || (!_ordenModal.TieneSoap && !_ordenModal.RequiereHospitalizacion))"
+                               title="@((_tieneDatosCirugia && _ordenModal.RequiereCirugia) || (!_ordenModal.TieneSoap && !_ordenModal.RequiereHospitalizacion) ? "No se puede deshabilitar Cirugía en esta orden quirúrgica" : "Habilitar o deshabilitar módulos de cirugía")"
                                @onchange="OnToggleCirugiaModalAsync" />
                         <label class="form-check-label small fw-semibold" for="chkModalCirugia">
-                            Requiere Cirugía @if (_tieneDatosCirugia && _ordenModal.RequiereCirugia) { <span title="Con registros">🔒</span> }
+                            Requiere Cirugía @if ((_tieneDatosCirugia && _ordenModal.RequiereCirugia) || (!_ordenModal.TieneSoap && !_ordenModal.RequiereHospitalizacion)) { <span title="Bloqueado">🔒</span> }
                         </label>
                     </div>
                     <div class="form-check form-switch mb-0">
@@ -708,16 +708,19 @@
                             </div>
 
                             <div class="row g-3">
-                                <div class="col-lg-6 d-flex flex-column gap-3">
-                                    <div class="card border-0 shadow-sm h-100">
-                                        <div class="card-header bg-white fw-bold text-primary py-2">
-                                            <i class="bi bi-hospital me-1"></i>Indicaciones de Ingreso y Cuidados
-                                        </div>
-                                        <div class="card-body small d-flex flex-column gap-2">
-                                            @if (_ordenModal.RequiereHospitalizacion)
-                                            {
+                                @if (_ordenModal.RequiereHospitalizacion)
+                                {
+                                    <div class="col-lg-6 d-flex flex-column gap-3">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-header bg-white fw-bold text-primary py-2 d-flex justify-content-between align-items-center">
+                                                <span><i class="bi bi-hospital me-1"></i>Indicaciones de Ingreso y Cuidados</span>
+                                                <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" @onclick="EditarIngresoDesdeModalAsync">
+                                                    <i class="bi bi-pencil-square me-1"></i>Editar ingreso
+                                                </button>
+                                            </div>
+                                            <div class="card-body small d-flex flex-column gap-2">
                                                 <div class="d-flex flex-wrap gap-3 pb-2 border-bottom">
-                                                    <div><strong>Ubicación / Jaula:</strong> <span class="badge text-bg-info">@(string.IsNullOrWhiteSpace(_resumenIngreso?.UbicacionJaula) ? _ordenModal.JaulaCodigo : _resumenIngreso.UbicacionJaula)</span></div>
+                                                    <div><strong>Ubicación / Jaula:</strong> <span class="badge text-bg-info">@(string.IsNullOrWhiteSpace(_resumenIngreso?.UbicacionJaula) ? (string.IsNullOrWhiteSpace(_ordenModal.JaulaCodigo) ? "Sin asignar" : _ordenModal.JaulaCodigo) : _resumenIngreso.UbicacionJaula)</span></div>
                                                     @if (_resumenIngreso?.FechaIngreso is { } fi)
                                                     {
                                                         <div><strong>Fecha de ingreso:</strong> @fi.ToString("dd/MM/yyyy HH:mm")</div>
@@ -735,21 +738,17 @@
                                                     <div class="fw-semibold text-secondary">Dieta y cuidados</div>
                                                     <div class="p-2 bg-light rounded border mt-1">@(string.IsNullOrWhiteSpace(_resumenIngreso?.DietaCuidados) ? "Sin dieta o cuidados especiales registrados." : _resumenIngreso.DietaCuidados)</div>
                                                 </div>
-                                            }
-                                            else
-                                            {
-                                                <div class="alert alert-light border mb-0">
-                                                    Paciente en modalidad ambulatoria (**Cirugía sin hospitalización**). Si requiere internación posterior, activa el switch **Requiere Hospitalización** arriba.
-                                                </div>
-                                            }
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                }
 
-                                <div class="col-lg-6 d-flex flex-column gap-3">
+                                <div class="@(_ordenModal.RequiereHospitalizacion ? "col-lg-6 d-flex flex-column gap-3" : "col-12")">
+                                    <div class="@(_ordenModal.RequiereHospitalizacion ? "d-flex flex-column gap-3" : "row g-3")">
                                     @if (_ordenModal.RequiereCirugia)
                                     {
-                                        <div class="card border-0 shadow-sm">
+                                        <div class="@(_ordenModal.RequiereHospitalizacion ? "" : "col-lg-6")">
+                                        <div class="card border-0 shadow-sm h-100">
                                             <div class="card-header bg-white fw-bold text-primary py-2 d-flex justify-content-between align-items-center">
                                                 <span><i class="bi bi-calendar2-check me-1"></i>Cirugía Programada</span>
                                                 @if (!EstaPestanaBloqueada("cirugia"))
@@ -779,9 +778,11 @@
                                                 }
                                             </div>
                                         </div>
+                                        </div>
                                     }
 
-                                    <div class="card border-0 shadow-sm">
+                                    <div class="@(_ordenModal.RequiereHospitalizacion ? "" : (_ordenModal.RequiereCirugia ? "col-lg-6" : "col-12"))">
+                                    <div class="card border-0 shadow-sm h-100">
                                         <div class="card-header bg-white fw-bold text-primary py-2">
                                             <i class="bi bi-file-earmark-check me-1"></i>Consentimientos y Documentos
                                         </div>
@@ -819,6 +820,8 @@
                                                 <span class="text-muted">No hay consentimientos registrados para esta orden todavía.</span>
                                             }
                                         </div>
+                                    </div>
+                                    </div>
                                     </div>
                                 </div>
                             </div>
@@ -1331,15 +1334,24 @@
     private string? _mensajeModal;
 
     private IEnumerable<(string Id, string Icono, string Titulo, string Permiso, string Grupo)> PestanasDisponiblesModal =>
-        PestanasModulos.Where(t => Permisos.Permite(t.Permiso) ||
-            (t.Id == "diagnostico" && Permisos.Permite("/diagnostico/imagenologia")));
+        PestanasModulos
+            .Where(t => Permisos.Permite(t.Permiso) ||
+                (t.Id == "diagnostico" && Permisos.Permite("/diagnostico/imagenologia")))
+            .Where(t => _ordenModal is null
+                || _ordenModal.TieneSoap
+                || _ordenModal.RequiereHospitalizacion
+                || t.Id == "resumen"
+                || PestanasCirugia.Contains(t.Id));
 
     private bool EstaPestanaBloqueada(string id) =>
-        (_ordenModal is not null && PestanasCirugia.Contains(id) && !_ordenModal.RequiereCirugia)
+        (_ordenModal is not null && id == "soap" && !_ordenModal.TieneSoap)
+        || (_ordenModal is not null && PestanasCirugia.Contains(id) && !_ordenModal.RequiereCirugia)
         || (_ordenModal is not null && PestanasHospitalizacion.Contains(id) && !_ordenModal.RequiereHospitalizacion);
 
     private string MotivoBloqueoPestana(string id)
     {
+        if (_ordenModal is not null && id == "soap" && !_ordenModal.TieneSoap)
+            return "Módulo bloqueado: esta orden ingresó por cita de cirugía y no tuvo Historia Clínica SOAP";
         if (_ordenModal is not null && PestanasCirugia.Contains(id) && !_ordenModal.RequiereCirugia)
             return "Módulo bloqueado: active Requiere Cirugía";
         if (_ordenModal is not null && PestanasHospitalizacion.Contains(id) && !_ordenModal.RequiereHospitalizacion)
@@ -1516,12 +1528,24 @@
             _resumenCabecera = await tCab;
             _resumenIngreso = await tIng;
             _resumenAutorizaciones = (await tAuth).Where(a => a.Orden == idOrden).ToList();
-            _resumenCirugias = (await tCir).Where(c => c.Estado == "A" && c.Nhcl == nhcl).ToList();
+            _resumenCirugias = (await tCir)
+                .Where(c => c.Estado == "A" && (c.IdOrden == idOrden || ((c.IdOrden is null or <= 0) && c.Nhcl == nhcl)))
+                .ToList();
         }
         finally
         {
             _cargandoResumen = false;
         }
+    }
+
+    private async Task EditarIngresoDesdeModalAsync()
+    {
+        if (_ordenModal is null) return;
+        var item = _ordenModal;
+        _ordenModal = null;
+        _mensajeModal = null;
+        _confirmarDesactivarCirugia = false;
+        await SeleccionarParaIngresoAsync(item);
     }
 
     private async Task ImprimirResumenAutorizacionAsync(AutorizacionClinicaDto auth)
@@ -1614,15 +1638,21 @@
             _ordenModal.RequiereCirugia = reqCirugia;
             _ordenModal.RequiereHospitalizacion = reqHosp;
 
-            if (EstaPestanaBloqueada(_pestanaModuloActiva))
+            var pestanasVisibles = PestanasDisponiblesModal.ToList();
+            if (!pestanasVisibles.Any(t => t.Id == _pestanaModuloActiva) || EstaPestanaBloqueada(_pestanaModuloActiva))
             {
-                var primera = PestanasDisponiblesModal.FirstOrDefault(t => !EstaPestanaBloqueada(t.Id)).Id;
-                _pestanaModuloActiva = string.IsNullOrWhiteSpace(primera) ? "soap" : primera;
+                var primera = pestanasVisibles.FirstOrDefault(t => !EstaPestanaBloqueada(t.Id)).Id;
+                _pestanaModuloActiva = string.IsNullOrWhiteSpace(primera) ? "resumen" : primera;
             }
 
             await CargarColaAsync();
             var refOrd = _ordenes.FirstOrDefault(o => o.OrdenAtencionId == _ordenModal.OrdenAtencionId);
             if (refOrd != null) _ordenModal = refOrd;
+
+            if (_pestanaModuloActiva == "resumen")
+            {
+                await CargarResumenModalAsync();
+            }
         }
         catch (Exception ex)
         {

@@ -197,6 +197,22 @@ public class RecetaMedicamentoItemDto
     public string Origen { get; set; } = string.Empty; // F = catálogo, O = otro medicamento
 }
 
+public class OrdenCirugiaItemDto
+{
+    public int Sec { get; set; }
+    public int IdOrden { get; set; }
+    public int Nhcl { get; set; }
+    public int IdProducto { get; set; }
+    public string CodigoPrincipal { get; set; } = string.Empty;
+    public string DescripcionCirugia { get; set; } = string.Empty;
+    public string Observaciones { get; set; } = string.Empty;
+    public decimal Precio { get; set; }
+    public string Estado { get; set; } = "PENDIENTE_CITA";
+    public string PacienteNombre { get; set; } = string.Empty;
+    public string ClienteNombre { get; set; } = string.Empty;
+    public DateTime Fecha { get; set; } = DateTime.Now;
+}
+
 public class RecetaExternaCabeceraDto
 {
     public int IdFicha { get; set; }
