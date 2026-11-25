@@ -1415,6 +1415,7 @@
 <ProductCatalogModal UserId="@UsuarioProductos" BackOffice="@EsContextoBackOffice"
                      ContextLabel="detalle de factura"
                      CatalogTypeFilter="@filtroTipoCatalogoProductosFacturaComun"
+                     StockSucursalId="@SucursalFacturaId"
                      ShowCatalog="@mostrarCatalogoProductosFacturaComun"
                      ShowCatalogChanged="SetCatalogoProductosFacturaComunVisibleAsync"
                      ShowCreate="@mostrarModalProductoFacturaComun"
@@ -2135,6 +2136,7 @@
     private string? mensajeRecetaOrdenFactura;
     private readonly Dictionary<DetalleFacturaDto, (bool EsBien, string UnidadMedida, decimal FactorConversion)> metadataUnidadDetalle = new();
     private readonly Dictionary<int, (int Tarifa, string CodigoImpuestoSri, int TipoProducto, int? SubtipoProducto)> cacheFiscalFarmaciaOrden = new();
+    private int SucursalFacturaId => Session.Localidad > 0 ? Session.Localidad : 1;
     private string NombreSucursalFactura => string.IsNullOrWhiteSpace(Session.LocalidadDescripcion) ? "Sucursal actual" : Session.LocalidadDescripcion;
     private bool usarPropietarioFactura;
     private int? codigoPropietarioFactura;
@@ -2665,7 +2667,7 @@
         var identificacionesTask = IdentificacionService.GetAllActiveAsync();
         var cajaUsuarioTask = FacturacionService.GetCajaUsuarioAsync(currentUserId);
         var seriesFacturaTask = FacturacionService.GetSeriesFacturaHabilitadasAsync(currentUserId);
-        var productosFrecuentesTask = FacturacionService.BuscarProductosFiltroAsync(UsuarioProductos, string.Empty, EsContextoBackOffice);
+        var productosFrecuentesTask = FacturacionService.BuscarProductosFiltroAsync(UsuarioProductos, string.Empty, EsContextoBackOffice, SucursalFacturaId);
 
         await Task.WhenAll(
             formasPagoTask,
@@ -5575,7 +5577,7 @@
         nuevoCodProducto = filtro;
         productoLookup = null;
 
-        var resultados = await FacturacionService.BuscarProductosFiltroAsync(UsuarioProductos, filtro, EsContextoBackOffice);
+        var resultados = await FacturacionService.BuscarProductosFiltroAsync(UsuarioProductos, filtro, EsContextoBackOffice, SucursalFacturaId);
         if (revision != revisionBusquedaProductoDetalle || !ReferenceEquals(filaBusquedaProductoActiva, detalle))
             return;
 
@@ -5594,7 +5596,7 @@
         filaBusquedaProductoActiva = detalle;
         var filtro = (detalle.Descripcion ?? string.Empty).Trim();
         nuevoCodProducto = filtro;
-        var resultados = await FacturacionService.BuscarProductosFiltroAsync(UsuarioProductos, filtro, EsContextoBackOffice);
+        var resultados = await FacturacionService.BuscarProductosFiltroAsync(UsuarioProductos, filtro, EsContextoBackOffice, SucursalFacturaId);
         if (revision != revisionBusquedaProductoDetalle || !ReferenceEquals(filaBusquedaProductoActiva, detalle))
             return;
 

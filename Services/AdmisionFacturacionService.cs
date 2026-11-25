@@ -3124,7 +3124,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ISNULL(RTRIM(pr.COD_AUXILIAR), '') AS CodAuxiliar,
                 COALESCE(NULLIF(RTRIM(pr.NOMBRE), ''), NULLIF(LTRIM(RTRIM(m.med_otroMedicamento)), ''), 'Medicamento Receta') AS Descripcion,
                 ISNULL(CONVERT(nvarchar(250), m.med_indicaciones), '') AS Detalle,
-                CAST(ISNULL(m.med_cantidad1, 0) AS decimal(18,4)) AS Cantidad,
+                CAST(CASE WHEN ISNULL(pr.INVENTARIO, 1) = 0 AND ISNULL(m.med_cantidad1, 0) <= 0 THEN ISNULL(m.med_cantidad, 0) ELSE ISNULL(m.med_cantidad1, 0) END AS decimal(18,4)) AS Cantidad,
                 CAST(ISNULL(pr.VALOR_UNITARIO, 0) AS decimal(18,4)) AS PrecioUnitario,
                 ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
                 ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
@@ -3147,7 +3147,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             WHERE m.med_id_orden = @IdOrden
               AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_tipo)), ''), 'M') <> 'C'
               AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') IN ('Por Entregar', 'Por Facturar')
-              AND CAST(ISNULL(m.med_cantidad1, 0) AS decimal(18,4)) > 0
+              AND (CAST(ISNULL(m.med_cantidad1, 0) AS decimal(18,4)) > 0
+                   OR (ISNULL(pr.INVENTARIO, 1) = 0 AND CAST(ISNULL(m.med_cantidad, 0) AS decimal(18,4)) > 0))
               AND ISNULL(pr.CODIGO, 0) > 0
             ORDER BY m.sec;
             """, new { IdOrden = idOrden });

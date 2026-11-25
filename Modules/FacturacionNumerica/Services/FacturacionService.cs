@@ -890,7 +890,11 @@ namespace Simetric.Services
 
         #region BÚSQUEDA DE PRODUCTOS
 
-        public async Task<List<ProductoLookupDetalleDto>> BuscarProductosFiltroAsync(int idUsuario, string filtro, bool backOffice = false)
+        public async Task<List<ProductoLookupDetalleDto>> BuscarProductosFiltroAsync(
+            int idUsuario,
+            string filtro,
+            bool backOffice = false,
+            int? idSucursalStock = null)
         {
             filtro = (filtro ?? string.Empty).Trim();
             var filtroLower = filtro.ToLowerInvariant();
@@ -908,6 +912,22 @@ namespace Simetric.Services
                     (p.Estado == null || p.Estado == true) &&
                     p.Idusuario == idUsuario);
 
+            if (idSucursalStock is int sedeId && sedeId > 0)
+            {
+                var codigosConStock = await context.EContaxInventarioExistencias
+                    .AsNoTracking()
+                    .Where(e => e.IdSucursal == sedeId && (e.StockActual - e.StockReservado) > 0m)
+                    .Select(e => e.CodigoProducto)
+                    .Distinct()
+                    .ToListAsync();
+
+                query = query.Where(p =>
+                    p.Tipocompravena == "SERVICIO" ||
+                    p.Tipocompravena == "S" ||
+                    p.Inventario == false ||
+                    codigosConStock.Contains(p.Codigo));
+            }
+
             if (!string.IsNullOrWhiteSpace(filtroLower))
             {
                 query = query.Where(p =>
@@ -919,9 +939,10 @@ namespace Simetric.Services
                     (p.IdsubtipoNavigation != null && (p.IdsubtipoNavigation.Descripcion ?? "").ToLower().Contains(filtroLower)));
             }
 
+            int limite = idSucursalStock.HasValue ? 80 : 15;
             var productos = await query
                 .OrderBy(p => p.Nombre)
-                .Take(15)
+                .Take(limite)
                 .ToListAsync();
 
             return productos.Select(MapearAProductoDto).ToList();

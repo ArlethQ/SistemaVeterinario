@@ -258,6 +258,7 @@
     [Parameter] public bool BackOffice { get; set; }
     [Parameter] public string ContextLabel { get; set; } = "detalle";
     [Parameter] public string? CatalogTypeFilter { get; set; }
+    [Parameter] public int? StockSucursalId { get; set; }
     [Parameter] public bool ShowCatalog { get; set; }
     [Parameter] public EventCallback<bool> ShowCatalogChanged { get; set; }
     [Parameter] public bool ShowCreate { get; set; }
@@ -278,7 +279,7 @@
     private List<ProductSubtypeLookup> productSubtypes = new();
     private List<VatLookup> vats = new();
     private ProductModalModel productModel = CreateProductModel();
-    private (int UserId, bool BackOffice, string? TypeFilter)? loadedScope;
+    private (int UserId, bool BackOffice, string? TypeFilter, int? SucursalId)? loadedScope;
 
     private string TituloCatalogo =>
         string.Equals(CatalogTypeFilter, "PRODUCTO", StringComparison.OrdinalIgnoreCase)
@@ -345,9 +346,9 @@
     protected override async Task OnParametersSetAsync()
     {
         var tipoNorm = string.IsNullOrWhiteSpace(CatalogTypeFilter) ? null : CatalogTypeFilter.Trim().ToUpperInvariant();
-        if (loadedScope != (UserId, BackOffice, tipoNorm))
+        if (loadedScope != (UserId, BackOffice, tipoNorm, StockSucursalId))
         {
-            loadedScope = (UserId, BackOffice, tipoNorm);
+            loadedScope = (UserId, BackOffice, tipoNorm, StockSucursalId);
             catalogProducts.Clear();
             selectedKeys.Clear();
             addedKeys.Clear();
@@ -372,7 +373,7 @@
         try
         {
             var filtroInicial = string.IsNullOrWhiteSpace(CatalogTypeFilter) ? string.Empty : CatalogTypeFilter.Trim();
-            catalogProducts = (await FacturacionService.BuscarProductosFiltroAsync(UserId, filtroInicial, BackOffice)).Take(80).ToList();
+            catalogProducts = (await FacturacionService.BuscarProductosFiltroAsync(UserId, filtroInicial, BackOffice, StockSucursalId)).Take(80).ToList();
         }
         finally
         {
