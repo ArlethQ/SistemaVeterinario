@@ -212,13 +212,17 @@
                                         </span>
                                     </td>
                                     <td class="small">
-                                        @if (!item.RequiereHospitalizacion)
-                                        {
-                                            <span class="text-muted">Ambulatorio</span>
-                                        }
-                                        else if (!string.IsNullOrWhiteSpace(item.JaulaCodigo))
+                                        @if (!string.IsNullOrWhiteSpace(item.JaulaCodigo))
                                         {
                                             <span class="badge bandeja-jaula">@item.JaulaCodigo</span>
+                                            @if (!item.RequiereHospitalizacion)
+                                            {
+                                                <small class="text-muted d-block">Ambulatorio</small>
+                                            }
+                                        }
+                                        else if (!item.RequiereHospitalizacion)
+                                        {
+                                            <span class="text-muted">Ambulatorio</span>
                                         }
                                         else
                                         {
@@ -280,10 +284,20 @@
             <div class="ingreso-form">
                 <div class="ingreso-scroll">
                     <div class="row g-3">
-                        @if (_ordenSeleccionada.RequiereHospitalizacion)
+                        @if (_ordenSeleccionada.RequiereHospitalizacion || _ordenSeleccionada.RequiereCirugia)
                         {
                             <div class="col-md-6">
-                                <label class="form-label small fw-semibold" for="selJaula">Ubicación / Jaula <span class="text-danger">*</span></label>
+                                <label class="form-label small fw-semibold" for="selJaula">
+                                    Ubicación / Jaula
+                                    @if (_ordenSeleccionada.RequiereHospitalizacion)
+                                    {
+                                        <span class="text-danger">*</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted fw-normal">(opcional · estancia ambulatoria / recuperación)</span>
+                                    }
+                                </label>
                                 <select id="selJaula" class="form-select form-select-sm" @bind="_ingreso.IdJaula">
                                     <option value="">-- Seleccionar jaula --</option>
                                     @foreach (var jaula in JaulasParaSeleccion)
@@ -305,9 +319,12 @@
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold" for="txtUbicacionManual">Detalle / Referencia de ubicación (opcional)</label>
                                 <input id="txtUbicacionManual" class="form-control form-control-sm" @bind="_ingreso.UbicacionJaula"
-                                       placeholder="Ej. Área Caninos, Jaula J-01, Cuidados intensivos..." maxlength="150" />
+                                       placeholder="Ej. Área Caninos, Jaula J-01, Recuperación..." maxlength="150" />
                             </div>
+                        }
 
+                        @if (_ordenSeleccionada.RequiereHospitalizacion)
+                        {
                             <div class="col-12">
                                 <label class="form-label small fw-semibold" for="txtIndicaciones">Indicaciones de hospitalización</label>
                                 <textarea id="txtIndicaciones" class="form-control form-control-sm" rows="3" @bind="_ingreso.Indicaciones"
