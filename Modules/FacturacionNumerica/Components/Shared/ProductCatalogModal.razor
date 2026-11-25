@@ -15,7 +15,7 @@
                 <div class="pcm-title-wrap">
                     <span class="pcm-icon"><i class="bi bi-grid-3x3-gap"></i></span>
                     <div>
-                        <div id="@CatalogTitleId" class="pcm-title">Catalogo de productos y servicios</div>
+                        <div id="@CatalogTitleId" class="pcm-title">@TituloCatalogo</div>
                         <p>Selecciona uno o varios items y agregalos al @ContextLabel.</p>
                     </div>
                 </div>
@@ -111,8 +111,8 @@
                 <div class="pcm-title-wrap">
                     <span class="pcm-icon"><i class="bi bi-box-seam"></i></span>
                     <div>
-                        <div id="@CreateTitleId" class="pcm-title">Registrar producto</div>
-                        <p>Crea el producto y dejalo listo para usarlo en el @ContextLabel.</p>
+                        <div id="@CreateTitleId" class="pcm-title">Crear producto o servicio</div>
+                        <p>Crea el producto o servicio y dejalo listo para usarlo en el @ContextLabel.</p>
                     </div>
                 </div>
                 <button type="button" class="pcm-close" @onclick="CerrarCrearAsync" aria-label="Cerrar modal">
@@ -243,6 +243,7 @@
     [Parameter] public int UserId { get; set; }
     [Parameter] public bool BackOffice { get; set; }
     [Parameter] public string ContextLabel { get; set; } = "detalle";
+    [Parameter] public string? CatalogTypeFilter { get; set; }
     [Parameter] public bool ShowCatalog { get; set; }
     [Parameter] public EventCallback<bool> ShowCatalogChanged { get; set; }
     [Parameter] public bool ShowCreate { get; set; }
@@ -263,7 +264,14 @@
     private List<ProductSubtypeLookup> productSubtypes = new();
     private List<VatLookup> vats = new();
     private ProductModalModel productModel = CreateProductModel();
-    private (int UserId, bool BackOffice)? loadedScope;
+    private (int UserId, bool BackOffice, string? TypeFilter)? loadedScope;
+
+    private string TituloCatalogo =>
+        string.Equals(CatalogTypeFilter, "PRODUCTO", StringComparison.OrdinalIgnoreCase)
+            ? "Catálogo de productos"
+            : string.Equals(CatalogTypeFilter, "SERVICIO", StringComparison.OrdinalIgnoreCase)
+                ? "Catálogo de servicios"
+                : "Catálogo de productos y servicios";
 
     private IEnumerable<ProductoLookupDetalleDto> FilteredProducts
     {
@@ -271,6 +279,12 @@
         {
             var query = (catalogFilter ?? string.Empty).Trim();
             var products = catalogProducts.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(CatalogTypeFilter))
+            {
+                products = products.Where(p =>
+                    string.Equals((p.TipoCompravena ?? string.Empty).Trim(), CatalogTypeFilter.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
 
             if (!string.IsNullOrWhiteSpace(query))
             {
@@ -316,15 +330,16 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (loadedScope != (UserId, BackOffice))
+        var tipoNorm = string.IsNullOrWhiteSpace(CatalogTypeFilter) ? null : CatalogTypeFilter.Trim().ToUpperInvariant();
+        if (loadedScope != (UserId, BackOffice, tipoNorm))
         {
-            loadedScope = (UserId, BackOffice);
+            loadedScope = (UserId, BackOffice, tipoNorm);
             catalogProducts.Clear();
-            productTypes.Clear();
-            productSubtypes.Clear();
             selectedKeys.Clear();
             addedKeys.Clear();
-            productModel = CreateProductModel();
+            catalogFilter = string.Empty;
+            if (!productTypes.Any())
+                productModel = CreateProductModel();
         }
 
         if (ShowCatalog && !catalogProducts.Any() && !catalogLoading)
@@ -342,7 +357,8 @@
         catalogLoading = true;
         try
         {
-            catalogProducts = (await FacturacionService.BuscarProductosFiltroAsync(UserId, string.Empty, BackOffice)).Take(80).ToList();
+            var filtroInicial = string.IsNullOrWhiteSpace(CatalogTypeFilter) ? string.Empty : CatalogTypeFilter.Trim();
+            catalogProducts = (await FacturacionService.BuscarProductosFiltroAsync(UserId, filtroInicial, BackOffice)).Take(80).ToList();
         }
         finally
         {

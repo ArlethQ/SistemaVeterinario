@@ -842,7 +842,7 @@
 
                                 <tr @key="d" class="@(EsDetalleFacturaVacio(d) ? "n-detail-empty-row" : null)">
                                     <td style="width: 68px; max-width: 78px;">
-                                        @if (d.Codproducto > 0)
+                                        @if (d.Codproducto > 0 || !string.IsNullOrWhiteSpace(d.Codprincipal))
                                         {
                                             <span class="text-muted fw-bold d-inline-block text-truncate"
                                                   style="max-width: 72px; font-size: 0.76rem;"
@@ -850,28 +850,31 @@
                                         }
                                         else
                                         {
-                                            <input type="text"
-                                                   class="n-input-sm text-center fw-bold px-1"
-                                                   style="font-size: 0.76rem;"
-                                                   @bind="d.Codprincipal"
-                                                   @bind:event="oninput"
-                                                   @bind:after="AsegurarFilaVaciaDespuesDeEdicion"
-                                                   maxlength="50"
-                                                   placeholder="Cód." />
+                                            <span class="text-muted small">—</span>
                                         }
                                     </td>
                                     <td class="position-relative" style="min-width: 245px; white-space: normal;">
-                                        <textarea class="n-input-sm n-detail-concept-input"
-                                                  rows="@(EsDetalleFacturaVacio(d) ? 1 : 2)"
-                                                  style="resize: none; white-space: normal; word-break: break-word; overflow-wrap: anywhere; line-height: 1.25; height: auto; min-height: @(EsDetalleFacturaVacio(d) ? "2rem" : "2.5rem");"
-                                                  @bind="d.Descripcion"
-                                                  @bind:event="oninput"
-                                                  @bind:after="@(() => OnConceptoDetalleEditadoAsync(d))"
-                                                  @onfocus="@(() => MostrarSugerenciasDetalleProductoAsync(d))"
-                                                  @onblur="@(() => OcultarSugerenciasDetalleProductoAsync(d))"
-                                                  @onkeydown="@((KeyboardEventArgs e) => OnKeyDownConceptoDetalleAsync(d, e))"
-                                                  maxlength="150"
-                                                  placeholder="@(EsDetalleFacturaVacio(d) ? "Buscar producto o servicio" : "Concepto o nombre manual")"></textarea>
+                                        @if (d.Codproducto > 0)
+                                        {
+                                            <div class="fw-medium text-dark px-1 py-1"
+                                                 style="white-space: normal; word-break: break-word; overflow-wrap: anywhere; line-height: 1.25; font-size: 0.84rem;">
+                                                @d.Descripcion
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <textarea class="n-input-sm n-detail-concept-input"
+                                                      rows="@(EsDetalleFacturaVacio(d) ? 1 : 2)"
+                                                      style="resize: none; white-space: normal; word-break: break-word; overflow-wrap: anywhere; line-height: 1.25; height: auto; min-height: @(EsDetalleFacturaVacio(d) ? "2rem" : "2.5rem");"
+                                                      @bind="d.Descripcion"
+                                                      @bind:event="oninput"
+                                                      @bind:after="@(() => OnConceptoDetalleEditadoAsync(d))"
+                                                      @onfocus="@(() => MostrarSugerenciasDetalleProductoAsync(d))"
+                                                      @onblur="@(() => OcultarSugerenciasDetalleProductoAsync(d))"
+                                                      @onkeydown="@((KeyboardEventArgs e) => OnKeyDownConceptoDetalleAsync(d, e))"
+                                                      maxlength="150"
+                                                      placeholder="@(EsDetalleFacturaVacio(d) ? "Buscar producto o servicio" : "Concepto o nombre manual")"></textarea>
+                                        }
                                         @if (ReferenceEquals(filaBusquedaProductoActiva, d) && sugerenciasProductos != null)
                                         {
                                             <ul class="n-suggestions n-suggestions-inline n-detail-suggestions-floating">
@@ -1100,17 +1103,24 @@
                 <div class="n-detail-table-actions">
                     <button type="button"
                             class="n-table-add-product-btn"
-                            @onclick="AbrirCatalogoProductosFacturaComun"
+                            @onclick='() => AbrirCatalogoProductosFacturaComun("PRODUCTO")'
                             disabled="@sinCaja">
-                        <i class="bi bi-plus-circle"></i>
-                        <span>Seleccionar servicio o producto</span>
+                        <i class="bi bi-box-seam"></i>
+                        <span>Seleccionar producto</span>
+                    </button>
+                    <button type="button"
+                            class="n-table-add-product-btn"
+                            @onclick='() => AbrirCatalogoProductosFacturaComun("SERVICIO")'
+                            disabled="@sinCaja">
+                        <i class="bi bi-briefcase-medical"></i>
+                        <span>Seleccionar servicio</span>
                     </button>
                     <button type="button"
                             class="n-btn-primary n-detail-product-trigger"
                             @onclick="AbrirModalProductoFacturaComun"
                             disabled="@sinCaja">
                         <i class="bi bi-plus-circle"></i>
-                        <span>Registrar nuevo producto</span>
+                        <span>Crear producto o servicio</span>
                     </button>
                 </div>
 
@@ -1398,6 +1408,7 @@
 
 <ProductCatalogModal UserId="@UsuarioProductos" BackOffice="@EsContextoBackOffice"
                      ContextLabel="detalle de factura"
+                     CatalogTypeFilter="@filtroTipoCatalogoProductosFacturaComun"
                      ShowCatalog="@mostrarCatalogoProductosFacturaComun"
                      ShowCatalogChanged="SetCatalogoProductosFacturaComunVisibleAsync"
                      ShowCreate="@mostrarModalProductoFacturaComun"
@@ -2132,6 +2143,7 @@
     private bool mostrarModalNuevaGuiaRemision = false;
     private bool mostrarCatalogoProductosFactura = false;
     private bool mostrarCatalogoProductosFacturaComun = false;
+    private string? filtroTipoCatalogoProductosFacturaComun;
     private bool mostrarModalProductoFacturaComun = false;
     private bool mostrarCrudClientesFactura = false;
     private bool cargandoHistorialCliente = false;
@@ -5272,10 +5284,11 @@
     }
 
     // ===================== PRODUCTOS =====================
-    private async Task AbrirCatalogoProductosFacturaComun()
+    private async Task AbrirCatalogoProductosFacturaComun(string? tipoFiltro = null)
     {
         if (sinCaja) return;
 
+        filtroTipoCatalogoProductosFacturaComun = tipoFiltro;
         await SetCatalogoProductosFacturaComunVisibleAsync(true);
     }
 
