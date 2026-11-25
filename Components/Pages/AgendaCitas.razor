@@ -13,20 +13,41 @@
 
 <div class="container-fluid py-3 agenda-page">
     <!-- Encabezado -->
-    <div class="agenda-hero d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 bg-white">
-        <div class="d-flex align-items-center gap-3">
-            <div class="agenda-hero-icon">▦</div><div>
-            <h4 class="mb-0 fw-bold">
-                <i class="bi bi-calendar2-week-fill me-2"></i>Agenda Médica
-            </h4>
-            <small class="text-muted">
-                Programación de turnos por especialista, disponibilidad horaria y confirmación de citas.
-            </small>
+    <div class="agenda-hero mb-3 p-3 bg-white">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="agenda-hero-icon flex-shrink-0">▦</div>
+                <div>
+                    <h4 class="mb-0 fw-bold">
+                        <i class="bi bi-calendar2-week-fill me-2"></i>Agenda Médica
+                    </h4>
+                    <small class="text-muted">
+                        Programación de turnos por especialista, disponibilidad horaria y confirmación de citas.
+                    </small>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center agenda-toolbar">
+                @if (_puedeVerAgendaCompleta && Permisos.Permite("programacion/clinica"))
+                {
+                    <a class="btn btn-outline-primary btn-sm text-nowrap" href="@($"/programacion/clinica?medico={_medicoAgenda}")">Registrar turnos</a>
+                }
+                <button type="button" class="btn btn-primary btn-sm text-nowrap" @onclick="AbrirModalAgendamientoCirugia">
+                    <i class="bi bi-scissors me-1"></i>Agendamiento cirugía
+                </button>
+                <button class="btn btn-outline-danger btn-sm app-doc-action app-doc-pdf text-nowrap" @onclick="ExportarPdfAgendaAsync">
+                    <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Exportar Agenda PDF
+                </button>
+                @if (Permisos.Permite("admision/ordenes"))
+                {
+                    <a href="/admision/ordenes" class="btn btn-success btn-sm text-nowrap">
+                        <i class="bi bi-clipboard2-pulse me-1"></i>Recepción / Órdenes
+                    </a>
+                }
             </div>
         </div>
-        <div class="d-flex gap-2 align-items-center agenda-toolbar">
-            <div>
-                <label for="agenda-sucursal" class="form-label small mb-0">Sucursal</label>
+        <div class="row g-2 mt-3 pt-3 border-top align-items-end">
+            <div class="col-12 col-md-4">
+                <label for="agenda-sucursal" class="form-label small fw-semibold text-muted mb-1">Sucursal</label>
                 <select id="agenda-sucursal" class="form-select form-select-sm"
                         @bind:get="_sucursalAgenda" @bind:set="CambiarSucursalAsync" disabled="@(!_filtrosCargados || _sucursales.Count == 0)">
                     <option value="0">@(_sucursales.Count == 0 ? "Sin sucursales disponibles" : "Todas las sucursales")</option>
@@ -36,8 +57,8 @@
                     }
                 </select>
             </div>
-            <div>
-                <label for="agenda-especialidad" class="form-label small mb-0">Especialidad</label>
+            <div class="col-12 col-md-4">
+                <label for="agenda-especialidad" class="form-label small fw-semibold text-muted mb-1">Especialidad</label>
                 <select id="agenda-especialidad" class="form-select form-select-sm"
                         @bind:get="_especialidadAgenda" @bind:set="CambiarEspecialidadAsync" disabled="@(!_filtrosCargados || _sucursalAgenda <= 0)">
                     <option value="0">Seleccionar especialidad</option>
@@ -47,8 +68,8 @@
                     }
                 </select>
             </div>
-            <div>
-                <label for="agenda-medico" class="form-label small mb-0">Médico</label>
+            <div class="col-12 col-md-4">
+                <label for="agenda-medico" class="form-label small fw-semibold text-muted mb-1">Médico</label>
                 <select @key="(_sucursalAgenda, _especialidadAgenda)" id="agenda-medico" class="form-select form-select-sm"
                         @bind:get="_medicoAgenda" @bind:set="CambiarMedicoAsync"
                         disabled="@(!_filtrosCargados || !_puedeVerAgendaCompleta || _medicosAgenda.Count == 0)">
@@ -69,22 +90,6 @@
                     }
                 </select>
             </div>
-            @if (_puedeVerAgendaCompleta && Permisos.Permite("programacion/clinica"))
-            {
-                <a class="btn btn-outline-primary btn-sm" href="@($"/programacion/clinica?medico={_medicoAgenda}")">Registrar turnos</a>
-            }
-            <button type="button" class="btn btn-primary btn-sm" @onclick="AbrirModalAgendamientoCirugia">
-                <i class="bi bi-scissors me-1"></i>Agendamiento cirugía
-            </button>
-            <button class="btn btn-outline-danger btn-sm app-doc-action app-doc-pdf" @onclick="ExportarPdfAgendaAsync">
-                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Exportar Agenda PDF
-            </button>
-            @if (Permisos.Permite("admision/ordenes"))
-            {
-                <a href="/admision/ordenes" class="btn btn-success btn-sm">
-                    <i class="bi bi-clipboard2-pulse me-1"></i>Recepción / Órdenes
-                </a>
-            }
         </div>
     </div>
 
