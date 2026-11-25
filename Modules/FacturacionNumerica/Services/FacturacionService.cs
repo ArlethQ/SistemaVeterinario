@@ -906,13 +906,18 @@ namespace Simetric.Services
                 idUsuario = await ProductoCatalogoScope.ResolverAsync(context, idUsuario, true)
                     ?? throw new InvalidOperationException("No tiene acceso al catálogo de BackOffice.");
 
+            var usuariosCuenta = await ObtenerUsuariosCuentaIdsAsync(context, idUsuario);
+            if (!usuariosCuenta.Contains(idUsuario))
+                usuariosCuenta.Add(idUsuario);
+
             var query = context.Productos
                 .AsNoTracking()
                 .Include(p => p.TipoProductoNavigation)
                 .Include(p => p.IdsubtipoNavigation)
                 .Where(p =>
                     (p.Estado == null || p.Estado == true) &&
-                    p.Idusuario == idUsuario);
+                    p.Idusuario.HasValue &&
+                    usuariosCuenta.Contains(p.Idusuario.Value));
 
             if (tipoFiltroUpper == "SERVICIO")
             {

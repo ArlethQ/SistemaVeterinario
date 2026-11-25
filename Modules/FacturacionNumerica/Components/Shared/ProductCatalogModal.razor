@@ -347,6 +347,7 @@
     private List<VatLookup> vats = new();
     private ProductModalModel productModel = CreateProductModel();
     private (int UserId, bool BackOffice, string? TypeFilter, int? SucursalId)? loadedScope;
+    private bool wasShowCatalog;
 
     private string TituloCatalogo =>
         string.Equals(CatalogTypeFilter, "PRODUCTO", StringComparison.OrdinalIgnoreCase)
@@ -448,7 +449,8 @@
     protected override async Task OnParametersSetAsync()
     {
         var tipoNorm = string.IsNullOrWhiteSpace(CatalogTypeFilter) ? null : CatalogTypeFilter.Trim().ToUpperInvariant();
-        if (loadedScope != (UserId, BackOffice, tipoNorm, StockSucursalId))
+        bool cambioAlcance = loadedScope != (UserId, BackOffice, tipoNorm, StockSucursalId);
+        if (cambioAlcance)
         {
             loadedScope = (UserId, BackOffice, tipoNorm, StockSucursalId);
             catalogProducts.Clear();
@@ -460,7 +462,10 @@
                 productModel = CreateProductModel();
         }
 
-        if (ShowCatalog && !catalogProducts.Any() && !catalogLoading)
+        bool abrioCatalogo = ShowCatalog && !wasShowCatalog;
+        wasShowCatalog = ShowCatalog;
+
+        if (ShowCatalog && (abrioCatalogo || cambioAlcance || !catalogProducts.Any()) && !catalogLoading)
             await LoadCatalogAsync();
 
         if (ShowCreate && !productTypes.Any())

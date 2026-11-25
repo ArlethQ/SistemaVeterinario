@@ -959,6 +959,12 @@
                                                     @etiquetaUnidad
                                                 </small>
                                             }
+                                            @if (EsProductoPuestoEnEstablecimiento(d))
+                                            {
+                                                <span class="badge bg-primary-subtle text-primary border mt-1" style="font-size:.68rem;">
+                                                    <i class="ri-hospital-line me-1"></i>Puesto en establecimiento
+                                                </span>
+                                            }
                                         }
                                     </td>
 
@@ -5852,6 +5858,13 @@
     private bool EsConsumoClinico(DetalleFacturaDto detalle) =>
         origenesDetalleOrden.TryGetValue(detalle, out var origen) &&
         origen.Origen.StartsWith("CONSUMO_", StringComparison.Ordinal);
+
+    private bool EsProductoPuestoEnEstablecimiento(DetalleFacturaDto detalle) =>
+        origenesDetalleOrden.TryGetValue(detalle, out var org) &&
+        (string.Equals(org.Origen, "CONSULTA_INSUMO", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(org.Origen, "HOSPITALIZACION", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(org.Origen, "QUIROFANO", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(org.Origen, "ANESTESIA", StringComparison.OrdinalIgnoreCase));
 
     private bool EsDetalleBloqueadoOrden(DetalleFacturaDto detalle) =>
         origenesDetalleOrden.TryGetValue(detalle, out var org) &&
