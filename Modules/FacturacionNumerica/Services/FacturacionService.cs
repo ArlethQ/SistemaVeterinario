@@ -980,7 +980,8 @@ namespace Simetric.Services
                 TarifaIva = ObtenerTarifaIvaProducto(p),
                 TipoCompravena = p.Tipocompravena,
                 UnidadMedida = string.IsNullOrWhiteSpace(p.UnidadMedida) ? "UNIDAD" : p.UnidadMedida.Trim().ToUpperInvariant(),
-                FactorConversion = p.FactorConversionInventario > 0m ? p.FactorConversionInventario : 1m
+                FactorConversion = p.FactorConversionInventario > 0m ? p.FactorConversionInventario : 1m,
+                Inventario = p.Inventario ?? (!string.Equals(p.Tipocompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) && !string.Equals(p.Tipocompravena, "S", StringComparison.OrdinalIgnoreCase))
             };
         }
 

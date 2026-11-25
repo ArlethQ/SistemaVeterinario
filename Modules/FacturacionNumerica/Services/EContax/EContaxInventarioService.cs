@@ -39,6 +39,7 @@ public sealed class EContaxInventarioService
         var productosQuery = context.Productos
             .AsNoTracking()
             .Where(p => p.Estado != false &&
+                        p.Inventario != false &&
                         (p.Tipocompravena == null || (p.Tipocompravena.ToUpper() != "SERVICIO" && p.Tipocompravena.ToUpper() != "S")) &&
                         ((p.Idempresa == userContext.IdEmpresa && p.Idsucursal.HasValue && idsSucursal.Contains(p.Idsucursal.Value)) ||
                          context.EContaxProductosSucursales.Any(a => a.CodigoProducto == p.Codigo &&
@@ -475,7 +476,9 @@ public sealed class EContaxInventarioService
         foreach (var grupo in detalles.Where(x => x.Codproducto > 0 && x.Cantproducto > 0).GroupBy(x => x.Codproducto).OrderBy(x => x.Key))
         {
             if (!productos.TryGetValue(grupo.Key, out var producto) ||
-                string.Equals(producto.Tipocompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase))
+                string.Equals(producto.Tipocompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(producto.Tipocompravena, "S", StringComparison.OrdinalIgnoreCase) ||
+                producto.Inventario == false)
                 continue;
 
             var existencia = await ObtenerExistenciaAsync(context, idEmpresa, idSucursal, grupo.Key);
@@ -549,7 +552,8 @@ public sealed class EContaxInventarioService
             if (producto is null)
                 throw new InvalidOperationException($"El producto {grupo.Key} no existe o está inactivo en la empresa.");
             if (string.Equals(producto.Tipocompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(producto.Tipocompravena, "S", StringComparison.OrdinalIgnoreCase))
+                string.Equals(producto.Tipocompravena, "S", StringComparison.OrdinalIgnoreCase) ||
+                producto.Inventario == false)
                 continue;
 
             producto.Idempresa ??= idEmpresa;

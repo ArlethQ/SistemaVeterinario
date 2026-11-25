@@ -296,6 +296,10 @@
                                             <strong>@(string.IsNullOrWhiteSpace(p.Nombre) ? "Sin nombre" : p.Nombre)</strong>
                                             <span>
                                                 @(string.IsNullOrWhiteSpace(p.TipoCompravena) ? "Sin tipo" : p.TipoCompravena)
+                                                @if (!string.Equals(p.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) && !p.Inventario)
+                                                {
+                                                    <span class="badge text-bg-secondary ms-1" style="font-size:10px;" title="No controla stock en inventario"><i class="bi bi-box-seam me-1"></i>Sin inventario</span>
+                                                }
                                                 @if (p.SujetoFiscalizacion)
                                                 {
                                                     <span class="badge text-bg-warning text-dark ms-1" style="font-size:10px;" title="Medicamento sujeto a fiscalización ARCSA"><i class="bi bi-shield-lock-fill me-1"></i>Fiscalización</span>
@@ -316,7 +320,7 @@
                                         <span class="subcategory-line"><i class="bi bi-shop"></i> @(string.IsNullOrWhiteSpace(p.NombreSucursal) ? "Sin asignar" : p.NombreSucursal)</span>
                                     </td>
                                     <td data-label="Stock actual">
-                                        @(string.Equals(p.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) ? "No aplica" : p.StockActual.ToString("N2"))
+                                        @(string.Equals(p.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) || !p.Inventario ? "No aplica" : p.StockActual.ToString("N2"))
                                     </td>
                                     <td class="list-extra-col" data-label="Detalles">
                                         <div class="compact-detail">
@@ -334,7 +338,7 @@
                                             <button type="button" class="action-btn action-view" @onclick="() => VerProducto(p)" title="Ver">
                                                 <i class="bi bi-eye"></i>
                                             </button>
-                                            @if (!string.Equals(p.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase))
+                                            @if (!string.Equals(p.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) && p.Inventario)
                                             {
                                                 <button type="button" class="action-btn action-view" @onclick='() => NavManager.NavigateTo($"{EContaxRoutes.InventariosKardex}?productoId={p.Codigo}{(p.Idsucursal is > 0 ? $"&sucursalId={p.Idsucursal.Value}" : string.Empty)}")' title="Ver inventario">
                                                     <i class="bi bi-box-seam"></i>
@@ -457,6 +461,11 @@
                                         </div>
 
                                         <div class="detail-item">
+                                            <span>Entra a inventario</span>
+                                            <strong>@(string.Equals(productoEnVista.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) ? "No aplica (Servicio)" : (productoEnVista.Inventario ? "Sí" : "No"))</strong>
+                                        </div>
+
+                                        <div class="detail-item">
                                             <span>Sujeto a fiscalización</span>
                                             <strong>@(productoEnVista.SujetoFiscalizacion ? "Sí (Controlado ARCSA)" : "No")</strong>
                                         </div>
@@ -553,13 +562,13 @@
                             <div class="d-flex gap-2 flex-wrap">
                                 <button type="button"
                                         class="btn @(model.TipoCompravena == "PRODUCTO" ? "btn-primary" : "btn-outline-primary")"
-                                        @onclick='() => model.TipoCompravena = "PRODUCTO"'>
+                                        @onclick='() => { if (model.TipoCompravena == "SERVICIO") model.Inventario = true; model.TipoCompravena = "PRODUCTO"; }'>
                                     Producto
                                 </button>
 
                                 <button type="button"
                                         class="btn @(model.TipoCompravena == "SERVICIO" ? "btn-primary" : "btn-outline-primary")"
-                                        @onclick='() => model.TipoCompravena = "SERVICIO"'>
+                                        @onclick='() => { model.TipoCompravena = "SERVICIO"; model.Inventario = false; model.SujetoFiscalizacion = false; }'>
                                     Servicio
                                 </button>
                             </div>
@@ -584,12 +593,21 @@
                             <div class="col-md-6"><label class="form-label small fw-bold">Unidad de venta</label><InputText class="form-control form-control-sm" @bind-Value="model.UnidadMedida" placeholder="UNIDAD, CAJA, KG..." /></div>
                             <div class="col-md-6"><label class="form-label small fw-bold">Factor a unidad base</label><InputNumber class="form-control form-control-sm" @bind-Value="model.FactorConversionInventario" min="0.0001" step="0.0001" /><small class="text-muted">Ejemplo: 1 caja = 12 unidades.</small></div>
                         </div>
-                        <div class="form-check form-switch mb-2">
-                            <InputCheckbox class="form-check-input" id="chkSujetoFiscalizacionProd" @bind-Value="model.SujetoFiscalizacion" />
-                            <label class="form-check-label small fw-bold" for="chkSujetoFiscalizacionProd">
-                                Sujeto a fiscalización <span class="text-muted fw-normal">(Informe de movimiento de medicamentos sujetos a fiscalización)</span>
-                            </label>
-                        </div>
+                        @if (!string.Equals(model.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <div class="form-check form-switch mb-2">
+                                <InputCheckbox class="form-check-input" id="chkEntraInventarioProd" @bind-Value="model.Inventario" />
+                                <label class="form-check-label small fw-bold" for="chkEntraInventarioProd">
+                                    Entra a inventario <span class="text-muted fw-normal">(Controla stock, entradas y salidas; desactívalo para bienes sin stock como anestesia inhalatoria)</span>
+                                </label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <InputCheckbox class="form-check-input" id="chkSujetoFiscalizacionProd" @bind-Value="model.SujetoFiscalizacion" />
+                                <label class="form-check-label small fw-bold" for="chkSujetoFiscalizacionProd">
+                                    Sujeto a fiscalización <span class="text-muted fw-normal">(Informe de movimiento de medicamentos sujetos a fiscalización)</span>
+                                </label>
+                            </div>
+                        }
 
                         </div>
                         </details>
@@ -1203,6 +1221,7 @@
         public string? TipoCompravena { get; set; }
         public string? UnidadMedida { get; set; }
         public decimal FactorConversionInventario { get; set; } = 1m;
+        public bool Inventario { get; set; } = true;
         public bool SujetoFiscalizacion { get; set; }
 
         public int? TipoProducto { get; set; }
@@ -1247,6 +1266,7 @@
         public string? TipoCompravena { get; set; }
         public string? UnidadMedida { get; set; }
         public decimal FactorConversionInventario { get; set; } = 1m;
+        public bool Inventario { get; set; } = true;
         public bool SujetoFiscalizacion { get; set; }
 
         public int? TipoProducto { get; set; }
@@ -1969,6 +1989,7 @@
         {
             Estado = true,
             TipoCompravena = "PRODUCTO",
+            Inventario = true,
             TipoProducto = null,
             Idsubtipo = null,
             Codigoimpuesto = "",
@@ -2612,6 +2633,7 @@
                 TipoCompravena = itemDemo.TipoCompravena,
                 UnidadMedida = itemDemo.UnidadMedida,
                 FactorConversionInventario = itemDemo.FactorConversionInventario,
+                Inventario = itemDemo.Inventario,
                 SujetoFiscalizacion = itemDemo.SujetoFiscalizacion,
                 TipoProducto = itemDemo.TipoProducto,
                 Idsubtipo = itemDemo.Idsubtipo,
@@ -2661,6 +2683,7 @@
                     TipoCompravena = item.TipoCompravena,
                     UnidadMedida = item.UnidadMedida,
                     FactorConversionInventario = item.FactorConversionInventario,
+                    Inventario = item.Inventario,
                     SujetoFiscalizacion = item.SujetoFiscalizacion,
                     TipoProducto = item.TipoProducto,
                     Idsubtipo = item.Idsubtipo,

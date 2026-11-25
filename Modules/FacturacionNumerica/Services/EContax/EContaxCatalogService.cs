@@ -629,6 +629,7 @@ public sealed class EContaxCatalogService
                 TipoCompravena = p.Tipocompravena,
                 UnidadMedida = p.UnidadMedida,
                 FactorConversionInventario = p.FactorConversionInventario,
+                Inventario = p.Inventario ?? (p.Tipocompravena != "SERVICIO" && p.Tipocompravena != "S"),
                 SujetoFiscalizacion = p.SujetoFiscalizacion,
                 TipoProducto = p.TipoProducto,
                 Idsubtipo = p.Idsubtipo,
@@ -692,6 +693,7 @@ public sealed class EContaxCatalogService
                 TipoCompravena = p.Tipocompravena,
                 UnidadMedida = p.UnidadMedida,
                 FactorConversionInventario = p.FactorConversionInventario,
+                Inventario = p.Inventario ?? (p.Tipocompravena != "SERVICIO" && p.Tipocompravena != "S"),
                 SujetoFiscalizacion = p.SujetoFiscalizacion,
                 TipoProducto = p.TipoProducto,
                 Idsubtipo = p.Idsubtipo,
@@ -728,6 +730,9 @@ public sealed class EContaxCatalogService
         await ValidarProductoAsync(context, userContext, targetSucursalIds, model);
         NormalizarProducto(model);
 
+        var esServicio = string.Equals(model.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(model.TipoCompravena, "S", StringComparison.OrdinalIgnoreCase);
+
         var entity = new Producto
         {
             Nombre = model.Nombre,
@@ -738,7 +743,8 @@ public sealed class EContaxCatalogService
             Tipocompravena = model.TipoCompravena,
             UnidadMedida = NormalizarUnidad(model.UnidadMedida),
             FactorConversionInventario = ValidarFactorConversion(model.FactorConversionInventario),
-            SujetoFiscalizacion = model.SujetoFiscalizacion,
+            Inventario = esServicio ? false : model.Inventario,
+            SujetoFiscalizacion = esServicio ? false : model.SujetoFiscalizacion,
             TipoProducto = model.TipoProducto,
             Idsubtipo = model.Idsubtipo,
             Codigoimpuesto = model.Codigoimpuesto,
@@ -776,6 +782,9 @@ public sealed class EContaxCatalogService
         await ValidarProductoAsync(context, userContext, targetSucursalIds, model, codigo);
         NormalizarProducto(model);
 
+        var esServicio = string.Equals(model.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(model.TipoCompravena, "S", StringComparison.OrdinalIgnoreCase);
+
         producto.Nombre = model.Nombre;
         producto.CodigoPrincipal = model.CodigoPrincipal;
         producto.ValorUnitario = model.ValorUnitario;
@@ -784,7 +793,8 @@ public sealed class EContaxCatalogService
         producto.Tipocompravena = model.TipoCompravena;
         producto.UnidadMedida = NormalizarUnidad(model.UnidadMedida);
         producto.FactorConversionInventario = ValidarFactorConversion(model.FactorConversionInventario);
-        producto.SujetoFiscalizacion = model.SujetoFiscalizacion;
+        producto.Inventario = esServicio ? false : model.Inventario;
+        producto.SujetoFiscalizacion = esServicio ? false : model.SujetoFiscalizacion;
         producto.TipoProducto = model.TipoProducto;
         producto.Idsubtipo = model.Idsubtipo;
         producto.Codigoimpuesto = model.Codigoimpuesto;

@@ -1563,6 +1563,18 @@
                                     </div>
                                 </div>
 
+                                @if (string.Equals(productoModal.TipoCompravena, "PRODUCTO", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            <InputCheckbox class="form-check-input" id="chkInventarioNuevaFactModal" @bind-Value="productoModal.Inventario" />
+                                            <label class="form-check-label small fw-semibold" for="chkInventarioNuevaFactModal">
+                                                Entra a inventario <span class="text-muted fw-normal">(desactiva para bienes sin stock, ej. anestesia inhalatoria)</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                }
+
                             </div>
                         </section>
 
@@ -2322,6 +2334,7 @@
         public string? Codigoimpuesto { get; set; }
         public string? Porcentajeimpuesto { get; set; }
         public bool Facturable { get; set; } = true;
+        public bool Inventario { get; set; } = true;
 
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
@@ -5099,6 +5112,7 @@
     private void CambiarTipoCompravenaProductoModal(string tipo)
     {
         productoModal.TipoCompravena = tipo;
+        productoModal.Inventario = string.Equals(tipo, "PRODUCTO", StringComparison.OrdinalIgnoreCase);
     }
 
     private void SeleccionarTipoProductoModal() => CambiarTipoCompravenaProductoModal("PRODUCTO");
@@ -5189,6 +5203,7 @@
                 Precio2 = productoModal.Precio2,
                 Precio3 = productoModal.Precio3,
                 TipoCompravena = productoModal.TipoCompravena,
+                Inventario = string.Equals(productoModal.TipoCompravena, "PRODUCTO", StringComparison.OrdinalIgnoreCase) && productoModal.Inventario,
                 TipoProducto = productoModal.TipoProducto,
                 Idsubtipo = productoModal.Idsubtipo,
                 productoModal.Codigoimpuesto,

@@ -70,6 +70,7 @@ public class InventarioService : IInventarioService
                 LEFT JOIN dbo.ECONTAX_BODEGA b ON b.id_bodega = e.id_bodega
                 WHERE e.id_sucursal = @IdLocalidad
                   AND ISNULL(p.ESTADO, 1) <> 0
+                  AND ISNULL(p.INVENTARIO, 1) = 1
                   AND ISNULL(UPPER(p.TIPOCOMPRAVENA), 'B') NOT IN ('SERVICIO', 'S')
                 GROUP BY
                     p.CODIGO,

@@ -19,5 +19,6 @@
         public string? TipoCompravena { get; set; }    // PRODUCTO o SERVICIO
         public string? UnidadMedida { get; set; }
         public decimal FactorConversion { get; set; } = 1m;
+        public bool Inventario { get; set; } = true;
     }
 }
