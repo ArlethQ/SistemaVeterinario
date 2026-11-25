@@ -533,6 +533,10 @@ public class MonitorizacionAnestesiaDto
     public string BloqueoLocoregional { get; set; } = string.Empty;
 
     // Bloque 5: Monitorización Intraoperatoria
+    public bool UsaAnestesiaInhalatoria { get; set; }
+    public int? CodigoProductoAnestesia { get; set; }
+    public string NombreProductoAnestesia { get; set; } = string.Empty;
+    public decimal PrecioAnestesiaInhalatoria { get; set; }
     public List<FluidoAnestesiaAvaDto> Fluidos { get; set; } =
     [
         new(), new()
@@ -558,6 +562,14 @@ public class MonitorizacionAnestesiaDto
 
     public static List<IntervaloMonitorizacionAvaDto> CrearIntervalosIniciales(int cantidad = 12) =>
         Enumerable.Range(0, cantidad).Select(_ => new IntervaloMonitorizacionAvaDto()).ToList();
+}
+
+public class ProductoAnestesiaInhalatoriaDto
+{
+    public int Codigo { get; set; }
+    public string CodigoPrincipal { get; set; } = string.Empty;
+    public string Nombre { get; set; } = string.Empty;
+    public decimal PrecioUnitario { get; set; }
 }
 
 public class FarmacoPremedicacionAvaDto

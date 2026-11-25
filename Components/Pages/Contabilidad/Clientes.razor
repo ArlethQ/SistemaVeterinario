@@ -16,12 +16,14 @@
 @using Simetric.Data
 @using Simetric.Models
 @using Simetric.Services
+@using Simetric.Services.EContax
 @using MiniExcelLibs
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
 @inject EmisionControlService EmisionControlService
 @inject EmisorOnboardingService EmisorOnboardingService
+@inject EContaxInventarioService InventarioService
 @inject IDbContextFactory<AppDbContext> DbFactory
 @attribute [AllowAnonymous]
 
@@ -309,6 +311,13 @@
                                         else
                                         {
                                             <div class="action-group">
+                                                @if (EsModoProveedores)
+                                                {
+                                                    <button type="button" class="action-btn action-view" title="Historial de compras y productos"
+                                                            @onclick="() => AbrirHistorialProveedorAsync(c.Numeroidentificacion, GetNombreCompletoCliente(c))">
+                                                        <i class="bi bi-clock-history"></i>
+                                                    </button>
+                                                }
                                                 <button type="button" class="action-btn action-view" title="Ver"
                                                         @onclick="() => VerCliente(c)">
                                                     <i class="bi bi-eye"></i>
@@ -1472,7 +1481,341 @@
 
 </div>
 
+@if (mostrarHistorialProveedor)
+{
+    <div style="position:fixed;inset:0;z-index:3050;display:flex;align-items:center;justify-content:center;padding:.75rem;background:rgba(15,23,42,.56);backdrop-filter:blur(4px);"
+         @onclick="CerrarHistorialProveedor">
+        <section style="width:min(1480px,calc(100vw - 1.5rem));height:calc(100vh - 1.5rem);max-height:calc(100vh - 1.5rem);display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:#fff;box-shadow:0 24px 60px rgba(15,23,42,.30);border:1px solid #dbe6f2;"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-labelledby="historial-proveedor-modal-title"
+                 @onclick:stopPropagation="true">
+            <header style="flex:0 0 auto;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.95rem 1.35rem;border-bottom:1px solid #e2e8f0;background:linear-gradient(180deg,#ffffff,#f8fbff);">
+                <div style="min-width:0;">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                        <span class="badge bg-primary-subtle text-primary border"><i class="bi bi-clock-history me-1"></i>HISTORIAL DEL PROVEEDOR</span>
+                        @if (!string.IsNullOrWhiteSpace(historialProveedor?.RucProveedor))
+                        {
+                            <span class="badge bg-light text-dark border font-monospace">RUC: @historialProveedor.RucProveedor</span>
+                        }
+                    </div>
+                    <h2 id="historial-proveedor-modal-title" class="h5 fw-bold mb-0">@(historialProveedor?.NombreProveedor ?? "Proveedor")</h2>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-circle d-inline-flex align-items-center justify-content-center flex-shrink-0" style="width:36px;height:36px;" aria-label="Cerrar" @onclick="CerrarHistorialProveedor">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </header>
+
+            <div style="flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:1rem 1.35rem;background:#f8fafc;">
+                @if (cargandoHistorialProveedor)
+                {
+                    <div class="text-center py-5 my-4">
+                        <div class="spinner-border text-primary mb-3" role="status"></div>
+                        <div class="fw-semibold text-dark">Consultando historial de compras y precios del proveedor...</div>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(errorHistorialProveedor))
+                {
+                    <div class="alert alert-danger mb-0" role="alert">@errorHistorialProveedor</div>
+                }
+                else if (historialProveedor is not null)
+                {
+                    <div class="row g-2 mb-3">
+                        <div class="col-6 col-md-3">
+                            <div class="bg-white border rounded-3 p-2 px-3">
+                                <div class="small text-muted">Compras registradas</div>
+                                <div class="fs-5 fw-bold text-dark">@historialProveedor.Compras.Count</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="bg-white border rounded-3 p-2 px-3">
+                                <div class="small text-muted">Productos distintos</div>
+                                <div class="fs-5 fw-bold text-primary">@historialProveedor.Productos.Count</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="bg-white border rounded-3 p-2 px-3">
+                                <div class="small text-muted">Total comprado</div>
+                                <div class="fs-5 fw-bold text-success">$@historialProveedor.TotalComprado.ToString("N2")</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="bg-white border rounded-3 p-2 px-3">
+                                <div class="small text-muted">Última compra</div>
+                                <div class="fs-5 fw-bold text-dark">@(historialProveedor.UltimaFechaCompra?.ToString("dd/MM/yyyy") ?? "—")</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                        <ul class="nav nav-pills gap-1" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button type="button"
+                                        class="nav-link py-1 px-3 @(tabHistorialProveedor == "compras" ? "active" : "bg-white border text-dark")"
+                                        @onclick='() => tabHistorialProveedor = "compras"'>
+                                    <i class="bi bi-receipt me-1"></i>Historial de compras (@historialProveedor.Compras.Count)
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button type="button"
+                                        class="nav-link py-1 px-3 @(tabHistorialProveedor == "productos" ? "active" : "bg-white border text-dark")"
+                                        @onclick='() => tabHistorialProveedor = "productos"'>
+                                    <i class="bi bi-box-seam me-1"></i>Productos comprados (@historialProveedor.Productos.Count)
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div style="min-width:240px; max-width:340px; flex:1 1 240px;">
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   @bind="filtroHistorialProveedor"
+                                   @bind:event="oninput"
+                                   placeholder="@(tabHistorialProveedor == "compras" ? "Buscar documento o producto..." : "Buscar producto o código de inventario...")" />
+                        </div>
+                    </div>
+
+                    @if (tabHistorialProveedor == "compras")
+                    {
+                        var comprasFiltradas = ComprasHistorialFiltradas;
+                        if (comprasFiltradas.Count == 0)
+                        {
+                            <div class="alert alert-light border text-center py-4 mb-0">
+                                No se encontraron compras registradas para este proveedor.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="bg-white border rounded-3 overflow-hidden">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Origen</th>
+                                                <th>Documento</th>
+                                                <th>Fecha</th>
+                                                <th class="text-center">Ítems</th>
+                                                <th class="text-end">Total</th>
+                                                <th class="text-end">Detalle</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var doc in comprasFiltradas)
+                                            {
+                                                var expandido = compraHistorialExpandidaClave == doc.Clave;
+                                                <tr @key="doc.Clave">
+                                                    <td>
+                                                        <span class="badge @(doc.Origen == "Factura" ? "bg-primary-subtle text-primary border" : "bg-info-subtle text-dark border")">@doc.Origen</span>
+                                                    </td>
+                                                    <td class="fw-semibold font-monospace">@doc.NumeroDocumento</td>
+                                                    <td>@(doc.Fecha?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                                    <td class="text-center">@doc.Detalles.Count</td>
+                                                    <td class="text-end fw-semibold">$@doc.ValorTotal.ToString("N2")</td>
+                                                    <td class="text-end">
+                                                        <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" @onclick="() => ToggleCompraHistorial(doc.Clave)">
+                                                            @(expandido ? "Ocultar" : "Ver ítems")
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                @if (expandido)
+                                                {
+                                                    <tr>
+                                                        <td colspan="6" class="bg-light p-2 px-3">
+                                                            <table class="table table-sm bg-white border mb-0 small">
+                                                                <thead class="table-light">
+                                                                    <tr>
+                                                                        <th>Producto (inventario)</th>
+                                                                        <th>Código</th>
+                                                                        <th class="text-end">Cantidad</th>
+                                                                        <th class="text-end">Costo unit.</th>
+                                                                        <th class="text-end">Total</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    @foreach (var det in doc.Detalles)
+                                                                    {
+                                                                        <tr>
+                                                                            <td class="fw-semibold">@det.NombreProductoInventario</td>
+                                                                            <td class="font-monospace text-muted">@(string.IsNullOrWhiteSpace(det.CodigoPrincipal) ? "—" : det.CodigoPrincipal)</td>
+                                                                            <td class="text-end">@det.Cantidad.ToString("0.####") <span class="text-muted">@det.UnidadMedida</span></td>
+                                                                            <td class="text-end">$@det.PrecioUnitario.ToString("N4")</td>
+                                                                            <td class="text-end fw-semibold">$@det.ValorTotal.ToString("N2")</td>
+                                                                        </tr>
+                                                                    }
+                                                                </tbody>
+                                                            </table>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        var productosFiltrados = ProductosHistorialFiltrados;
+                        if (productosFiltrados.Count == 0)
+                        {
+                            <div class="alert alert-light border text-center py-4 mb-0">
+                                No hay productos homologados en inventario para este proveedor.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="bg-white border rounded-3 overflow-hidden">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Producto (en inventario)</th>
+                                                <th class="text-end">Último precio compra</th>
+                                                <th class="text-end">Precio promedio</th>
+                                                <th class="text-center">Variación</th>
+                                                <th class="text-end" title="Suma histórica de todos los paquetes/unidades comprados">Cant. acumulada</th>
+                                                <th class="text-center" title="Cantidad de compras en las que ingresó este producto (1 por documento)">Compras</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var prod in productosFiltrados)
+                                            {
+                                                var diff = prod.UltimoPrecioCompra - prod.PrecioPromedio;
+                                                var pctDiff = prod.PrecioPromedio > 0 ? (diff / prod.PrecioPromedio) * 100m : 0m;
+                                                <tr @key="prod.CodigoProducto">
+                                                    <td>
+                                                        <div class="fw-semibold text-dark">@prod.NombreProducto</div>
+                                                        <div class="small text-muted">
+                                                            <span class="font-monospace">@prod.CodigoPrincipal</span> · @prod.UnidadMedida
+                                                        </div>
+                                                    </td>
+                                                    <td class="text-end">
+                                                        <div class="fw-bold text-primary">$@prod.UltimoPrecioCompra.ToString("N4")</div>
+                                                        <small class="text-muted">@(prod.UltimaFechaCompra?.ToString("dd/MM/yyyy") ?? "—")</small>
+                                                    </td>
+                                                    <td class="text-end">
+                                                        <div class="fw-semibold text-dark">$@prod.PrecioPromedio.ToString("N4")</div>
+                                                        @if (prod.VecesComprado > 1 && prod.PrecioMinimo != prod.PrecioMaximo)
+                                                        {
+                                                            <small class="text-muted">Min $@prod.PrecioMinimo.ToString("N2") · Max $@prod.PrecioMaximo.ToString("N2")</small>
+                                                        }
+                                                    </td>
+                                                    <td class="text-center">
+                                                        @if (Math.Abs(diff) < 0.0001m || prod.VecesComprado <= 1)
+                                                        {
+                                                            <span class="badge bg-light text-secondary border">Estable</span>
+                                                        }
+                                                        else if (diff > 0)
+                                                        {
+                                                            <span class="badge bg-danger-subtle text-danger border" title="Última compra más cara que el promedio">+@pctDiff.ToString("0.0")% ↑</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-success-subtle text-success border" title="Última compra más económica que el promedio">@pctDiff.ToString("0.0")% ↓</span>
+                                                        }
+                                                    </td>
+                                                    <td class="text-end">@prod.CantidadTotal.ToString("0.####") <small class="text-muted">@prod.UnidadMedida</small></td>
+                                                    <td class="text-center"><span class="badge bg-light text-dark border">@prod.VecesComprado</span></td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        }
+                    }
+                }
+            </div>
+
+            <footer style="flex:0 0 auto;border-top:1px solid #e2e8f0;background:#fff;padding:.75rem 1.35rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+                <span class="small text-muted"><i class="bi bi-info-circle me-1 text-primary"></i>Los productos se muestran con el nombre guardado en tu inventario y el precio promedio ponderado de todas las compras al proveedor.</span>
+                <div>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CerrarHistorialProveedor">Cerrar</button>
+                </div>
+            </footer>
+        </section>
+    </div>
+}
+
 @code {
+    private bool mostrarHistorialProveedor;
+    private bool cargandoHistorialProveedor;
+    private string? errorHistorialProveedor;
+    private string tabHistorialProveedor = "compras";
+    private string filtroHistorialProveedor = string.Empty;
+    private string? compraHistorialExpandidaClave;
+    private EContaxInventarioService.HistorialComprasProveedorDto? historialProveedor;
+
+    private List<EContaxInventarioService.HistorialCompraDocumentoDto> ComprasHistorialFiltradas
+    {
+        get
+        {
+            if (historialProveedor is null) return [];
+            var q = filtroHistorialProveedor.Trim();
+            if (q.Length == 0) return historialProveedor.Compras;
+            return historialProveedor.Compras.Where(c =>
+                c.NumeroDocumento.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                c.Origen.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                c.Detalles.Any(d =>
+                    d.NombreProductoInventario.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    d.CodigoPrincipal.Contains(q, StringComparison.OrdinalIgnoreCase))).ToList();
+        }
+    }
+
+    private List<EContaxInventarioService.HistorialProductoProveedorDto> ProductosHistorialFiltrados
+    {
+        get
+        {
+            if (historialProveedor is null) return [];
+            var q = filtroHistorialProveedor.Trim();
+            if (q.Length == 0) return historialProveedor.Productos;
+            return historialProveedor.Productos.Where(p =>
+                p.NombreProducto.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                p.CodigoPrincipal.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                p.CodigoProducto.ToString().Contains(q)).ToList();
+        }
+    }
+
+    private async Task AbrirHistorialProveedorAsync(string? rucProveedor, string? nombreProveedor)
+    {
+        if (usuarioLogueadoId <= 0) return;
+        mostrarHistorialProveedor = true;
+        cargandoHistorialProveedor = true;
+        errorHistorialProveedor = null;
+        tabHistorialProveedor = "compras";
+        filtroHistorialProveedor = string.Empty;
+        compraHistorialExpandidaClave = null;
+        historialProveedor = new EContaxInventarioService.HistorialComprasProveedorDto
+        {
+            NombreProveedor = string.IsNullOrWhiteSpace(nombreProveedor) ? "Proveedor" : nombreProveedor.Trim(),
+            RucProveedor = (rucProveedor ?? string.Empty).Trim()
+        };
+
+        try
+        {
+            historialProveedor = await InventarioService.ObtenerHistorialComprasProveedorAsync(usuarioLogueadoId, rucProveedor, nombreProveedor);
+        }
+        catch (Exception ex)
+        {
+            errorHistorialProveedor = ex.GetBaseException().Message;
+        }
+        finally
+        {
+            cargandoHistorialProveedor = false;
+        }
+    }
+
+    private void CerrarHistorialProveedor()
+    {
+        mostrarHistorialProveedor = false;
+        errorHistorialProveedor = null;
+        compraHistorialExpandidaClave = null;
+    }
+
+    private void ToggleCompraHistorial(string clave)
+    {
+        compraHistorialExpandidaClave = compraHistorialExpandidaClave == clave ? null : clave;
+    }
     private string TextoEntidad(string texto) => EsModoProveedores
         ? texto.Replace("Clientes", "Proveedores").Replace("clientes", "proveedores")
             .Replace("Cliente", "Proveedor").Replace("cliente", "proveedor")

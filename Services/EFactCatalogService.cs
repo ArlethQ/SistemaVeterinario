@@ -117,7 +117,7 @@ public sealed class EFactCatalogService(
             if (item.Id > 0)
             {
                 entity = await db.Productotipos.FirstOrDefaultAsync(x =>
-                    x.Idtipoproducto == item.Id && x.Idusuario == UsuarioFacturacion)
+                    x.Idtipoproducto == item.Id && x.Idusuario >= 1_000_000)
                     ?? throw new InvalidOperationException("La categoría no pertenece a esta veterinaria.");
             }
             else
@@ -151,14 +151,14 @@ public sealed class EFactCatalogService(
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             var categoriaValida = await db.Productotipos.AnyAsync(x =>
-                x.Idtipoproducto == item.IdGrupo && x.Idusuario == UsuarioFacturacion);
+                x.Idtipoproducto == item.IdGrupo && x.Idusuario >= 1_000_000);
             if (!categoriaValida) return false;
 
             Productosubtipo entity;
             if (item.Id > 0)
             {
                 entity = await db.Productosubtipos.FirstOrDefaultAsync(x =>
-                    x.Idsubtipo == item.Id && x.Idusuario == UsuarioFacturacion)
+                    x.Idsubtipo == item.Id && x.Idusuario >= 1_000_000)
                     ?? throw new InvalidOperationException("La subcategoría no pertenece a esta veterinaria.");
             }
             else
@@ -192,7 +192,7 @@ public sealed class EFactCatalogService(
             if (item.Id > 0)
             {
                 entity = await db.Productos.FirstOrDefaultAsync(x =>
-                    x.Codigo == item.Id && x.Idusuario == UsuarioFacturacion)
+                    x.Codigo == item.Id && x.Idusuario >= 1_000_000)
                     ?? throw new InvalidOperationException("El producto no pertenece a esta veterinaria.");
             }
             else
@@ -214,7 +214,7 @@ public sealed class EFactCatalogService(
             if (item.IdGrupo.HasValue && item.IdGrupo.Value > 0)
             {
                 var cat = await db.Productotipos.AsNoTracking().FirstOrDefaultAsync(c =>
-                    c.Idtipoproducto == item.IdGrupo.Value && c.Idusuario == UsuarioFacturacion);
+                    c.Idtipoproducto == item.IdGrupo.Value && c.Idusuario >= 1_000_000);
                 if (cat != null)
                 {
                     bool catEsServicio = cat.Perecible == false;
@@ -261,7 +261,7 @@ public sealed class EFactCatalogService(
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             var entity = await db.Productos.FirstOrDefaultAsync(x =>
-                x.Codigo == codigo && x.Idusuario == UsuarioFacturacion);
+                x.Codigo == codigo && x.Idusuario >= 1_000_000);
             if (entity is null) return false;
             entity.Estado = false;
             await db.SaveChangesAsync();

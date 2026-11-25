@@ -677,6 +677,57 @@ else if (_paciente != null)
             </div>
         </div>
         <div class="card-body p-2">
+            <!-- Uso de Anestesia Inhalatoria (cobro sin descuento de inventario) -->
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 px-3 py-2 mb-2 rounded border @(_dto.UsaAnestesiaInhalatoria ? "bg-primary-subtle border-primary-subtle" : "bg-light") small">
+                <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                    <input class="form-check-input mt-0" type="checkbox" role="switch" id="chkUsaAnestesiaInhalatoria"
+                           checked="@_dto.UsaAnestesiaInhalatoria"
+                           @onchange="OnToggleAnestesiaInhalatoriaAsync" />
+                    <label class="form-check-label fw-bold text-dark mb-0" for="chkUsaAnestesiaInhalatoria">
+                        ¿Se usó anestesia inhalatoria?
+                    </label>
+                </div>
+
+                @if (_dto.UsaAnestesiaInhalatoria)
+                {
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        @if (_productosAnestesiaInhalatoria.Count > 1)
+                        {
+                            <select class="form-select form-select-sm" style="width:auto; min-width:220px;"
+                                    value="@(_dto.CodigoProductoAnestesia ?? 0)"
+                                    @onchange="OnCambiarProductoAnestesiaAsync">
+                                @foreach (var pa in _productosAnestesiaInhalatoria)
+                                {
+                                    <option value="@pa.Codigo">@pa.Nombre — $@pa.PrecioUnitario.ToString("N2")</option>
+                                }
+                            </select>
+                        }
+                        else if (_productosAnestesiaInhalatoria.Count == 1)
+                        {
+                            var pa = _productosAnestesiaInhalatoria[0];
+                            <span class="fw-semibold text-primary">@pa.Nombre</span>
+                        }
+
+                        @if (_dto.CodigoProductoAnestesia is > 0)
+                        {
+                            <span class="badge text-bg-primary">
+                                <i class="bi bi-cash-coin me-1"></i>Se cobrará $@_dto.PrecioAnestesiaInhalatoria.ToString("N2")
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="text-warning-emphasis">
+                                <i class="bi bi-exclamation-triangle me-1"></i>No hay productos de anestesia sin inventario configurados.
+                            </span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <span class="text-muted">Activa este check si se utilizó anestesia inhalatoria para incluirla automáticamente en el cobro.</span>
+                }
+            </div>
+
             <!-- Gráfico SVG simétrico (escala AVA equidistante) -->
             <div class="overflow-x-auto border rounded bg-white p-2 mb-2">
                 @{
@@ -1145,6 +1196,7 @@ else if (_paciente != null)
     private bool _descargandoStock;
     private PacienteHeaderDto? _paciente;
     private MonitorizacionAnestesiaDto _dto = new();
+    private List<ProductoAnestesiaInhalatoriaDto> _productosAnestesiaInhalatoria = [];
 
     private bool _cargandoInicial = true;
     private bool _guardando;
@@ -1278,6 +1330,8 @@ else if (_paciente != null)
             _idCirugiaActiva = _cirugiasOrden.FirstOrDefault()?.IdCirugia ?? 0;
 
         var loaded = await QuirofanoService.ObtenerMonitorizacionAnestesiaAsync(IdOrden, Nhcl, _idCirugiaActiva);
+        _productosAnestesiaInhalatoria = await QuirofanoService.ObtenerProductosAnestesiaInhalatoriaAsync();
+        SincronizarSeleccionAnestesiaInhalatoria(loaded);
 
         // Autocompletar datos ya guardados del paciente y de la cirugía programada (si aplica)
         if (!loaded.FechaNacimiento.HasValue && p.FechaNacimiento.HasValue)
@@ -1381,6 +1435,51 @@ else if (_paciente != null)
         if (OnCirugiaCambiada.HasDelegate)
             await OnCirugiaCambiada.InvokeAsync(nuevoIdCirugia);
         await CargarDatosAsync(navegar: false);
+    }
+
+    private void SincronizarSeleccionAnestesiaInhalatoria(MonitorizacionAnestesiaDto dto)
+    {
+        if (_productosAnestesiaInhalatoria.Count == 0)
+            return;
+
+        var sel = dto.CodigoProductoAnestesia is > 0
+            ? _productosAnestesiaInhalatoria.FirstOrDefault(p => p.Codigo == dto.CodigoProductoAnestesia.Value)
+            : null;
+        sel ??= _productosAnestesiaInhalatoria[0];
+
+        if (dto.UsaAnestesiaInhalatoria || dto.CodigoProductoAnestesia is > 0)
+        {
+            dto.CodigoProductoAnestesia = sel.Codigo;
+            dto.NombreProductoAnestesia = sel.Nombre;
+            dto.PrecioAnestesiaInhalatoria = sel.PrecioUnitario;
+        }
+    }
+
+    private async Task OnToggleAnestesiaInhalatoriaAsync(ChangeEventArgs e)
+    {
+        _dto.UsaAnestesiaInhalatoria = e.Value is bool b && b;
+        if (_dto.UsaAnestesiaInhalatoria)
+        {
+            if (_productosAnestesiaInhalatoria.Count == 0)
+                _productosAnestesiaInhalatoria = await QuirofanoService.ObtenerProductosAnestesiaInhalatoriaAsync();
+            SincronizarSeleccionAnestesiaInhalatoria(_dto);
+        }
+        await GuardarBorradorAutoAsync();
+    }
+
+    private async Task OnCambiarProductoAnestesiaAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var cod))
+        {
+            var sel = _productosAnestesiaInhalatoria.FirstOrDefault(p => p.Codigo == cod);
+            if (sel != null)
+            {
+                _dto.CodigoProductoAnestesia = sel.Codigo;
+                _dto.NombreProductoAnestesia = sel.Nombre;
+                _dto.PrecioAnestesiaInhalatoria = sel.PrecioUnitario;
+            }
+        }
+        await GuardarBorradorAutoAsync();
     }
 
     private async Task GuardarAsync()

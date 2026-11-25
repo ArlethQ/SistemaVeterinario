@@ -2098,4 +2098,351 @@ public sealed class EContaxInventarioService
         public decimal ValorTotal { get; set; }
         public string Bodega { get; set; } = "";
     }
+
+    public async Task<HistorialComprasProveedorDto> ObtenerHistorialComprasProveedorAsync(
+        int userId,
+        string? rucProveedor,
+        string? nombreProveedor)
+    {
+        await _seguridad.ExigirAccionAsync(userId, EContaxRoutes.Clientes, EContaxAccion.Ver);
+        await using var context = await _dbFactory.CreateDbContextAsync();
+        var userContext = await _tenant.GetContextAsync(context, userId);
+
+        var ruc = (rucProveedor ?? string.Empty).Trim();
+        var nombre = (nombreProveedor ?? string.Empty).Trim();
+
+        var resultado = new HistorialComprasProveedorDto
+        {
+            NombreProveedor = string.IsNullOrWhiteSpace(nombre) ? "Proveedor" : nombre,
+            RucProveedor = ruc
+        };
+
+        if (string.IsNullOrWhiteSpace(ruc) && string.IsNullOrWhiteSpace(nombre))
+            return resultado;
+
+        var usuariosEmpresa = await context.EContaxUsuariosContexto
+            .AsNoTracking()
+            .Where(x => x.IdEmpresa == userContext.IdEmpresa && x.Estado)
+            .Select(x => x.IdUsuario)
+            .ToListAsync();
+        if (!usuariosEmpresa.Contains(userId)) usuariosEmpresa.Add(userId);
+        if (!usuariosEmpresa.Contains(userContext.IdUsuarioTitular)) usuariosEmpresa.Add(userContext.IdUsuarioTitular);
+
+        // Resolver IDs de cliente/proveedor por RUC o nombre
+        var clientesQuery = context.Clientes.AsNoTracking();
+        List<Cliente> clientesMatch;
+        if (!string.IsNullOrWhiteSpace(ruc))
+        {
+            clientesMatch = await clientesQuery
+                .Where(c => c.Numeroidentificacion == ruc)
+                .ToListAsync();
+        }
+        else
+        {
+            var nombreLower = nombre.ToLowerInvariant();
+            clientesMatch = await clientesQuery
+                .Where(c =>
+                    (c.Nombrerazonsocial != null && c.Nombrerazonsocial.ToLower() == nombreLower) ||
+                    (c.Nombrecomercial != null && c.Nombrecomercial.ToLower() == nombreLower))
+                .ToListAsync();
+        }
+
+        var clienteIds = clientesMatch.Select(c => c.Codcliente).Distinct().ToList();
+        var primerCliente = clientesMatch.FirstOrDefault();
+        if (primerCliente is not null)
+        {
+            if (string.IsNullOrWhiteSpace(resultado.RucProveedor))
+                resultado.RucProveedor = primerCliente.Numeroidentificacion ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(nombre))
+            {
+                resultado.NombreProveedor = primerCliente.Nombrerazonsocial
+                    ?? primerCliente.Nombrecomercial
+                    ?? $"{primerCliente.Nombres} {primerCliente.Apellidos}".Trim();
+            }
+        }
+
+        var comprasDocs = new List<HistorialCompraDocumentoDto>();
+        var registrosProducto = new List<(int CodigoProducto, string CodigoPrincipal, string NombreInventario, string UnidadMedida, decimal Cantidad, decimal PrecioUnitario, DateTime Fecha, string Documento, string ClaveDocumento)>();
+
+        // 1. Facturas de compra (ComprasFacturas + ComprasDetalleFac)
+        if (clienteIds.Count > 0)
+        {
+            var facturas = await context.ComprasFacturas.AsNoTracking()
+                .Where(c => c.Estado == true &&
+                            c.CodClientes.HasValue && clienteIds.Contains(c.CodClientes.Value) &&
+                            (c.CodDocumento == "01" || c.CodDocumento == "03") &&
+                            (c.TipoDocumento == null || c.TipoDocumento == "COM" || c.TipoDocumento == "COMPRA" || c.TipoDocumento == "LIQ") &&
+                            (c.Usuario == null || usuariosEmpresa.Contains(c.Usuario.Value)))
+                .OrderByDescending(c => c.FchAutorizacion ?? c.FechaRegistro)
+                .ThenByDescending(c => c.CodFactura)
+                .Select(c => new
+                {
+                    c.CodFactura,
+                    c.Serie,
+                    c.NumFactura,
+                    Fecha = c.FchAutorizacion ?? c.FechaRegistro,
+                    ValorTotal = c.ValorTotal ?? 0m,
+                    Ingresada = c.Inventario == true
+                })
+                .ToListAsync();
+
+            if (facturas.Count > 0)
+            {
+                var facIds = facturas.Select(f => f.CodFactura).ToList();
+                var detsFac = await (
+                    from d in context.ComprasDetalleFac.AsNoTracking()
+                    join p in context.Productos.AsNoTracking() on d.CodProducto equals p.Codigo into prods
+                    from p in prods.DefaultIfEmpty()
+                    where facIds.Contains(d.CodFactura)
+                    orderby d.CodLinea
+                    select new
+                    {
+                        d.CodFactura,
+                        d.CodProducto,
+                        d.CodPrincipal,
+                        d.DescripProducto,
+                        Cantidad = d.CantProducto ?? 0m,
+                        PrecioUnitario = d.PrecioProducto ?? 0m,
+                        ValorTotal = d.ValorTotal ?? 0m,
+                        NombreInventario = p == null ? null : p.Nombre,
+                        CodigoPrincipalInv = p == null ? null : p.CodigoPrincipal,
+                        UnidadMedida = p == null ? null : p.UnidadMedida
+                    }).ToListAsync();
+
+                var detsPorFac = detsFac.GroupBy(d => d.CodFactura).ToDictionary(g => g.Key, g => g.ToList());
+
+                foreach (var f in facturas)
+                {
+                    var serie = f.Serie ?? string.Empty;
+                    var numeroDoc = serie.Length == 6
+                        ? $"{serie[..3]}-{serie[3..]}-{f.NumFactura}"
+                        : $"{serie}-{f.NumFactura}".Trim('-');
+                    var fecha = f.Fecha ?? DateTime.MinValue;
+
+                    var lineas = detsPorFac.TryGetValue(f.CodFactura, out var list)
+                        ? list.Select(d =>
+                        {
+                            var tieneInv = d.CodProducto > 0;
+                            var nombreInv = tieneInv
+                                ? (string.IsNullOrWhiteSpace(d.NombreInventario) ? $"Producto #{d.CodProducto}" : d.NombreInventario.Trim())
+                                : (d.DescripProducto ?? "Sin homologar");
+                            var codPrinc = tieneInv
+                                ? (!string.IsNullOrWhiteSpace(d.CodigoPrincipalInv) ? d.CodigoPrincipalInv.Trim() : d.CodProducto.ToString())
+                                : (d.CodPrincipal ?? string.Empty);
+                            var unidad = string.IsNullOrWhiteSpace(d.UnidadMedida) ? "UNIDAD" : d.UnidadMedida.Trim().ToUpperInvariant();
+
+                            if (tieneInv && d.Cantidad > 0)
+                            {
+                                registrosProducto.Add((d.CodProducto, codPrinc, nombreInv, unidad, d.Cantidad, d.PrecioUnitario, fecha, numeroDoc, $"FAC-{f.CodFactura}"));
+                            }
+
+                            return new HistorialCompraLineaDto
+                            {
+                                CodigoProducto = d.CodProducto,
+                                CodigoPrincipal = codPrinc,
+                                NombreProductoInventario = nombreInv,
+                                UnidadMedida = unidad,
+                                Cantidad = d.Cantidad,
+                                PrecioUnitario = d.PrecioUnitario,
+                                ValorTotal = d.ValorTotal > 0 ? d.ValorTotal : Math.Round(d.Cantidad * d.PrecioUnitario, 2, MidpointRounding.AwayFromZero)
+                            };
+                        }).ToList()
+                        : [];
+
+                    comprasDocs.Add(new HistorialCompraDocumentoDto
+                    {
+                        Clave = $"FAC-{f.CodFactura}",
+                        Origen = "Factura",
+                        NumeroDocumento = numeroDoc,
+                        Fecha = f.Fecha,
+                        ValorTotal = f.ValorTotal,
+                        IngresadaInventario = f.Ingresada,
+                        Detalles = lineas
+                    });
+                }
+            }
+        }
+
+        // 2. Recepciones confirmadas de órdenes de compra
+        var recepcionesQuery = from r in context.EContaxRecepcionesCompra.AsNoTracking()
+                               join o in context.EContaxOrdenesCompra.AsNoTracking() on r.IdOrdenCompra equals o.IdOrdenCompra
+                               where r.IdEmpresa == userContext.IdEmpresa
+                                     && o.IdEmpresa == userContext.IdEmpresa
+                                     && (r.Estado == "RECIBIDA_PARCIAL" || r.Estado == "RECIBIDA_COMPLETA")
+                                     && ((clienteIds.Count > 0 && clienteIds.Contains(o.IdProveedorCliente))
+                                         || (!string.IsNullOrWhiteSpace(nombre) && o.NombreProveedor.ToLower() == nombre.ToLower()))
+                               orderby r.FechaRecepcion descending, r.IdRecepcion descending
+                               select new
+                               {
+                                   r.IdRecepcion,
+                                   r.NumeroRecepcion,
+                                   r.FechaRecepcion,
+                                   r.NumeroFacturaProveedor,
+                                   o.NumeroOrden,
+                                   r.IdOrdenCompra
+                               };
+
+        var recepciones = await recepcionesQuery.ToListAsync();
+        if (recepciones.Count > 0)
+        {
+            var recIds = recepciones.Select(r => r.IdRecepcion).ToList();
+            var ocIds = recepciones.Select(r => r.IdOrdenCompra).Distinct().ToList();
+
+            var costosOc = await context.EContaxOrdenesCompraDetalles.AsNoTracking()
+                .Where(d => ocIds.Contains(d.IdOrdenCompra))
+                .ToDictionaryAsync(d => d.IdDetalle, d => d.PrecioUnitario);
+
+            var detsRec = await (
+                from d in context.EContaxRecepcionesCompraDetalles.AsNoTracking()
+                join p in context.Productos.AsNoTracking() on d.CodigoProducto equals p.Codigo into prods
+                from p in prods.DefaultIfEmpty()
+                where recIds.Contains(d.IdRecepcion) && d.CantidadRecibida > 0
+                select new
+                {
+                    d.IdRecepcion,
+                    d.IdDetalleOrdenCompra,
+                    d.CodigoProducto,
+                    d.CantidadRecibida,
+                    d.CostoUnitario,
+                    NombreInventario = p == null ? null : p.Nombre,
+                    CodigoPrincipalInv = p == null ? null : p.CodigoPrincipal,
+                    UnidadMedida = p == null ? null : p.UnidadMedida
+                }).ToListAsync();
+
+            var detsPorRec = detsRec.GroupBy(d => d.IdRecepcion).ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var r in recepciones)
+            {
+                var docLabel = string.IsNullOrWhiteSpace(r.NumeroFacturaProveedor)
+                    ? $"{r.NumeroRecepcion} ({r.NumeroOrden})"
+                    : $"{r.NumeroRecepcion} · Fac {r.NumeroFacturaProveedor}";
+
+                var lineas = detsPorRec.TryGetValue(r.IdRecepcion, out var list)
+                    ? list.Select(d =>
+                    {
+                        var costo = d.CostoUnitario ?? costosOc.GetValueOrDefault(d.IdDetalleOrdenCompra);
+                        var nombreInv = string.IsNullOrWhiteSpace(d.NombreInventario) ? $"Producto #{d.CodigoProducto}" : d.NombreInventario.Trim();
+                        var codPrinc = !string.IsNullOrWhiteSpace(d.CodigoPrincipalInv) ? d.CodigoPrincipalInv.Trim() : d.CodigoProducto.ToString();
+                        var unidad = string.IsNullOrWhiteSpace(d.UnidadMedida) ? "UNIDAD" : d.UnidadMedida.Trim().ToUpperInvariant();
+                        var totalLinea = Math.Round(d.CantidadRecibida * costo, 2, MidpointRounding.AwayFromZero);
+
+                        if (d.CodigoProducto > 0)
+                        {
+                            registrosProducto.Add((d.CodigoProducto, codPrinc, nombreInv, unidad, d.CantidadRecibida, costo, r.FechaRecepcion, docLabel, $"REC-{r.IdRecepcion}"));
+                        }
+
+                        return new HistorialCompraLineaDto
+                        {
+                            CodigoProducto = d.CodigoProducto,
+                            CodigoPrincipal = codPrinc,
+                            NombreProductoInventario = nombreInv,
+                            UnidadMedida = unidad,
+                            Cantidad = d.CantidadRecibida,
+                            PrecioUnitario = costo,
+                            ValorTotal = totalLinea
+                        };
+                    }).ToList()
+                    : [];
+
+                comprasDocs.Add(new HistorialCompraDocumentoDto
+                {
+                    Clave = $"REC-{r.IdRecepcion}",
+                    Origen = "Recepción OC",
+                    NumeroDocumento = docLabel,
+                    Fecha = r.FechaRecepcion,
+                    ValorTotal = lineas.Sum(x => x.ValorTotal),
+                    IngresadaInventario = true,
+                    Detalles = lineas
+                });
+            }
+        }
+
+        resultado.Compras = comprasDocs
+            .OrderByDescending(c => c.Fecha ?? DateTime.MinValue)
+            .ThenByDescending(c => c.Clave)
+            .ToList();
+
+        resultado.Productos = registrosProducto
+            .GroupBy(x => x.CodigoProducto)
+            .Select(g =>
+            {
+                var ordenado = g.OrderByDescending(x => x.Fecha).ToList();
+                var ultimo = ordenado[0];
+                var totalCant = g.Sum(x => x.Cantidad);
+                var promedioPonderado = totalCant > 0
+                    ? Math.Round(g.Sum(x => x.Cantidad * x.PrecioUnitario) / totalCant, 4, MidpointRounding.AwayFromZero)
+                    : Math.Round(g.Average(x => x.PrecioUnitario), 4, MidpointRounding.AwayFromZero);
+
+                return new HistorialProductoProveedorDto
+                {
+                    CodigoProducto = g.Key,
+                    CodigoPrincipal = ultimo.CodigoPrincipal,
+                    NombreProducto = ultimo.NombreInventario,
+                    UnidadMedida = ultimo.UnidadMedida,
+                    UltimoPrecioCompra = ultimo.PrecioUnitario,
+                    UltimaFechaCompra = ultimo.Fecha == DateTime.MinValue ? null : ultimo.Fecha,
+                    UltimoDocumento = ultimo.Documento,
+                    PrecioPromedio = promedioPonderado,
+                    PrecioMinimo = g.Min(x => x.PrecioUnitario),
+                    PrecioMaximo = g.Max(x => x.PrecioUnitario),
+                    CantidadTotal = totalCant,
+                    VecesComprado = g.Select(x => x.ClaveDocumento).Distinct().Count()
+                };
+            })
+            .OrderByDescending(x => x.UltimaFechaCompra ?? DateTime.MinValue)
+            .ThenBy(x => x.NombreProducto, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        resultado.TotalComprado = resultado.Compras.Sum(c => c.ValorTotal);
+        resultado.UltimaFechaCompra = resultado.Compras.Select(c => c.Fecha).Where(f => f.HasValue).DefaultIfEmpty(null).Max();
+        return resultado;
+    }
+
+    public sealed class HistorialComprasProveedorDto
+    {
+        public string NombreProveedor { get; set; } = "";
+        public string RucProveedor { get; set; } = "";
+        public decimal TotalComprado { get; set; }
+        public DateTime? UltimaFechaCompra { get; set; }
+        public List<HistorialCompraDocumentoDto> Compras { get; set; } = [];
+        public List<HistorialProductoProveedorDto> Productos { get; set; } = [];
+    }
+
+    public sealed class HistorialCompraDocumentoDto
+    {
+        public string Clave { get; set; } = "";
+        public string Origen { get; set; } = "";
+        public string NumeroDocumento { get; set; } = "";
+        public DateTime? Fecha { get; set; }
+        public decimal ValorTotal { get; set; }
+        public bool IngresadaInventario { get; set; }
+        public List<HistorialCompraLineaDto> Detalles { get; set; } = [];
+    }
+
+    public sealed class HistorialCompraLineaDto
+    {
+        public int CodigoProducto { get; set; }
+        public string CodigoPrincipal { get; set; } = "";
+        public string NombreProductoInventario { get; set; } = "";
+        public string UnidadMedida { get; set; } = "UNIDAD";
+        public decimal Cantidad { get; set; }
+        public decimal PrecioUnitario { get; set; }
+        public decimal ValorTotal { get; set; }
+    }
+
+    public sealed class HistorialProductoProveedorDto
+    {
+        public int CodigoProducto { get; set; }
+        public string CodigoPrincipal { get; set; } = "";
+        public string NombreProducto { get; set; } = "";
+        public string UnidadMedida { get; set; } = "UNIDAD";
+        public decimal UltimoPrecioCompra { get; set; }
+        public DateTime? UltimaFechaCompra { get; set; }
+        public string UltimoDocumento { get; set; } = "";
+        public decimal PrecioPromedio { get; set; }
+        public decimal PrecioMinimo { get; set; }
+        public decimal PrecioMaximo { get; set; }
+        public decimal CantidadTotal { get; set; }
+        public int VecesComprado { get; set; }
+    }
 }

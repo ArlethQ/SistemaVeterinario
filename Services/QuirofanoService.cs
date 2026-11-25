@@ -35,6 +35,7 @@ public interface IQuirofanoService
     // 6. Hoja de Monitorización de Anestesia Unificada (Modelo AVA - qvt_monitorizacion_anestesia)
     Task<MonitorizacionAnestesiaDto> ObtenerMonitorizacionAnestesiaAsync(int idOrden, int nhcl, int idCirugia = 0);
     Task<(bool Ok, string? Mensaje)> GuardarMonitorizacionAnestesiaAsync(MonitorizacionAnestesiaDto dto, int idUsuario, int idLocalidad);
+    Task<List<ProductoAnestesiaInhalatoriaDto>> ObtenerProductosAnestesiaInhalatoriaAsync();
 
     // 7. Resumen de cirugías programadas vinculadas a una orden/paciente (soporte multi-cirugía por orden)
     Task<List<CirugiaOperacionResumenDto>> ObtenerResumenCirugiasOrdenAsync(int idOrden, int nhcl);
@@ -2097,6 +2098,8 @@ public class QuirofanoService : IQuirofanoService
                 catch { }
             }
 
+            await SincronizarCargoAnestesiaInhalatoriaAsync(dto, idUsuario, idLocalidad);
+
             try
             {
                 await _db.RegistrarBitacoraAsync($"Monitorización de Anestesia (AVA) guardada Orden {dto.IdOrden}", idUsuario);
@@ -2109,6 +2112,110 @@ public class QuirofanoService : IQuirofanoService
         {
             _logger.LogError(ex, "Error al guardar Monitorización de Anestesia Orden {IdOrden}", dto.IdOrden);
             return (false, "No se pudo guardar la Hoja de Monitorización de Anestesia.");
+        }
+    }
+
+    public async Task<List<ProductoAnestesiaInhalatoriaDto>> ObtenerProductosAnestesiaInhalatoriaAsync()
+    {
+        try
+        {
+            const string sql = @"
+                SELECT CODIGO AS Codigo,
+                       ISNULL(NULLIF(LTRIM(RTRIM(CODIGO_PRINCIPAL)), ''), CAST(CODIGO AS VARCHAR(50))) AS CodigoPrincipal,
+                       ISNULL(LTRIM(RTRIM(NOMBRE)), '') AS Nombre,
+                       CAST(ISNULL(VALOR_UNITARIO, 0) AS decimal(18,2)) AS PrecioUnitario
+                FROM VeterinariaFacturacion.dbo.PRODUCTO
+                WHERE ISNULL(ESTADO, 1) <> 0
+                  AND INVENTARIO = 0
+                  AND (TIPOCOMPRAVENA IS NULL OR UPPER(LTRIM(RTRIM(TIPOCOMPRAVENA))) NOT IN ('S', 'SERVICIO'))
+                ORDER BY CASE
+                    WHEN UPPER(ISNULL(NOMBRE, '')) LIKE '%SEVOFLUR%'
+                      OR UPPER(ISNULL(NOMBRE, '')) LIKE '%ISOFLUR%'
+                      OR UPPER(ISNULL(NOMBRE, '')) LIKE '%DESFLUR%'
+                      OR UPPER(ISNULL(NOMBRE, '')) LIKE '%INHALAT%'
+                      OR UPPER(ISNULL(NOMBRE, '')) LIKE '%ANESTES%' THEN 0 ELSE 1 END, NOMBRE;";
+            return (await _db.QueryAsync<ProductoAnestesiaInhalatoriaDto>(sql)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo cargar productos de anestesia inhalatoria sin inventario.");
+            return [];
+        }
+    }
+
+    private async Task SincronizarCargoAnestesiaInhalatoriaAsync(MonitorizacionAnestesiaDto dto, int idUsuario, int idLocalidad)
+    {
+        if (dto.IdOrden <= 0 || dto.Nhcl <= 0)
+            return;
+
+        const string moduloAnest = "MonAnestesia-Inh";
+        var tagCirugia = dto.IdCirugia > 0 ? $"[CIR:{dto.IdCirugia}]" : string.Empty;
+        var indicaciones = dto.IdCirugia > 0
+            ? $"{tagCirugia} Uso de anestesia inhalatoria"
+            : "Uso de anestesia inhalatoria";
+
+        try
+        {
+            const string sqlDelete = @"
+                DELETE FROM dbo.qvt_productosUtilizados
+                WHERE ordenId = @IdOrden
+                  AND modulo = @Modulo
+                  AND (@TagCirugia = '' OR ISNULL(indicacionesprod, '') LIKE @TagPattern);";
+
+            await _db.ExecuteAsync(sqlDelete, new
+            {
+                dto.IdOrden,
+                Modulo = moduloAnest,
+                TagCirugia = tagCirugia,
+                TagPattern = $"{tagCirugia}%"
+            });
+
+            if (!dto.UsaAnestesiaInhalatoria)
+                return;
+
+            var productos = await ObtenerProductosAnestesiaInhalatoriaAsync();
+            var prod = (dto.CodigoProductoAnestesia is > 0
+                    ? productos.FirstOrDefault(p => p.Codigo == dto.CodigoProductoAnestesia.Value)
+                    : null)
+                ?? productos.FirstOrDefault();
+
+            if (prod is null)
+                return;
+
+            dto.CodigoProductoAnestesia = prod.Codigo;
+            dto.NombreProductoAnestesia = prod.Nombre;
+            dto.PrecioAnestesiaInhalatoria = prod.PrecioUnitario;
+
+            const string sqlInsert = @"
+                INSERT INTO dbo.qvt_productosUtilizados (
+                    ordenId, nhcl, hora, fecha, codigoprod, precioprod, stockprod, indicacionesprod,
+                    cantprod, usuario, localidad, proddescripcion, via, origen, iniciales, funcion,
+                    funcionario, estado, modulo, tipo, observaciones
+                ) VALUES (
+                    @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProd, @PrecioProd, 0, @IndicacionesProd,
+                    1, @Usuario, @Localidad, @ProdDescripcion, 'Inhalatoria', 'E', 'AN', 'Anestesiólogo',
+                    @Funcionario, 'Vigente', @Modulo, 'M', '[FARMACIA:ENTREGADO] Anestesia inhalatoria (sin inventario)'
+                );";
+
+            await _db.ExecuteAsync(sqlInsert, new
+            {
+                OrdenId = dto.IdOrden,
+                dto.Nhcl,
+                Hora = DateTime.Now.ToString("HH:mm"),
+                Fecha = DateTime.Today,
+                CodigoProd = prod.CodigoPrincipal,
+                PrecioProd = prod.PrecioUnitario,
+                IndicacionesProd = indicaciones,
+                Usuario = idUsuario,
+                Localidad = idLocalidad > 0 ? idLocalidad : 1,
+                ProdDescripcion = Truncate(prod.Nombre, 200),
+                Funcionario = Truncate(string.IsNullOrWhiteSpace(dto.Anestesista) ? "Anestesiólogo" : dto.Anestesista, 100),
+                Modulo = moduloAnest
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo sincronizar el cargo de anestesia inhalatoria en Orden {IdOrden}", dto.IdOrden);
         }
     }
 
