@@ -1124,7 +1124,8 @@ namespace Simetric.Services
             List<Detallefactura> detalles,
             List<FacturaCorreoDestinoDto>? correosFactura = null,
             string? requestId = null,
-            int? idOrdenVeterinaria = null)
+            int? idOrdenVeterinaria = null,
+            IReadOnlySet<Detallefactura>? detallesSinSalidaInventario = null)
         {
             UltimoErrorGuardarFactura = null;
             var normalizedRequestId = string.IsNullOrWhiteSpace(requestId) ? null : requestId.Trim();
@@ -1417,7 +1418,7 @@ namespace Simetric.Services
                                 idUsuario,
                                 factura.Idempresa.Value,
                                 factura.Idsucursal.Value,
-                                detalles,
+                                detalles.Where(d => detallesSinSalidaInventario?.Contains(d) != true).ToList(),
                                 factura.Codfactura.ToString(CultureInfo.InvariantCulture));
                         }
 

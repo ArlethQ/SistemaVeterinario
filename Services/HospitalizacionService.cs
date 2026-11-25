@@ -1119,9 +1119,6 @@ public class HospitalizacionService : IHospitalizacionService
         int sedeId = idLocalidad > 0 ? idLocalidad : 1;
 
         const string sql = @"
-            SET XACT_ABORT ON;
-            BEGIN TRANSACTION;
-
             IF NOT EXISTS (SELECT 1 FROM vt_ordenAtencion WHERE ordenAten_id = @OrdenId AND ordenAten_nhcl = @Nhcl)
                OR EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @OrdenId AND cierre = 'S')
             BEGIN
@@ -1130,83 +1127,23 @@ public class HospitalizacionService : IHospitalizacionService
                 RETURN;
             END
 
-            DECLARE @CodProdInt INT = TRY_CAST(@IdBC AS INT);
-            IF @CodProdInt IS NULL OR @CodProdInt <= 0
-            BEGIN
-                SELECT TOP 1 @CodProdInt = p.CODIGO
-                FROM dbo.PRODUCTO p
-                WHERE p.CODIGO_PRINCIPAL = @CodigoProducto OR CAST(p.CODIGO AS VARCHAR(50)) = @CodigoProducto;
-            END
-
-            DECLARE @IdEmpresa INT = NULL;
-            DECLARE @StockActual DECIMAL(18,4) = 0;
-            DECLARE @StockReservado DECIMAL(18,4) = 0;
-            DECLARE @CostoPromedio DECIMAL(18,4) = 0;
-
-            IF @CodProdInt > 0
-            BEGIN
-                SELECT TOP 1
-                    @IdEmpresa = e.id_empresa,
-                    @StockActual = e.stock_actual,
-                    @StockReservado = ISNULL(e.stock_reservado, 0),
-                    @CostoPromedio = ISNULL(e.costo_promedio, 0)
-                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
-                WHERE e.codigo_producto = @CodProdInt
-                  AND e.id_sucursal = @Localidad
-                ORDER BY e.stock_actual DESC;
-            END
-
-            IF @IdEmpresa IS NULL OR (@StockActual - @StockReservado) < @Cantidad
-            BEGIN
-                ROLLBACK TRANSACTION;
-                SELECT -2;
-                RETURN;
-            END
-
-            DECLARE @NuevoReservado DECIMAL(18,4) = @StockReservado + @Cantidad;
-            DECLARE @DisponibleRestante DECIMAL(18,4) = @StockActual - @NuevoReservado;
-
-            -- Reservar en cola de Farmacia (no descuenta stock_actual hasta que Farmacia lo entregue)
-            UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
-            SET stock_reservado = @NuevoReservado,
-                fecha_actualizacion = SYSUTCDATETIME()
-            WHERE codigo_producto = @CodProdInt
-              AND id_sucursal = @Localidad
-              AND id_empresa = @IdEmpresa;
-
-            -- Registrar movimiento de reserva en Kardex de inventario
-            INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
-                codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
-                cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
-                metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
-            ) VALUES (
-                @CodProdInt, @IdEmpresa, @Localidad, 'RESERVA',
-                @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
-                'PROMEDIO', 'FARMACIA_COLA', 'ORDEN:' + CAST(@OrdenId AS VARCHAR(20)), @Usuario, SYSUTCDATETIME(),
-                'En cola de Farmacia · Monitoreo 24h Orden #' + CAST(@OrdenId AS VARCHAR(20)) + ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) +
-                CASE WHEN ISNULL(@Bodega, '') <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END
-            );
-
-            DECLARE @OutTbl TABLE (Id INT);
             INSERT INTO hvt_cabMonitoreoMedBC (
                 ordenId, nhcl, hora, fecha, codigoprod, precioprod, stockprod,
                 indicacionesprod, cantprod, usuario, localidad, proddescripcion,
                 via, origen, iniciales, funcion, funcionario, estado, grupo, modulo,
                 med_iva, med_iddinamics, med_medida, med_bodega, observaciones
             )
-            OUTPUT INSERTED.id INTO @OutTbl
             VALUES (
-                @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProducto, @Precio, CAST(@DisponibleRestante AS INT),
+                @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProducto, @Precio, 0,
                 @Indicaciones, @Cantidad, @Usuario, @Localidad, @Producto,
                 @Via, 'K', @Iniciales, @Funcion, @Funcionario, 'A', 'PENDIENTE', 'Monitoreo',
-                @Iva, CAST(@CodProdInt AS VARCHAR(50)), @Medida, @Bodega, 'En cola de Farmacia'
+                @Iva, @IdBC, @Medida, @Bodega, NULL
             );
 
-            COMMIT TRANSACTION;
-            SELECT TOP 1 Id FROM @OutTbl;";
+            ";
 
         int idInserted = await _db.ExecuteScalarAsync<int>(
-            sql,
+            FarmaciaService.GuardarSalidaClinica(sql, "MON"),
             new
             {
                 input.OrdenId,
@@ -1230,13 +1167,13 @@ public class HospitalizacionService : IHospitalizacionService
                 input.Bodega
             });
 
-        if (idInserted == -2)
+        if (idInserted == -4)
             return (false, "Stock disponible insuficiente en la sucursal actual (considerando unidades ya reservadas en cola de Farmacia).");
         if (idInserted <= 0)
             return (false, "La orden no está disponible o el monitoreo está cerrado.");
 
         _inventarioService.InvalidarCacheCatalogo();
-        return (true, $"Solicitud enviada a la cola de Farmacia y reservada ({input.Cantidad} {input.Medida} · {input.Bodega}). Se descargará cuando Farmacia la entregue.");
+        return (true, "Producto descargado del inventario y registrado en la cola de Farmacia.");
     }
 
     public async Task<bool> ActualizarMedicamentoMonitoreoAsync(
@@ -1248,6 +1185,14 @@ public class HospitalizacionService : IHospitalizacionService
         const string sql = @"
             SET XACT_ABORT ON;
             BEGIN TRANSACTION;
+
+            IF EXISTS (SELECT 1 FROM dbo.vt_salidaClinicaLote WHERE Origen = 'MON' AND IdRegistro = @IdRegistro)
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 0;
+                RETURN;
+            END;
+
 
             IF EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @IdOrden AND cierre = 'S')
             BEGIN
@@ -1375,6 +1320,14 @@ public class HospitalizacionService : IHospitalizacionService
         const string sql = @"
             SET XACT_ABORT ON;
             BEGIN TRANSACTION;
+
+            IF EXISTS (SELECT 1 FROM dbo.vt_salidaClinicaLote WHERE Origen = 'MON' AND IdRegistro = @IdRegistro)
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 0;
+                RETURN;
+            END;
+
 
             IF EXISTS (SELECT 1 FROM hvt_cabMonitoreo WHERE idOrden = @IdOrden AND cierre = 'S')
             BEGIN

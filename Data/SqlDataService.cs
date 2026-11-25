@@ -56,6 +56,25 @@ public class SqlDataService : ISqlDataService
             {
                 using var cmd = connection.CreateCommand();
                 cmd.CommandText = @"
+                    IF COL_LENGTH(N'dbo.vt_ordenAtencion', N'ordenaten_factura') IS NULL
+                        ALTER TABLE dbo.vt_ordenAtencion ADD ordenaten_factura char(1) NULL;
+                    IF COL_LENGTH(N'dbo.vt_ordenAtencion', N'ordenaten_numfacBC') IS NULL
+                        ALTER TABLE dbo.vt_ordenAtencion ADD ordenaten_numfacBC varchar(50) NULL;
+
+                    IF OBJECT_ID(N'dbo.vt_salidaClinicaLote', N'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.vt_salidaClinicaLote (
+                            Origen char(3) NOT NULL, IdRegistro int NOT NULL, IdLote bigint NOT NULL,
+                            IdOrden int NOT NULL, IdLocalidad int NOT NULL, IdEmpresa int NOT NULL,
+                            CodigoProducto int NOT NULL, Cantidad decimal(18,4) NOT NULL,
+                            Devuelto decimal(18,4) NOT NULL DEFAULT 0,
+                            PRIMARY KEY (Origen, IdRegistro, IdLote),
+                            CHECK (Devuelto >= 0 AND Devuelto <= Cantidad)
+                        );
+                        CREATE INDEX IX_vt_salidaClinicaLote_Orden ON dbo.vt_salidaClinicaLote (IdOrden);
+                    END;
+                    IF COL_LENGTH('dbo.vt_salidaClinicaLote', 'Merma') IS NULL
+                        ALTER TABLE dbo.vt_salidaClinicaLote ADD Merma decimal(18,4) NOT NULL DEFAULT 0;
                     IF OBJECT_ID(N'dbo.vt_proformaCargosManuales', N'U') IS NULL
                     BEGIN
                         CREATE TABLE dbo.vt_proformaCargosManuales (

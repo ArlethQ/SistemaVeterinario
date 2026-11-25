@@ -543,14 +543,10 @@
         _notificacionError = !res.Exito;
         if (res.Exito)
         {
-            proforma.FacturadoBc = "S";
-            proforma.NumeroFacturaBc = res.NumeroProforma;
+            proforma.EtapaActual = "PROFORMA";
             var resumen = _ordenesProforma.FirstOrDefault(o => o.IdOrden == proforma.IdOrden);
             if (resumen is not null)
-            {
-                resumen.FacturadoBc = "S";
-                resumen.NumeroFacturaBc = res.NumeroProforma;
-            }
+                resumen.EtapaActual = "PROFORMA";
         }
         _mensajeNotificacion = res.Mensaje;
     }

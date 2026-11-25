@@ -21,7 +21,7 @@
                         <span class="badge bg-light text-dark"><i class="ri-map-pin-2-line me-1 text-primary"></i>Sucursal activa: @NombreSucursalActiva</span>
                     </div>
                     <h4 class="mb-0 fw-bold text-white">Cola de Despacho de Medicamentos y Venta de Farmacia</h4>
-                    <small class="text-white-50">Los medicamentos pedidos desde Monitoreo, Pre-Anestesia y Hospitalización reservan stock aquí y se descargan al entregarlos al veterinario.</small>
+                    <small class="text-white-50">Consulte las salidas y devoluciones de Hospitalización y Quirófano.</small>
                 </div>
             </div>
             <div class="d-flex flex-wrap gap-2">
@@ -264,6 +264,13 @@
             <div class="card-header bg-white py-3 px-3">
                 <div class="row g-2 align-items-end">
                     <div class="col-md-5">
+                        @if (OrdenClinicaId is > 0)
+                        {
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="badge bg-primary">Orden #@OrdenClinicaId</span>
+                                <a href="/farmacia" class="small">Quitar filtro de orden</a>
+                            </div>
+                        }
                         <label class="form-label small fw-bold mb-1">Buscar en la cola de Farmacia (@NombreSucursalActiva):</label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-light"><i class="ri-search-line"></i></span>
@@ -289,7 +296,8 @@
                             <option value="TODOS">Todas las áreas</option>
                             <option value="Monitoreo">Monitoreo 24h</option>
                             <option value="PreAnestesia">Pre-Anestesia</option>
-                            <option value="Quirofano">Quirófano / Anestesia</option>
+                            <option value="EnfermeriaIng">Enfermería de ingreso</option>
+                            <option value="EnCirugia">Quirófano / Anestesia</option>
                         </select>
                     </div>
                     <div class="col-12 col-md-2 text-end">
@@ -429,7 +437,21 @@
                                             }
                                             else
                                             {
-                                                <span class="text-muted small"><i class="ri-check-double-line text-success me-1"></i>Completado</span>
+                                                @if (item.CantidadDevuelta > 0)
+                                                {
+                                                    <span class="small text-muted me-2">Devuelto @item.CantidadDevuelta.ToString("0.####")</span>
+                                                }
+                                                @if (item.CantidadMerma > 0)
+                                                {
+                                                    <span class="small text-muted me-2">Merma @item.CantidadMerma.ToString("0.####")</span>
+                                                }
+                                                @if (item.CantidadRetornable > 0)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                                            disabled="@_procesando" @onclick="() => AbrirDevolucionAsync(item)">
+                                                        <i class="ri-arrow-go-back-line me-1"></i>Devolver
+                                                    </button>
+                                                }
                                             }
                                         </td>
                                     </tr>
@@ -760,7 +782,53 @@
     }
 </div>
 
+@if (_itemDevolucion is { } itemDevolucion)
+{
+    <div class="modal d-block" role="dialog" aria-modal="true" aria-labelledby="titulo-devolucion" style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 id="titulo-devolucion" class="modal-title">Devolver producto</h5>
+                    <button type="button" class="btn-close" aria-label="Cerrar" disabled="@_procesando"
+                            @onclick="() => _itemDevolucion = null"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="fw-semibold">@itemDevolucion.NombreProducto · Orden #@itemDevolucion.IdOrden</p>
+                    <label class="form-label" for="tipo-devolucion">Movimiento</label>
+                    <select class="form-select mb-3" id="tipo-devolucion" @bind="_tipoDevolucion" disabled="@_procesando">
+                        <option value="reingreso">Reingresar al inventario</option>
+                        <option value="merma">Registrar merma</option>
+                    </select>
+                    <p class="small text-muted">@(EsMerma ? "La merma mantiene el cargo y no incrementa el stock." : "Confirme únicamente la cantidad apta para volver al inventario.")</p>
+                    <label class="form-label" for="lote-devolucion">Lote</label>
+                    <select class="form-select mb-3" id="lote-devolucion" @bind="_loteDevolucion" disabled="@_procesando">
+                        @foreach (var lote in _lotesDevolucion)
+                        {
+                            <option value="@lote.IdLote">@lote.Nombre · @lote.Disponible.ToString("0.####") disponibles</option>
+                        }
+                    </select>
+                    <label class="form-label" for="cantidad-devolucion">Cantidad (@itemDevolucion.UnidadMedida)</label>
+                    <input class="form-control" id="cantidad-devolucion" type="number" step="0.0001"
+                           min="0.0001" @bind="_cantidadDevolucion" disabled="@_procesando" />
+                    @if (!string.IsNullOrWhiteSpace(_errorDevolucion))
+                    {
+                        <div class="alert alert-danger mt-3 mb-0" role="alert">@_errorDevolucion</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" disabled="@(_procesando || _lotesDevolucion.Count == 0)"
+                            @onclick="ConfirmarDevolucionAsync">Confirmar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
+    [SupplyParameterFromQuery(Name = "ordenId")]
+    public int? OrdenClinicaId { get; set; }
+
+    private int? _ordenClinicaCargada;
     private string _tabActiva = "recetas";
     private bool _cargando = true;
     private bool _procesando;
@@ -779,7 +847,7 @@
     private string _estadoFiltroRecetasSoap = "PENDIENTE";
     private int _idOrdenRecetaSeleccionada;
     private string _filtroCola = string.Empty;
-    private string _estadoFiltroCola = "PENDIENTE";
+    private string _estadoFiltroCola = "TODOS";
     private string _moduloFiltroCola = "TODOS";
     private string _filtroStockSede = string.Empty;
 
@@ -881,8 +949,20 @@
         }
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        if (_localidadCargada > 0 && _ordenClinicaCargada == OrdenClinicaId)
+            return;
+
+        _ordenClinicaCargada = OrdenClinicaId;
+        if (OrdenClinicaId is > 0)
+        {
+            _tabActiva = "cola";
+            _estadoFiltroCola = "TODOS";
+            _moduloFiltroCola = "TODOS";
+            _filtroCola = string.Empty;
+        }
+
         await CargarTodoAsync();
     }
 
@@ -893,7 +973,7 @@
         try
         {
             var tRecetas = FarmaciaService.ObtenerRecetasSoapColaAsync(SucursalActivaId, null, "TODOS");
-            var tCola = FarmaciaService.ObtenerColaDespachoAsync(SucursalActivaId, null, "TODOS", null);
+            var tCola = FarmaciaService.ObtenerColaDespachoAsync(SucursalActivaId, estadoFiltro: "TODOS", idOrden: OrdenClinicaId);
             var tStock = FarmaciaService.ObtenerStockSedeDetalladoAsync(SucursalActivaId);
             var tCat = InventarioService.BuscarMedicamentosConStockAsync(string.Empty, SucursalActivaId, Session.Apostrofe);
             var tVentas = FarmaciaService.ObtenerHistorialVentasAsync(SucursalActivaId);
@@ -1016,6 +1096,76 @@
             _mensajeAlerta = res.Mensaje;
             if (res.Exito)
                 await CargarTodoAsync();
+        }
+        finally
+        {
+            _procesando = false;
+        }
+    }
+
+    private FarmaciaOrdenColaDto? _itemDevolucion;
+    private List<FarmaciaLoteRetornableDto> _lotesDevolucion = [];
+    private long _loteDevolucion;
+    private decimal _cantidadDevolucion;
+    private string _tipoDevolucion = "reingreso";
+    private bool EsMerma => _tipoDevolucion == "merma";
+    private string? _errorDevolucion;
+
+    private async Task AbrirDevolucionAsync(FarmaciaOrdenColaDto item)
+    {
+        _itemDevolucion = item;
+        _lotesDevolucion = [];
+        _cantidadDevolucion = 0;
+        _tipoDevolucion = "reingreso";
+        _errorDevolucion = null;
+        _procesando = true;
+        try
+        {
+            _lotesDevolucion = await FarmaciaService.ObtenerLotesRetornablesAsync(item.OrigenTabla, item.IdRegistro, SucursalActivaId);
+            _loteDevolucion = _lotesDevolucion.FirstOrDefault()?.IdLote ?? 0;
+            if (_lotesDevolucion.Count == 0)
+                _errorDevolucion = "La orden ya está facturada o no quedan lotes habilitados para devolución.";
+        }
+        catch
+        {
+            _errorDevolucion = "No se pudieron consultar los lotes de la salida.";
+        }
+        finally
+        {
+            _procesando = false;
+        }
+    }
+
+    private async Task ConfirmarDevolucionAsync()
+    {
+        if (_procesando || _itemDevolucion is not { } item)
+            return;
+
+        var lote = _lotesDevolucion.FirstOrDefault(l => l.IdLote == _loteDevolucion);
+        if (lote is null || _cantidadDevolucion <= 0 || _cantidadDevolucion > lote.Disponible)
+        {
+            _errorDevolucion = "Ingrese una cantidad válida para el lote seleccionado.";
+            return;
+        }
+
+        _procesando = true;
+        try
+        {
+            if (!await FarmaciaService.DevolverSalidaClinicaAsync(item.OrigenTabla, item.IdRegistro, lote.IdLote,
+                    _cantidadDevolucion, SucursalActivaId, Session.IdUser, EsMerma))
+            {
+                _errorDevolucion = "La cantidad, el lote o el estado de la orden cambió. Abra nuevamente la devolución.";
+                return;
+            }
+
+            _itemDevolucion = null;
+            _esError = false;
+            _mensajeAlerta = EsMerma ? "Merma registrada." : "Devolución registrada en inventario y prefacturación.";
+            await CargarTodoAsync();
+        }
+        catch
+        {
+            _errorDevolucion = "No se pudo confirmar la devolución. Actualice la cola antes de reintentar.";
         }
         finally
         {

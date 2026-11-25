@@ -379,10 +379,9 @@ public class QuirofanoService : IQuirofanoService
                     @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProd, @PrecioProd, @StockProd, @IndicacionesProd,
                     @CantProd, @Usuario, @Localidad, @ProdDescripcion, @Via, 'E', @Iniciales, @Funcion,
                     @Funcionario, 'Vigente', @Modulo, 'M'
-                );
-                SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                );";
 
-            int idCreado = await _db.ExecuteScalarAsync<int>(sqlInsert, new
+            int idCreado = await _db.ExecuteScalarAsync<int>(FarmaciaService.GuardarSalidaClinica(sqlInsert, "QUI"), new
             {
                 prod.OrdenId,
                 prod.Nhcl,
@@ -403,6 +402,8 @@ public class QuirofanoService : IQuirofanoService
                 prod.Modulo
             });
 
+            if (idCreado > 0)
+                _inventarioService.InvalidarCacheCatalogo();
             return idCreado > 0;
         }
         catch (Exception ex)
@@ -416,8 +417,7 @@ public class QuirofanoService : IQuirofanoService
     {
         try
         {
-            await _db.ExecuteAsync("DELETE FROM qvt_productosUtilizados WHERE id = @Id", new { Id = idProducto });
-            return true;
+            return await _db.ExecuteAsync("DELETE FROM qvt_productosUtilizados WHERE id = @Id AND ordenId = @OrdenId AND ISNULL(observaciones, '') NOT LIKE '%[[]FARMACIA:ENTREGADO]%'", new { Id = idProducto, OrdenId = idOrden }) > 0;
         }
         catch (Exception ex)
         {

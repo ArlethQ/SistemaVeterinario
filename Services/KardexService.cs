@@ -358,10 +358,9 @@ public class KardexService : IKardexService
                     @OrdenId, @Nhcl, @Hora, @Fecha, @CodigoProd, @PrecioProd, 0, @IndicacionesProd,
                     @CantProd, @Usuario, @Localidad, @ProdDescripcion, @Via, 'E', @Iniciales, @Funcion,
                     @Funcionario, 'Vigente', 1, @Modulo, 'M'
-                );
-                SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                );";
 
-            int? idCreado = await _sql.ExecuteScalarAsync<int?>(insertSql, new
+            int? idCreado = await _sql.ExecuteScalarAsync<int?>(FarmaciaService.GuardarSalidaClinica(insertSql, "QUI"), new
             {
                 OrdenId = ordenId,
                 Nhcl = nhcl,
@@ -381,21 +380,13 @@ public class KardexService : IKardexService
                 Modulo = modulo
             });
 
-            if (idCreado.HasValue && idCreado.Value > 0)
+            if (idCreado > 0)
             {
-                await _inventarioService.GuardarReservaStockAsync(
-                    input.CodigoProd.Trim(),
-                    idUsuarioSesion,
-                    input.CantProd,
-                    idLocalidad,
-                    input.Bodega.Trim(),
-                    ordenId,
-                    nhcl,
-                    idCreado.Value,
-                    "QUI");
-
-                return (true, "Administración de medicamento registrada y stock reservado con éxito.");
+                _inventarioService.InvalidarCacheCatalogo();
+                return (true, "Administración registrada y producto descargado del inventario.");
             }
+
+            return (false, "No se pudo descargar el producto. Verifique el stock libre de la sucursal.");
         }
         catch (Exception ex)
         {
@@ -409,8 +400,8 @@ public class KardexService : IKardexService
     {
         try
         {
-            const string deleteSql = "DELETE FROM qvt_productosUtilizados WHERE id = @Id";
-            int res = await _sql.ExecuteAsync(deleteSql, new { Id = idRegistro });
+            const string deleteSql = "DELETE FROM qvt_productosUtilizados WHERE id = @Id AND ordenId = @OrdenId AND ISNULL(observaciones, '') NOT LIKE '%[[]FARMACIA:ENTREGADO]%'";
+            int res = await _sql.ExecuteAsync(deleteSql, new { Id = idRegistro, OrdenId = ordenId });
             if (res > 0)
             {
                 await _inventarioService.EliminarReservaStockAsync(codigoProd, ordenId, idRegistro, "QUI");

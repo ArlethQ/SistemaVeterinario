@@ -5873,9 +5873,13 @@
         StateHasChanged();
     }
 
+    private bool EsConsumoClinico(DetalleFacturaDto detalle) =>
+        origenesDetalleOrden.TryGetValue(detalle, out var origen) &&
+        origen.Origen.StartsWith("CONSUMO_", StringComparison.Ordinal);
+
     private bool EsDetalleBloqueadoOrden(DetalleFacturaDto detalle) =>
         origenesDetalleOrden.TryGetValue(detalle, out var org) &&
-        (string.Equals(org.Origen, "CONSULTA", StringComparison.OrdinalIgnoreCase) ||
+        (EsConsumoClinico(detalle) || string.Equals(org.Origen, "CONSULTA", StringComparison.OrdinalIgnoreCase) ||
          string.Equals(org.Origen, "CONSULTA_INSUMO", StringComparison.OrdinalIgnoreCase));
 
     private void QuitarDetalle(int index)
@@ -6720,20 +6724,46 @@
             if (ordenFactura is { } ordenSeleccionada)
             {
                 var ordenVigente = (await AdmisionFacturacion.BuscarOrdenesParaFacturaAsync("", ordenSeleccionada.IdOrden)).FirstOrDefault();
-                if (ordenVigente is null)
+                if (ordenVigente is null || ordenVigente.FacturadoBc == "S")
                 {
                     await AlertService.CloseAsync();
                     await AlertService.ShowErrorAsync("La orden seleccionada ya no está habilitada para facturación.");
                     return;
                 }
             }
+            if (ordenFactura is { } ordenClinica)
+            {
+                var pendiente = await AdmisionFacturacion.ValidarCierreParaFacturarAsync(ordenClinica);
+                if (pendiente is not null)
+                {
+                    await AlertService.CloseAsync();
+                    await AlertService.ShowErrorAsync(pendiente);
+                    return;
+                }
+
+                var localidad = Session.Localidad > 0 ? Session.Localidad : 1;
+                var itemsVigentes = await AdmisionFacturacion.ObtenerItemsParaFacturaOrdenAsync(ordenClinica.IdOrden, localidad);
+                var consumosVigentes = itemsVigentes.Where(i => i.Origen.StartsWith("CONSUMO_", StringComparison.Ordinal))
+                    .Select(i => (i.Origen, i.SecOrigen, i.Cantidad, i.PrecioUnitario)).ToHashSet();
+                var consumosCargados = detallesFacturables.Where(EsConsumoClinico)
+                    .Select(d => (origenesDetalleOrden[d].Origen, origenesDetalleOrden[d].SecOrigen, d.Cantidad, d.Precio));
+                if (!consumosVigentes.SetEquals(consumosCargados))
+                {
+                    await CargarItemsOrdenEnFacturaAsync(ordenClinica);
+                    await AlertService.CloseAsync();
+                    await AlertService.ShowErrorAsync("Los consumos cambiaron. Revise los valores actualizados antes de emitir.");
+                    return;
+                }
+            }
+
             var exito = await FacturacionService.GuardarFacturaCompletaAsync(
                 currentUserId,
                 factura,
                 cliente,
                 detallesParaGuardar,
                 correosFactura,
-                idOrdenVeterinaria: ordenFactura?.IdOrden);
+                idOrdenVeterinaria: ordenFactura?.IdOrden,
+                detallesSinSalidaInventario: detallesParaGuardar.Where((_, index) => EsConsumoClinico(detallesFacturables[index])).ToHashSet());
 
             if (!exito)
             {

@@ -26,7 +26,17 @@ public class FarmaciaOrdenColaDto
     public string DetalleEntrega { get; set; } = string.Empty;
     public decimal StockFisico { get; set; }
     public decimal StockReservado { get; set; }
+    public decimal CantidadRetornable { get; set; }
+    public decimal CantidadDevuelta { get; set; }
+    public decimal CantidadMerma { get; set; }
     public decimal StockLibre => Math.Max(0, StockFisico - StockReservado);
+}
+
+public class FarmaciaLoteRetornableDto
+{
+    public long IdLote { get; set; }
+    public decimal Disponible { get; set; }
+    public string Nombre { get; set; } = string.Empty;
 }
 
 public class FarmaciaVentaLineaInputDto

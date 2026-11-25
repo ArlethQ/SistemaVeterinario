@@ -5,7 +5,9 @@ namespace HosvetKardex.Web.Services;
 
 public interface IFarmaciaService
 {
-    Task<List<FarmaciaOrdenColaDto>> ObtenerColaDespachoAsync(int idLocalidad, string? filtro = null, string estadoFiltro = "PENDIENTE", string? moduloFiltro = null);
+    Task<List<FarmaciaOrdenColaDto>> ObtenerColaDespachoAsync(int idLocalidad, string? filtro = null, string estadoFiltro = "PENDIENTE", string? moduloFiltro = null, int? idOrden = null);
+    Task<List<FarmaciaLoteRetornableDto>> ObtenerLotesRetornablesAsync(string origen, int registro, int localidad);
+    Task<bool> DevolverSalidaClinicaAsync(string origen, int registro, long lote, decimal cantidad, int localidad, int usuario, bool merma);
     Task<(bool Exito, string Mensaje)> DespacharItemColaAsync(string origenTabla, int idRegistro, int idLocalidad, int idUsuarioFarmacia, string nombreUsuarioFarmacia);
     Task<(bool Exito, string Mensaje)> DespacharOrdenCompletaAsync(int idOrden, int idLocalidad, int idUsuarioFarmacia, string nombreUsuarioFarmacia);
     Task<(bool Exito, string Mensaje)> CancelarItemColaAsync(string origenTabla, int idRegistro, int idLocalidad, int idUsuarioFarmacia, string nombreUsuarioFarmacia);
@@ -38,7 +40,8 @@ public class FarmaciaService : IFarmaciaService
         int idLocalidad,
         string? filtro = null,
         string estadoFiltro = "PENDIENTE",
-        string? moduloFiltro = null)
+        string? moduloFiltro = null,
+        int? idOrden = null)
     {
         int sedeId = idLocalidad > 0 ? idLocalidad : 1;
 
@@ -129,17 +132,30 @@ public class FarmaciaService : IFarmaciaService
                 WHERE ISNULL(q.localidad, @IdLocalidad) = @IdLocalidad
                   AND ISNULL(q.estado, 'Vigente') IN ('Vigente', 'A')
                   AND ISNULL(q.cantprod, 0) > 0
+            ),
+            ColaReciente AS (
+                SELECT c.*,
+                    ROW_NUMBER() OVER (PARTITION BY c.EstadoFarmacia ORDER BY c.Fecha DESC, c.IdRegistro DESC, c.OrigenTabla) AS Posicion
+                FROM ColaUnificada c
+                WHERE (@IdOrden IS NULL OR c.IdOrden = @IdOrden)
             )
-            SELECT TOP 250 *
-            FROM ColaUnificada
+            SELECT c.*, ISNULL(d.Disponible, 0) AS CantidadRetornable,
+                ISNULL(d.Devuelto, 0) AS CantidadDevuelta, ISNULL(d.Merma, 0) AS CantidadMerma
+            FROM ColaReciente c
+            OUTER APPLY (
+                SELECT SUM(l.Cantidad - l.Devuelto - l.Merma) AS Disponible, SUM(l.Devuelto) AS Devuelto, SUM(l.Merma) AS Merma
+                FROM dbo.vt_salidaClinicaLote l
+                WHERE l.Origen = c.OrigenTabla AND l.IdRegistro = c.IdRegistro AND l.IdLocalidad = @IdLocalidad
+            ) d
+            WHERE @IdOrden IS NOT NULL OR c.Posicion <= 250
             ORDER BY
-                CASE WHEN EstadoFarmacia = 'PENDIENTE' THEN 0 ELSE 1 END,
                 Fecha DESC,
+                Hora DESC,
                 IdRegistro DESC;";
 
         try
         {
-            var lista = (await _db.QueryAsync<FarmaciaOrdenColaDto>(sql, new { IdLocalidad = sedeId })).ToList();
+            var lista = (await _db.QueryAsync<FarmaciaOrdenColaDto>(sql, new { IdLocalidad = sedeId, IdOrden = idOrden is > 0 ? idOrden : null })).ToList();
 
             if (!string.IsNullOrWhiteSpace(estadoFiltro) && !string.Equals(estadoFiltro, "TODOS", StringComparison.OrdinalIgnoreCase))
             {
@@ -174,28 +190,17 @@ public class FarmaciaService : IFarmaciaService
         }
     }
 
-    public async Task<(bool Exito, string Mensaje)> DespacharItemColaAsync(
-        string origenTabla,
-        int idRegistro,
-        int idLocalidad,
-        int idUsuarioFarmacia,
-        string nombreUsuarioFarmacia)
-    {
-        int sedeId = idLocalidad > 0 ? idLocalidad : 1;
-        string tabla = string.Equals(origenTabla, "QUI", StringComparison.OrdinalIgnoreCase) ? "QUI" : "MON";
-        string despachador = string.IsNullOrWhiteSpace(nombreUsuarioFarmacia) ? "Farmacia" : nombreUsuarioFarmacia.Trim();
-
-        const string sql = @"
+    private const string DescargarClinicoSql = @"
             SET XACT_ABORT ON;
             BEGIN TRANSACTION;
 
             DECLARE @CodProdInt INT = 0;
             DECLARE @CodProdStr VARCHAR(50) = '';
             DECLARE @NombreProd VARCHAR(250) = '';
-            DECLARE @Cantidad DECIMAL(18,4) = 0;
-            DECLARE @OrdenId INT = 0;
-            DECLARE @Nhcl INT = 0;
-            DECLARE @Bodega VARCHAR(120) = '';
+            DECLARE @SalidaCantidad DECIMAL(18,4) = 0;
+            DECLARE @SalidaOrdenId INT = 0;
+            DECLARE @SalidaNhcl INT = 0;
+            DECLARE @SalidaBodega VARCHAR(120) = '';
             DECLARE @Solicitante VARCHAR(120) = '';
             DECLARE @YaEntregado BIT = 0;
 
@@ -205,30 +210,32 @@ public class FarmaciaService : IFarmaciaService
                     @CodProdInt = ISNULL(TRY_CAST(med_iddinamics AS INT), 0),
                     @CodProdStr = ISNULL(RTRIM(codigoprod), ''),
                     @NombreProd = ISNULL(proddescripcion, ''),
-                    @Cantidad = ISNULL(cantprod, 0),
-                    @OrdenId = ISNULL(ordenId, 0),
-                    @Nhcl = ISNULL(nhcl, 0),
-                    @Bodega = ISNULL(med_bodega, ''),
+                    @SalidaCantidad = ISNULL(cantprod, 0),
+                    @SalidaOrdenId = ISNULL(ordenId, 0),
+                    @SalidaNhcl = ISNULL(nhcl, 0),
+                    @SalidaBodega = ISNULL(med_bodega, ''),
                     @Solicitante = COALESCE(NULLIF(LTRIM(RTRIM(funcionario)), ''), NULLIF(LTRIM(RTRIM(iniciales)), ''), 'Veterinario'),
                     @YaEntregado = CASE WHEN ISNULL(grupo, '') = 'ENTREGADO' THEN 1 ELSE 0 END
                 FROM dbo.hvt_cabMonitoreoMedBC WITH (UPDLOCK, HOLDLOCK)
-                WHERE id = @IdRegistro;
+                WHERE id = @IdRegistro AND localidad = @IdLocalidad
+                  AND ISNULL(estado, 'A') = 'A' AND modulo = 'Monitoreo';
             END
             ELSE
             BEGIN
                 SELECT TOP 1
                     @CodProdStr = ISNULL(RTRIM(CONVERT(VARCHAR(50), codigoprod)), ''),
                     @NombreProd = ISNULL(proddescripcion, ''),
-                    @Cantidad = ISNULL(cantprod, 0),
-                    @OrdenId = ISNULL(ordenId, 0),
-                    @Nhcl = ISNULL(nhcl, 0),
+                    @SalidaCantidad = ISNULL(cantprod, 0),
+                    @SalidaOrdenId = ISNULL(ordenId, 0),
+                    @SalidaNhcl = ISNULL(nhcl, 0),
                     @Solicitante = COALESCE(NULLIF(LTRIM(RTRIM(funcionario)), ''), NULLIF(LTRIM(RTRIM(iniciales)), ''), 'Anestesiólogo'),
                     @YaEntregado = CASE WHEN ISNULL(observaciones, '') LIKE '%[[]FARMACIA:ENTREGADO]%' THEN 1 ELSE 0 END
                 FROM dbo.qvt_productosUtilizados WITH (UPDLOCK, HOLDLOCK)
-                WHERE id = @IdRegistro;
+                WHERE id = @IdRegistro AND localidad = @IdLocalidad
+                  AND ISNULL(estado, 'Vigente') IN ('Vigente', 'A');
             END
 
-            IF @Cantidad <= 0
+            IF @SalidaCantidad <= 0
             BEGIN
                 ROLLBACK TRANSACTION;
                 SELECT -1;
@@ -271,15 +278,16 @@ public class FarmaciaService : IFarmaciaService
               AND e.id_sucursal = @IdLocalidad
             ORDER BY e.stock_actual DESC;
 
-            IF @IdEmpresa IS NULL OR @StockActual < @Cantidad
+            IF @IdEmpresa IS NULL OR (@StockActual - CASE WHEN @Directo = 1 OR @OrigenTabla = 'QUI' THEN @StockReservado ELSE 0 END) < @SalidaCantidad
             BEGIN
                 ROLLBACK TRANSACTION;
                 SELECT -4;
                 RETURN;
             END
 
-            DECLARE @NuevoStock DECIMAL(18,4) = @StockActual - @Cantidad;
-            DECLARE @NuevoReservado DECIMAL(18,4) = CASE WHEN @StockReservado - @Cantidad < 0 THEN 0 ELSE @StockReservado - @Cantidad END;
+            DECLARE @NuevoStock DECIMAL(18,4) = @StockActual - @SalidaCantidad;
+            DECLARE @NuevoReservado DECIMAL(18,4) = CASE WHEN @Directo = 1 OR @OrigenTabla = 'QUI' THEN @StockReservado
+                WHEN @StockReservado < @SalidaCantidad THEN 0 ELSE @StockReservado - @SalidaCantidad END;
 
             -- Descargar físicamente stock_actual y liberar stock_reservado
             UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
@@ -291,7 +299,7 @@ public class FarmaciaService : IFarmaciaService
               AND id_empresa = @IdEmpresa;
 
             -- Descontar de lotes disponibles (FIFO)
-            DECLARE @RestanteLote DECIMAL(18,4) = @Cantidad;
+            DECLARE @RestanteLote DECIMAL(18,4) = @SalidaCantidad;
             DECLARE @IdLote BIGINT, @DispLote DECIMAL(18,4), @TomarLote DECIMAL(18,4);
             WHILE @RestanteLote > 0
             BEGIN
@@ -311,8 +319,16 @@ public class FarmaciaService : IFarmaciaService
                 SET cantidad_disponible = cantidad_disponible - @TomarLote
                 WHERE id_lote = @IdLote;
 
+                INSERT INTO dbo.vt_salidaClinicaLote
+                    (Origen, IdRegistro, IdLote, IdOrden, IdLocalidad, IdEmpresa, CodigoProducto, Cantidad)
+                VALUES (@OrigenTabla, @IdRegistro, @IdLote, @SalidaOrdenId, @IdLocalidad, @IdEmpresa, @CodProdInt, @TomarLote);
                 SET @RestanteLote = @RestanteLote - @TomarLote;
             END
+
+            IF @RestanteLote > 0
+                INSERT INTO dbo.vt_salidaClinicaLote
+                    (Origen, IdRegistro, IdLote, IdOrden, IdLocalidad, IdEmpresa, CodigoProducto, Cantidad)
+                VALUES (@OrigenTabla, @IdRegistro, @IdLote, @SalidaOrdenId, @IdLocalidad, @IdEmpresa, @CodProdInt, @RestanteLote);
 
             DECLARE @SelloEntrega VARCHAR(300) = 'Entregado por ' + @Despachador + ' (' + CONVERT(VARCHAR(16), GETDATE(), 120) + ')';
 
@@ -323,10 +339,10 @@ public class FarmaciaService : IFarmaciaService
                 metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
             ) VALUES (
                 @CodProdInt, @IdEmpresa, @IdLocalidad, 'SALIDA',
-                @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
-                'PROMEDIO', 'FARMACIA_DESPACHO', 'ORDEN:' + CAST(@OrdenId AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
-                'Despacho de Farmacia a ' + @Solicitante + ' · Orden #' + CAST(@OrdenId AS VARCHAR(20)) + ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) +
-                CASE WHEN @Bodega <> '' THEN ' · Bodega: ' + @Bodega ELSE '' END + ' · ' + @SelloEntrega
+                @SalidaCantidad, @CostoPromedio, ROUND(@SalidaCantidad * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
+                'PROMEDIO', 'FARMACIA_DESPACHO', 'ORDEN:' + CAST(@SalidaOrdenId AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
+                'Despacho de Farmacia a ' + @Solicitante + ' · Orden #' + CAST(@SalidaOrdenId AS VARCHAR(20)) + ' NHCL #' + CAST(@SalidaNhcl AS VARCHAR(20)) +
+                CASE WHEN @SalidaBodega <> '' THEN ' · Bodega: ' + @SalidaBodega ELSE '' END + ' · ' + @SelloEntrega
             );
 
             IF @OrigenTabla = 'MON'
@@ -344,12 +360,150 @@ public class FarmaciaService : IFarmaciaService
             END
 
             COMMIT TRANSACTION;
-            SELECT 1;";
+            IF @Directo = 1 COMMIT TRANSACTION;
+            SELECT CASE WHEN @Directo = 1 THEN @IdRegistro ELSE 1 END;";
+
+    internal static string GuardarSalidaClinica(string insercionSql, string origen) => $@"
+        SET XACT_ABORT ON;
+        BEGIN TRANSACTION;
+        IF NOT EXISTS (
+            SELECT 1 FROM dbo.vt_ordenAtencion WITH (UPDLOCK, HOLDLOCK)
+            WHERE ordenAten_id = @OrdenId AND ordenAten_nhcl = @Nhcl
+              AND (ISNULL(ordenaten_factura, 'N') <> 'S' OR ordenaten_numfacBC LIKE 'PROF-%')
+        )
+        BEGIN
+            ROLLBACK TRANSACTION;
+            SELECT -1;
+            RETURN;
+        END;
+        {insercionSql}
+        DECLARE @IdRegistro int = CONVERT(int, SCOPE_IDENTITY());
+        DECLARE @OrigenTabla char(3) = '{origen}', @Directo bit = 1;
+        DECLARE @IdLocalidad int = @Localidad, @IdUsuario int = @Usuario;
+        DECLARE @Despachador varchar(120) = @Funcionario;
+        {DescargarClinicoSql}";
+
+    public async Task<List<FarmaciaLoteRetornableDto>> ObtenerLotesRetornablesAsync(string origen, int registro, int localidad) =>
+        (await _db.QueryAsync<FarmaciaLoteRetornableDto>("""
+            SELECT d.IdLote, d.Cantidad - d.Devuelto - d.Merma AS Disponible,
+                   COALESCE(NULLIF(l.numero_lote, ''), CASE WHEN d.IdLote = 0 THEN 'Sin lote' ELSE CONCAT('Lote #', d.IdLote) END) AS Nombre
+            FROM dbo.vt_salidaClinicaLote d
+            JOIN dbo.vt_ordenAtencion o ON o.ordenAten_id = d.IdOrden
+            LEFT JOIN dbo.ECONTAX_INVENTARIO_LOTE l ON l.id_lote = d.IdLote
+            WHERE d.Origen = @Origen AND d.IdRegistro = @Registro AND d.IdLocalidad = @Localidad
+              AND d.Cantidad > d.Devuelto + d.Merma AND (ISNULL(o.ordenaten_factura, 'N') <> 'S' OR o.ordenaten_numfacBC LIKE 'PROF-%')
+              AND (d.IdLote = 0 OR (l.id_lote IS NOT NULL AND
+                   (l.fecha_vencimiento IS NULL OR l.fecha_vencimiento >= CONVERT(date, GETDATE()))))
+            ORDER BY d.IdLote;
+            """, new { Origen = origen, Registro = registro, Localidad = localidad })).ToList();
+
+    public async Task<bool> DevolverSalidaClinicaAsync(string origen, int registro, long lote, decimal cantidad, int localidad, int usuario, bool merma)
+    {
+        if (origen is not ("MON" or "QUI") || cantidad <= 0 || decimal.Round(cantidad, 4) != cantidad || usuario <= 0)
+            return false;
+
+        var actualizado = await _db.ExecuteScalarAsync<int>("""
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            DECLARE @Orden int, @Empresa int, @Producto int, @Saldo decimal(18,4), @Costo decimal(18,4);
+            SELECT @Orden = IdOrden, @Empresa = IdEmpresa, @Producto = CodigoProducto
+            FROM dbo.vt_salidaClinicaLote WITH (UPDLOCK, HOLDLOCK)
+            WHERE Origen = @Origen AND IdRegistro = @Registro AND IdLote = @Lote AND IdLocalidad = @Localidad
+              AND Cantidad - Devuelto - Merma >= @Cantidad;
+
+            IF @Orden IS NULL OR NOT EXISTS (
+                SELECT 1 FROM dbo.vt_ordenAtencion WITH (UPDLOCK, HOLDLOCK)
+                WHERE ordenAten_id = @Orden AND (ISNULL(ordenaten_factura, 'N') <> 'S' OR ordenaten_numfacBC LIKE 'PROF-%')
+            )
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 0;
+                RETURN;
+            END;
+
+            IF @Merma = 0
+            BEGIN
+                UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                SET @Saldo = stock_actual = stock_actual + @Cantidad,
+                    @Costo = ISNULL(costo_promedio, 0), fecha_actualizacion = SYSUTCDATETIME()
+                WHERE codigo_producto = @Producto AND id_empresa = @Empresa AND id_sucursal = @Localidad;
+                IF @@ROWCOUNT <> 1
+                BEGIN
+                    ROLLBACK TRANSACTION;
+                    SELECT 0;
+                    RETURN;
+                END;
+
+                IF @Lote <> 0
+                BEGIN
+                    UPDATE dbo.ECONTAX_INVENTARIO_LOTE
+                    SET cantidad_disponible = cantidad_disponible + @Cantidad
+                    WHERE id_lote = @Lote AND codigo_producto = @Producto AND id_empresa = @Empresa AND id_sucursal = @Localidad
+                      AND (fecha_vencimiento IS NULL OR fecha_vencimiento >= CONVERT(date, GETDATE()))
+                      AND cantidad_disponible + @Cantidad <= cantidad_original;
+                    IF @@ROWCOUNT <> 1
+                    BEGIN
+                        ROLLBACK TRANSACTION;
+                        SELECT 0;
+                        RETURN;
+                    END;
+                END;
+
+            END
+            ELSE
+            BEGIN
+                SELECT @Saldo = stock_actual, @Costo = ISNULL(costo_promedio, 0)
+                FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA WITH (UPDLOCK, HOLDLOCK)
+                WHERE codigo_producto = @Producto AND id_empresa = @Empresa AND id_sucursal = @Localidad;
+                IF @Saldo IS NULL
+                BEGIN
+                    ROLLBACK TRANSACTION;
+                    SELECT 0;
+                    RETURN;
+                END;
+            END;
+
+            UPDATE dbo.vt_salidaClinicaLote
+            SET Devuelto = Devuelto + CASE WHEN @Merma = 0 THEN @Cantidad ELSE 0 END,
+                Merma = Merma + CASE WHEN @Merma = 1 THEN @Cantidad ELSE 0 END
+            WHERE Origen = @Origen AND IdRegistro = @Registro AND IdLote = @Lote;
+
+            INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                codigo_producto, id_empresa, id_sucursal, tipo_movimiento, cantidad, costo_unitario,
+                costo_total, saldo_cantidad, saldo_costo, metodo_valoracion, referencia_tipo,
+                referencia, id_usuario, fecha_movimiento, observacion
+            ) VALUES (
+                @Producto, @Empresa, @Localidad, CASE WHEN @Merma = 1 THEN 'MERMA' ELSE 'ENTRADA' END, @Cantidad, @Costo,
+                ROUND(@Cantidad * @Costo, 4), @Saldo, ROUND(@Saldo * @Costo, 4), 'PROMEDIO',
+                CASE WHEN @Merma = 1 THEN 'MERMA_CLINICA' ELSE 'DEVOLUCION_CLINICA' END, CONCAT('ORDEN:', @Orden), @Usuario, SYSUTCDATETIME(),
+                CONCAT(CASE WHEN @Merma = 1 THEN 'Merma clínica ' ELSE 'Devolución clínica ' END, @Origen, ' #', @Registro, ', lote ', @Lote)
+            );
+
+            COMMIT TRANSACTION;
+            SELECT 1;
+            """, new { Origen = origen, Registro = registro, Lote = lote, Cantidad = cantidad, Localidad = localidad, Usuario = usuario, Merma = merma });
+        if (actualizado == 1)
+            _inventarioService.InvalidarCacheCatalogo();
+        return actualizado == 1;
+    }
+
+    public async Task<(bool Exito, string Mensaje)> DespacharItemColaAsync(
+        string origenTabla,
+        int idRegistro,
+        int idLocalidad,
+        int idUsuarioFarmacia,
+        string nombreUsuarioFarmacia)
+    {
+        int sedeId = idLocalidad > 0 ? idLocalidad : 1;
+        string tabla = string.Equals(origenTabla, "QUI", StringComparison.OrdinalIgnoreCase) ? "QUI" : "MON";
+        string despachador = string.IsNullOrWhiteSpace(nombreUsuarioFarmacia) ? "Farmacia" : nombreUsuarioFarmacia.Trim();
 
         try
         {
-            int code = await _db.ExecuteScalarAsync<int>(sql, new
+            int code = await _db.ExecuteScalarAsync<int>(DescargarClinicoSql, new
             {
+                Directo = false,
                 OrigenTabla = tabla,
                 IdRegistro = idRegistro,
                 IdLocalidad = sedeId,

@@ -4,21 +4,44 @@
 @page "/diagnostico/imagenologia/{IdOrden:int}/{Nhcl:int}"
 @inject NavigationManager Navigation
 
-<PageTitle>e-ForVets - Órdenes de diagnóstico</PageTitle>
+@if (!ModoModal)
+{
+    <PageTitle>e-ForVets - Órdenes de diagnóstico</PageTitle>
+}
 
-<div class="container-fluid py-3">
+<div class="@(ModoModal ? "py-2" : "container-fluid py-3")">
     <nav class="nav diagnostic-tabs mb-3" aria-label="Órdenes de diagnóstico">
         @if (Permisos.Permite("diagnostico/laboratorio"))
         {
-            <NavLink class="nav-link" href="diagnostico/laboratorio">
-                <i class="bi bi-eyedropper me-1" aria-hidden="true"></i>Laboratorio
-            </NavLink>
+            @if (ModoModal)
+            {
+                <button type="button" class="nav-link @(!EsImagenologia ? "active" : "")"
+                        aria-pressed="@(!EsImagenologia)" @onclick="() => _imagenologiaModal = false">
+                    <i class="bi bi-eyedropper me-1" aria-hidden="true"></i>Laboratorio
+                </button>
+            }
+            else
+            {
+                <NavLink class="nav-link" href="diagnostico/laboratorio">
+                    <i class="bi bi-eyedropper me-1" aria-hidden="true"></i>Laboratorio
+                </NavLink>
+            }
         }
         @if (Permisos.Permite("diagnostico/imagenologia"))
         {
-            <NavLink class="nav-link" href="diagnostico/imagenologia">
-                <i class="bi bi-lungs me-1" aria-hidden="true"></i>Rayos X / Ecografía
-            </NavLink>
+            @if (ModoModal)
+            {
+                <button type="button" class="nav-link @(EsImagenologia ? "active" : "")"
+                        aria-pressed="@(EsImagenologia)" @onclick="() => _imagenologiaModal = true">
+                    <i class="bi bi-lungs me-1" aria-hidden="true"></i>Rayos X / Ecografía
+                </button>
+            }
+            else
+            {
+                <NavLink class="nav-link" href="diagnostico/imagenologia">
+                    <i class="bi bi-lungs me-1" aria-hidden="true"></i>Rayos X / Ecografía
+                </NavLink>
+            }
         }
     </nav>
 
@@ -37,7 +60,13 @@
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
 
-    private bool EsImagenologia => Navigation.ToBaseRelativePath(Navigation.Uri)
+    [Parameter] public bool ModoModal { get; set; }
+
+    private bool _imagenologiaModal;
+    private bool EsImagenologia => ModoModal
+        ? Permisos.Permite("diagnostico/imagenologia") &&
+          (_imagenologiaModal || !Permisos.Permite("diagnostico/laboratorio"))
+        : Navigation.ToBaseRelativePath(Navigation.Uri)
         .Split('/', '?', '#')
         .ElementAtOrDefault(1)
         ?.Equals("imagenologia", StringComparison.OrdinalIgnoreCase) == true;

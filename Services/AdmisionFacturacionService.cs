@@ -62,6 +62,7 @@ public interface IAdmisionFacturacionService
     Task<OrdenProformaResumenDto?> ObtenerDetalleProformaOrdenAsync(int idOrden);
     Task<List<OrdenProformaResumenDto>> BuscarOrdenesParaFacturaAsync(string filtro, int? idOrden = null);
     Task<List<ItemOrdenParaFacturaDto>> ObtenerItemsParaFacturaOrdenAsync(int idOrden, int idLocalidad);
+    Task<string?> ValidarCierreParaFacturarAsync(OrdenProformaResumenDto orden);
     Task<bool> MarcarOrdenFacturadaAsync(int idOrden, string numeroFactura);
     Task<(ItemFacturableProformaDto? Cargo, string Mensaje)> AgregarCargoProformaManualAsync(ItemFacturableProformaDto cargo);
     Task<(bool Exito, string NumeroProforma, string Mensaje)> EmitirProformaAsync(int idOrden, List<ItemFacturableProformaDto> itemsSeleccionados, int idUsuario);
@@ -2531,11 +2532,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             return [];
 
         var cols = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
-        string colFactura = cols.Contains("ordenaten_factura") ? "RTRIM(ISNULL(o.ordenaten_factura, 'N'))" : "'N'";
+        string colFactura = cols.Contains("ordenaten_factura") && cols.Contains("ordenaten_numfacbc") ? "CASE WHEN o.ordenaten_numfacBC LIKE 'PROF-%' THEN 'N' ELSE RTRIM(ISNULL(o.ordenaten_factura, 'N')) END" : cols.Contains("ordenaten_factura") ? "RTRIM(ISNULL(o.ordenaten_factura, 'N'))" : "'N'";
         string colNumFac = cols.Contains("ordenaten_numfacBC") ? "RTRIM(ISNULL(o.ordenaten_numfacBC, ''))" : "''";
-        string exprNoFacturada = cols.Contains("ordenaten_factura")
-            ? "CASE WHEN ISNULL(o.ordenaten_factura, 'N') = 'S' THEN 1 ELSE 0 END"
-            : "0";
+        string exprNoFacturada = $"CASE WHEN {colFactura} = 'S' THEN 1 ELSE 0 END";
         string sqlOrden = $@"
             SELECT TOP (30)
                 o.ordenAten_id AS IdOrden,
@@ -2607,6 +2606,36 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         })).ToList();
     }
 
+    private const string ConsumosClinicosSql = """
+        WITH Salidas AS (
+            SELECT Origen, IdRegistro, CodigoProducto, SUM(Cantidad - Devuelto) AS Cantidad
+            FROM dbo.vt_salidaClinicaLote
+            WHERE IdOrden = @IdOrden
+            GROUP BY Origen, IdRegistro, CodigoProducto
+        ),
+        ConsumosClinicos AS (
+            SELECT m.id AS IdRegistro, m.ordenId AS IdOrden, 'HOSPITALIZACION' AS OrigenModulo,
+                   ISNULL(d.CodigoProducto, TRY_CONVERT(int, m.med_iddinamics)) AS CodigoProducto, RTRIM(CONVERT(varchar(50), m.codigoprod)) AS CodigoItemBc,
+                   ISNULL(m.proddescripcion, '') AS DescripcionItem, ISNULL(d.Cantidad, m.cantprod) AS Cantidad,
+                   ISNULL(m.precioprod, 0) AS PrecioUnitario, ISNULL(m.fecha, GETDATE()) AS FechaCargo
+            FROM dbo.hvt_cabMonitoreoMedBC m
+            LEFT JOIN Salidas d ON d.Origen = 'MON' AND d.IdRegistro = m.id
+            WHERE m.ordenId = @IdOrden AND m.modulo = 'Monitoreo' AND ISNULL(m.estado, 'A') = 'A'
+              AND (d.IdRegistro IS NOT NULL OR m.grupo = 'ENTREGADO')
+            UNION ALL
+            SELECT q.id, q.ordenId,
+                   CASE WHEN q.modulo = 'EnfermeriaIng' OR
+                             (q.modulo = 'EnCirugia' AND @RequiereCirugia = 0 AND @RequiereHospitalizacion = 1)
+                        THEN 'HOSPITALIZACION' ELSE 'QUIROFANO' END,
+                   d.CodigoProducto, RTRIM(CONVERT(varchar(50), q.codigoprod)),
+                   ISNULL(q.proddescripcion, ''), ISNULL(d.Cantidad, q.cantprod), ISNULL(q.precioprod, 0), ISNULL(q.fecha, GETDATE())
+            FROM dbo.qvt_productosUtilizados q
+            LEFT JOIN Salidas d ON d.Origen = 'QUI' AND d.IdRegistro = q.id
+            WHERE q.ordenId = @IdOrden AND ISNULL(q.estado, 'Vigente') IN ('Vigente', 'A')
+              AND (d.IdRegistro IS NOT NULL OR ISNULL(q.observaciones, '') LIKE '%[[]FARMACIA:ENTREGADO]%' )
+        )
+        """;
+
     public async Task<OrdenProformaResumenDto?> ObtenerDetalleProformaOrdenAsync(int idOrden)
     {
         var orden = (await ConsultarOrdenesCerradasAsync("", soloProcesos: true, idOrden: idOrden)).SingleOrDefault();
@@ -2617,8 +2646,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             SELECT id AS IdRegistro, ordenId AS IdOrden, 'HOSPITALIZACION' AS OrigenModulo,
                    RTRIM(ISNULL(CONVERT(varchar(50), codigoprod), '')) AS CodigoItemBc, RTRIM(ISNULL(proddescripcion, '')) AS DescripcionItem,
                    ISNULL(cantprod, 0) AS Cantidad, ISNULL(precioprod, 0) AS PrecioUnitario, ISNULL(fecha, GETDATE()) AS FechaCargo
-            FROM hvt_cabMonitoreoMedBC
-            WHERE ordenId = @IdOrden AND modulo = 'Monitoreo' AND ISNULL(estado, 'A') = 'A'
+            FROM hvt_cabMonitoreoMedBC m
+            WHERE NOT EXISTS (SELECT 1 FROM dbo.vt_salidaClinicaLote d WHERE d.Origen = 'MON' AND d.IdRegistro = m.id)
+              AND ISNULL(m.grupo, '') NOT IN ('PENDIENTE', 'ENTREGADO')
+              AND ordenId = @IdOrden AND modulo = 'Monitoreo' AND ISNULL(estado, 'A') = 'A'
               AND ISNULL(cantprod, 0) > 0
             UNION ALL
             SELECT id, ordenId,
@@ -2627,13 +2658,17 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         THEN 'HOSPITALIZACION' ELSE 'QUIROFANO' END,
                    RTRIM(ISNULL(CONVERT(varchar(50), codigoprod), '')), RTRIM(ISNULL(proddescripcion, '')),
                    ISNULL(cantprod, 0), ISNULL(precioprod, 0), ISNULL(fecha, GETDATE())
-            FROM qvt_productosUtilizados
-            WHERE ordenId = @IdOrden AND modulo IN ('EnfermeriaIng', 'EnCirugia', 'PreAnestesia')
+            FROM qvt_productosUtilizados q
+            WHERE NOT EXISTS (SELECT 1 FROM dbo.vt_salidaClinicaLote d WHERE d.Origen = 'QUI' AND d.IdRegistro = q.id)
+              AND ISNULL(q.observaciones, '') NOT LIKE '%[[]FARMACIA:ENTREGADO]%'
+              AND ordenId = @IdOrden AND modulo IN ('EnfermeriaIng', 'EnCirugia', 'PreAnestesia')
               AND ISNULL(estado, 'Vigente') IN ('Vigente', 'A') AND ISNULL(cantprod, 0) > 0;
             """;
 
-        var items = (await _db.QueryAsync<ItemFacturableProformaDto>(sqlConsumos,
-            new { IdOrden = idOrden, orden.RequiereCirugia, orden.RequiereHospitalizacion })).ToList();
+        var parametros = new { IdOrden = idOrden, orden.RequiereCirugia, orden.RequiereHospitalizacion };
+        var items = (await _db.QueryAsync<ItemFacturableProformaDto>(ConsumosClinicosSql + "\nSELECT * FROM ConsumosClinicos;", parametros)).ToList();
+        items.AddRange(await _db.QueryAsync<ItemFacturableProformaDto>(sqlConsumos,
+            parametros));
         var cargosHospital = await ObtenerCargosHistoricosAsync(idOrden, "HOSPITALIZACION", "vt_facturasBChospi");
         var cargosCirugia = await ObtenerCargosHistoricosAsync(idOrden, "QUIROFANO", "vt_facturasBCquirofano");
         foreach (var cargos in new[] { cargosHospital, cargosCirugia })
@@ -2651,7 +2686,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 ORDER BY IdRegistro;
             """, new { IdOrden = idOrden }));
 
-        orden.Items = items;
+        orden.Items = items.Where(item => item.Cantidad > 0).ToList();
         orden.ConsumoHospitalizacion = orden.TotalHospitalizacion;
         orden.ConsumoCirugia = orden.TotalQuirofano;
         return orden;
@@ -2736,30 +2771,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
         try
         {
-            var cols = await ObtenerColumnasTablaAsync("vt_ordenAtencion");
-            if (cols.Contains("ordenaten_factura") && cols.Contains("ordenaten_numfacBC"))
-            {
-                int actualizados = await _db.ExecuteAsync(@"
-                    UPDATE vt_ordenAtencion
-                    SET ordenaten_factura = 'S',
-                        ordenaten_numfacBC = @NumFac
-                    WHERE ordenAten_id = @IdOrden",
-                    new { IdOrden = idOrden, NumFac = numeroGenerado });
-                if (actualizados == 0)
-                    return (false, string.Empty, "No se encontró la orden para emitir la proforma.");
-            }
-            else
-            {
-                await _db.ExecuteAsync(@"
-                    UPDATE vt_ordenAtencion
-                    SET ordenAten_etapa = 'PROFORMA'
-                    WHERE ordenAten_id = @IdOrden",
-                    new { IdOrden = idOrden });
-            }
-
-
-
-
+            int actualizados = await _db.ExecuteAsync("""
+                UPDATE dbo.vt_ordenAtencion SET ordenAten_etapa = 'PROFORMA'
+                WHERE ordenAten_id = @IdOrden
+                  AND (ISNULL(ordenaten_factura, 'N') <> 'S' OR ordenaten_numfacBC LIKE 'PROF-%');
+                """, new { IdOrden = idOrden });
+            if (actualizados == 0)
+                return (false, string.Empty, "La orden ya está facturada o ya no está disponible.");
         }
         catch (Exception ex)
         {
@@ -3161,7 +3179,37 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             ORDER BY m.sec;
             """, new { IdOrden = idOrden });
 
-        foreach (var row in procedimientos.Concat(aplicadosConsulta).Concat(laboratorios).Concat(imagenes).Concat(fisioterapias).Concat(medicinas))
+        var proceso = (await ConsultarOrdenesCerradasAsync("", soloProcesos: true, idOrden: idOrden)).SingleOrDefault();
+        IEnumerable<OrdenProductoQueryRow> clinicos = proceso is null ? [] : await _db.QueryAsync<OrdenProductoQueryRow>(ConsumosClinicosSql + """
+
+            SELECT CONCAT('CONSUMO_', c.OrigenModulo) AS Origen, c.IdRegistro AS SecOrigen,
+                   ISNULL(p.CODIGO, 0) AS CodProducto, c.CodigoItemBc AS CodPrincipal,
+                   c.DescripcionItem AS Descripcion, c.Cantidad, c.PrecioUnitario,
+                   ISNULL(p.CODIGOIMPUESTO, '2') AS CodigoImpuestoSri,
+                   p.PORCENTAJEIMPUESTO AS PorcentajeImpuestoRaw, p.TIPO_PRODUCTO AS TipoProducto,
+                   p.IDSUBTIPO AS SubtipoProducto, p.UNIDAD_MEDIDA AS UnidadMedida
+            FROM ConsumosClinicos c
+            OUTER APPLY (
+                SELECT TOP (1) p.* FROM VeterinariaFacturacion.dbo.PRODUCTO p
+                WHERE p.CODIGO = c.CodigoProducto OR (c.CodigoProducto IS NULL AND
+                      (p.CODIGO_PRINCIPAL = c.CodigoItemBc OR CONVERT(varchar(50), p.CODIGO) = c.CodigoItemBc))
+                ORDER BY CASE WHEN p.IDUSUARIO = @IdUsuario THEN 0 ELSE 1 END, p.CODIGO
+            ) p
+            WHERE c.Cantidad > 0
+            UNION ALL
+            SELECT 'CARGO_CLINICO', c.IdRegistro, ISNULL(p.CODIGO, 0), c.CodigoItemBc,
+                   c.DescripcionItem, c.Cantidad, c.PrecioUnitario, ISNULL(p.CODIGOIMPUESTO, '2'),
+                   p.PORCENTAJEIMPUESTO, p.TIPO_PRODUCTO, p.IDSUBTIPO, p.UNIDAD_MEDIDA
+            FROM dbo.vt_proformaCargosManuales c
+            OUTER APPLY (
+                SELECT TOP (1) p.* FROM VeterinariaFacturacion.dbo.PRODUCTO p
+                WHERE p.CODIGO_PRINCIPAL = c.CodigoItemBc OR CONVERT(varchar(50), p.CODIGO) = c.CodigoItemBc
+                ORDER BY CASE WHEN p.IDUSUARIO = @IdUsuario THEN 0 ELSE 1 END, p.CODIGO
+            ) p
+            WHERE c.IdOrden = @IdOrden;
+            """, new { IdOrden = idOrden, proceso.RequiereHospitalizacion, proceso.RequiereCirugia, IdUsuario = idUsuarioCatalogo });
+
+        foreach (var row in procedimientos.Concat(aplicadosConsulta).Concat(laboratorios).Concat(imagenes).Concat(fisioterapias).Concat(medicinas).Concat(clinicos))
         {
             resultado.Add(new ItemOrdenParaFacturaDto
             {
@@ -3185,6 +3233,39 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         }
 
         return resultado;
+    }
+
+    public async Task<string?> ValidarCierreParaFacturarAsync(OrdenProformaResumenDto orden)
+    {
+        if (!orden.RequiereHospitalizacion && !orden.RequiereCirugia)
+            return null;
+
+        var pendiente = await _db.ExecuteScalarAsync<int>("""
+            SELECT CASE
+                WHEN @RequiereHospitalizacion = 1 AND NOT EXISTS (
+                    SELECT 1 FROM dbo.hvt_cabMonitoreo WHERE idOrden = @IdOrden AND cierre = 'S'
+                ) THEN 1
+                WHEN @RequiereCirugia = 1 AND NOT EXISTS (
+                    SELECT 1 FROM dbo.qvt_verificacion WHERE fichamedr = @IdOrden AND cerrado = 'S'
+                ) THEN 2
+                WHEN EXISTS (
+                    SELECT 1 FROM dbo.hvt_cabMonitoreoMedBC
+                    WHERE ordenId = @IdOrden AND modulo = 'Monitoreo' AND ISNULL(estado, 'A') = 'A'
+                      AND grupo = 'PENDIENTE' AND cantprod > 0
+                ) OR EXISTS (
+                    SELECT 1 FROM dbo.qvt_productosUtilizados
+                    WHERE ordenId = @IdOrden AND ISNULL(estado, 'Vigente') IN ('Vigente', 'A')
+                      AND ISNULL(observaciones, '') NOT LIKE '%[[]FARMACIA:ENTREGADO]%' AND cantprod > 0
+                ) THEN 3 ELSE 0 END;
+            """, new { orden.IdOrden, orden.RequiereHospitalizacion, orden.RequiereCirugia });
+
+        return pendiente switch
+        {
+            1 => "Cierre el monitoreo de hospitalización antes de emitir la factura.",
+            2 => "Complete la verificación de recuperación de la cirugía antes de emitir la factura.",
+            3 => "Resuelva las salidas pendientes en Farmacia antes de emitir la factura.",
+            _ => null
+        };
     }
 
     public async Task<bool> MarcarOrdenFacturadaAsync(int idOrden, string numeroFactura)

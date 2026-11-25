@@ -252,7 +252,7 @@
                     <span class="fw-bold">💊 2. SOLICITUD Y REGISTRO DE MEDICAMENTOS EN MONITOREO (COLA DE FARMACIA · @NombreSucursalActiva.ToUpperInvariant())</span>
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-primary-subtle text-primary border">@_catalogoStockSede.Count producto(s) con stock disponible en @NombreSucursalActiva</span>
-                        <a href="/farmacia" class="btn btn-xs btn-light py-0 px-2 fw-semibold no-print">
+                        <a href="@($"/farmacia?ordenId={IdOrden}")" class="btn btn-xs btn-light py-0 px-2 fw-semibold no-print">
                             <i class="ri-medicine-bottle-line me-1"></i>Ver Cola de Farmacia
                         </a>
                     </div>
@@ -444,7 +444,11 @@
                                             <td>@m.Hora</td>
                                             <td>@m.Iniciales (@m.Funcion)</td>
                                             <td class="no-print">
-                                                @if (!_sheet.Cerrada)
+                                                @if (m.EstadoFarmacia == "ENTREGADO")
+                                                {
+                                                    <small class="text-muted">Devolución en Farmacia</small>
+                                                }
+                                                else if (!_sheet.Cerrada)
                                                 {
                                                     <button type="button" class="btn btn-link btn-sm" @onclick="() => EditarMedicamento(m)" disabled="@_guardandoMedicamento">Editar</button>
                                                     <button type="button" class="btn btn-link btn-sm text-danger" @onclick="() => EliminarMedicamentoAsync(m)" disabled="@_guardandoMedicamento">Retirar</button>

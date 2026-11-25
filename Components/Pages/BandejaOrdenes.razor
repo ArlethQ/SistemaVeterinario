@@ -907,15 +907,11 @@
                                         IdOrden="@_ordenModal.OrdenAtencionId"
                                         Nhcl="@_ordenModal.Nhcl" />
                     break;
-                case "laboratorio":
-                    <OrdenesLaboratorio @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
+                case "diagnostico":
+                    <OrdenesDiagnostico @key="_ordenModal.OrdenAtencionId"
                                         IdOrden="@_ordenModal.OrdenAtencionId"
-                                        Nhcl="@_ordenModal.Nhcl" />
-                    break;
-                case "imagenologia":
-                    <OrdenesImagenologia @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
-                                         IdOrden="@_ordenModal.OrdenAtencionId"
-                                         Nhcl="@_ordenModal.Nhcl" />
+                                        Nhcl="@_ordenModal.Nhcl"
+                                        ModoModal="true" />
                     break;
                 case "informes":
                     <BandejaResultadosDiagnosticos @key="(_ordenModal.OrdenAtencionId, _pestanaModuloActiva)"
@@ -1269,8 +1265,7 @@
         ("kardex", "bi-folder", "Kardex", "/kardex/enfermeria", "HOSPITALIZACIÓN"),
         ("signos", "bi-heart-pulse", "Signos", "/kardex/signos", "HOSPITALIZACIÓN"),
         ("monitoreo", "bi-display", "Monitoreo", "/hospitalizacion/monitoreo", "HOSPITALIZACIÓN"),
-        ("laboratorio", "bi-eyedropper", "Laboratorio", "/diagnostico/laboratorio", "DIAGNÓSTICO"),
-        ("imagenologia", "bi-radioactive", "RX / Ecografía", "/diagnostico/imagenologia", "DIAGNÓSTICO"),
+        ("diagnostico", "bi-eyedropper", "Laboratorio e Imagenología", "/diagnostico/laboratorio", "DIAGNÓSTICO"),
         ("informes", "bi-file-text", "Informes", "/diagnostico/bandeja", "DIAGNÓSTICO"),
         ("cirugia", "bi-calendar-event", "Programación de cirugía", "/programacion/clinica", "CIRUGÍA"),
         ("preanestesia", "bi-clipboard2-pulse", "Preanestesia", "/quirofano/preanestesia", "CIRUGÍA"),
@@ -1318,7 +1313,8 @@
     private string? _mensajeModal;
 
     private IEnumerable<(string Id, string Icono, string Titulo, string Permiso, string Grupo)> PestanasDisponiblesModal =>
-        PestanasModulos.Where(t => Permisos.Permite(t.Permiso));
+        PestanasModulos.Where(t => Permisos.Permite(t.Permiso) ||
+            (t.Id == "diagnostico" && Permisos.Permite("/diagnostico/imagenologia")));
 
     private bool EstaPestanaBloqueada(string id) =>
         (_ordenModal is not null && PestanasCirugia.Contains(id) && !_ordenModal.RequiereCirugia)
