@@ -565,7 +565,16 @@
             <div class="col-lg-6">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-capsule me-1"></i>Prescripción Médica</span>
+                        <span>
+                            <i class="bi bi-capsule me-1"></i>Prescripción Médica
+                            @if (Ficha.RequiereHospitalizacion || string.Equals(Ficha.RequiereCirugia?.Trim(), "S", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <span class="badge bg-warning text-dark ms-1 fw-normal" style="font-size:.72rem;"
+                                      title="Por requerir hospitalización o cirugía, lo recetado aquí solo se reserva y pasará a factura al confirmar la Evolución Médica.">
+                                    <i class="bi bi-lock-fill me-1"></i>Solo reserva (Hosp./Cirugía)
+                                </span>
+                            }
+                        </span>
                         <div class="d-flex align-items-center gap-2">
                             <span class="badge bg-success">@RecetaItems.Count ítem(s)</span>
                             <a href="/farmacia" class="btn btn-xs btn-outline-info text-dark py-0 px-2" title="Ver receta en Cola de Farmacia">

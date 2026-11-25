@@ -24,6 +24,8 @@
         </button>
     </header>
 
+    @if (!ModoModal)
+    {
     <div class="evolucion-panel evolucion-toolbar">
             <!-- Selector Dropbox de Órdenes -->
             <div class="d-flex align-items-center gap-1">
@@ -47,6 +49,7 @@
             </div>
 
     </div>
+    }
 
     @if (!string.IsNullOrEmpty(MensajeAlerta))
     {
@@ -92,9 +95,9 @@
     }
 
     <div class="row g-3">
-        <!-- Columna Izquierda: Registro de Nueva Evolución y Solicitud de Exámenes -->
+        <!-- Columna Izquierda: Registro de Nueva Evolución -->
         <div class="col-lg-5">
-            <div class="card evolucion-panel mb-3">
+            <div class="card evolucion-panel h-100">
                 <div class="card-header evolucion-section d-flex flex-wrap gap-2 justify-content-between align-items-center">
                     <span>
                         <i class="bi bi-pencil-square me-1"></i>
@@ -124,62 +127,6 @@
                     <SaveButton class="btn btn-sm btn-primary w-100" OnClick="GuardarEvolucionAsync">
                         <i class="bi bi-floppy-fill me-1"></i>@(EvolucionForm.IdEvolucion > 0 ? "Actualizar Evolución" : "Registrar Nota de Evolución")
                     </SaveButton>
-                </div>
-            </div>
-
-            <!-- Solicitud de Exámenes Complementarios asociados a Evolución -->
-            <div class="card evolucion-panel">
-                <div class="card-header evolucion-section">
-                    <i class="bi bi-eyedropper me-1"></i>Solicitar Laboratorio / Imagenología en Evolución
-                </div>
-                <div class="card-body">
-                    <div class="row g-2">
-                        <div class="col-md-4">
-                            <label class="form-label small fw-semibold">Área</label>
-                            <select class="form-select form-select-sm" @bind="NuevaOrdenExamen.TipoCategoria" @bind:after="CargarCatalogoExamenesEvolucionAsync">
-                                <option value="LAB">Laboratorio Clínico</option>
-                                <option value="RX">Imagenología (RX/Eco)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label small fw-semibold">Evolución #</label>
-                            <select class="form-select form-select-sm" @bind="NuevaOrdenExamen.IdEvolucion">
-                                <option value="0">General de la Orden</option>
-                                @foreach (var ev in Evoluciones)
-                                {
-                                    <option value="@ev.IdEvolucion">Evolución #@ev.IdEvolucion (@ev.Hora)</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label small fw-semibold">Cantidad</label>
-                            <input type="number" min="1" class="form-control form-control-sm" @bind="NuevaOrdenExamen.Cantidad" />
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label small fw-semibold">Filtrar catálogo</label>
-                            <input type="text" class="form-control form-control-sm" placeholder="Buscar examen o código..."
-                                   @bind="FiltroCatalogoExamen" @bind:event="oninput" @bind:after="CargarCatalogoExamenesEvolucionAsync" />
-                        </div>
-                        <div class="col-md-7">
-                            <label class="form-label small fw-semibold">Estudio / Examen del Catálogo *</label>
-                            <select class="form-select form-select-sm" value="@NuevaOrdenExamen.CodigoProd" @onchange="SeleccionarExamenCatalogo">
-                                <option value="">-- Seleccione examen (@CatalogoExamenesEvolucion.Count disp.) --</option>
-                                @foreach (var item in CatalogoExamenesEvolucion)
-                                {
-                                    <option value="@item.CodigoProd">[@item.CodigoProd] @item.Descripcion ($@item.PrecioUnitario.ToString("N2"))</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label small fw-semibold">Indicación Clínica / Muestra</label>
-                            <input type="text" class="form-control form-control-sm" @bind="NuevaOrdenExamen.Observaciones" placeholder="Ayuno, región anatómica..." />
-                        </div>
-                        <div class="col-12">
-                            <SaveButton class="btn btn-sm btn-outline-primary w-100" OnClick="AgregarExamenEvolucionAsync">
-                                <i class="bi bi-plus-circle me-1"></i>Adjuntar Orden de Examen
-                            </SaveButton>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -246,11 +193,20 @@
             </div>
         </div>
     </div>
+
+    <OrdenesClinicasSoapPanel @ref="_ordenesPanel"
+                              IdOrden="@IdOrden"
+                              Nhcl="@Nhcl"
+                              Paciente="@Paciente"
+                              OnOrdenesActualizadas="RecargarEvolucionesAsync" />
 </div>
 
 @code {
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
+    [Parameter] public bool ModoModal { get; set; }
+
+    private OrdenesClinicasSoapPanel? _ordenesPanel;
 
     private int IdOrdenInput { get; set; }
     private int NhclInput { get; set; }
@@ -262,19 +218,11 @@
     private PacienteHeaderDto? Paciente { get; set; }
     private List<EvolucionMedicaDto> Evoluciones { get; set; } = new();
     private EvolucionMedicaDto EvolucionForm { get; set; } = new();
-    private OrdenExamenEvolucionDto NuevaOrdenExamen { get; set; } = new();
-    private List<PruebaCatalogoDto> CatalogoExamenesEvolucion { get; set; } = new();
-    private string FiltroCatalogoExamen { get; set; } = string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
         CargandoInicial = true;
         await Task.Yield();
-
-        if (CatalogoExamenesEvolucion.Count == 0)
-        {
-            await CargarCatalogoExamenesEvolucionAsync();
-        }
 
         if (_ordenesActivas.Count == 0)
         {
@@ -455,9 +403,23 @@
         int idCreado = await ConsultaService.GuardarEvolucionMedicaAsync(EvolucionForm, idUser);
         if (idCreado > 0)
         {
-            MensajeAlerta = eraEdicion
+            string msgBase = eraEdicion
                 ? $"Evolución médica #{idCreado} actualizada correctamente."
                 : $"Evolución médica #{idCreado} guardada correctamente.";
+
+            if (_ordenesPanel is not null)
+            {
+                var medicinasConfirmar = _ordenesPanel.ObtenerMedicinasParaConfirmar();
+                if (medicinasConfirmar.Count > 0 || _ordenesPanel.HayReservasSoapPendientes)
+                {
+                    var resMed = await ConsultaService.ConfirmarMedicinasEvolucionAsync(
+                        idCreado, IdOrden, Nhcl, medicinasConfirmar, idUser, Session.Localidad);
+                    msgBase += $" {resMed.Mensaje}";
+                    await _ordenesPanel.RefrescarAsync();
+                }
+            }
+
+            MensajeAlerta = msgBase;
         }
         else
         {
@@ -475,51 +437,6 @@
             LimpiarFormulario();
         }
         MensajeAlerta = null;
-        await RecargarEvolucionesAsync();
-    }
-
-    private async Task CargarCatalogoExamenesEvolucionAsync()
-    {
-        if (NuevaOrdenExamen.TipoCategoria == "RX")
-        {
-            CatalogoExamenesEvolucion = await LabService.ObtenerCatalogoImagenologiaAsync("TODOS", FiltroCatalogoExamen, Session.Apostrofe);
-        }
-        else
-        {
-            CatalogoExamenesEvolucion = await LabService.ObtenerCatalogoLaboratorioAsync(0, FiltroCatalogoExamen, Session.Apostrofe);
-        }
-        NuevaOrdenExamen.CodigoProd = string.Empty;
-        NuevaOrdenExamen.DescripcionExamen = string.Empty;
-    }
-
-    private void SeleccionarExamenCatalogo(ChangeEventArgs e)
-    {
-        var codigo = e.Value?.ToString() ?? string.Empty;
-        NuevaOrdenExamen.CodigoProd = codigo;
-        var item = CatalogoExamenesEvolucion.FirstOrDefault(x => x.CodigoProd == codigo);
-        NuevaOrdenExamen.DescripcionExamen = item?.Descripcion ?? string.Empty;
-    }
-
-    private async Task AgregarExamenEvolucionAsync()
-    {
-        if (string.IsNullOrWhiteSpace(NuevaOrdenExamen.DescripcionExamen) ||
-            !int.TryParse(NuevaOrdenExamen.CodigoProd, out int codigo) || codigo <= 0)
-        {
-            MensajeAlerta = "Seleccione un examen real e ingrese su código válido del catálogo.";
-            return;
-        }
-        NuevaOrdenExamen.IdOrden = IdOrden;
-        NuevaOrdenExamen.Nhcl = Nhcl;
-        if (NuevaOrdenExamen.IdEvolucion == 0 && Evoluciones.Any())
-        {
-            NuevaOrdenExamen.IdEvolucion = Evoluciones.First().IdEvolucion;
-        }
-        if (!await ConsultaService.AgregarOrdenExamenAsync(NuevaOrdenExamen))
-        {
-            MensajeAlerta = "No se pudo registrar la orden de examen.";
-            return;
-        }
-        NuevaOrdenExamen = new OrdenExamenEvolucionDto { TipoCategoria = NuevaOrdenExamen.TipoCategoria, IdEvolucion = NuevaOrdenExamen.IdEvolucion };
         await RecargarEvolucionesAsync();
     }
 

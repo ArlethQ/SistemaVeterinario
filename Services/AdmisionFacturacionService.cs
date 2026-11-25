@@ -3147,6 +3147,12 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             WHERE m.med_id_orden = @IdOrden
               AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_tipo)), ''), 'M') <> 'C'
               AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') IN ('Por Entregar', 'Por Facturar')
+              AND NOT EXISTS (
+                  SELECT 1 FROM dbo.vt_fichamedica fm
+                  WHERE fm.med_orden = @IdOrden
+                    AND (ISNULL(fm.med_requiereHospitalizacion, 0) = 1
+                         OR LTRIM(RTRIM(ISNULL(fm.med_pregunta, ''))) = 'S')
+              )
               AND (CAST(ISNULL(m.med_cantidad1, 0) AS decimal(18,4)) > 0
                    OR (ISNULL(pr.INVENTARIO, 1) = 0 AND CAST(ISNULL(m.med_cantidad, 0) AS decimal(18,4)) > 0))
               AND ISNULL(pr.CODIGO, 0) > 0

@@ -1,18 +1,18 @@
-using HosvetKardex.Web.Data;
+﻿using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Models;
 
 namespace HosvetKardex.Web.Services;
 
 public interface IConsultaExternaService
 {
-    // 1. Ficha Médica / Historia Clínica SOAP (vt_fichamedica)
+    // 1. Ficha MÃ©dica / Historia ClÃ­nica SOAP (vt_fichamedica)
     Task<FichaMedicaCompletaDto> ObtenerFichaMedicaAsync(int idOrden, int nhcl, bool historica = false);
     Task<List<string>> ObtenerTiposConsultaCatalogoAsync(int idLocalidad = 0);
     Task<bool> GuardarFichaMedicaAsync(FichaMedicaCompletaDto dto, int idUsuario, bool triaje = false, bool editarTriaje = false, bool cerrarOrden = true);
 
     Task<List<TriajeHistorialDto>> ObtenerHistorialTriajeAsync(int nhcl);
 
-    // 2. Diagnósticos CIE-10 (vt_diagnosticos + vt_cie10)
+    // 2. DiagnÃ³sticos CIE-10 (vt_diagnosticos + vt_cie10)
     Task<List<CatalogoCie10ItemDto>> BuscarCatalogoCie10Async(string filtro);
     Task<List<DiagnosticoCie10Dto>> ObtenerDiagnosticosOrdenAsync(int idOrden);
     Task<bool> AgregarDiagnosticoOrdenAsync(DiagnosticoCie10Dto diag);
@@ -26,7 +26,7 @@ public interface IConsultaExternaService
     Task<bool> AgregarVacunaAsync(VacunaPacienteDto dto, int idUsuario, int idCliente);
     Task<bool> EliminarVacunaAsync(int vacunaId, int idUsuario);
 
-    // 4. Evolución Médica y Órdenes Asociadas (vt_EvolucionMedico + vt_labOrdenes + vt_rxOrdenes)
+    // 4. EvoluciÃ³n MÃ©dica y Ã“rdenes Asociadas (vt_EvolucionMedico + vt_labOrdenes + vt_rxOrdenes)
     Task<List<EvolucionMedicaDto>> ObtenerEvolucionesPacienteAsync(int nhcl, int? idOrdenFiltro = null);
     Task<int> GuardarEvolucionMedicaAsync(EvolucionMedicaDto dto, int idUsuario);
     Task<bool> EliminarEvolucionMedicaAsync(int idEvolucion);
@@ -34,8 +34,12 @@ public interface IConsultaExternaService
     Task<bool> AgregarOrdenExamenAsync(OrdenExamenEvolucionDto orden);
     Task<bool> EliminarOrdenExamenAsync(int sec, string tipoCategoria);
 
-    // 5. Recetario Médico e Indicaciones Generales (vt_medicinas + vt_IndicacionesGenerales)
+    // 5. Recetario MÃ©dico e Indicaciones Generales (vt_medicinas + vt_IndicacionesGenerales)
     Task<List<RecetaMedicamentoItemDto>> ObtenerRecetaOrdenAsync(int idOrden);
+    Task<List<RecetaMedicamentoItemDto>> ObtenerRecetaPendienteOrdenAsync(int idOrden);
+    Task<List<RecetaMedicamentoItemDto>> ObtenerMedicinasUltimaEvolucionAsync(int nhcl, int idOrdenActual = 0);
+    Task<(bool Exito, string Mensaje, int Confirmados)> ConfirmarMedicinasEvolucionAsync(
+        int idEvolucion, int idOrden, int nhcl, IReadOnlyCollection<RecetaMedicamentoItemDto> medicinas, int idUsuario, int idLocalidad);
     Task<List<AdvertenciaMedicamentoDto>> ObtenerAdvertenciasMedicamentoAsync(int nhcl);
     Task<bool> RegistrarAdvertenciaMedicamentoAsync(int nhcl, int orden, int sec, string motivo, DateTime inicio, DateTime? fin, int usuario);
     Task<string> ObtenerIndicacionesGeneralesAsync(int idOrden);
@@ -54,7 +58,7 @@ public interface IConsultaExternaService
     Task<(bool Ok, string? Mensaje)> AgregarMedicamentoRecetaExternaAsync(int idFicha, RecetaMedicamentoItemDto item, string serial);
     Task<bool> EliminarMedicamentoRecetaExternaAsync(int sec);
 
-    // 6. Autorizaciones / Consentimientos y Alta Médica (vt_autorizaciones + vt_formatos + qvt_formulario_alta)
+    // 6. Autorizaciones / Consentimientos y Alta MÃ©dica (vt_autorizaciones + vt_formatos + qvt_formulario_alta)
     Task<List<FormatoPlantillaDto>> ObtenerPlantillasFormatosAsync(string? tipo = null);
     Task<FormatoPlantillaDto?> ObtenerPlantillaHospitalizacionDefaultAsync();
     Task<FormatoPlantillaDto?> ObtenerPlantillaPorTipoONombreAsync(string tipo, string? nombreContiene = null);
@@ -69,7 +73,7 @@ public interface IConsultaExternaService
     Task<FormularioAltaMedicaDto> ObtenerFormularioAltaAsync(int idOrden, int nhcl);
     Task<bool> GuardarFormularioAltaAsync(FormularioAltaMedicaDto dto, int idUsuario);
 
-    // 7. Impresión masiva de fichas médicas por lotes (vt_imprimirfichas.aspx)
+    // 7. ImpresiÃ³n masiva de fichas mÃ©dicas por lotes (vt_imprimirfichas.aspx)
     Task<List<FichaMedicaResumenLoteDto>> ObtenerAtencionesParaImpresionLoteAsync(int nhcl);
 
     // 8. Apuntes longitudinales a historias clinicas (vt_apuntesahistorias / vt_notas)
@@ -118,7 +122,7 @@ public class ConsultaExternaService : IConsultaExternaService
     }
 
     // ========================================================================
-    // 1. FICHA MÉDICA / HISTORIA CLÍNICA SOAP (Reemplaza vt_hisDatMedicos.aspx)
+    // 1. FICHA MÃ‰DICA / HISTORIA CLÃNICA SOAP (Reemplaza vt_hisDatMedicos.aspx)
     // ========================================================================
     public async Task<FichaMedicaCompletaDto> ObtenerFichaMedicaAsync(int idOrden, int nhcl, bool historica = false)
     {
@@ -197,7 +201,7 @@ public class ConsultaExternaService : IConsultaExternaService
             {
                 string colStr = pac.mas_colortriaje?.ToString()?.Trim() ?? "green";
                 string castradoRaw = (pac.mas_castrado?.ToString() ?? "N").Trim().ToUpperInvariant();
-                dto.Esterilizado = (castradoRaw == "S" || castradoRaw == "SI" || castradoRaw == "SÍ" || castradoRaw == "1" || castradoRaw == "TRUE")
+                dto.Esterilizado = (castradoRaw == "S" || castradoRaw == "SI" || castradoRaw == "SÃ" || castradoRaw == "1" || castradoRaw == "TRUE")
                     ? "S"
                     : "N";
 
@@ -206,7 +210,7 @@ public class ConsultaExternaService : IConsultaExternaService
 
                 dto.ColorTriaje = colStr;
 
-                // Si no hay temperamento en vt_fichamedica o está en blanco/tranquilo, sincronizar con el semáforo de vt_pacientes
+                // Si no hay temperamento en vt_fichamedica o estÃ¡ en blanco/tranquilo, sincronizar con el semÃ¡foro de vt_pacientes
                 if (string.IsNullOrWhiteSpace(dto.Temperamento) || dto.Temperamento == "TRANQUILO")
                 {
                     if (colStr.Equals("red", StringComparison.OrdinalIgnoreCase) || colStr.Contains("rojo"))
@@ -218,9 +222,9 @@ public class ConsultaExternaService : IConsultaExternaService
                 }
             }
 
-            // Si la consulta actual no tiene examen físico guardado aún (consulta nueva o en blanco),
-            // verificar si el paciente ya tuvo una consulta registrada el MISMO DÍA para precargar
-            // el examen físico, constantes y temperamento.
+            // Si la consulta actual no tiene examen fÃ­sico guardado aÃºn (consulta nueva o en blanco),
+            // verificar si el paciente ya tuvo una consulta registrada el MISMO DÃA para precargar
+            // el examen fÃ­sico, constantes y temperamento.
             bool sinExamenFisico = existente == null || (existente.Peso <= 0 && string.IsNullOrWhiteSpace(existente.MedMotivo) && string.IsNullOrWhiteSpace(existente.MedObjetivo));
 
             if (!historica && nhcl > 0 && sinExamenFisico)
@@ -232,7 +236,7 @@ public class ConsultaExternaService : IConsultaExternaService
                         ISNULL(f.temperatura, 38.5) AS Temperatura,
                         ISNULL(f.frecuenciacardiaca, 90) AS FrecuenciaCardiaca,
                         ISNULL(f.frecuenciarespiratoria, 24) AS FrecuenciaRespiratoria,
-                        ISNULL(f.mucosas, 'Rosadas y húmedas') AS Mucosas,
+                        ISNULL(f.mucosas, 'Rosadas y hÃºmedas') AS Mucosas,
                         ISNULL(f.tiempollenadocapilar, 2) AS TiempoLlenadoCapilar,
                         ISNULL(f.deshidratacion, 0) AS Deshidratacion,
                         ISNULL(f.reflejotusigeno, 'Negativo') AS ReflejoTusigeno,
@@ -240,9 +244,9 @@ public class ConsultaExternaService : IConsultaExternaService
                         ISNULL(f.palpaciontiroides, 'Sin alteraciones') AS PalpacionTiroides,
                         ISNULL(f.indicecondicioncorporal, 5) AS IndiceCondicionCorporal,
                         ISNULL(f.cp, 'Normal') AS Cp,
-                        ISNULL(f.linfonodos, 'Normales / Simétricos') AS Linfonodos,
+                        ISNULL(f.linfonodos, 'Normales / SimÃ©tricos') AS Linfonodos,
                         ISNULL(f.palpacionabdominal, 'Blando, no doloroso') AS PalpacionAbdominal,
-                        ISNULL(f.pielyanexos, 'Íntegra, pelaje normal') AS PielYAnexos,
+                        ISNULL(f.pielyanexos, 'Ãntegra, pelaje normal') AS PielYAnexos,
                         ISNULL(f.cavidadoral, 'Sin alteraciones') AS CavidadOral,
                         ISNULL(f.otros, '') AS Otros,
                         ISNULL(f.temperamento, 'TRANQUILO') AS Temperamento,
@@ -305,7 +309,7 @@ public class ConsultaExternaService : IConsultaExternaService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Aviso al obtener Ficha Médica para Orden {IdOrden}", idOrden);
+            _logger.LogWarning(ex, "Aviso al obtener Ficha MÃ©dica para Orden {IdOrden}", idOrden);
         }
 
         return dto;
@@ -355,7 +359,7 @@ public class ConsultaExternaService : IConsultaExternaService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo consultar el catálogo de consultas desde PRODUCTO.");
+            _logger.LogWarning(ex, "No se pudo consultar el catÃ¡logo de consultas desde PRODUCTO.");
             return [];
         }
     }
@@ -524,7 +528,7 @@ public class ConsultaExternaService : IConsultaExternaService
                           AND (ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                             OR (o.ordenAten_estado = 'T' AND EXISTS (
                                 SELECT 1 FROM vt_vitacora v
-                                WHERE v.vit_detalle = CONCAT('Ficha Médica SOAP guardada Orden #', @MedOrden, ' NHCL #', @MedNhcl))))
+                                WHERE v.vit_detalle = CONCAT('Ficha MÃ©dica SOAP guardada Orden #', @MedOrden, ' NHCL #', @MedNhcl))))
                           AND EXISTS (
                               SELECT 1 FROM vt_usuarios u
                               JOIN vt_tipos_usuarios t ON t.tipuser_numero = u.user_tipouser_numero
@@ -534,7 +538,7 @@ public class ConsultaExternaService : IConsultaExternaService
                         SELECT 1 FROM vt_vitacora
                         WHERE vit_detalle = CONCAT('Triaje de ingreso completado Orden #', @MedOrden)
                     )
-                        THROW 50001, 'La orden ya no está disponible para triaje.', 1;
+                        THROW 50001, 'La orden ya no estÃ¡ disponible para triaje.', 1;
 
                     UPDATE vt_ordenAtencion
                     SET ordenAten_idEnfermero = CASE WHEN ISNULL(ordenAten_esProcedimiento, 0) = 0 AND ISNULL(ordenAten_triajeMedico, 0) = 1 THEN ordenAten_idEnfermero ELSE @MedIdUser END,
@@ -569,7 +573,7 @@ public class ConsultaExternaService : IConsultaExternaService
                               )
                           )
                     )
-                        THROW 50001, 'La orden ya no permite editar la ficha SOAP (fuera de las 24 horas posteriores al cierre o no asignada al médico).', 1;
+                        THROW 50001, 'La orden ya no permite editar la ficha SOAP (fuera de las 24 horas posteriores al cierre o no asignada al mÃ©dico).', 1;
                     """, new { dto.MedOrden, dto.MedNhcl, EsAdmin = _session.TipoUser == 1 ? 1 : 0, IdUsuarioSesion = _session.IdUser }));
             }
 
@@ -666,7 +670,7 @@ public class ConsultaExternaService : IConsultaExternaService
 
                 comandos.Add(("""
                     IF EXISTS (SELECT 1 FROM vt_fichamedica WHERE med_orden = @MedOrden AND med_nhcl = @MedNhcl)
-                        THROW 50001, 'La ficha SOAP cambió durante el guardado. Intente nuevamente.', 1;
+                        THROW 50001, 'La ficha SOAP cambiÃ³ durante el guardado. Intente nuevamente.', 1;
                     """, dto));
                 comandos.Add((sqlInsert, dto));
             }
@@ -714,7 +718,7 @@ public class ConsultaExternaService : IConsultaExternaService
 
                 comandos.Add((@"
                     INSERT INTO vt_vitacora (vit_detalle, vit_idUser, vit_idFechaMod, ip, hostname)
-                    VALUES (CONCAT('Ficha Médica SOAP guardada Orden #', @MedOrden, ' NHCL #', @MedNhcl),
+                    VALUES (CONCAT('Ficha MÃ©dica SOAP guardada Orden #', @MedOrden, ' NHCL #', @MedNhcl),
                         @MedIdUser, GETDATE(), '127.0.0.1', 'BlazorClient');", dto));
             }
 
@@ -723,13 +727,13 @@ public class ConsultaExternaService : IConsultaExternaService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al guardar Ficha Médica para Orden {MedOrden}", dto.MedOrden);
+            _logger.LogError(ex, "Error al guardar Ficha MÃ©dica para Orden {MedOrden}", dto.MedOrden);
             return false;
         }
     }
 
     // ========================================================================
-    // 2. DIAGNÓSTICOS CIE-10 (vt_diagnosticos + vt_cie10)
+    // 2. DIAGNÃ“STICOS CIE-10 (vt_diagnosticos + vt_cie10)
     // ========================================================================
     public async Task<List<CatalogoCie10ItemDto>> BuscarCatalogoCie10Async(string filtro)
     {
@@ -828,7 +832,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(a.antecedente_descripcion, '') AS Descripcion,
                 ISNULL(a.alimentacion, '') AS Alimentacion,
                 ISNULL(a.cuales_mascotas, '') AS ContactoMascotas,
-                ISNULL(u.user_nombre, 'Médico') AS NombreMedico
+                ISNULL(u.user_nombre, 'MÃ©dico') AS NombreMedico
             FROM vt_antecedentes a
             LEFT JOIN vt_usuarios u ON a.antecedente_iduser = u.user_numero
             WHERE a.antecedente_nhcl = @Nhcl AND ISNULL(a.antecedente_estado, 'A') = 'A'
@@ -874,8 +878,8 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(v.vacuna_idprod, 0) AS IdProducto,
                 UPPER(REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), '')) AS NombreVacuna,
                 ISNULL(v.vacuna_observacion, '') AS ObservacionVacuna,
-                ISNULL(v.vacuna_tipo, 'Vacunación') AS Tipo,
-                ISNULL(u.user_nombre, 'Médico') AS NombreMedico
+                ISNULL(v.vacuna_tipo, 'VacunaciÃ³n') AS Tipo,
+                ISNULL(u.user_nombre, 'MÃ©dico') AS NombreMedico
             FROM vt_vacunas v
             LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON v.vacuna_idprod = p.CODIGO
             LEFT JOIN vt_usuarios u ON v.vacuna_iduser = u.user_numero
@@ -920,7 +924,7 @@ public class ConsultaExternaService : IConsultaExternaService
             ? string.Empty
             : dto.ObservacionVacuna.Length > 500 ? dto.ObservacionVacuna.Substring(0, 500) : dto.ObservacionVacuna;
         var tipo = string.IsNullOrEmpty(dto.Tipo)
-            ? "Vacunación"
+            ? "VacunaciÃ³n"
             : dto.Tipo.Length > 50 ? dto.Tipo.Substring(0, 50) : dto.Tipo;
 
         await _db.ExecuteAsync(sql, new
@@ -947,7 +951,7 @@ public class ConsultaExternaService : IConsultaExternaService
     }
 
     // ========================================================================
-    // 4. EVOLUCIONES MÉDICAS Y ÓRDENES ASOCIADAS (vt_EvolucionMedico)
+    // 4. EVOLUCIONES MÃ‰DICAS Y Ã“RDENES ASOCIADAS (vt_EvolucionMedico)
     // ========================================================================
     public async Task<List<EvolucionMedicaDto>> ObtenerEvolucionesPacienteAsync(int nhcl, int? idOrdenFiltro = null)
     {
@@ -962,7 +966,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(e.descripcion, '') AS Descripcion,
                 ISNULL(e.idEscogido, 0) AS IdEscogido,
                 ISNULL(e.idUser, 0) AS IdUser,
-                ISNULL(u.user_nombre, 'Médico Tratante') AS NombreMedico,
+                ISNULL(u.user_nombre, 'MÃ©dico Tratante') AS NombreMedico,
                 ISNULL(e.estadoEvolucion, 'A') AS EstadoEvolucion
             FROM vt_EvolucionMedico e
             LEFT JOIN vt_usuarios u ON ISNULL(e.idEscogido, e.idUser) = u.user_numero
@@ -998,7 +1002,7 @@ public class ConsultaExternaService : IConsultaExternaService
             int filas = await _db.ExecuteAsync(sqlUpdate, dto);
             if (filas > 0)
             {
-                await _db.RegistrarBitacoraAsync($"Evolución Médica #{dto.IdEvolucion} actualizada Orden #{dto.IdOrden}", idUsuario);
+                await _db.RegistrarBitacoraAsync($"EvoluciÃ³n MÃ©dica #{dto.IdEvolucion} actualizada Orden #{dto.IdOrden}", idUsuario);
                 return dto.IdEvolucion;
             }
             return 0;
@@ -1014,7 +1018,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
             int idCreado = await _db.ExecuteScalarAsync<int>(sqlInsert, dto);
-            await _db.RegistrarBitacoraAsync($"Nueva Evolución Médica #{idCreado} Orden #{dto.IdOrden}", idUsuario);
+            await _db.RegistrarBitacoraAsync($"Nueva EvoluciÃ³n MÃ©dica #{idCreado} Orden #{dto.IdOrden}", idUsuario);
             return idCreado;
         }
     }
@@ -1136,7 +1140,7 @@ public class ConsultaExternaService : IConsultaExternaService
     }
 
     // ========================================================================
-    // 5. RECETARIO MÉDICO E INDICACIONES GENERALES (vt_medicinas + vt_IndicacionesGenerales)
+    // 5. RECETARIO MÃ‰DICO E INDICACIONES GENERALES (vt_medicinas + vt_IndicacionesGenerales)
     // ========================================================================
     public async Task<List<AdvertenciaMedicamentoDto>> ObtenerAdvertenciasMedicamentoAsync(int nhcl)
     {
@@ -1203,6 +1207,369 @@ public class ConsultaExternaService : IConsultaExternaService
 
         var lista = await _db.QueryAsync<RecetaMedicamentoItemDto>(sql, new { IdOrden = idOrden });
         return lista.ToList();
+    }
+
+    public async Task<List<RecetaMedicamentoItemDto>> ObtenerRecetaPendienteOrdenAsync(int idOrden)
+    {
+        if (idOrden <= 0) return [];
+
+        const string sql = @"
+            SELECT
+                m.sec AS Sec,
+                ISNULL(m.med_id_orden, 0) AS IdOrden,
+                ISNULL(m.med_nhcl, 0) AS Nhcl,
+                CAST(ISNULL(m.med_idProdu, '') AS VARCHAR(50)) AS CodigoProd,
+                COALESCE(
+                    NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(m.med_otroMedicamento, '')), CHAR(13), ''), CHAR(10), ''), ''),
+                    NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), ''), ''),
+                    ''
+                ) AS Descripcionamento,
+                ISNULL(m.med_cantidad, 1) AS Cantidad,
+                ISNULL(m.med_cantidadLetras, '') AS CantidadLetras,
+                ISNULL(m.med_indicaciones, '') AS Indicaciones,
+                ISNULL(m.med_observaciones, '') AS Observaciones,
+                ISNULL(m.med_fecha, GETDATE()) AS Fecha,
+                ISNULL(m.med_tipo, 'M') AS Tipo
+            FROM vt_medicinas m
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO p ON m.med_idProdu = p.CODIGO
+            WHERE m.med_id_orden = @IdOrden
+              AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_tipo)), ''), 'M') IN ('M', 'I')
+              AND ISNULL(NULLIF(LTRIM(RTRIM(m.med_estado)), ''), 'Por Entregar') IN ('Por Entregar', 'Por Facturar')
+            ORDER BY m.sec ASC";
+
+        var lista = await _db.QueryAsync<RecetaMedicamentoItemDto>(sql, new { IdOrden = idOrden });
+        return lista.ToList();
+    }
+
+    private async Task AsegurarTablaEvolucionMedicinasAsync()
+    {
+        const string sql = @"
+            IF OBJECT_ID('dbo.vt_evolucion_medicinas', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.vt_evolucion_medicinas (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    id_evolucion INT NOT NULL,
+                    id_orden INT NOT NULL,
+                    nhcl INT NOT NULL,
+                    cod_producto VARCHAR(50) NULL,
+                    descripcion NVARCHAR(250) NOT NULL,
+                    cantidad DECIMAL(18,4) NOT NULL DEFAULT(1),
+                    cantidad_letras NVARCHAR(150) NULL,
+                    indicaciones NVARCHAR(500) NULL,
+                    tipo VARCHAR(10) NOT NULL DEFAULT('M'),
+                    fecha_registro DATETIME NOT NULL DEFAULT(GETDATE())
+                );
+                CREATE INDEX IX_vt_evolucion_medicinas_nhcl ON dbo.vt_evolucion_medicinas (nhcl, id_evolucion DESC);
+                CREATE INDEX IX_vt_evolucion_medicinas_orden ON dbo.vt_evolucion_medicinas (id_orden, id_evolucion DESC);
+            END";
+        await _db.ExecuteAsync(sql);
+    }
+
+    public async Task<List<RecetaMedicamentoItemDto>> ObtenerMedicinasUltimaEvolucionAsync(int nhcl, int idOrdenActual = 0)
+    {
+        if (nhcl <= 0) return [];
+        await AsegurarTablaEvolucionMedicinasAsync();
+
+        const string sqlUltimoId = @"
+            SELECT TOP 1 em.id_evolucion
+            FROM dbo.vt_evolucion_medicinas em
+            INNER JOIN dbo.vt_EvolucionMedico ev ON ev.idEvolucion = em.id_evolucion
+            WHERE em.nhcl = @Nhcl
+              AND ISNULL(ev.estadoEvolucion, 'A') = 'A'
+            ORDER BY CASE WHEN @IdOrden > 0 AND em.id_orden = @IdOrden THEN 0 ELSE 1 END,
+                     em.id_evolucion DESC;";
+
+        var ultimoId = await _db.ExecuteScalarAsync<int?>(sqlUltimoId, new { Nhcl = nhcl, IdOrden = idOrdenActual });
+        if (ultimoId is not > 0)
+            return [];
+
+        const string sqlItems = @"
+            SELECT
+                0 AS Sec,
+                @IdOrden AS IdOrden,
+                @Nhcl AS Nhcl,
+                ISNULL(cod_producto, '') AS CodigoProd,
+                ISNULL(descripcion, '') AS Descripcionamento,
+                ISNULL(cantidad, 1) AS Cantidad,
+                ISNULL(cantidad_letras, '') AS CantidadLetras,
+                ISNULL(indicaciones, '') AS Indicaciones,
+                ISNULL(tipo, 'M') AS Tipo,
+                fecha_registro AS Fecha
+            FROM dbo.vt_evolucion_medicinas
+            WHERE id_evolucion = @IdEvolucion
+            ORDER BY id ASC;";
+
+        var items = await _db.QueryAsync<RecetaMedicamentoItemDto>(sqlItems, new
+        {
+            IdEvolucion = ultimoId.Value,
+            IdOrden = idOrdenActual,
+            Nhcl = nhcl
+        });
+        return items.ToList();
+    }
+
+    public async Task<(bool Exito, string Mensaje, int Confirmados)> ConfirmarMedicinasEvolucionAsync(
+        int idEvolucion,
+        int idOrden,
+        int nhcl,
+        IReadOnlyCollection<RecetaMedicamentoItemDto> medicinas,
+        int idUsuario,
+        int idLocalidad)
+    {
+        if (idEvolucion <= 0 || idOrden <= 0 || nhcl <= 0)
+            return (false, "Datos invÃ¡lidos para confirmar medicinas de la evoluciÃ³n.", 0);
+
+        await AsegurarTablaEvolucionMedicinasAsync();
+
+        int sedeId = idLocalidad > 0 ? idLocalidad : 1;
+        int userId = idUsuario > 0 ? idUsuario : 1;
+        var validas = (medicinas ?? [])
+            .Where(m => m.Cantidad > 0 && !string.IsNullOrWhiteSpace(m.Descripcionamento))
+            .ToList();
+
+        // 1. Liberar reservas temporales pendientes de la receta SOAP (med_tipo IN ('M','I')) para esta orden
+        const string sqlLiberarSoap = @"
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+
+            DECLARE @Sec INT, @CodProd INT, @CantRes DECIMAL(18,4);
+            DECLARE cur CURSOR LOCAL FAST_FORWARD FOR
+                SELECT sec, ISNULL(med_idProdu, 0), CAST(ISNULL(med_cantidad1, 0) AS DECIMAL(18,4))
+                FROM dbo.vt_medicinas WITH (UPDLOCK, HOLDLOCK)
+                WHERE med_id_orden = @IdOrden
+                  AND ISNULL(NULLIF(LTRIM(RTRIM(med_tipo)), ''), 'M') IN ('M', 'I')
+                  AND ISNULL(NULLIF(LTRIM(RTRIM(med_estado)), ''), 'Por Entregar') IN ('Por Entregar', 'Por Facturar');
+
+            OPEN cur;
+            FETCH NEXT FROM cur INTO @Sec, @CodProd, @CantRes;
+            WHILE @@FETCH_STATUS = 0
+            BEGIN
+                IF @CodProd > 0 AND @CantRes > 0
+                BEGIN
+                    DECLARE @IdEmpresa INT = NULL, @SucRes INT = @IdLocalidad, @StockAct DECIMAL(18,4) = 0, @StockRes DECIMAL(18,4) = 0, @CostoProm DECIMAL(18,4) = 0;
+                    SELECT TOP 1
+                        @IdEmpresa = e.id_empresa,
+                        @SucRes = e.id_sucursal,
+                        @StockAct = e.stock_actual,
+                        @StockRes = ISNULL(e.stock_reservado, 0),
+                        @CostoProm = ISNULL(e.costo_promedio, 0)
+                    FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+                    WHERE e.codigo_producto = @CodProd
+                      AND (e.id_sucursal = @IdLocalidad OR ISNULL(e.stock_reservado, 0) >= @CantRes)
+                    ORDER BY CASE WHEN e.id_sucursal = @IdLocalidad THEN 0 ELSE 1 END, ISNULL(e.stock_reservado, 0) DESC;
+
+                    IF @IdEmpresa IS NOT NULL
+                    BEGIN
+                        UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                        SET stock_reservado = CASE WHEN @StockRes - @CantRes < 0 THEN 0 ELSE @StockRes - @CantRes END,
+                            fecha_actualizacion = SYSUTCDATETIME()
+                        WHERE codigo_producto = @CodProd
+                          AND id_sucursal = @SucRes
+                          AND id_empresa = @IdEmpresa;
+
+                        INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                            codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                            cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                            metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                        ) VALUES (
+                            @CodProd, @IdEmpresa, @SucRes, 'RESERVA_LIBERADA',
+                            @CantRes, @CostoProm, ROUND(@CantRes * @CostoProm, 4), @StockAct, ROUND(@StockAct * @CostoProm, 4),
+                            'PROMEDIO', 'EVOLUCION_MEDICA', 'EVOLUCION:' + CAST(@IdEvolucion AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
+                            'LiberaciÃ³n de reserva SOAP al confirmar EvoluciÃ³n MÃ©dica #' + CAST(@IdEvolucion AS VARCHAR(20)) + ' Orden #' + CAST(@IdOrden AS VARCHAR(20))
+                        );
+                    END
+                END
+
+                UPDATE dbo.vt_medicinas
+                SET med_estado = 'Confirmado',
+                    med_cantidad1 = 0,
+                    med_observaciones = LEFT('Confirmado en EvoluciÃ³n MÃ©dica #' + CAST(@IdEvolucion AS VARCHAR(20)), 240)
+                WHERE sec = @Sec;
+
+                FETCH NEXT FROM cur INTO @Sec, @CodProd, @CantRes;
+            END
+            CLOSE cur;
+            DEALLOCATE cur;
+
+            DELETE FROM dbo.vt_evolucion_medicinas WHERE id_evolucion = @IdEvolucion;
+
+            COMMIT TRANSACTION;";
+
+        try
+        {
+            await _db.ExecuteAsync(sqlLiberarSoap, new
+            {
+                IdOrden = idOrden,
+                IdEvolucion = idEvolucion,
+                IdUsuario = userId,
+                IdLocalidad = sedeId
+            });
+
+            int confirmados = 0;
+            var sinStock = new List<string>();
+
+            const string sqlConfirmarLinea = @"
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+
+                DECLARE @CodProdInt INT = CASE WHEN @CodigoNum > 0 THEN @CodigoNum ELSE NULL END;
+                IF @CodProdInt IS NULL OR @CodProdInt <= 0
+                BEGIN
+                    SELECT TOP 1 @CodProdInt = p.CODIGO
+                    FROM dbo.PRODUCTO p
+                    WHERE p.NOMBRE = LTRIM(RTRIM(@Descripcion))
+                       OR p.CODIGO_PRINCIPAL = LTRIM(RTRIM(@Descripcion));
+                END
+
+                DECLARE @ControlaInv BIT = 1;
+                IF @CodProdInt IS NOT NULL AND @CodProdInt > 0
+                BEGIN
+                    SELECT TOP 1 @ControlaInv = CAST(ISNULL(INVENTARIO, 1) AS BIT)
+                    FROM dbo.PRODUCTO
+                    WHERE CODIGO = @CodProdInt;
+
+                    IF @ControlaInv = 1
+                    BEGIN
+                        DECLARE @IdEmpresa INT = NULL;
+                        DECLARE @StockActual DECIMAL(18,4) = 0;
+                        DECLARE @StockReservado DECIMAL(18,4) = 0;
+                        DECLARE @CostoPromedio DECIMAL(18,4) = 0;
+
+                        SELECT TOP 1
+                            @IdEmpresa = e.id_empresa,
+                            @StockActual = e.stock_actual,
+                            @StockReservado = ISNULL(e.stock_reservado, 0),
+                            @CostoPromedio = ISNULL(e.costo_promedio, 0)
+                        FROM dbo.ECONTAX_INVENTARIO_EXISTENCIA e WITH (UPDLOCK, HOLDLOCK)
+                        WHERE e.codigo_producto = @CodProdInt
+                          AND e.id_sucursal = @IdLocalidad
+                        ORDER BY e.stock_actual DESC;
+
+                        DECLARE @Disponible DECIMAL(18,4) = CASE WHEN @StockActual - @StockReservado > 0 THEN @StockActual - @StockReservado ELSE 0 END;
+                        IF @IdEmpresa IS NULL OR @Disponible < @Cantidad
+                        BEGIN
+                            ROLLBACK TRANSACTION;
+                            SELECT -1;
+                            RETURN;
+                        END
+
+                        DECLARE @NuevoStock DECIMAL(18,4) = @StockActual - @Cantidad;
+
+                        UPDATE dbo.ECONTAX_INVENTARIO_EXISTENCIA
+                        SET stock_actual = @NuevoStock,
+                            fecha_actualizacion = SYSUTCDATETIME()
+                        WHERE codigo_producto = @CodProdInt
+                          AND id_sucursal = @IdLocalidad
+                          AND id_empresa = @IdEmpresa;
+
+                        -- Descarga FIFO en lotes
+                        DECLARE @RestanteLote DECIMAL(18,4) = @Cantidad;
+                        DECLARE @IdLote BIGINT, @DispLote DECIMAL(18,4), @TomarLote DECIMAL(18,4);
+                        WHILE @RestanteLote > 0
+                        BEGIN
+                            SET @IdLote = NULL;
+                            SELECT TOP 1 @IdLote = l.id_lote, @DispLote = l.cantidad_disponible
+                            FROM dbo.ECONTAX_INVENTARIO_LOTE l WITH (UPDLOCK, HOLDLOCK)
+                            WHERE l.codigo_producto = @CodProdInt
+                              AND l.id_sucursal = @IdLocalidad
+                              AND l.id_empresa = @IdEmpresa
+                              AND l.cantidad_disponible > 0
+                            ORDER BY ISNULL(l.fecha_vencimiento, '9999-12-31'), l.fecha_ingreso, l.id_lote;
+
+                            IF @IdLote IS NULL BREAK;
+
+                            SET @TomarLote = CASE WHEN @DispLote <= @RestanteLote THEN @DispLote ELSE @RestanteLote END;
+                            UPDATE dbo.ECONTAX_INVENTARIO_LOTE
+                            SET cantidad_disponible = cantidad_disponible - @TomarLote
+                            WHERE id_lote = @IdLote;
+
+                            SET @RestanteLote = @RestanteLote - @TomarLote;
+                        END
+
+                        INSERT INTO dbo.ECONTAX_INVENTARIO_MOVIMIENTO (
+                            codigo_producto, id_empresa, id_sucursal, tipo_movimiento,
+                            cantidad, costo_unitario, costo_total, saldo_cantidad, saldo_costo,
+                            metodo_valoracion, referencia_tipo, referencia, id_usuario, fecha_movimiento, observacion
+                        ) VALUES (
+                            @CodProdInt, @IdEmpresa, @IdLocalidad, 'SALIDA',
+                            @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @NuevoStock, ROUND(@NuevoStock * @CostoPromedio, 4),
+                            'PROMEDIO', 'EVOLUCION_MEDICA', 'EVOLUCION:' + CAST(@IdEvolucion AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
+                            'Descarga directa por EvoluciÃ³n MÃ©dica #' + CAST(@IdEvolucion AS VARCHAR(20)) +
+                            ' Orden #' + CAST(@IdOrden AS VARCHAR(20)) + ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) +
+                            ' Â· Cantidad: ' + CAST(@Cantidad AS VARCHAR(20))
+                        );
+                    END
+                END
+
+                -- Guardar snapshot en historial de la evoluciÃ³n (para botÃ³n Cargar de evoluciÃ³n anterior)
+                INSERT INTO dbo.vt_evolucion_medicinas (
+                    id_evolucion, id_orden, nhcl, cod_producto, descripcion,
+                    cantidad, cantidad_letras, indicaciones, tipo
+                ) VALUES (
+                    @IdEvolucion, @IdOrden, @Nhcl,
+                    CASE WHEN @CodProdInt IS NOT NULL AND @CodProdInt > 0 THEN CAST(@CodProdInt AS VARCHAR(50)) ELSE '' END,
+                    LEFT(@Descripcion, 250), @Cantidad, LEFT(ISNULL(@CantidadLetras, ''), 150),
+                    LEFT(ISNULL(@Indicaciones, ''), 500), 'M'
+                );
+
+                -- Registrar como aplicado en factura (med_tipo = 'C', med_estado = 'Descargado' para no descontar dos veces al facturar)
+                INSERT INTO dbo.vt_medicinas (
+                    med_nhcl, med_idProdu, med_indicaciones, med_cantidad, med_id_orden,
+                    med_otroMedicamento, med_estado, med_cantidad1, med_cantidadLetras,
+                    med_fecha, med_tipo, med_observaciones, med_utilizado
+                ) VALUES (
+                    @Nhcl, ISNULL(@CodProdInt, 0), LEFT(ISNULL(@Indicaciones, ''), 250), @Cantidad, @IdOrden,
+                    LEFT(@Descripcion, 250), 'Descargado', @Cantidad, LEFT(ISNULL(@CantidadLetras, ''), 120),
+                    GETDATE(), 'C',
+                    LEFT('EvoluciÃ³n MÃ©dica #' + CAST(@IdEvolucion AS VARCHAR(20)) +
+                         CASE WHEN @ControlaInv = 1 THEN ' (descargado directo de inventario)' ELSE ' (sin control de inventario)' END, 240),
+                    1
+                );
+
+                COMMIT TRANSACTION;
+                SELECT 1;";
+
+            foreach (var med in validas)
+            {
+                int codNum = int.TryParse(med.CodigoProd, out var c) ? c : 0;
+                int res = await _db.ExecuteScalarAsync<int>(sqlConfirmarLinea, new
+                {
+                    IdEvolucion = idEvolucion,
+                    IdOrden = idOrden,
+                    Nhcl = nhcl,
+                    CodigoNum = codNum,
+                    Descripcion = med.Descripcionamento.Trim(),
+                    med.Cantidad,
+                    CantidadLetras = string.IsNullOrWhiteSpace(med.CantidadLetras) ? med.Cantidad.ToString("0.##") : med.CantidadLetras.Trim(),
+                    Indicaciones = string.IsNullOrWhiteSpace(med.Indicaciones) ? $"Confirmado en EvoluciÃ³n #{idEvolucion}" : med.Indicaciones.Trim(),
+                    IdUsuario = userId,
+                    IdLocalidad = sedeId
+                });
+
+                if (res == -1)
+                    sinStock.Add($"{med.Descripcionamento} (cant. {med.Cantidad:0.##})");
+                else if (res > 0)
+                    confirmados++;
+            }
+
+            if (sinStock.Count > 0)
+            {
+                return (confirmados > 0,
+                    $"Se descargaron {confirmados} medicamento(s) a factura. Stock insuficiente para: {string.Join(", ", sinStock)}.",
+                    confirmados);
+            }
+
+            return (true,
+                confirmados > 0
+                    ? $"Se descargaron {confirmados} medicamento(s) del inventario y pasaron directamente a factura."
+                    : "Reservas temporales de receta actualizadas.",
+                confirmados);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al confirmar medicinas de EvoluciÃ³n #{IdEvolucion} Orden #{IdOrden}", idEvolucion, idOrden);
+            return (false, $"Error al descargar medicinas de evoluciÃ³n: {ex.Message}", 0);
+        }
     }
 
     public async Task<string> ObtenerIndicacionesGeneralesAsync(int idOrden)
@@ -1382,7 +1749,7 @@ public class ConsultaExternaService : IConsultaExternaService
                         @CodProdInt, @IdEmpresa, @SucursalReserva, 'RESERVA_LIBERADA',
                         @CantReservada, @CostoPromedio, ROUND(@CantReservada * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
                         'PROMEDIO', 'FARMACIA_RECETA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), 1, SYSUTCDATETIME(),
-                        'Liberación de reserva por eliminación en Receta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20))
+                        'LiberaciÃ³n de reserva por eliminaciÃ³n en Receta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20))
                     );
                 END
             END
@@ -1431,7 +1798,7 @@ public class ConsultaExternaService : IConsultaExternaService
     {
         if (item.IdOrden <= 0 || item.Nhcl <= 0 || item.Cantidad <= 0 ||
             !int.TryParse(item.CodigoProd, out var codProdInt) || codProdInt <= 0)
-            return (false, "Selecciona un medicamento o insumo válido en stock de la sucursal.");
+            return (false, "Selecciona un medicamento o insumo vÃ¡lido en stock de la sucursal.");
 
         int sedeId = idLocalidad > 0 ? idLocalidad : 1;
         int userId = idUsuario > 0 ? idUsuario : 1;
@@ -1486,7 +1853,7 @@ public class ConsultaExternaService : IConsultaExternaService
                     @Cantidad, @CostoPromedio, ROUND(@Cantidad * @CostoPromedio, 4), @StockActual, ROUND(@StockActual * @CostoPromedio, 4),
                     'PROMEDIO', 'CONSULTA_APLICADA_COLA', 'ORDEN:' + CAST(@IdOrden AS VARCHAR(20)), @IdUsuario, SYSUTCDATETIME(),
                     'Reserva en consulta SOAP Orden #' + CAST(@IdOrden AS VARCHAR(20)) +
-                    ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) + ' · Cantidad: ' + CAST(@Cantidad AS VARCHAR(20))
+                    ' NHCL #' + CAST(@Nhcl AS VARCHAR(20)) + ' Â· Cantidad: ' + CAST(@Cantidad AS VARCHAR(20))
                 );
             END
 
@@ -1609,7 +1976,7 @@ public class ConsultaExternaService : IConsultaExternaService
         RecetaExternaCabeceraDto dto, int idUsuario)
     {
         if (dto.Nhcl <= 0 || string.IsNullOrWhiteSpace(dto.Paciente) || string.IsNullOrWhiteSpace(dto.Cliente))
-            return (false, 0, "Seleccione un paciente válido.");
+            return (false, 0, "Seleccione un paciente vÃ¡lido.");
         if (string.IsNullOrWhiteSpace(dto.Motivo))
             return (false, 0, "El motivo de la receta es obligatorio.");
 
@@ -1698,7 +2065,7 @@ public class ConsultaExternaService : IConsultaExternaService
     {
         if (idFicha <= 0 || dto.Nhcl <= 0) return (false, "Guarde primero la cabecera de la receta.");
         var descripcion = string.IsNullOrWhiteSpace(dto.DescripcionObservacion) ? dto.NombreCie10 : dto.DescripcionObservacion;
-        if (string.IsNullOrWhiteSpace(descripcion)) return (false, "Ingrese o seleccione un diagnóstico.");
+        if (string.IsNullOrWhiteSpace(descripcion)) return (false, "Ingrese o seleccione un diagnÃ³stico.");
         var codigo = string.IsNullOrWhiteSpace(dto.CodigoDiag) ? "0" : dto.CodigoDiag.Trim();
         if (codigo.Length > 10) codigo = codigo[..10];
         var tipo = dto.TipoDiag.StartsWith("D", StringComparison.OrdinalIgnoreCase) ? "D" : "P";
@@ -1716,7 +2083,7 @@ public class ConsultaExternaService : IConsultaExternaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error agregando diagnostico a receta externa {IdFicha}", idFicha);
-            return (false, "No se pudo agregar el diagnóstico.");
+            return (false, "No se pudo agregar el diagnÃ³stico.");
         }
     }
 
@@ -1794,7 +2161,7 @@ public class ConsultaExternaService : IConsultaExternaService
         => await _db.ExecuteAsync("DELETE FROM vt_medicinasexterno WHERE sec=@Sec", new { Sec = sec }) > 0;
 
     // ========================================================================
-    // 6. AUTORIZACIONES / CONSENTIMIENTOS Y ALTA MÉDICA (vt_autorizaciones + qvt_formulario_alta)
+    // 6. AUTORIZACIONES / CONSENTIMIENTOS Y ALTA MÃ‰DICA (vt_autorizaciones + qvt_formulario_alta)
     // ========================================================================
     private static bool _plantillaHospVerificada;
 
@@ -1802,47 +2169,47 @@ public class ConsultaExternaService : IConsultaExternaService
     {
         if (_plantillaHospVerificada) return;
 
-        const string htmlDefault = @"<h2 style=""text-align:center;"">CONSENTIMIENTO INFORMADO DE HOSPITALIZACIÓN VETERINARIA</h2>
-<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cédula de identidad N° <strong>[CEDULA]</strong>, en mi calidad de propietario/a o responsable legal del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL], Especie: <strong>[ESPECIE]</strong>, Raza: <strong>[RAZA]</strong>, Sexo: <strong>[SEXO]</strong>, Edad: <strong>[EDAD]</strong>), autorizo expresamente su ingreso y permanencia en el área de <strong>Hospitalización 24 Horas</strong> bajo la supervisión del médico veterinario responsable (<strong>[MEDICO]</strong>) y el equipo clínico de turno.</p>
-<h3>1. Alcance de la atención hospitalaria</h3>
-<p>Comprendo y autorizo la realización de procedimientos de monitoreo de signos vitales, canalización venosa, fluidoterapia, administración de medicación prescrita, toma de muestras de laboratorio, estudios de imagen y cuidados de enfermería necesarios para la estabilización y tratamiento del paciente.</p>
-<h3>2. Riesgos y evolución clínica</h3>
-<p>Se me ha informado de manera clara sobre el estado clínico actual del paciente, los posibles riesgos asociados a su patología o a los procedimientos terapéuticos y que la evolución clínica puede variar según la respuesta individual del animal. En caso de emergencia vital, autorizo las maniobras de estabilización inmediata mientras se me contacta al teléfono <strong>[TELEFONOPIE]</strong>.</p>
+        const string htmlDefault = @"<h2 style=""text-align:center;"">CONSENTIMIENTO INFORMADO DE HOSPITALIZACIÃ“N VETERINARIA</h2>
+<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cÃ©dula de identidad NÂ° <strong>[CEDULA]</strong>, en mi calidad de propietario/a o responsable legal del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL], Especie: <strong>[ESPECIE]</strong>, Raza: <strong>[RAZA]</strong>, Sexo: <strong>[SEXO]</strong>, Edad: <strong>[EDAD]</strong>), autorizo expresamente su ingreso y permanencia en el Ã¡rea de <strong>HospitalizaciÃ³n 24 Horas</strong> bajo la supervisiÃ³n del mÃ©dico veterinario responsable (<strong>[MEDICO]</strong>) y el equipo clÃ­nico de turno.</p>
+<h3>1. Alcance de la atenciÃ³n hospitalaria</h3>
+<p>Comprendo y autorizo la realizaciÃ³n de procedimientos de monitoreo de signos vitales, canalizaciÃ³n venosa, fluidoterapia, administraciÃ³n de medicaciÃ³n prescrita, toma de muestras de laboratorio, estudios de imagen y cuidados de enfermerÃ­a necesarios para la estabilizaciÃ³n y tratamiento del paciente.</p>
+<h3>2. Riesgos y evoluciÃ³n clÃ­nica</h3>
+<p>Se me ha informado de manera clara sobre el estado clÃ­nico actual del paciente, los posibles riesgos asociados a su patologÃ­a o a los procedimientos terapÃ©uticos y que la evoluciÃ³n clÃ­nica puede variar segÃºn la respuesta individual del animal. En caso de emergencia vital, autorizo las maniobras de estabilizaciÃ³n inmediata mientras se me contacta al telÃ©fono <strong>[TELEFONOPIE]</strong>.</p>
 <h3>3. Compromiso administrativo</h3>
-<p>Acepto los costos diarios de estancia hospitalaria, insumos, fármacos y exámenes complementarios generados durante la internación.</p>
-<p>Fecha de emisión: <strong>[FECHAPIE]</strong></p>
+<p>Acepto los costos diarios de estancia hospitalaria, insumos, fÃ¡rmacos y exÃ¡menes complementarios generados durante la internaciÃ³n.</p>
+<p>Fecha de emisiÃ³n: <strong>[FECHAPIE]</strong></p>
 <br/>
 <table style=""width:100%; border-collapse:collapse; margin-top:24px;"">
 <tr>
 <td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Firma del Propietario / Responsable</strong><br/>C.I.: [CEDULA]</td>
-<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Médico Veterinario / Responsable de Ingreso</strong><br/>[MEDICO]</td>
+<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>MÃ©dico Veterinario / Responsable de Ingreso</strong><br/>[MEDICO]</td>
 </tr>
 </table>";
 
-        const string htmlCirugiaDefault = @"<h2 style=""text-align:center;"">CONSENTIMIENTO INFORMADO DE CIRUGÍA VETERINARIA</h2>
-<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cédula de identidad N° <strong>[CEDULA]</strong>, propietario/a o responsable legal del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL], Especie: <strong>[ESPECIE]</strong>, Raza: <strong>[RAZA]</strong>, Sexo: <strong>[SEXO]</strong>, Edad: <strong>[EDAD]</strong>), autorizo al médico veterinario <strong>[MEDICO]</strong> y al equipo quirúrgico a realizar el procedimiento quirúrgico indicado.</p>
-<h3>1. Información sobre el procedimiento y riesgos</h3>
-<p>Declaro haber recibido explicación clara sobre la naturaleza del procedimiento quirúrgico, los beneficios esperados, las posibles complicaciones intraoperatorias o postoperatorias (hemorragia, infección, dehiscencia de sutura, reacciones adversas o riesgo vital inherente al cuadro clínico) y las alternativas disponibles.</p>
-<h3>2. Autorización ante imprevistos</h3>
-<p>En caso de presentarse hallazgos o emergencias durante la cirugía, autorizo al equipo quirúrgico a tomar las decisiones médicas necesarias para resguardar la vida y bienestar del paciente, comunicándose al teléfono <strong>[TELEFONOPIE]</strong>.</p>
-<p>Fecha de emisión: <strong>[FECHAPIE]</strong></p>
+        const string htmlCirugiaDefault = @"<h2 style=""text-align:center;"">CONSENTIMIENTO INFORMADO DE CIRUGÃA VETERINARIA</h2>
+<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cÃ©dula de identidad NÂ° <strong>[CEDULA]</strong>, propietario/a o responsable legal del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL], Especie: <strong>[ESPECIE]</strong>, Raza: <strong>[RAZA]</strong>, Sexo: <strong>[SEXO]</strong>, Edad: <strong>[EDAD]</strong>), autorizo al mÃ©dico veterinario <strong>[MEDICO]</strong> y al equipo quirÃºrgico a realizar el procedimiento quirÃºrgico indicado.</p>
+<h3>1. InformaciÃ³n sobre el procedimiento y riesgos</h3>
+<p>Declaro haber recibido explicaciÃ³n clara sobre la naturaleza del procedimiento quirÃºrgico, los beneficios esperados, las posibles complicaciones intraoperatorias o postoperatorias (hemorragia, infecciÃ³n, dehiscencia de sutura, reacciones adversas o riesgo vital inherente al cuadro clÃ­nico) y las alternativas disponibles.</p>
+<h3>2. AutorizaciÃ³n ante imprevistos</h3>
+<p>En caso de presentarse hallazgos o emergencias durante la cirugÃ­a, autorizo al equipo quirÃºrgico a tomar las decisiones mÃ©dicas necesarias para resguardar la vida y bienestar del paciente, comunicÃ¡ndose al telÃ©fono <strong>[TELEFONOPIE]</strong>.</p>
+<p>Fecha de emisiÃ³n: <strong>[FECHAPIE]</strong></p>
 <br/>
 <table style=""width:100%; border-collapse:collapse; margin-top:24px;"">
 <tr>
 <td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Firma del Propietario / Responsable</strong><br/>C.I.: [CEDULA]</td>
-<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Cirujano / Médico Responsable</strong><br/>[MEDICO]</td>
+<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Cirujano / MÃ©dico Responsable</strong><br/>[MEDICO]</td>
 </tr>
 </table>";
 
-        const string htmlAnestesiaDefault = @"<h2 style=""text-align:center;"">AUTORIZACIÓN DE ANESTESIA VETERINARIA</h2>
-<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cédula de identidad N° <strong>[CEDULA]</strong>, responsable del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL], Especie: <strong>[ESPECIE]</strong>, Raza: <strong>[RAZA]</strong>, Edad: <strong>[EDAD]</strong>), autorizo la administración de protocolos de sedación, analgesia y anestesia general o regional necesarios para el procedimiento indicado por <strong>[MEDICO]</strong>.</p>
-<p>Comprendo que todo procedimiento anestésico conlleva riesgos fisiológicos individuales y autorizo las maniobras de soporte vital en caso de requerirse. Teléfono de contacto: <strong>[TELEFONOPIE]</strong>.</p>
+        const string htmlAnestesiaDefault = @"<h2 style=""text-align:center;"">AUTORIZACIÃ“N DE ANESTESIA VETERINARIA</h2>
+<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cÃ©dula de identidad NÂ° <strong>[CEDULA]</strong>, responsable del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL], Especie: <strong>[ESPECIE]</strong>, Raza: <strong>[RAZA]</strong>, Edad: <strong>[EDAD]</strong>), autorizo la administraciÃ³n de protocolos de sedaciÃ³n, analgesia y anestesia general o regional necesarios para el procedimiento indicado por <strong>[MEDICO]</strong>.</p>
+<p>Comprendo que todo procedimiento anestÃ©sico conlleva riesgos fisiolÃ³gicos individuales y autorizo las maniobras de soporte vital en caso de requerirse. TelÃ©fono de contacto: <strong>[TELEFONOPIE]</strong>.</p>
 <p>Fecha: <strong>[FECHAPIE]</strong></p>
 <br/>
 <table style=""width:100%; border-collapse:collapse; margin-top:24px;"">
 <tr>
 <td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Firma del Propietario / Responsable</strong><br/>C.I.: [CEDULA]</td>
-<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>Médico / Anestesista</strong><br/>[MEDICO]</td>
+<td style=""width:50%; text-align:center; padding-top:24px;"">________________________________________<br/><strong>MÃ©dico / Anestesista</strong><br/>[MEDICO]</td>
 </tr>
 </table>";
 
@@ -1850,13 +2217,13 @@ public class ConsultaExternaService : IConsultaExternaService
             IF NOT EXISTS (SELECT 1 FROM vt_formatos WHERE form_tipo = 'HOSPITALIZACION')
             BEGIN
                 INSERT INTO vt_formatos (form_nombre, form_tipo, form_archivoHtml, form_es_sistema)
-                VALUES (N'Consentimiento Informado de Hospitalización', 'HOSPITALIZACION', @HtmlHosp, 1);
+                VALUES (N'Consentimiento Informado de HospitalizaciÃ³n', 'HOSPITALIZACION', @HtmlHosp, 1);
             END
 
             IF NOT EXISTS (SELECT 1 FROM vt_formatos WHERE form_tipo = 'CIRUGIA')
             BEGIN
                 INSERT INTO vt_formatos (form_nombre, form_tipo, form_archivoHtml, form_es_sistema)
-                VALUES (N'Consentimiento Informado de Cirugía', 'CIRUGIA', @HtmlCir, 1);
+                VALUES (N'Consentimiento Informado de CirugÃ­a', 'CIRUGIA', @HtmlCir, 1);
             END
 
             IF NOT EXISTS (SELECT 1 FROM vt_formatos WHERE form_nombre LIKE '%Anestesia%')
@@ -1952,7 +2319,7 @@ public class ConsultaExternaService : IConsultaExternaService
         try
         {
             if (formId <= 0)
-                return (false, "Identificador de plantilla no válido.");
+                return (false, "Identificador de plantilla no vÃ¡lido.");
 
             var esSistema = await _db.ExecuteScalarAsync<int?>(
                 "SELECT ISNULL(form_es_sistema, CASE WHEN form_id <= 8 THEN 1 ELSE 0 END) FROM vt_formatos WHERE form_id = @FormId",
@@ -1960,7 +2327,7 @@ public class ConsultaExternaService : IConsultaExternaService
 
             if (esSistema == 1 || formId <= 8)
             {
-                return (false, "Esta es una plantilla oficial predeterminada del sistema y está protegida contra eliminación.");
+                return (false, "Esta es una plantilla oficial predeterminada del sistema y estÃ¡ protegida contra eliminaciÃ³n.");
             }
 
             var filas = await _db.ExecuteAsync("DELETE FROM vt_formatos WHERE form_id = @FormId", new { FormId = formId });
@@ -1968,12 +2335,12 @@ public class ConsultaExternaService : IConsultaExternaService
             {
                 return (true, null);
             }
-            return (false, "No se encontró la plantilla para eliminar.");
+            return (false, "No se encontrÃ³ la plantilla para eliminar.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al eliminar plantilla formato form_id={FormId}", formId);
-            return (false, "Ocurrió un error al intentar eliminar la plantilla.");
+            return (false, "OcurriÃ³ un error al intentar eliminar la plantilla.");
         }
     }
 
@@ -1982,8 +2349,8 @@ public class ConsultaExternaService : IConsultaExternaService
         if (string.IsNullOrEmpty(texto)) return string.Empty;
 
         return texto
-            .Replace("Numrica", "Numérica")
-            .Replace("NUMRICA", "NUMÉRICA");
+            .Replace("Numrica", "NumÃ©rica")
+            .Replace("NUMRICA", "NUMÃ‰RICA");
     }
 
     public async Task<string> ProcesarPlantillaConDatosPacienteAsync(int formId, int nhcl, bool conservarCampos = false)
@@ -1994,8 +2361,8 @@ public class ConsultaExternaService : IConsultaExternaService
         if (string.IsNullOrWhiteSpace(plantilla))
         {
             plantilla = @"<h4>CONSENTIMIENTO INFORMADO e-ForVets</h4>
-<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cédula de identidad N° <strong>[CEDULA]</strong>, en calidad de propietario/responsable del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL]), autorizo al equipo médico del Hospital de Especialidades Veterinarias la realización de los procedimientos diagnósticos, anestésicos, quirúrgicos o terapéuticos explicados.</p>
-<p>Fecha: [FECHAPIE] | Teléfono: [TELEFONOPIE]</p>";
+<p>Yo, <strong>[NOMBRECLIENTE]</strong>, con cÃ©dula de identidad NÂ° <strong>[CEDULA]</strong>, en calidad de propietario/responsable del paciente <strong>[MASCOTA]</strong> (NHCL #[NHCL]), autorizo al equipo mÃ©dico del Hospital de Especialidades Veterinarias la realizaciÃ³n de los procedimientos diagnÃ³sticos, anestÃ©sicos, quirÃºrgicos o terapÃ©uticos explicados.</p>
+<p>Fecha: [FECHAPIE] | TelÃ©fono: [TELEFONOPIE]</p>";
         }
 
         var campos = await ObtenerCamposDocumentoAsync(nhcl);
@@ -2007,7 +2374,7 @@ public class ConsultaExternaService : IConsultaExternaService
             if (!campos.TryGetValue(match.Value, out var valor)) return match.Value;
             var texto = System.Net.WebUtility.HtmlEncode(valor);
             return conservarCampos
-                ? $"<span data-hosvet-token=\"{match.Value}\" contenteditable=\"false\">{(texto.Length == 0 ? "—" : texto)}</span>"
+                ? $"<span data-hosvet-token=\"{match.Value}\" contenteditable=\"false\">{(texto.Length == 0 ? "â€”" : texto)}</span>"
                 : texto;
         });
     }
@@ -2030,7 +2397,7 @@ public class ConsultaExternaService : IConsultaExternaService
                     ELSE RTRIM(ISNULL(p.mas_sexo, ''))
                 END AS Sexo,
                 p.mas_fechanace AS FechaNacimiento,
-                RTRIM(ISNULL(u.user_nombre, 'Médico Veterinario')) AS Medico
+                RTRIM(ISNULL(u.user_nombre, 'MÃ©dico Veterinario')) AS Medico
             FROM vt_pacientes p
             INNER JOIN vt_clientes c ON p.mas_idcliente = c.pa_codigo
             LEFT JOIN vt_especie e ON p.mas_especie = e.especie_id
@@ -2049,7 +2416,7 @@ public class ConsultaExternaService : IConsultaExternaService
         string especie = datos?.Especie ?? "";
         string raza = datos?.Raza ?? "";
         string sexo = datos?.Sexo ?? "";
-        string medico = datos?.Medico ?? "Médico Veterinario";
+        string medico = datos?.Medico ?? "MÃ©dico Veterinario";
         string hoy = DateTime.Today.ToString("yyyy-MM-dd");
 
         string edadTexto = "";
@@ -2101,7 +2468,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 ISNULL(a.autorizacion_documento, 'Consentimiento Informado') AS Documento,
                 ISNULL(a.autorizacion_tipo, 'HDEV') AS Tipo,
                 ISNULL(a.autorizacion_detalle, '') AS DetalleHtml,
-                ISNULL(u.user_nombre, 'Médico') AS NombreMedico,
+                ISNULL(u.user_nombre, 'MÃ©dico') AS NombreMedico,
                 a.autorizacion_archivo_url AS ArchivoUrl,
                 a.autorizacion_archivo_nombre AS ArchivoNombre
             FROM vt_autorizaciones a
@@ -2147,7 +2514,7 @@ public class ConsultaExternaService : IConsultaExternaService
     {
         if (autorizacionId <= 0 || string.IsNullOrWhiteSpace(detalleHtml)) return false;
 
-        var doc = string.IsNullOrWhiteSpace(documento) ? "Consentimiento Informado de Hospitalización" : documento.Trim();
+        var doc = string.IsNullOrWhiteSpace(documento) ? "Consentimiento Informado de HospitalizaciÃ³n" : documento.Trim();
         if (doc.Length > 150) doc = doc.Substring(0, 150);
 
         var filas = await _db.ExecuteAsync(@"
@@ -2292,9 +2659,9 @@ public class ConsultaExternaService : IConsultaExternaService
         ApunteHistoriaClinicaDto dto, int idUsuario)
     {
         if (dto.Nhcl <= 0 || dto.IdCliente <= 0)
-            return (false, "Seleccione un paciente válido.");
+            return (false, "Seleccione un paciente vÃ¡lido.");
         if (dto.Fecha == default)
-            return (false, "Ingrese una fecha válida.");
+            return (false, "Ingrese una fecha vÃ¡lida.");
         if (string.IsNullOrWhiteSpace(dto.Observacion))
             return (false, "No se puede ingresar un apunte en blanco.");
 
@@ -2332,13 +2699,13 @@ public class ConsultaExternaService : IConsultaExternaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error guardando apunte para NHCL {Nhcl}", dto.Nhcl);
-            return (false, "No se pudo guardar el apunte clínico.");
+            return (false, "No se pudo guardar el apunte clÃ­nico.");
         }
     }
 
     public async Task<(bool Ok, string? Mensaje)> AnularApunteHistoriaAsync(int id, int idUsuario)
     {
-        if (id <= 0) return (false, "El apunte seleccionado no es válido.");
+        if (id <= 0) return (false, "El apunte seleccionado no es vÃ¡lido.");
         try
         {
             var filas = await _db.ExecuteAsync(@"
@@ -2361,7 +2728,7 @@ public class ConsultaExternaService : IConsultaExternaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error anulando apunte de historia {Id}", id);
-            return (false, "No se pudo anular el apunte clínico.");
+            return (false, "No se pudo anular el apunte clÃ­nico.");
         }
     }
 
@@ -2400,7 +2767,7 @@ public class ConsultaExternaService : IConsultaExternaService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error consultando atenciones para impresión por lotes NHCL {Nhcl}", nhcl);
+            _logger.LogError(ex, "Error consultando atenciones para impresiÃ³n por lotes NHCL {Nhcl}", nhcl);
             return [];
         }
     }

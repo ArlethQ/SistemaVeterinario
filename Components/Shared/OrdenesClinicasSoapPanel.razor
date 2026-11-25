@@ -1,0 +1,1406 @@
+@using HosvetKardex.Web.Components.Pages
+@inject IConsultaExternaService ConsultaService
+@inject ILaboratorioImagenService LabImagenService
+@inject IAdministracionClinicaService AdminClinicaService
+@inject IAdmisionFacturacionService AdmisionService
+@inject IEFactCatalogService EFactCatalog
+@inject IFarmaciaService FarmaciaService
+@inject IReportExportService ReportService
+@inject SessionStateService Session
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ILogger<OrdenesClinicasSoapPanel> Logger
+
+@if (IdOrden > 0 && Nhcl > 0)
+{
+    <!-- Switch de carga de datos desde Anamnesis / SOAP -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 px-3 py-2 mt-3 mb-2 rounded border @(_cargarDatosAnamnesis ? "bg-primary-subtle border-primary-subtle" : "bg-light") small">
+        <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+            <input class="form-check-input mt-0" type="checkbox" role="switch" id="chkCargarAnamnesisEvol"
+                   checked="@_cargarDatosAnamnesis"
+                   @onchange="OnToggleCargarAnamnesis" />
+            <label class="form-check-label fw-bold text-dark mb-0" for="chkCargarAnamnesisEvol">
+                Cargar datos de la anamnesis (SOAP)
+            </label>
+        </div>
+        <span class="text-muted">
+            @if (_cargarDatosAnamnesis)
+            {
+                <span>Mostrando prescripción, insumos y servicios cargados del SOAP. Si lo desactivas, se limpia esta vista sin borrar el SOAP.</span>
+            }
+            else
+            {
+                <span>Vista limpia (sin datos de anamnesis). Actívalo nuevamente si deseas recuperar lo cargado en el SOAP.</span>
+            }
+        </span>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_mensaje))
+    {
+        <div class="alert @(_esError ? "alert-danger" : "alert-success") alert-dismissible fade show py-2 small mb-3" role="alert">
+            <i class="bi @(_esError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>@_mensaje
+            <button type="button" class="btn-close py-2" @onclick="() => _mensaje = null"></button>
+        </div>
+    }
+
+    <div class="row g-3">
+        <!-- 1. PRESCRIPCIÓN MÉDICA / MEDICINAS DE LA EVOLUCIÓN -->
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold text-primary d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span><i class="bi bi-capsule me-1"></i>Prescripción Médica / Medicinas</span>
+                        @if (_medicinasTrabajo.Count > 0)
+                        {
+                            <span class="badge bg-warning text-dark fw-normal" style="font-size:.72rem;"
+                                  title="Al presionar Registrar Nota de Evolución, estas medicinas se descargarán directamente del inventario y pasarán a factura.">
+                                <i class="bi bi-arrow-right-circle me-1"></i>Se descargan y facturan al registrar nota de evolución
+                            </span>
+                        }
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="badge bg-success">@_medicinasTrabajo.Count ítem(s)</span>
+                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2"
+                                @onclick="CargarDeEvolucionAnteriorAsync"
+                                disabled="@_cargandoEvolucionAnterior"
+                                title="Cargar las medicinas registradas en la evolución médica anterior">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>@(_cargandoEvolucionAnterior ? "Cargando..." : "Cargar de evolución anterior")
+                        </button>
+                        <a href="/farmacia" class="btn btn-xs btn-outline-info text-dark py-0 px-2" title="Ver receta en Cola de Farmacia">
+                            <i class="ri-medicine-bottle-line me-1"></i>Cola Farmacia
+                        </a>
+                        <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 app-doc-action app-doc-print"
+                                @onclick="ImprimirRecetaMedicaPdfAsync" title="Imprimir Receta Médica">
+                            <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Receta
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-primary py-0"
+                                @onclick='() => Nav.NavigateTo($"/consulta/recetario/{IdOrden}/{Nhcl}")'>
+                            Abrir Recetario Completo
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 mb-3 p-2 bg-light rounded border">
+                        <div class="col-md-5 position-relative">
+                            <label class="form-label small fw-semibold">Medicamento / Producto *</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" autocomplete="off"
+                                       @bind="_nuevoMedicamento.Descripcionamento"
+                                       @bind:event="oninput"
+                                       @bind:after="OnMedicamentoInputChanged"
+                                       @onfocus="OnMedicamentoFocus"
+                                       placeholder="Buscar por nombre o código..." />
+                                @if (!string.IsNullOrWhiteSpace(_nuevoMedicamento.Descripcionamento))
+                                {
+                                    <button type="button" class="btn btn-outline-secondary" title="Limpiar" @onclick="LimpiarSeleccionMedicamento">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                }
+                            </div>
+                            @if (_mostrarSugerenciasMed && _sugerenciasMedicamento.Any())
+                            {
+                                <div class="list-group position-absolute w-100 shadow-sm mt-1" style="z-index: 1050; max-height: 190px; overflow-y: auto;">
+                                    @foreach (var prod in _sugerenciasMedicamento)
+                                    {
+                                        <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center"
+                                                @onclick="() => SeleccionarMedicamento(prod)">
+                                            <span>
+                                                <strong>[@prod.Id] @prod.Codigo</strong> @prod.Descripcion
+                                                <small class="text-muted ms-1">(@prod.UnidadMedida@(prod.FactorConversion > 1m ? $" · Paq. ×{prod.FactorConversion:G29}" : ""))</small>
+                                            </span>
+                                            <span class="text-muted ms-2">$@(prod.Precio?.ToString("F2") ?? "0.00")</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Cant. y Presentación</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" min="1" step="1" class="form-control" style="max-width: 72px;" onkeydown="return event.key !== '-'"
+                                       @bind="_nuevoMedicamento.Cantidad" @bind:after="ActualizarCantidadLetras" />
+                                <select class="form-select" @bind="_modoDespachoReceta" @bind:after="ActualizarCantidadLetras">
+                                    <option value="UNIDAD">@UnidadProductoReceta</option>
+                                    <option value="PAQUETE">@(FactorProductoReceta > 1m ? $"Paquete (×{FactorProductoReceta:G29} {UnidadProductoReceta})" : "Paquete")</option>
+                                </select>
+                            </div>
+                            @if (_modoDespachoReceta == "PAQUETE" && FactorProductoReceta > 1m)
+                            {
+                                <small class="text-primary d-block mt-1 fw-semibold" style="font-size:.72rem;">
+                                    = @CantidadBaseRecetaCalculada.ToString("0.##") @UnidadProductoReceta
+                                </small>
+                            }
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">En Letras</label>
+                            <input type="text" class="form-control form-control-sm" @bind="_nuevoMedicamento.CantidadLetras" />
+                        </div>
+                        <div class="col-md-9">
+                            <label class="form-label small fw-semibold">Indicaciones Posológicas (Dosis, Frecuencia y Duración) *</label>
+                            <input type="text" class="form-control form-control-sm" @bind="_nuevoMedicamento.Indicaciones"
+                                   placeholder="Ej: Administrar 1 tableta vía oral cada 12 horas por 7 días." />
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <SaveButton Type="button" class="btn btn-sm btn-success w-100" OnClick="AgregarMedicamentoTrabajo">
+                                <i class="bi bi-plus-circle me-1"></i>Agregar
+                            </SaveButton>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold mb-0">Indicaciones Generales de Receta</label>
+                        <textarea class="form-control form-control-sm" rows="2" @bind="_indicacionesGeneralesReceta"
+                                  placeholder="Cuidados generales para imprimir en la receta..."></textarea>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle small mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Medicamento</th>
+                                    <th class="text-center" style="width:110px;">Cant.</th>
+                                    <th>Indicaciones Posológicas</th>
+                                    <th style="width:120px;">Origen</th>
+                                    <th style="width:40px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!_medicinasTrabajo.Any())
+                                {
+                                    <tr><td colspan="5" class="text-center text-muted py-3">Sin medicamentos pendientes por confirmar en esta evolución.</td></tr>
+                                }
+                                @foreach (var item in _medicinasTrabajo)
+                                {
+                                    <tr @key="item.IdTemp">
+                                        <td class="fw-semibold">@item.Item.Descripcionamento</td>
+                                        <td class="text-center">
+                                            <input type="number" min="0.01" step="1" class="form-control form-control-sm text-center"
+                                                   @bind="item.Item.Cantidad" />
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm"
+                                                   @bind="item.Item.Indicaciones" />
+                                        </td>
+                                        <td>
+                                            @if (item.Origen == "ANAMNESIS")
+                                            {
+                                                <span class="badge bg-info-subtle text-primary border">Anamnesis SOAP</span>
+                                            }
+                                            else if (item.Origen == "EVOLUCION_ANT")
+                                            {
+                                                <span class="badge bg-secondary-subtle text-dark border">Evol. anterior</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-success-subtle text-success border">Nuevo</span>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            <button type="button" class="btn btn-sm btn-link text-danger p-0" title="Quitar de esta evolución"
+                                                    @onclick="() => QuitarMedicinaTrabajo(item.IdTemp)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. MEDICACIÓN / INSUMOS ADMINISTRADOS (EN FACTURA) -->
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold text-primary d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span><i class="bi bi-eyedropper me-1"></i>Medicación / Insumos Administrados</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary">@AplicadosVisibles.Count ítem(s)</span>
+                        <small class="text-muted fw-normal">Va directo al cobro en factura (no se puede borrar)</small>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 mb-3 p-2 bg-light rounded border align-items-end">
+                        <div class="col-md-5 position-relative">
+                            <label class="form-label small fw-semibold">Medicamento / Insumo en stock *</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" autocomplete="off"
+                                       @bind="_filtroAplicado"
+                                       @bind:event="oninput"
+                                       @bind:after="OnAplicadoInputChanged"
+                                       @onfocus="OnAplicadoFocus"
+                                       placeholder="Buscar producto con stock en la sucursal..." />
+                                @if (!string.IsNullOrWhiteSpace(_filtroAplicado))
+                                {
+                                    <button type="button" class="btn btn-outline-secondary" title="Limpiar" @onclick="LimpiarProductoAplicado">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                }
+                            </div>
+                            @if (_mostrarSugerenciasAplicado && _sugerenciasAplicado.Any())
+                            {
+                                <div class="list-group position-absolute w-100 shadow-sm mt-1" style="z-index: 1050; max-height: 190px; overflow-y: auto;">
+                                    @foreach (var prod in _sugerenciasAplicado)
+                                    {
+                                        <button type="button" class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center"
+                                                @onclick="() => SeleccionarProductoAplicado(prod)">
+                                            <span>
+                                                <strong>[@prod.CodigoPrincipal]</strong> @prod.NombreProducto
+                                                @if (!prod.ControlaInventario)
+                                                {
+                                                    <small class="text-info ms-1">(Sin control de inventario · @prod.UnidadMedida)</small>
+                                                }
+                                                else
+                                                {
+                                                    <small class="text-success ms-1">(Disp: @prod.StockLibre.ToString("0.##") @prod.UnidadMedida@(prod.FactorConversion > 1m ? $" · Paq. ×{prod.FactorConversion:G29}" : ""))</small>
+                                                }
+                                            </span>
+                                            <span class="text-muted ms-2">$@prod.PrecioUnitario.ToString("F2")</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Cant. y Presentación</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" min="1" step="1" class="form-control" style="max-width: 72px;" onkeydown="return event.key !== '-'"
+                                       @bind="_cantidadAplicado" />
+                                <select class="form-select" @bind="_modoAplicado">
+                                    <option value="UNIDAD">@UnidadProductoAplicado</option>
+                                    @if (FactorProductoAplicado > 1m)
+                                    {
+                                        <option value="PAQUETE">Paquete (×@FactorProductoAplicado.ToString("G29") @UnidadProductoAplicado)</option>
+                                    }
+                                </select>
+                            </div>
+                            @if (_modoAplicado == "PAQUETE" && FactorProductoAplicado > 1m)
+                            {
+                                <small class="text-primary d-block mt-1 fw-semibold" style="font-size:.72rem;">
+                                    = @CantidadBaseAplicadoCalculada.ToString("0.##") @UnidadProductoAplicado a descontar
+                                </small>
+                            }
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold">Vía / Detalle</label>
+                            <input type="text" class="form-control form-control-sm" @bind="_indicacionAplicado"
+                                   placeholder="Ej: IV 2 ml en evolución" />
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <SaveButton Type="button" class="btn btn-sm btn-primary w-100" OnClick="AgregarAplicadoConsultaAsync">
+                                <i class="bi bi-check2-circle me-1"></i>Aplicar
+                            </SaveButton>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle small mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Medicamento / Insumo</th>
+                                    <th class="text-center">Cant.</th>
+                                    <th>Vía / Detalle</th>
+                                    <th>Fecha</th>
+                                    <th class="text-end">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!AplicadosVisibles.Any())
+                                {
+                                    <tr><td colspan="5" class="text-center text-muted py-3">Sin medicación o insumos aplicados para mostrar.</td></tr>
+                                }
+                                @foreach (var ap in AplicadosVisibles)
+                                {
+                                    <tr>
+                                        <td class="fw-semibold">@ap.Descripcionamento</td>
+                                        <td class="text-center fw-bold">@ap.Cantidad.ToString("0.##")</td>
+                                        <td>@ap.Indicaciones</td>
+                                        <td class="text-muted">@ap.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                                        <td class="text-end">
+                                            <span class="badge bg-light text-secondary border" title="Administrado (no se puede eliminar)">
+                                                <i class="bi bi-lock-fill me-1"></i>En factura
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. SERVICIOS MÉDICOS -->
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold text-primary d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span><i class="bi bi-clipboard2-check me-1"></i>Servicios Médicos</span>
+                    <div class="d-flex flex-wrap gap-1 small">
+                        <span class="badge bg-info text-dark">Lab: @OrdenesLabVisibles.Count</span>
+                        <span class="badge bg-warning text-dark">Imagen: @OrdenesImagenVisibles.Count</span>
+                        <span class="badge bg-success">Fisio: @OrdenesFisioVisibles.Count</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 mb-3 p-2 bg-light rounded border align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Categoría de Servicio *</label>
+                            <select class="form-select form-select-sm" @bind="_categoriaServicio" @bind:after="OnCategoriaServicioChangedAsync">
+                                <option value="Laboratorio">Laboratorio</option>
+                                <option value="Imagenología">Imagenología</option>
+                                <option value="Fisioterapia">Fisioterapia</option>
+                                <option value="Procedimientos">Procedimientos</option>
+                            </select>
+                        </div>
+                        @if (_categoriaServicio == "Procedimientos")
+                        {
+                            <div class="col-md-2">
+                                <label class="form-label small fw-semibold">Subcategoría</label>
+                                <select class="form-select form-select-sm" @bind="_subcategoriaProcedimiento" @bind:after="LimpiarSeleccionServicio">
+                                    <option value="0">Todas las subcategorías</option>
+                                    @foreach (var grupo in SubcategoriasProcedimientos)
+                                    {
+                                        <option value="@grupo.IdSubcategoria">@grupo.Subcategoria</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label small fw-semibold">Tipo de Servicio (Catálogo PRODUCTO) *</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" autocomplete="off"
+                                       @bind="_filtroServicio"
+                                       @bind:event="oninput"
+                                       @bind:after="OnFiltroServicioInputChanged"
+                                       @onfocus="() => _mostrarSugerenciasServicio = true"
+                                       placeholder="Buscar o elegir servicio de @_categoriaServicio..." />
+                                @if (!string.IsNullOrWhiteSpace(_filtroServicio))
+                                {
+                                    <button type="button" class="btn btn-outline-secondary" title="Limpiar filtro" @onclick="LimpiarSeleccionServicio">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                }
+                                <button type="button" class="btn btn-outline-secondary" title="Mostrar lista" @onclick="ToggleSugerenciasServicio">
+                                    <i class="bi bi-chevron-down"></i>
+                                </button>
+                            </div>
+                            @if (_mostrarSugerenciasServicio)
+                            {
+                                <div class="list-group position-absolute w-100 shadow-sm mt-1" style="z-index: 1050; max-height: 220px; overflow-y: auto;">
+                                    @if (!_serviciosFiltrados.Any())
+                                    {
+                                        <div class="list-group-item small text-muted py-2">No hay servicios coincidentes en @_categoriaServicio.</div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var srv in _serviciosFiltrados.Take(40))
+                                        {
+                                            <button type="button"
+                                                    class="list-group-item list-group-item-action py-1 px-2 small d-flex justify-content-between align-items-center @(srv.Codigo == _codigoServicioSeleccionado ? "active" : "")"
+                                                    @onclick="() => SeleccionarServicio(srv)">
+                                                <span><strong>[@(srv.CodigoBusqueda ?? srv.Codigo)]</strong> @srv.Descripcion</span>
+                                                @if (_categoriaServicio != "Procedimientos")
+                                                {
+                                                    <span class="ms-2 @(srv.Codigo == _codigoServicioSeleccionado ? "" : "text-muted")">$@srv.Precio.ToString("N2")</span>
+                                                }
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small fw-semibold">Cant.</label>
+                            <input type="number" min="1" step="1" class="form-control form-control-sm" onkeydown="return event.key !== '-'" @bind="_cantidadServicio" />
+                        </div>
+                        @if (_categoriaServicio == "Laboratorio")
+                        {
+                            <div class="col-md-1">
+                                <label class="form-label small fw-semibold">Prioridad</label>
+                                <select class="form-select form-select-sm" @bind="_prioridadServicio">
+                                    <option value="Rutina">Rutina</option>
+                                    <option value="Emergente">Emergente</option>
+                                </select>
+                            </div>
+                        }
+                        <div class="@(_categoriaServicio == "Laboratorio" ? "col-md-2" : "col-md-3")">
+                            <label class="form-label small fw-semibold">Observaciones</label>
+                            <input type="text" class="form-control form-control-sm" maxlength="@(_categoriaServicio == "Procedimientos" ? 250 : (int?)null)" @bind="_observacionServicio" placeholder="Indicaciones o detalle opcional..." />
+                        </div>
+                        <div class="col-md-1">
+                            <SaveButton Type="button" class="btn btn-sm btn-primary w-100" OnClick="AgregarServicioOrdenAsync" Disabled="@_agregandoServicio">
+                                <i class="bi bi-plus-lg"></i>
+                            </SaveButton>
+                        </div>
+                    </div>
+                    @if (_mensajeServicio is not null)
+                    {
+                        <p class="small @(_errorServicio ? "text-danger" : "text-success")" role="status">@_mensajeServicio</p>
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="border rounded">
+                                <div class="bg-info bg-opacity-10 px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold text-primary small">
+                                        <i class="bi bi-droplet-half me-1"></i>Orden de Laboratorio
+                                        <span class="badge bg-info text-dark ms-1">@OrdenesLabVisibles.Count</span>
+                                    </span>
+                                    <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 app-doc-action app-doc-print"
+                                            @onclick="ImprimirOrdenLaboratorioPdfAsync">
+                                        <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Orden de Laboratorio
+                                    </button>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover align-middle small mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Prueba / Examen</th>
+                                                <th class="text-center">Prioridad</th>
+                                                <th class="text-center">Cant.</th>
+                                                <th>Observaciones</th>
+                                                <th class="text-end">Precio</th>
+                                                <th>Estado</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @if (!OrdenesLabVisibles.Any())
+                                            {
+                                                <tr><td colspan="7" class="text-center text-muted py-2">Sin pruebas de laboratorio para mostrar.</td></tr>
+                                            }
+                                            @foreach (var lab in OrdenesLabVisibles)
+                                            {
+                                                <tr>
+                                                    <td class="fw-semibold">[@lab.CodigoProd] @lab.DescripcionExamen</td>
+                                                    <td class="text-center"><span class="badge @(lab.Prioridad == "Emergente" ? "bg-danger" : "bg-secondary")">@lab.Prioridad</span></td>
+                                                    <td class="text-center">@lab.Cantidad</td>
+                                                    <td>@lab.Observaciones</td>
+                                                    <td class="text-end">$@lab.Precio.ToString("N2")</td>
+                                                    <td><span class="badge bg-light text-dark border">@lab.Estado</span></td>
+                                                    <td class="text-end">
+                                                        <button type="button" class="btn btn-sm btn-link text-danger p-0" title="Eliminar examen"
+                                                                @onclick='() => EliminarServicioPorCategoriaAsync("Laboratorio", lab.Sec)'>
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="border rounded">
+                                <div class="bg-warning bg-opacity-10 px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold text-primary small">
+                                        <i class="bi bi-radioactive me-1"></i>Orden de Imagenología
+                                        <span class="badge bg-warning text-dark ms-1">@OrdenesImagenVisibles.Count</span>
+                                    </span>
+                                    <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 app-doc-action app-doc-print"
+                                            @onclick="ImprimirOrdenImagenPdfAsync">
+                                        <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Orden de Imagenología
+                                    </button>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover align-middle small mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Estudio de Imagenología</th>
+                                                <th class="text-center">Cant.</th>
+                                                <th>Proyecciones / Observaciones</th>
+                                                <th class="text-end">Precio</th>
+                                                <th>Estado</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @if (!OrdenesImagenVisibles.Any())
+                                            {
+                                                <tr><td colspan="6" class="text-center text-muted py-2">Sin estudios de imagenología para mostrar.</td></tr>
+                                            }
+                                            @foreach (var img in OrdenesImagenVisibles)
+                                            {
+                                                <tr>
+                                                    <td class="fw-semibold">[@img.CodigoProd] @img.DescripcionEstudio</td>
+                                                    <td class="text-center">@img.Cantidad</td>
+                                                    <td>@img.Observaciones</td>
+                                                    <td class="text-end">$@img.Precio.ToString("N2")</td>
+                                                    <td><span class="badge bg-light text-dark border">@img.Estado</span></td>
+                                                    <td class="text-end">
+                                                        <button type="button" class="btn btn-sm btn-link text-danger p-0" title="Eliminar estudio"
+                                                                @onclick='() => EliminarServicioPorCategoriaAsync("Imagenología", img.Sec)'>
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="border rounded">
+                                <div class="bg-success bg-opacity-10 px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold text-primary small">
+                                        <i class="bi bi-heart-pulse me-1"></i>Orden de Fisioterapia
+                                        <span class="badge bg-success ms-1">@OrdenesFisioVisibles.Count</span>
+                                    </span>
+                                    <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 app-doc-action app-doc-print"
+                                            @onclick="ImprimirOrdenFisioterapiaPdfAsync">
+                                        <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Orden de Fisioterapia
+                                    </button>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover align-middle small mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Servicio de Fisioterapia</th>
+                                                <th class="text-center">Cant.</th>
+                                                <th>Observaciones del Tratamiento</th>
+                                                <th class="text-end">Precio</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @if (!OrdenesFisioVisibles.Any())
+                                            {
+                                                <tr><td colspan="5" class="text-center text-muted py-2">Sin sesiones de fisioterapia para mostrar.</td></tr>
+                                            }
+                                            @foreach (var fisio in OrdenesFisioVisibles)
+                                            {
+                                                <tr>
+                                                    <td class="fw-semibold">[@fisio.IdProducto] @fisio.Descripcion</td>
+                                                    <td class="text-center">@fisio.Cantidad.ToString("0.##")</td>
+                                                    <td>@fisio.Observaciones</td>
+                                                    <td class="text-end">$@fisio.Precio.ToString("N2")</td>
+                                                    <td class="text-end">
+                                                        <button type="button" class="btn btn-sm btn-link text-danger p-0" title="Eliminar sesión"
+                                                                @onclick='() => EliminarServicioPorCategoriaAsync("Fisioterapia", fisio.Sec)'>
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (_cargarDatosAnamnesis || _procedimientosAgregadosEnSesion > 0)
+                    {
+                        <ProcedimientosTriaje @key="(IdOrden, Nhcl, _versionProcedimientos)" IdOrden="@IdOrden" Nhcl="@Nhcl" SoloLectura="true" />
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+    [Parameter] public PacienteHeaderDto? Paciente { get; set; }
+    [Parameter] public EventCallback OnOrdenesActualizadas { get; set; }
+
+    private sealed class MedicinaTrabajoRow
+    {
+        public Guid IdTemp { get; } = Guid.NewGuid();
+        public string Origen { get; set; } = "NUEVO"; // ANAMNESIS, EVOLUCION_ANT, NUEVO
+        public RecetaMedicamentoItemDto Item { get; set; } = new();
+    }
+
+    private int _ordenCargada;
+    private int _nhclCargado;
+    private string? _mensaje;
+    private bool _esError;
+
+    // Switch de carga desde Anamnesis / SOAP (activado por defecto)
+    private bool _cargarDatosAnamnesis = true;
+    private bool _cargandoEvolucionAnterior;
+
+    private List<DiagnosticoCie10Dto> _diagnosticos = [];
+    private List<RecetaMedicamentoItemDto> _recetaSoapPendiente = [];
+    private List<MedicinaTrabajoRow> _medicinasTrabajo = [];
+
+    private List<RecetaMedicamentoItemDto> _aplicadosItems = [];
+    private HashSet<int> _aplicadosAnamnesisSecs = [];
+    private List<OrdenLaboratorioItemDto> _ordenesLab = [];
+    private HashSet<int> _labAnamnesisSecs = [];
+    private List<OrdenImagenItemDto> _ordenesImagen = [];
+    private HashSet<int> _imagenAnamnesisSecs = [];
+    private List<FisioterapiaOrdenDto> _ordenesFisio = [];
+    private HashSet<int> _fisioAnamnesisSecs = [];
+    private int _procedimientosAgregadosEnSesion;
+
+    private List<RecetaMedicamentoItemDto> AplicadosVisibles =>
+        _cargarDatosAnamnesis ? _aplicadosItems : _aplicadosItems.Where(x => !_aplicadosAnamnesisSecs.Contains(x.Sec)).ToList();
+    private List<OrdenLaboratorioItemDto> OrdenesLabVisibles =>
+        _cargarDatosAnamnesis ? _ordenesLab : _ordenesLab.Where(x => !_labAnamnesisSecs.Contains(x.Sec)).ToList();
+    private List<OrdenImagenItemDto> OrdenesImagenVisibles =>
+        _cargarDatosAnamnesis ? _ordenesImagen : _ordenesImagen.Where(x => !_imagenAnamnesisSecs.Contains(x.Sec)).ToList();
+    private List<FisioterapiaOrdenDto> OrdenesFisioVisibles =>
+        _cargarDatosAnamnesis ? _ordenesFisio : _ordenesFisio.Where(x => !_fisioAnamnesisSecs.Contains(x.Sec)).ToList();
+
+    public bool HayReservasSoapPendientes => _recetaSoapPendiente.Count > 0;
+    public List<RecetaMedicamentoItemDto> ObtenerMedicinasParaConfirmar() =>
+        _medicinasTrabajo.Where(x => x.Item.Cantidad > 0 && !string.IsNullOrWhiteSpace(x.Item.Descripcionamento))
+            .Select(x => x.Item)
+            .ToList();
+
+    private List<CatalogoOperativoDto> _catalogoMedicamentos = [];
+    private List<CatalogoOperativoDto> _sugerenciasMedicamento = [];
+    private bool _mostrarSugerenciasMed;
+    private CatalogoOperativoDto? _productoRecetaSeleccionado;
+    private string _modoDespachoReceta = "UNIDAD";
+    private string _indicacionesGeneralesReceta = string.Empty;
+    private string _indicacionesGeneralesAnamnesis = string.Empty;
+    private RecetaMedicamentoItemDto _nuevoMedicamento = new() { Cantidad = 1 };
+
+    private string UnidadProductoReceta => string.IsNullOrWhiteSpace(_productoRecetaSeleccionado?.UnidadMedida)
+        ? "UNIDAD"
+        : _productoRecetaSeleccionado!.UnidadMedida.Trim().ToUpperInvariant();
+    private decimal FactorProductoReceta => _productoRecetaSeleccionado is { FactorConversion: > 1m } p ? p.FactorConversion : 1m;
+    private decimal CantidadBaseRecetaCalculada => _modoDespachoReceta == "PAQUETE" && FactorProductoReceta > 1m
+        ? Math.Round(_nuevoMedicamento.Cantidad * FactorProductoReceta, 4)
+        : _nuevoMedicamento.Cantidad;
+
+    private List<FarmaciaStockSedeItemDto> _stockAplicadoSede = [];
+    private List<FarmaciaStockSedeItemDto> _sugerenciasAplicado = [];
+    private bool _mostrarSugerenciasAplicado;
+    private FarmaciaStockSedeItemDto? _productoAplicadoSeleccionado;
+    private string _filtroAplicado = string.Empty;
+    private string _modoAplicado = "UNIDAD";
+    private decimal _cantidadAplicado = 1m;
+    private string _indicacionAplicado = string.Empty;
+
+    private string UnidadProductoAplicado => string.IsNullOrWhiteSpace(_productoAplicadoSeleccionado?.UnidadMedida)
+        ? "UNIDAD"
+        : _productoAplicadoSeleccionado!.UnidadMedida.Trim().ToUpperInvariant();
+    private decimal FactorProductoAplicado => _productoAplicadoSeleccionado is { FactorConversion: > 1m } p ? p.FactorConversion : 1m;
+    private decimal CantidadBaseAplicadoCalculada => _modoAplicado == "PAQUETE" && FactorProductoAplicado > 1m
+        ? Math.Round(_cantidadAplicado * FactorProductoAplicado, 4)
+        : _cantidadAplicado;
+
+    private sealed record ServicioCatalogoItem(string Codigo, string Descripcion, decimal Precio, string? CodigoBusqueda = null, int IdSubcategoria = 0, string? Subcategoria = null);
+    private int _versionProcedimientos;
+    private int _subcategoriaProcedimiento;
+    private string _categoriaServicio = "Laboratorio";
+    private readonly Dictionary<string, List<ServicioCatalogoItem>> _cacheServiciosPorCategoria = new();
+    private List<ServicioCatalogoItem> _serviciosFiltrados = [];
+    private string _filtroServicio = string.Empty;
+    private string _codigoServicioSeleccionado = string.Empty;
+    private bool _mostrarSugerenciasServicio;
+    private decimal _cantidadServicio = 1;
+    private string _prioridadServicio = "Rutina";
+    private string _observacionServicio = string.Empty;
+    private bool _agregandoServicio;
+    private bool _errorServicio;
+    private string? _mensajeServicio;
+
+    private List<ServicioCatalogoItem> ServiciosCategoria =>
+        _cacheServiciosPorCategoria.TryGetValue(_categoriaServicio, out var lista) ? lista : [];
+    private IEnumerable<ServicioCatalogoItem> SubcategoriasProcedimientos =>
+        ServiciosCategoria.Where(s => s.IdSubcategoria > 0 && !string.IsNullOrWhiteSpace(s.Subcategoria))
+            .DistinctBy(s => s.IdSubcategoria).OrderBy(s => s.Subcategoria);
+    private IEnumerable<ServicioCatalogoItem> ServiciosEnSubcategoria =>
+        _categoriaServicio == "Procedimientos" && _subcategoriaProcedimiento > 0
+            ? ServiciosCategoria.Where(s => s.IdSubcategoria == _subcategoriaProcedimiento)
+            : ServiciosCategoria;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IdOrden <= 0 || Nhcl <= 0)
+            return;
+
+        if (_ordenCargada == IdOrden && _nhclCargado == Nhcl)
+            return;
+
+        _ordenCargada = IdOrden;
+        _nhclCargado = Nhcl;
+        _cargarDatosAnamnesis = true;
+        _procedimientosAgregadosEnSesion = 0;
+        _cacheServiciosPorCategoria.Remove("Procedimientos");
+        _subcategoriaProcedimiento = 0;
+        ActualizarCantidadLetras();
+        await CargarTodoAsync(esCargaInicial: true);
+    }
+
+    public async Task RefrescarAsync()
+    {
+        _medicinasTrabajo.Clear();
+        await CargarTodoAsync(esCargaInicial: true);
+        StateHasChanged();
+    }
+
+    private async Task CargarTodoAsync(bool esCargaInicial = false)
+    {
+        try
+        {
+            var tFicha = ConsultaService.ObtenerFichaMedicaAsync(IdOrden, Nhcl);
+            var tDiag = ConsultaService.ObtenerDiagnosticosOrdenAsync(IdOrden);
+            var tRecPend = ConsultaService.ObtenerRecetaPendienteOrdenAsync(IdOrden);
+            var tApl = ConsultaService.ObtenerAplicadosConsultaOrdenAsync(IdOrden);
+            var tLab = LabImagenService.ObtenerOrdenesLaboratorioAsync(IdOrden, Nhcl);
+            var tImg = LabImagenService.ObtenerOrdenesImagenAsync(IdOrden, Nhcl);
+            var tFisio = AdminClinicaService.ObtenerFisioterapiaAsync(IdOrden, Nhcl);
+
+            await Task.WhenAll(tFicha, tDiag, tRecPend, tApl, tLab, tImg, tFisio);
+
+            var ficha = await tFicha;
+            _indicacionesGeneralesAnamnesis = ficha.IndicacionesGeneralesReceta ?? string.Empty;
+            _indicacionesGeneralesReceta = _cargarDatosAnamnesis ? _indicacionesGeneralesAnamnesis : string.Empty;
+            _diagnosticos = await tDiag;
+            _recetaSoapPendiente = await tRecPend;
+            _aplicadosItems = await tApl;
+            _ordenesLab = await tLab;
+            _ordenesImagen = await tImg;
+            _ordenesFisio = await tFisio;
+
+            if (esCargaInicial)
+            {
+                _aplicadosAnamnesisSecs = _aplicadosItems.Select(x => x.Sec).ToHashSet();
+                _labAnamnesisSecs = _ordenesLab.Select(x => x.Sec).ToHashSet();
+                _imagenAnamnesisSecs = _ordenesImagen.Select(x => x.Sec).ToHashSet();
+                _fisioAnamnesisSecs = _ordenesFisio.Select(x => x.Sec).ToHashSet();
+                ReconstruirMedicinasDesdeAnamnesis();
+            }
+
+            if (_catalogoMedicamentos.Count == 0)
+            {
+                var prods = await EFactCatalog.ObtenerProductosAsync();
+                _catalogoMedicamentos = prods.Where(p => p.Estado == "A" && !p.EsServicio).ToList();
+            }
+            if (_stockAplicadoSede.Count == 0)
+            {
+                await RecargarStockAplicadoSedeAsync();
+            }
+            await CargarCatalogoServicioCategoriaAsync(_categoriaServicio);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error cargando órdenes clínicas en evolución médica para Orden {Orden}", IdOrden);
+        }
+    }
+
+    private void ReconstruirMedicinasDesdeAnamnesis()
+    {
+        _medicinasTrabajo.RemoveAll(x => x.Origen == "ANAMNESIS");
+        if (_cargarDatosAnamnesis && _recetaSoapPendiente.Count > 0)
+        {
+            var precargadas = _recetaSoapPendiente.Select(m => new MedicinaTrabajoRow
+            {
+                Origen = "ANAMNESIS",
+                Item = new RecetaMedicamentoItemDto
+                {
+                    Sec = m.Sec,
+                    IdOrden = IdOrden,
+                    Nhcl = Nhcl,
+                    CodigoProd = m.CodigoProd,
+                    Descripcionamento = m.Descripcionamento,
+                    Cantidad = m.Cantidad,
+                    CantidadLetras = m.CantidadLetras,
+                    Indicaciones = m.Indicaciones,
+                    Tipo = m.Tipo
+                }
+            }).ToList();
+            _medicinasTrabajo.InsertRange(0, precargadas);
+        }
+    }
+
+    private void OnToggleCargarAnamnesis(ChangeEventArgs e)
+    {
+        _cargarDatosAnamnesis = e.Value is bool b && b;
+        _indicacionesGeneralesReceta = _cargarDatosAnamnesis ? _indicacionesGeneralesAnamnesis : string.Empty;
+        ReconstruirMedicinasDesdeAnamnesis();
+    }
+
+    private async Task CargarDeEvolucionAnteriorAsync()
+    {
+        if (_cargandoEvolucionAnterior || Nhcl <= 0) return;
+        _cargandoEvolucionAnterior = true;
+        _mensaje = null;
+        try
+        {
+            var anteriores = await ConsultaService.ObtenerMedicinasUltimaEvolucionAsync(Nhcl, IdOrden);
+            if (anteriores.Count == 0)
+            {
+                _esError = false;
+                _mensaje = "No hay medicinas registradas en una evolución médica anterior para este paciente.";
+                return;
+            }
+
+            _medicinasTrabajo.RemoveAll(x => x.Origen == "EVOLUCION_ANT");
+            foreach (var m in anteriores)
+            {
+                _medicinasTrabajo.Add(new MedicinaTrabajoRow
+                {
+                    Origen = "EVOLUCION_ANT",
+                    Item = new RecetaMedicamentoItemDto
+                    {
+                        IdOrden = IdOrden,
+                        Nhcl = Nhcl,
+                        CodigoProd = m.CodigoProd,
+                        Descripcionamento = m.Descripcionamento,
+                        Cantidad = m.Cantidad,
+                        CantidadLetras = m.CantidadLetras,
+                        Indicaciones = m.Indicaciones,
+                        Tipo = "M"
+                    }
+                });
+            }
+
+            _esError = false;
+            _mensaje = $"Se cargaron {anteriores.Count} medicamento(s) de la evolución médica anterior. Revisa o ajusta y presiona Registrar Nota de Evolución.";
+        }
+        catch (Exception ex)
+        {
+            _esError = true;
+            _mensaje = $"No se pudo cargar la evolución anterior: {ex.Message}";
+        }
+        finally
+        {
+            _cargandoEvolucionAnterior = false;
+        }
+    }
+
+    private async Task RecargarStockAplicadoSedeAsync()
+    {
+        try
+        {
+            int sede = Session.Localidad > 0 ? Session.Localidad : 1;
+            _stockAplicadoSede = (await FarmaciaService.ObtenerStockSedeDetalladoAsync(sede, incluirSinInventario: true))
+                .Where(x => !x.ControlaInventario || x.StockLibre > 0)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se pudo cargar el stock disponible de la sucursal.");
+        }
+    }
+
+    private void OnMedicamentoFocus()
+    {
+        ActualizarSugerenciasMedicamento();
+        _mostrarSugerenciasMed = _sugerenciasMedicamento.Any();
+    }
+
+    private void OnMedicamentoInputChanged()
+    {
+        _nuevoMedicamento.CodigoProd = string.Empty;
+        _productoRecetaSeleccionado = null;
+        ActualizarSugerenciasMedicamento();
+        _mostrarSugerenciasMed = _sugerenciasMedicamento.Any();
+        ActualizarCantidadLetras();
+    }
+
+    private void ActualizarSugerenciasMedicamento()
+    {
+        var texto = _nuevoMedicamento.Descripcionamento?.Trim() ?? string.Empty;
+        _sugerenciasMedicamento = string.IsNullOrWhiteSpace(texto)
+            ? _catalogoMedicamentos.Take(15).ToList()
+            : _catalogoMedicamentos
+                .Where(p => p.Descripcion.Contains(texto, StringComparison.OrdinalIgnoreCase)
+                         || p.Codigo.Contains(texto, StringComparison.OrdinalIgnoreCase)
+                         || p.Id.ToString().Contains(texto, StringComparison.OrdinalIgnoreCase))
+                .Take(20)
+                .ToList();
+    }
+
+    private void SeleccionarMedicamento(CatalogoOperativoDto prod)
+    {
+        _productoRecetaSeleccionado = prod;
+        _modoDespachoReceta = "UNIDAD";
+        _nuevoMedicamento.CodigoProd = prod.Id.ToString();
+        _nuevoMedicamento.Descripcionamento = prod.Descripcion;
+        _nuevoMedicamento.Precio = prod.Precio ?? 0m;
+        _mostrarSugerenciasMed = false;
+        ActualizarCantidadLetras();
+    }
+
+    private void LimpiarSeleccionMedicamento()
+    {
+        _productoRecetaSeleccionado = null;
+        _modoDespachoReceta = "UNIDAD";
+        _nuevoMedicamento.CodigoProd = string.Empty;
+        _nuevoMedicamento.Descripcionamento = string.Empty;
+        _nuevoMedicamento.Precio = 0m;
+        _sugerenciasMedicamento.Clear();
+        _mostrarSugerenciasMed = false;
+        ActualizarCantidadLetras();
+    }
+
+    private void ActualizarCantidadLetras()
+    {
+        int n = Math.Max(1, (int)Math.Round(_nuevoMedicamento.Cantidad));
+        _nuevoMedicamento.CantidadLetras = FichaMedica.FormatearCantidadEnLetras(n, _modoDespachoReceta, UnidadProductoReceta, FactorProductoReceta);
+    }
+
+    private Task AgregarMedicamentoTrabajo()
+    {
+        if (IdOrden <= 0 || Nhcl <= 0) return Task.CompletedTask;
+        if (_nuevoMedicamento.Cantidad <= 0)
+        {
+            _esError = true;
+            _mensaje = "La cantidad del medicamento debe ser mayor a cero.";
+            return Task.CompletedTask;
+        }
+        if (string.IsNullOrWhiteSpace(_nuevoMedicamento.Descripcionamento) || string.IsNullOrWhiteSpace(_nuevoMedicamento.Indicaciones))
+        {
+            _esError = true;
+            _mensaje = "Ingrese el medicamento y sus indicaciones posológicas.";
+            return Task.CompletedTask;
+        }
+
+        if (string.IsNullOrWhiteSpace(_nuevoMedicamento.CodigoProd))
+        {
+            var exacto = _catalogoMedicamentos.FirstOrDefault(p =>
+                string.Equals(p.Descripcion.Trim(), _nuevoMedicamento.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.Codigo, _nuevoMedicamento.Descripcionamento.Trim(), StringComparison.OrdinalIgnoreCase)
+                || p.Id.ToString() == _nuevoMedicamento.Descripcionamento.Trim());
+            if (exacto != null)
+            {
+                _productoRecetaSeleccionado = exacto;
+                _nuevoMedicamento.CodigoProd = exacto.Id.ToString();
+                _nuevoMedicamento.Descripcionamento = exacto.Descripcion;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(_nuevoMedicamento.CantidadLetras) || int.TryParse(_nuevoMedicamento.CantidadLetras.Trim(), out _))
+            ActualizarCantidadLetras();
+
+        _medicinasTrabajo.Add(new MedicinaTrabajoRow
+        {
+            Origen = "NUEVO",
+            Item = new RecetaMedicamentoItemDto
+            {
+                IdOrden = IdOrden,
+                Nhcl = Nhcl,
+                CodigoProd = _nuevoMedicamento.CodigoProd,
+                Descripcionamento = _nuevoMedicamento.Descripcionamento.Trim(),
+                Cantidad = CantidadBaseRecetaCalculada,
+                CantidadLetras = _nuevoMedicamento.CantidadLetras,
+                Indicaciones = _nuevoMedicamento.Indicaciones.Trim(),
+                Tipo = "M"
+            }
+        });
+
+        _nuevoMedicamento = new RecetaMedicamentoItemDto { Cantidad = 1 };
+        _productoRecetaSeleccionado = null;
+        _modoDespachoReceta = "UNIDAD";
+        ActualizarCantidadLetras();
+        _mostrarSugerenciasMed = false;
+        _esError = false;
+        _mensaje = "Medicamento agregado a la lista. Presiona Registrar Nota de Evolución para descargarlo del inventario y enviarlo a factura.";
+        return Task.CompletedTask;
+    }
+
+    private void QuitarMedicinaTrabajo(Guid idTemp)
+    {
+        _medicinasTrabajo.RemoveAll(x => x.IdTemp == idTemp);
+    }
+
+    private async Task OnAplicadoFocus()
+    {
+        if (_stockAplicadoSede.Count == 0)
+            await RecargarStockAplicadoSedeAsync();
+        FiltrarSugerenciasAplicado();
+        _mostrarSugerenciasAplicado = _sugerenciasAplicado.Any();
+    }
+
+    private async Task OnAplicadoInputChanged()
+    {
+        _productoAplicadoSeleccionado = null;
+        _modoAplicado = "UNIDAD";
+        if (_stockAplicadoSede.Count == 0)
+            await RecargarStockAplicadoSedeAsync();
+        FiltrarSugerenciasAplicado();
+        _mostrarSugerenciasAplicado = _sugerenciasAplicado.Any();
+    }
+
+    private void FiltrarSugerenciasAplicado()
+    {
+        var texto = (_filtroAplicado ?? string.Empty).Trim();
+        _sugerenciasAplicado = string.IsNullOrWhiteSpace(texto)
+            ? _stockAplicadoSede.Take(15).ToList()
+            : _stockAplicadoSede
+                .Where(p => p.NombreProducto.Contains(texto, StringComparison.OrdinalIgnoreCase)
+                         || p.CodigoPrincipal.Contains(texto, StringComparison.OrdinalIgnoreCase)
+                         || p.CodigoProducto.ToString().Contains(texto, StringComparison.OrdinalIgnoreCase))
+                .Take(20)
+                .ToList();
+    }
+
+    private void SeleccionarProductoAplicado(FarmaciaStockSedeItemDto prod)
+    {
+        _productoAplicadoSeleccionado = prod;
+        _modoAplicado = "UNIDAD";
+        _filtroAplicado = prod.NombreProducto;
+        _mostrarSugerenciasAplicado = false;
+    }
+
+    private void LimpiarProductoAplicado()
+    {
+        _productoAplicadoSeleccionado = null;
+        _modoAplicado = "UNIDAD";
+        _filtroAplicado = string.Empty;
+        _cantidadAplicado = 1m;
+        _indicacionAplicado = string.Empty;
+        _sugerenciasAplicado.Clear();
+        _mostrarSugerenciasAplicado = false;
+    }
+
+    private async Task AgregarAplicadoConsultaAsync()
+    {
+        if (IdOrden <= 0 || Nhcl <= 0) return;
+
+        if (_productoAplicadoSeleccionado is null)
+        {
+            var texto = (_filtroAplicado ?? string.Empty).Trim();
+            _productoAplicadoSeleccionado = _stockAplicadoSede.FirstOrDefault(p =>
+                string.Equals(p.NombreProducto.Trim(), texto, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(p.CodigoPrincipal.Trim(), texto, StringComparison.OrdinalIgnoreCase) ||
+                p.CodigoProducto.ToString() == texto);
+        }
+
+        if (_productoAplicadoSeleccionado is null)
+        {
+            _esError = true;
+            _mensaje = "Selecciona un producto con stock disponible en la sucursal actual.";
+            return;
+        }
+
+        if (_cantidadAplicado <= 0)
+        {
+            _esError = true;
+            _mensaje = "La cantidad aplicada debe ser mayor a cero.";
+            return;
+        }
+
+        decimal cantidadBase = CantidadBaseAplicadoCalculada;
+        if (_productoAplicadoSeleccionado.ControlaInventario && cantidadBase > _productoAplicadoSeleccionado.StockLibre)
+        {
+            _esError = true;
+            _mensaje = $"Stock insuficiente: disponible {_productoAplicadoSeleccionado.StockLibre:0.##} {_productoAplicadoSeleccionado.UnidadMedida}.";
+            return;
+        }
+
+        var nuevoAplicado = new RecetaMedicamentoItemDto
+        {
+            IdOrden = IdOrden,
+            Nhcl = Nhcl,
+            CodigoProd = _productoAplicadoSeleccionado.CodigoProducto.ToString(),
+            Descripcionamento = _productoAplicadoSeleccionado.NombreProducto,
+            Cantidad = cantidadBase,
+            CantidadLetras = $"{cantidadBase:0.##} {UnidadProductoAplicado}",
+            Indicaciones = string.IsNullOrWhiteSpace(_indicacionAplicado) ? "Aplicado en evolución" : _indicacionAplicado.Trim(),
+            Tipo = "C"
+        };
+
+        int idUser = Session.CurrentUser?.UserNumero ?? 1;
+        var res = await ConsultaService.AgregarAplicadoConsultaAsync(nuevoAplicado, idUser, Session.Localidad);
+        _esError = !res.Exito;
+        _mensaje = res.Mensaje;
+        if (res.Exito)
+        {
+            LimpiarProductoAplicado();
+            _aplicadosItems = await ConsultaService.ObtenerAplicadosConsultaOrdenAsync(IdOrden);
+            await RecargarStockAplicadoSedeAsync();
+            await OnOrdenesActualizadas.InvokeAsync();
+        }
+    }
+
+    private async Task OnCategoriaServicioChangedAsync()
+    {
+        _subcategoriaProcedimiento = 0;
+        _mensajeServicio = null;
+        _codigoServicioSeleccionado = string.Empty;
+        _filtroServicio = string.Empty;
+        _mostrarSugerenciasServicio = false;
+        await CargarCatalogoServicioCategoriaAsync(_categoriaServicio);
+    }
+
+    private async Task CargarCatalogoServicioCategoriaAsync(string categoria)
+    {
+        if (!_cacheServiciosPorCategoria.ContainsKey(categoria))
+        {
+            try
+            {
+                var lista = categoria switch
+                {
+                    "Laboratorio" => (await LabImagenService.ObtenerCatalogoLaboratorioAsync(0))
+                        .Select(x => new ServicioCatalogoItem(x.CodigoProd, x.Descripcion, x.PrecioUnitario))
+                        .ToList(),
+                    "Imagenología" => (await LabImagenService.ObtenerCatalogoImagenologiaAsync("TODOS"))
+                        .Select(x => new ServicioCatalogoItem(x.CodigoProd, x.Descripcion, x.PrecioUnitario))
+                        .ToList(),
+                    "Fisioterapia" => (await AdminClinicaService.ObtenerCatalogoFisioterapiaAsync())
+                        .Select(x => new ServicioCatalogoItem(x.IdProducto.ToString(), x.Descripcion, x.Precio))
+                        .ToList(),
+                    "Procedimientos" when IdOrden > 0 && Nhcl > 0 =>
+                        (await AdmisionService.ObtenerCatalogoProcedimientosTriajeAsync(IdOrden, Nhcl))
+                        .Select(x => new ServicioCatalogoItem(x.Id.ToString(), x.Descripcion, 0, x.Codigo, x.IdSubgrupo ?? 0, x.Subgrupo))
+                        .ToList(),
+                    _ => []
+                };
+                if (categoria != "Procedimientos" || lista.Count > 0)
+                    _cacheServiciosPorCategoria[categoria] = lista;
+                else if (_categoriaServicio == categoria)
+                {
+                    _errorServicio = false;
+                    _mensajeServicio = "No hay procedimientos activos para la sede de esta orden.";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Error al cargar el catálogo de servicios para {Categoria}", categoria);
+                _errorServicio = true;
+                _mensajeServicio = $"No se pudo cargar el catálogo de {categoria}.";
+            }
+        }
+
+        FiltrarServiciosCategoria();
+    }
+
+    private void OnFiltroServicioInputChanged()
+    {
+        _codigoServicioSeleccionado = string.Empty;
+        _mostrarSugerenciasServicio = true;
+        FiltrarServiciosCategoria();
+    }
+
+    private void FiltrarServiciosCategoria()
+    {
+        var lista = ServiciosEnSubcategoria;
+        var texto = _filtroServicio?.Trim() ?? string.Empty;
+        _serviciosFiltrados = string.IsNullOrWhiteSpace(texto)
+            ? lista.ToList()
+            : lista.Where(s => s.Descripcion.Contains(texto, StringComparison.OrdinalIgnoreCase)
+                            || (s.CodigoBusqueda ?? s.Codigo).Contains(texto, StringComparison.OrdinalIgnoreCase))
+                   .ToList();
+    }
+
+    private void ToggleSugerenciasServicio()
+    {
+        if (!_mostrarSugerenciasServicio) FiltrarServiciosCategoria();
+        _mostrarSugerenciasServicio = !_mostrarSugerenciasServicio;
+    }
+
+    private void LimpiarSeleccionServicio()
+    {
+        _codigoServicioSeleccionado = string.Empty;
+        _filtroServicio = string.Empty;
+        FiltrarServiciosCategoria();
+        _mostrarSugerenciasServicio = true;
+    }
+
+    private void SeleccionarServicio(ServicioCatalogoItem srv)
+    {
+        _codigoServicioSeleccionado = srv.Codigo;
+        _filtroServicio = srv.Descripcion;
+        _mostrarSugerenciasServicio = false;
+    }
+
+    private async Task AgregarServicioOrdenAsync()
+    {
+        if (_agregandoServicio || IdOrden <= 0 || Nhcl <= 0) return;
+        _agregandoServicio = true;
+        _mensajeServicio = null;
+
+        try
+        {
+            if (_cantidadServicio <= 0)
+            {
+                _errorServicio = true;
+                _mensajeServicio = "La cantidad del servicio debe ser mayor a cero.";
+                return;
+            }
+
+            var listaActual = ServiciosEnSubcategoria;
+            var servicio = !string.IsNullOrWhiteSpace(_codigoServicioSeleccionado)
+                ? listaActual.FirstOrDefault(s => s.Codigo == _codigoServicioSeleccionado)
+                : listaActual.FirstOrDefault(s => string.Equals(s.Descripcion.Trim(), _filtroServicio.Trim(), StringComparison.OrdinalIgnoreCase));
+
+            if (servicio is null)
+            {
+                _errorServicio = true;
+                _mensajeServicio = $"Seleccione un servicio válido del catálogo de {_categoriaServicio}.";
+                return;
+            }
+
+            string obs = string.IsNullOrWhiteSpace(_observacionServicio) ? servicio.Descripcion : _observacionServicio.Trim();
+
+            switch (_categoriaServicio)
+            {
+                case "Laboratorio":
+                    if (!await LabImagenService.AgregarOrdenLaboratorioAsync(new OrdenLaboratorioItemDto
+                    {
+                        IdOrden = IdOrden,
+                        Nhcl = Nhcl,
+                        CodigoProd = servicio.Codigo,
+                        DescripcionExamen = servicio.Descripcion,
+                        Observaciones = obs,
+                        Cantidad = (int)Math.Max(1, Math.Round(_cantidadServicio)),
+                        Prioridad = _prioridadServicio,
+                        Estado = "POR REALIZAR",
+                        Fecha = DateTime.Now,
+                        Precio = servicio.Precio
+                    }))
+                        throw new InvalidOperationException("El servicio no se guardó.");
+                    _ordenesLab = await LabImagenService.ObtenerOrdenesLaboratorioAsync(IdOrden, Nhcl);
+                    break;
+
+                case "Imagenología":
+                    if (!await LabImagenService.AgregarOrdenImagenAsync(new OrdenImagenItemDto
+                    {
+                        IdOrden = IdOrden,
+                        Nhcl = Nhcl,
+                        CodigoProd = servicio.Codigo,
+                        DescripcionEstudio = servicio.Descripcion,
+                        Observaciones = obs,
+                        Cantidad = (int)Math.Max(1, Math.Round(_cantidadServicio)),
+                        Estado = "Por Facturar",
+                        Fecha = DateTime.Now,
+                        Precio = servicio.Precio
+                    }))
+                        throw new InvalidOperationException("El servicio no se guardó.");
+                    _ordenesImagen = await LabImagenService.ObtenerOrdenesImagenAsync(IdOrden, Nhcl);
+                    break;
+
+                case "Procedimientos":
+                    if (!int.TryParse(servicio.Codigo, out int idProcedimiento) ||
+                        !await AdmisionService.AgregarProcedimientoTriajeAsync(IdOrden, Nhcl,
+                            idProcedimiento, (int)Math.Max(1, Math.Round(_cantidadServicio)),
+                            _observacionServicio.Trim(), desdeHistorial: false, desdeSoap: true))
+                        throw new InvalidOperationException("El procedimiento no se guardó.");
+                    _procedimientosAgregadosEnSesion++;
+                    _versionProcedimientos++;
+                    break;
+
+                case "Fisioterapia":
+                    if (!int.TryParse(servicio.Codigo, out int idProdFisio) || idProdFisio <= 0)
+                    {
+                        _errorServicio = true;
+                        _mensajeServicio = "No se pudo identificar el código de producto de fisioterapia.";
+                        return;
+                    }
+                    if (!await AdminClinicaService.GuardarFisioterapiaAsync(new FisioterapiaOrdenDto
+                    {
+                        IdOrden = IdOrden,
+                        Nhcl = Nhcl,
+                        IdProducto = idProdFisio,
+                        Descripcion = servicio.Descripcion,
+                        Observaciones = obs,
+                        Cantidad = _cantidadServicio,
+                        Precio = servicio.Precio,
+                        Fecha = DateTime.Now
+                    }))
+                        throw new InvalidOperationException("El servicio no se guardó.");
+                    _ordenesFisio = await AdminClinicaService.ObtenerFisioterapiaAsync(IdOrden, Nhcl);
+                    break;
+            }
+
+            _codigoServicioSeleccionado = string.Empty;
+            _filtroServicio = string.Empty;
+            _observacionServicio = string.Empty;
+            _cantidadServicio = 1;
+            _mostrarSugerenciasServicio = false;
+            FiltrarServiciosCategoria();
+
+            _errorServicio = false;
+            _mensajeServicio = $"Servicio de {_categoriaServicio} agregado a la orden #{IdOrden}.";
+            await OnOrdenesActualizadas.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error al agregar servicio a la orden {Orden}", IdOrden);
+            _errorServicio = true;
+            _mensajeServicio = "No se pudo completar el registro del servicio.";
+        }
+        finally
+        {
+            _agregandoServicio = false;
+        }
+    }
+
+    private async Task EliminarServicioPorCategoriaAsync(string categoria, int sec)
+    {
+        switch (categoria)
+        {
+            case "Laboratorio":
+                await LabImagenService.EliminarOrdenLaboratorioAsync(sec);
+                _ordenesLab = await LabImagenService.ObtenerOrdenesLaboratorioAsync(IdOrden, Nhcl);
+                break;
+            case "Imagenología":
+                await LabImagenService.EliminarOrdenImagenAsync(sec);
+                _ordenesImagen = await LabImagenService.ObtenerOrdenesImagenAsync(IdOrden, Nhcl);
+                break;
+            case "Fisioterapia":
+                await AdminClinicaService.EliminarFisioterapiaAsync(sec);
+                _ordenesFisio = await AdminClinicaService.ObtenerFisioterapiaAsync(IdOrden, Nhcl);
+                break;
+        }
+        await OnOrdenesActualizadas.InvokeAsync();
+    }
+
+    private async Task ImprimirRecetaMedicaPdfAsync()
+    {
+        if (Paciente is null || Paciente.Nhcl <= 0) return;
+        var paraImprimir = _medicinasTrabajo.Select(x => x.Item).ToList();
+        if (paraImprimir.Count == 0) paraImprimir = _aplicadosItems;
+        if (!paraImprimir.Any())
+        {
+            _esError = true;
+            _mensaje = "Agregue al menos un medicamento antes de imprimir la receta médica.";
+            return;
+        }
+        var pdfBytes = ReportService.GenerarRecetaMedicaPdf(Paciente, paraImprimir, _diagnosticos, _indicacionesGeneralesReceta);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Receta_Medica_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+    }
+
+    private async Task ImprimirOrdenLaboratorioPdfAsync()
+    {
+        if (Paciente is null || Paciente.Nhcl <= 0) return;
+        if (!OrdenesLabVisibles.Any())
+        {
+            _esError = true;
+            _mensaje = "Agregue al menos una prueba antes de imprimir la orden de laboratorio.";
+            return;
+        }
+        var pdfBytes = ReportService.GenerarOrdenLaboratorioPdf(Paciente, OrdenesLabVisibles, _diagnosticos);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Orden_Laboratorio_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+    }
+
+    private async Task ImprimirOrdenImagenPdfAsync()
+    {
+        if (Paciente is null || Paciente.Nhcl <= 0) return;
+        if (!OrdenesImagenVisibles.Any())
+        {
+            _esError = true;
+            _mensaje = "Agregue al menos un estudio antes de imprimir la orden de imagenología.";
+            return;
+        }
+        var pdfBytes = ReportService.GenerarOrdenImagenPdf(Paciente, OrdenesImagenVisibles, _diagnosticos);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Orden_Imagenologia_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+    }
+
+    private async Task ImprimirOrdenFisioterapiaPdfAsync()
+    {
+        if (Paciente is null || Paciente.Nhcl <= 0) return;
+        if (!OrdenesFisioVisibles.Any())
+        {
+            _esError = true;
+            _mensaje = "Agregue al menos un servicio antes de imprimir la orden de fisioterapia.";
+            return;
+        }
+        var pdfBytes = ReportService.GenerarOrdenFisioterapiaPdf(Paciente, OrdenesFisioVisibles, _diagnosticos);
+        await JS.InvokeVoidAsync("descargarArchivoBase64", $"Orden_Fisioterapia_Orden_{IdOrden}.pdf", "application/pdf", Convert.ToBase64String(pdfBytes));
+    }
+}
