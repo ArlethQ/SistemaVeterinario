@@ -73,6 +73,9 @@
             {
                 <a class="btn btn-outline-primary btn-sm" href="@($"/programacion/clinica?medico={_medicoAgenda}")">Registrar turnos</a>
             }
+            <button type="button" class="btn btn-primary btn-sm" @onclick="AbrirModalAgendamientoCirugia">
+                <i class="bi bi-scissors me-1"></i>Agendamiento cirugía
+            </button>
             <button class="btn btn-outline-danger btn-sm app-doc-action app-doc-pdf" @onclick="ExportarPdfAgendaAsync">
                 <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Exportar Agenda PDF
             </button>
@@ -834,8 +837,33 @@
     </div>
 </div>
 
+@if (_mostrarModalAgendamientoCirugia)
+{
+    <div class="modal-backdrop fade show" style="z-index: 1050;" @onclick="CerrarModalAgendamientoCirugia"></div>
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="z-index: 1055;">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-primary text-white py-2 px-3">
+                    <h5 class="modal-title h6 fw-bold mb-0">
+                        <i class="bi bi-scissors me-2"></i>Agendamiento de cirugía
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Cerrar" @onclick="CerrarModalAgendamientoCirugia"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <ProgramacionClinica ModoModal="true"
+                                         MostrarSelectorPacienteEnModal="true"
+                                         FiltrarPorMedicoEnModal="true" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+    private bool _mostrarModalAgendamientoCirugia;
+    private void AbrirModalAgendamientoCirugia() => _mostrarModalAgendamientoCirugia = true;
+    private void CerrarModalAgendamientoCirugia() => _mostrarModalAgendamientoCirugia = false;
 
     private List<CatalogoItemGenericoDto> _medicos = new();
     private List<CatalogoItemGenericoDto> _medicosAgenda = [];
