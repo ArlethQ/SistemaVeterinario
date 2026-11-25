@@ -183,98 +183,117 @@
 
                     <ValidationSummary class="text-danger small mb-3" />
 
-                    <div class="pcm-form-grid">
-                        <section class="pcm-panel">
-                            <div class="pcm-panel-title">Datos principales</div>
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <label class="n-label">Tipo de registro *</label>
-                                    <div class="pcm-choice" role="group" aria-label="Tipo de producto o servicio">
-                                        <button type="button" class="@(productModel.TipoCompravena == "PRODUCTO" ? "is-active" : string.Empty)" @onclick="SeleccionarProducto">Producto</button>
-                                        <button type="button" class="@(productModel.TipoCompravena == "SERVICIO" ? "is-active" : string.Empty)" @onclick="SeleccionarServicio">Servicio</button>
-                                    </div>
-                                </div>
-                                <div class="col-md-8">
-                                    <label class="n-label">Nombre *</label>
-                                    <InputText class="n-input" @bind-Value="productModel.Nombre" placeholder="Nombre del producto o servicio" />
-                                    <ValidationMessage For="@(() => productModel.Nombre)" class="text-danger small" />
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="n-label">Codigo *</label>
-                                    <InputText class="n-input" @bind-Value="productModel.CodigoPrincipal" placeholder="10001" />
-                                    <ValidationMessage For="@(() => productModel.CodigoPrincipal)" class="text-danger small" />
-                                </div>
-                                <div class="col-12">
-                                    <label class="n-label">Codigo auxiliar</label>
-                                    <InputText class="n-input" @bind-Value="productModel.CodAuxiliar" placeholder="Opcional" />
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="n-label">Categoria *</label>
-                                    @if (!productTypes.Any())
-                                    {
-                                        <div class="pcm-category-required">
-                                            <i class="bi bi-exclamation-triangle"></i>
-                                            <div>
-                                                <strong>No tienes categorias activas.</strong>
-                                                <span>Crea una categoria y volveras a este documento.</span>
-                                            </div>
-                                            <button type="button" @onclick="IrACrearCategoria">
-                                                Ir a crear categoria
-                                            </button>
-                                        </div>
-                                    }
-                                    <InputSelect class="n-select" @bind-Value="SelectedCategory">
-                                        <option value="">-- Seleccione --</option>
-                                        @foreach (var type in productTypes)
-                                        {
-                                            <option value="@type.Idtipoproducto">@type.Descripcion</option>
-                                        }
-                                    </InputSelect>
-                                    <ValidationMessage For="@(() => productModel.TipoProducto)" class="text-danger small" />
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="n-label">Subcategoria</label>
-                                    <InputSelect class="n-select" @bind-Value="productModel.Idsubtipo" disabled="@(!productModel.TipoProducto.HasValue)">
-                                        <option value="">-- Seleccione --</option>
-                                        @foreach (var subtype in FilteredSubtypes)
-                                        {
-                                            <option value="@subtype.Idsubtipo">@subtype.Descripcion</option>
-                                        }
-                                    </InputSelect>
-                                </div>
-                            </div>
-                        </section>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="n-label">Descripción *</label>
+                            <InputText class="n-input" @bind-Value="productModel.Nombre" placeholder="Nombre del producto o servicio" />
+                            <ValidationMessage For="@(() => productModel.Nombre)" class="text-danger small" />
+                        </div>
 
-                        <aside class="pcm-panel">
-                            <div class="pcm-panel-title">Configuracion comercial</div>
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <label class="n-label">Precio base *</label>
-                                    <InputNumber class="n-input text-end" @bind-Value="productModel.ValorUnitario" placeholder="0.00" />
-                                    <ValidationMessage For="@(() => productModel.ValorUnitario)" class="text-danger small" />
-                                </div>
-                                <div class="col-12">
-                                    <label class="n-label">IVA</label>
-                                    <InputSelect class="n-select" @bind-Value="SelectedVat">
-                                        <option value="">Sin IVA</option>
-                                        @foreach (var vat in vats)
-                                        {
-                                            <option value="@vat.Codigo">@GetVatLabel(vat)</option>
-                                        }
-                                    </InputSelect>
-                                    <ValidationMessage For="@(() => productModel.Porcentajeimpuesto)" class="text-danger small" />
-                                </div>
-                                @if (productModel.TipoCompravena == "PRODUCTO")
-                                {
-                                    <div class="col-12">
-                                        <div class="alert alert-info py-2 px-3 mb-0 small border-0">
-                                            <i class="bi bi-info-circle me-1"></i>
-                                            Este producto ingresará <strong>sin control de inventario</strong> para poder facturarlo de inmediato.
-                                        </div>
-                                    </div>
-                                }
+                        <div class="col-md-6">
+                            <label class="n-label">Tipo *</label>
+                            <div class="pcm-choice" role="group" aria-label="Tipo de producto o servicio">
+                                <button type="button" class="@(productModel.TipoCompravena == "PRODUCTO" ? "is-active" : string.Empty)" @onclick="SeleccionarProducto">Bien (Producto)</button>
+                                <button type="button" class="@(productModel.TipoCompravena == "SERVICIO" ? "is-active" : string.Empty)" @onclick="SeleccionarServicio">Servicio</button>
                             </div>
-                        </aside>
+                        </div>
+
+                        <div class="col-md-6 d-flex align-items-end">
+                            @if (productModel.TipoCompravena == "PRODUCTO")
+                            {
+                                <div class="alert alert-info py-2 px-3 mb-0 small border-0 w-100">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Ingresará <strong>sin control de inventario</strong> para facturar de inmediato.
+                                </div>
+                            }
+                        </div>
+
+                        @if (productModel.TipoCompravena == "PRODUCTO")
+                        {
+                            <div class="col-md-6">
+                                <label class="n-label">Unidad de medida</label>
+                                <InputSelect class="n-select" @bind-Value="productModel.UnidadMedida">
+                                    @foreach (var u in UnidadesMedida)
+                                    {
+                                        <option value="@u">@u</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="n-label" title="Cantidad de unidades de medida que contiene 1 envase/caja">Factor / Contenido por envase</label>
+                                <InputNumber class="n-input" @bind-Value="productModel.FactorConversionInventario" min="0.0001" step="0.01" />
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <InputCheckbox id="pcm-fiscalizacion-check" class="form-check-input" @bind-Value="productModel.SujetoFiscalizacion" />
+                                    <label class="form-check-label small fw-semibold" for="pcm-fiscalizacion-check">
+                                        Sujeto a fiscalización <span class="text-muted fw-normal">(Informe de movimiento de medicamentos sujetos a fiscalización)</span>
+                                    </label>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="col-12">
+                            <label class="n-label">Categoría *</label>
+                            @if (!FilteredCategories.Any())
+                            {
+                                <div class="pcm-category-required">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    <div>
+                                        <strong>No tienes categorías activas para @(productModel.TipoCompravena == "SERVICIO" ? "servicios" : "bienes").</strong>
+                                        <span>Crea una categoría y volverás a este documento.</span>
+                                    </div>
+                                    <button type="button" @onclick="IrACrearCategoria">
+                                        Ir a crear categoría
+                                    </button>
+                                </div>
+                            }
+                            <InputSelect class="n-select" @bind-Value="SelectedCategory">
+                                <option value="">-- Seleccione --</option>
+                                @foreach (var type in FilteredCategories)
+                                {
+                                    <option value="@type.Idtipoproducto">@type.Descripcion</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => productModel.TipoProducto)" class="text-danger small" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="n-label">Subcategoría</label>
+                            <InputSelect class="n-select" @bind-Value="productModel.Idsubtipo" disabled="@(!productModel.TipoProducto.HasValue)">
+                                <option value="">Sin subcategoría</option>
+                                @foreach (var subtype in FilteredSubtypes)
+                                {
+                                    <option value="@subtype.Idsubtipo">@subtype.Descripcion</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="n-label">Código *</label>
+                            <InputText class="n-input" @bind-Value="productModel.CodigoPrincipal" placeholder="Ej: 10001" />
+                            <ValidationMessage For="@(() => productModel.CodigoPrincipal)" class="text-danger small" />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="n-label">Precio base *</label>
+                            <InputNumber class="n-input text-end" @bind-Value="productModel.ValorUnitario" placeholder="0.00" />
+                            <ValidationMessage For="@(() => productModel.ValorUnitario)" class="text-danger small" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="n-label">IVA</label>
+                            <InputSelect class="n-select" @bind-Value="SelectedVat">
+                                <option value="">Sin IVA</option>
+                                @foreach (var vat in vats)
+                                {
+                                    <option value="@vat.Codigo">@GetVatLabel(vat)</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => productModel.Porcentajeimpuesto)" class="text-danger small" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="n-label">Código auxiliar (opcional)</label>
+                            <InputText class="n-input" @bind-Value="productModel.CodAuxiliar" placeholder="Opcional" />
+                        </div>
                     </div>
                 </div>
 
@@ -412,6 +431,23 @@
         return paginas;
     }
 
+    private static readonly string[] UnidadesMedida =
+    [
+        "UNIDAD", "ML", "L", "MG", "G", "KG", "TABLETA", "CAPSULA",
+        "AMPOLLA", "FRASCO", "DOSIS", "SOBRE", "CAJA", "PAQUETE", "TUBO", "PAR", "METRO"
+    ];
+
+    private IEnumerable<ProductTypeLookup> FilteredCategories
+    {
+        get
+        {
+            var tipoEsperado = string.Equals(productModel.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) ? "S" : "B";
+            return productTypes.Where(t =>
+                string.IsNullOrWhiteSpace(t.Tipo) ||
+                string.Equals(t.Tipo.Trim(), tipoEsperado, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     private IEnumerable<ProductSubtypeLookup> FilteredSubtypes =>
         productModel.TipoProducto.HasValue
             ? productSubtypes.Where(x => x.Idtipoproducto == productModel.TipoProducto.Value)
@@ -516,9 +552,25 @@
         await ShowCreateChanged.InvokeAsync(false);
     }
 
-    private void SeleccionarProducto() => productModel.TipoCompravena = "PRODUCTO";
+    private void SeleccionarProducto()
+    {
+        if (productModel.TipoCompravena != "PRODUCTO")
+        {
+            productModel.TipoCompravena = "PRODUCTO";
+            productModel.TipoProducto = null;
+            productModel.Idsubtipo = null;
+        }
+    }
 
-    private void SeleccionarServicio() => productModel.TipoCompravena = "SERVICIO";
+    private void SeleccionarServicio()
+    {
+        if (productModel.TipoCompravena != "SERVICIO")
+        {
+            productModel.TipoCompravena = "SERVICIO";
+            productModel.TipoProducto = null;
+            productModel.Idsubtipo = null;
+        }
+    }
 
     private void IrACrearCategoria()
     {
@@ -600,6 +652,9 @@
                 Porcentajeimpuesto = productModel.Porcentajeimpuesto,
                 Estado = true,
                 Inventario = false,
+                UnidadMedida = productModel.TipoCompravena == "SERVICIO" ? "UNIDAD" : (string.IsNullOrWhiteSpace(productModel.UnidadMedida) ? "UNIDAD" : productModel.UnidadMedida),
+                FactorConversionInventario = productModel.TipoCompravena == "SERVICIO" || productModel.FactorConversionInventario <= 0m ? 1m : productModel.FactorConversionInventario,
+                SujetoFiscalizacion = productModel.TipoCompravena == "PRODUCTO" && productModel.SujetoFiscalizacion,
                 Margen = (decimal?)null,
                 Facturable = true
             });
@@ -657,6 +712,7 @@
     {
         public int Idtipoproducto { get; set; }
         public string? Descripcion { get; set; }
+        public string? Tipo { get; set; }
     }
 
     private class ProductSubtypeLookup
@@ -699,6 +755,9 @@
         public string? Porcentajeimpuesto { get; set; }
         public bool Facturable { get; set; } = true;
         public bool Inventario { get; set; } = false;
+        public string UnidadMedida { get; set; } = "UNIDAD";
+        public decimal FactorConversionInventario { get; set; } = 1m;
+        public bool SujetoFiscalizacion { get; set; } = false;
 
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {

@@ -63,6 +63,9 @@ public class ProductosController : ControllerBase
         public string? Porcentajeimpuesto { get; set; }
         public bool? Estado { get; set; }
         public bool? Inventario { get; set; }
+        public string? UnidadMedida { get; set; }
+        public decimal? FactorConversionInventario { get; set; }
+        public bool? SujetoFiscalizacion { get; set; }
         public string? Observacion { get; set; }
     }
 
@@ -134,14 +137,19 @@ public class ProductosController : ControllerBase
         if (ownerId == null) return NotFound("Usuario no encontrado.");
         var tipos = await _db.Productotipos
             .AsNoTracking()
-            .Where(x => x.Idusuario == ownerId && x.Estado == true)
+            .Where(x => (x.Idusuario == ownerId || (ownerId >= 1_000_000 && x.Idusuario >= 1_000_000)) && x.Estado == true)
             .OrderBy(x => x.Descripcion)
-            .Select(x => new { x.Idtipoproducto, x.Descripcion })
+            .Select(x => new
+            {
+                x.Idtipoproducto,
+                x.Descripcion,
+                Tipo = x.Perecible == false ? "S" : "B"
+            })
             .ToListAsync();
 
         var subtipos = await _db.Productosubtipos
             .AsNoTracking()
-            .Where(x => x.Idusuario == ownerId && x.Estado == "A")
+            .Where(x => (x.Idusuario == ownerId || (ownerId >= 1_000_000 && x.Idusuario >= 1_000_000)) && x.Estado == "A")
             .OrderBy(x => x.Descripcion)
             .Select(x => new { x.Idsubtipo, x.Descripcion, x.Idtipoproducto })
             .ToListAsync();
@@ -258,6 +266,13 @@ public class ProductosController : ControllerBase
             Porcentajeimpuesto = model.Porcentajeimpuesto,
             Estado = model.Estado ?? true,
             Inventario = string.Equals(model.TipoCompravena, "PRODUCTO", StringComparison.OrdinalIgnoreCase) && (model.Inventario ?? false),
+            UnidadMedida = string.Equals(model.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase)
+                ? "UNIDAD"
+                : (string.IsNullOrWhiteSpace(model.UnidadMedida) ? "UNIDAD" : model.UnidadMedida.Trim().ToUpperInvariant()),
+            FactorConversionInventario = string.Equals(model.TipoCompravena, "SERVICIO", StringComparison.OrdinalIgnoreCase) || (model.FactorConversionInventario ?? 1m) <= 0m
+                ? 1m
+                : Math.Round(model.FactorConversionInventario ?? 1m, 4),
+            SujetoFiscalizacion = string.Equals(model.TipoCompravena, "PRODUCTO", StringComparison.OrdinalIgnoreCase) && (model.SujetoFiscalizacion ?? false),
             Observacion = model.Observacion,
             Idusuario = ownerId.Value // âœ… Se guarda para el Jefe
         };

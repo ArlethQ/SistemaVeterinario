@@ -910,6 +910,8 @@ namespace Simetric.Services
             if (!usuariosCuenta.Contains(idUsuario))
                 usuariosCuenta.Add(idUsuario);
 
+            bool incluirCatalogoVeterinario = idUsuario >= 1_000_000 || usuariosCuenta.Any(u => u >= 1_000_000);
+
             var query = context.Productos
                 .AsNoTracking()
                 .Include(p => p.TipoProductoNavigation)
@@ -917,7 +919,8 @@ namespace Simetric.Services
                 .Where(p =>
                     (p.Estado == null || p.Estado == true) &&
                     p.Idusuario.HasValue &&
-                    usuariosCuenta.Contains(p.Idusuario.Value));
+                    (usuariosCuenta.Contains(p.Idusuario.Value) ||
+                     (incluirCatalogoVeterinario && p.Idusuario.Value >= 1_000_000)));
 
             if (tipoFiltroUpper == "SERVICIO")
             {
