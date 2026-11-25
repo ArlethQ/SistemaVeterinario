@@ -83,7 +83,13 @@
                                 </button>
                                 <span class="pcm-card-icon"><i class="bi bi-box-seam"></i></span>
                                 <div class="pcm-card-main">
-                                    <strong>@(product.Descripcion ?? "Producto")</strong>
+                                    <strong>
+                                        @(product.Descripcion ?? "Producto")
+                                        @if (!EsTipoServicio(product.TipoCompravena) && !product.Inventario)
+                                        {
+                                            <span class="badge bg-info-subtle text-info-emphasis border ms-1" style="font-size: 0.68rem;">Sin inventario</span>
+                                        }
+                                    </strong>
                                     <small>@(string.IsNullOrWhiteSpace(product.Codprincipal) ? "Sin codigo" : product.Codprincipal)</small>
                                     <small>@(string.IsNullOrWhiteSpace(product.Categoria) ? "Catalogo" : product.Categoria) | IVA @product.TarifaIva.ToString("0.##")%</small>
                                 </div>
@@ -288,6 +294,12 @@
                 ? "Catálogo de servicios"
                 : "Catálogo de productos y servicios";
 
+    private static bool EsTipoServicio(string? tipo)
+    {
+        var t = (tipo ?? string.Empty).Trim().ToUpperInvariant();
+        return t == "S" || t.StartsWith("SERV", StringComparison.Ordinal);
+    }
+
     private IEnumerable<ProductoLookupDetalleDto> FilteredProducts
     {
         get
@@ -295,10 +307,13 @@
             var query = (catalogFilter ?? string.Empty).Trim();
             var products = catalogProducts.AsEnumerable();
 
-            if (!string.IsNullOrWhiteSpace(CatalogTypeFilter))
+            if (string.Equals(CatalogTypeFilter, "SERVICIO", StringComparison.OrdinalIgnoreCase))
             {
-                products = products.Where(p =>
-                    string.Equals((p.TipoCompravena ?? string.Empty).Trim(), CatalogTypeFilter.Trim(), StringComparison.OrdinalIgnoreCase));
+                products = products.Where(p => EsTipoServicio(p.TipoCompravena));
+            }
+            else if (string.Equals(CatalogTypeFilter, "PRODUCTO", StringComparison.OrdinalIgnoreCase))
+            {
+                products = products.Where(p => !EsTipoServicio(p.TipoCompravena));
             }
 
             if (!string.IsNullOrWhiteSpace(query))
@@ -372,8 +387,7 @@
         catalogLoading = true;
         try
         {
-            var filtroInicial = string.IsNullOrWhiteSpace(CatalogTypeFilter) ? string.Empty : CatalogTypeFilter.Trim();
-            catalogProducts = (await FacturacionService.BuscarProductosFiltroAsync(UserId, filtroInicial, BackOffice, StockSucursalId)).Take(80).ToList();
+            catalogProducts = (await FacturacionService.BuscarProductosFiltroAsync(UserId, string.Empty, BackOffice, StockSucursalId, CatalogTypeFilter)).Take(120).ToList();
         }
         finally
         {

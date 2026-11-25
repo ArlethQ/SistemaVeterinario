@@ -894,10 +894,12 @@ namespace Simetric.Services
             int idUsuario,
             string filtro,
             bool backOffice = false,
-            int? idSucursalStock = null)
+            int? idSucursalStock = null,
+            string? tipoFiltro = null)
         {
             filtro = (filtro ?? string.Empty).Trim();
             var filtroLower = filtro.ToLowerInvariant();
+            var tipoFiltroUpper = (tipoFiltro ?? string.Empty).Trim().ToUpperInvariant();
 
             await using var context = await _dbFactory.CreateDbContextAsync();
             if (backOffice)
@@ -912,6 +914,21 @@ namespace Simetric.Services
                     (p.Estado == null || p.Estado == true) &&
                     p.Idusuario == idUsuario);
 
+            if (tipoFiltroUpper == "SERVICIO")
+            {
+                query = query.Where(p =>
+                    p.Tipocompravena != null &&
+                    (p.Tipocompravena.Trim().ToUpper() == "S" ||
+                     p.Tipocompravena.Trim().ToUpper().StartsWith("SERV")));
+            }
+            else if (tipoFiltroUpper == "PRODUCTO")
+            {
+                query = query.Where(p =>
+                    p.Tipocompravena == null ||
+                    (p.Tipocompravena.Trim().ToUpper() != "S" &&
+                     !p.Tipocompravena.Trim().ToUpper().StartsWith("SERV")));
+            }
+
             if (idSucursalStock is int sedeId && sedeId > 0)
             {
                 var codigosConStock = await context.EContaxInventarioExistencias
@@ -922,8 +939,9 @@ namespace Simetric.Services
                     .ToListAsync();
 
                 query = query.Where(p =>
-                    p.Tipocompravena == "SERVICIO" ||
-                    p.Tipocompravena == "S" ||
+                    (p.Tipocompravena != null &&
+                     (p.Tipocompravena.Trim().ToUpper() == "S" ||
+                      p.Tipocompravena.Trim().ToUpper().StartsWith("SERV"))) ||
                     p.Inventario == false ||
                     codigosConStock.Contains(p.Codigo));
             }
@@ -939,7 +957,7 @@ namespace Simetric.Services
                     (p.IdsubtipoNavigation != null && (p.IdsubtipoNavigation.Descripcion ?? "").ToLower().Contains(filtroLower)));
             }
 
-            int limite = idSucursalStock.HasValue ? 80 : 15;
+            int limite = idSucursalStock.HasValue || !string.IsNullOrWhiteSpace(tipoFiltroUpper) ? 120 : 15;
             var productos = await query
                 .OrderBy(p => p.Nombre)
                 .Take(limite)

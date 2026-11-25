@@ -830,76 +830,37 @@
                             </tr>
                         </thead>
                         <tbody>
+                            @if (!detallesDto.Any(x => !EsDetalleFacturaVacio(x)))
+                            {
+                                <tr>
+                                    <td colspan="10" class="text-center text-muted py-4 small">
+                                        Sin productos ni servicios agregados. Usa los botones inferiores para seleccionar o crear uno.
+                                    </td>
+                                </tr>
+                            }
                             @for (int i = 0; i < detallesDto.Count; i++)
                             {
                                 var index = i;
                                 var d = detallesDto[i];
+                                if (EsDetalleFacturaVacio(d))
+                                    continue;
                                 var tarifaEfectiva = GetTarifaEfectiva(d);
                                 var descuentoFila = GetDescuentoEfectivoDetalle(d);
                                 var baseImp = GetBaseImponibleDetalle(d);
                                 var ivaFila = GetIvaDetalle(d);
                                 var totalFila = GetTotalDetalle(d);
 
-                                <tr @key="d" class="@(EsDetalleFacturaVacio(d) ? "n-detail-empty-row" : null)">
+                                <tr @key="d">
                                     <td style="width: 68px; max-width: 78px;">
-                                        @if (d.Codproducto > 0 || !string.IsNullOrWhiteSpace(d.Codprincipal))
-                                        {
-                                            <span class="text-muted fw-bold d-inline-block text-truncate"
-                                                  style="max-width: 72px; font-size: 0.76rem;"
-                                                  title="@GetCodigoVisualDetalle(d)">@GetCodigoVisualDetalle(d)</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted small">—</span>
-                                        }
+                                        <span class="text-muted fw-bold d-inline-block text-truncate"
+                                              style="max-width: 72px; font-size: 0.76rem;"
+                                              title="@GetCodigoVisualDetalle(d)">@GetCodigoVisualDetalle(d)</span>
                                     </td>
-                                    <td class="position-relative" style="min-width: 245px; white-space: normal;">
-                                        @if (d.Codproducto > 0)
-                                        {
-                                            <div class="fw-medium text-dark px-1 py-1"
-                                                 style="white-space: normal; word-break: break-word; overflow-wrap: anywhere; line-height: 1.25; font-size: 0.84rem;">
-                                                @d.Descripcion
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <textarea class="n-input-sm n-detail-concept-input"
-                                                      rows="@(EsDetalleFacturaVacio(d) ? 1 : 2)"
-                                                      style="resize: none; white-space: normal; word-break: break-word; overflow-wrap: anywhere; line-height: 1.25; height: auto; min-height: @(EsDetalleFacturaVacio(d) ? "2rem" : "2.5rem");"
-                                                      @bind="d.Descripcion"
-                                                      @bind:event="oninput"
-                                                      @bind:after="@(() => OnConceptoDetalleEditadoAsync(d))"
-                                                      @onfocus="@(() => MostrarSugerenciasDetalleProductoAsync(d))"
-                                                      @onblur="@(() => OcultarSugerenciasDetalleProductoAsync(d))"
-                                                      @onkeydown="@((KeyboardEventArgs e) => OnKeyDownConceptoDetalleAsync(d, e))"
-                                                      maxlength="150"
-                                                      placeholder="@(EsDetalleFacturaVacio(d) ? "Buscar producto o servicio" : "Concepto o nombre manual")"></textarea>
-                                        }
-                                        @if (ReferenceEquals(filaBusquedaProductoActiva, d) && sugerenciasProductos != null)
-                                        {
-                                            <ul class="n-suggestions n-suggestions-inline n-detail-suggestions-floating">
-                                                @if (sugerenciasProductos.Any())
-                                                {
-                                                    @for (var idx = 0; idx < sugerenciasProductos.Count; idx++)
-                                                    {
-                                                        var p = sugerenciasProductos[idx];
-                                                        <li @onmousedown:preventDefault
-                                                            @onmousedown="() => PrepararSeleccionProducto()"
-                                                            class="@(indiceSugerenciaProductoActiva == idx ? "is-active" : null)"
-                                                            @onclick="async () => await SeleccionarProductoEnFilaDesdeListaAsync(d, p)">
-                                                            <strong>@p.Descripcion</strong><br />
-                                                            <small>Cód: @p.Codprincipal | @ObtenerResumenProductoBusqueda(p) | PVP: $@p.PrecioUnitario.ToString("N2")</small>
-                                                        </li>
-                                                    }
-                                                }
-                                                else if (!string.IsNullOrWhiteSpace(d.Descripcion))
-                                                {
-                                                    <li class="text-muted small py-2 px-3" style="cursor: default;">
-                                                        No se encontraron productos ni servicios para "@d.Descripcion.Trim()".
-                                                    </li>
-                                                }
-                                            </ul>
-                                        }
+                                    <td style="min-width: 245px; white-space: normal;">
+                                        <div class="fw-medium text-dark px-1 py-1"
+                                             style="white-space: normal; word-break: break-word; overflow-wrap: anywhere; line-height: 1.25; font-size: 0.84rem;">
+                                            @d.Descripcion
+                                        </div>
                                     </td>
 
                                     <td class="text-center">
@@ -3854,13 +3815,7 @@
     private void AsegurarFilaVaciaDetalle()
     {
         detallesDto ??= new();
-
-        if (detallesDto.Any(EsDetalleFacturaVacio))
-            return;
-
-        var detalleVacio = CrearDetalleFacturaVacio();
-        detallesDto.Add(detalleVacio);
-        modosDescuentoDetalle[detalleVacio] = ModoDescuento.Porcentaje;
+        detallesDto.RemoveAll(EsDetalleFacturaVacio);
     }
 
     private void AsegurarFilaVaciaDespuesDeEdicion()
