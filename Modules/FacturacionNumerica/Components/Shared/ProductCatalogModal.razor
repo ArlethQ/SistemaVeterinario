@@ -29,7 +29,7 @@
                     <label class="pcm-search">
                         <i class="bi bi-search"></i>
                         <input class="n-input"
-                               @bind="catalogFilter"
+                               @bind="CatalogFilter"
                                @bind:event="oninput"
                                placeholder="Buscar por nombre, codigo, categoria o subcategoria" />
                     </label>
@@ -68,8 +68,16 @@
                 }
                 else
                 {
+                    var filtrados = FilteredProductsList;
+                    var totalFiltrados = filtrados.Count;
+                    var totalPaginas = Math.Max(1, (int)Math.Ceiling(totalFiltrados / (double)PageSize));
+                    var paginaActual = Math.Clamp(currentPage, 1, totalPaginas);
+                    var paginaItems = filtrados.Skip((paginaActual - 1) * PageSize).Take(PageSize).ToList();
+                    var inicioItem = ((paginaActual - 1) * PageSize) + 1;
+                    var finItem = Math.Min(totalFiltrados, paginaActual * PageSize);
+
                     <div class="pcm-grid">
-                        @foreach (var product in FilteredProducts)
+                        @foreach (var product in paginaItems)
                         {
                             var selected = IsSelected(product);
                             var added = IsAdded(product);
@@ -100,6 +108,45 @@
                                     </button>
                                 </div>
                             </article>
+                        }
+                    </div>
+
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 pt-2 border-top">
+                        <small class="text-muted">
+                            Mostrando <strong>@inicioItem–@finItem</strong> de <strong>@totalFiltrados</strong> · Página <strong>@paginaActual</strong> de <strong>@totalPaginas</strong>
+                        </small>
+                        @if (totalPaginas > 1)
+                        {
+                            <div class="d-flex flex-wrap align-items-center gap-1">
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-secondary"
+                                        disabled="@(paginaActual <= 1)"
+                                        @onclick="() => IrAPagina(paginaActual - 1)">
+                                    Anterior
+                                </button>
+                                @foreach (var pag in ObtenerPaginasVisibles(paginaActual, totalPaginas))
+                                {
+                                    if (pag == -1)
+                                    {
+                                        <span class="px-1 text-muted small">…</span>
+                                    }
+                                    else
+                                    {
+                                        var pNum = pag;
+                                        <button type="button"
+                                                class="btn btn-sm @(pNum == paginaActual ? "btn-primary fw-bold" : "btn-outline-secondary")"
+                                                @onclick="() => IrAPagina(pNum)">
+                                            @pNum
+                                        </button>
+                                    }
+                                }
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-secondary"
+                                        disabled="@(paginaActual >= totalPaginas)"
+                                        @onclick="() => IrAPagina(paginaActual + 1)">
+                                    Siguiente
+                                </button>
+                            </div>
                         }
                     </div>
                 }
@@ -274,7 +321,21 @@
 
     private readonly string CatalogTitleId = $"catalogoProductos_{Guid.NewGuid():N}";
     private readonly string CreateTitleId = $"nuevoProducto_{Guid.NewGuid():N}";
+    private const int PageSize = 10;
+    private int currentPage = 1;
     private string catalogFilter = string.Empty;
+    private string CatalogFilter
+    {
+        get => catalogFilter;
+        set
+        {
+            if (catalogFilter != value)
+            {
+                catalogFilter = value;
+                currentPage = 1;
+            }
+        }
+    }
     private bool catalogLoading;
     private bool saving;
     private string? createError;
@@ -300,7 +361,7 @@
         return t == "S" || t.StartsWith("SERV", StringComparison.Ordinal);
     }
 
-    private IEnumerable<ProductoLookupDetalleDto> FilteredProducts
+    private List<ProductoLookupDetalleDto> FilteredProductsList
     {
         get
         {
@@ -325,8 +386,34 @@
                     (p.Subcategoria?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false));
             }
 
-            return products.Take(40);
+            return products.ToList();
         }
+    }
+
+    private IEnumerable<ProductoLookupDetalleDto> FilteredProducts => FilteredProductsList;
+
+    private void IrAPagina(int pagina)
+    {
+        currentPage = Math.Max(1, pagina);
+    }
+
+    private static List<int> ObtenerPaginasVisibles(int actual, int total)
+    {
+        var paginas = new List<int>();
+        if (total <= 7)
+        {
+            for (int i = 1; i <= total; i++) paginas.Add(i);
+            return paginas;
+        }
+
+        paginas.Add(1);
+        int inicio = Math.Max(2, actual - 2);
+        int fin = Math.Min(total - 1, actual + 2);
+        if (inicio > 2) paginas.Add(-1);
+        for (int i = inicio; i <= fin; i++) paginas.Add(i);
+        if (fin < total - 1) paginas.Add(-1);
+        paginas.Add(total);
+        return paginas;
     }
 
     private IEnumerable<ProductSubtypeLookup> FilteredSubtypes =>
@@ -368,6 +455,7 @@
             selectedKeys.Clear();
             addedKeys.Clear();
             catalogFilter = string.Empty;
+            currentPage = 1;
             if (!productTypes.Any())
                 productModel = CreateProductModel();
         }
@@ -387,7 +475,7 @@
         catalogLoading = true;
         try
         {
-            catalogProducts = (await FacturacionService.BuscarProductosFiltroAsync(UserId, string.Empty, BackOffice, StockSucursalId, CatalogTypeFilter)).Take(120).ToList();
+            catalogProducts = await FacturacionService.BuscarProductosFiltroAsync(UserId, string.Empty, BackOffice, StockSucursalId, CatalogTypeFilter);
         }
         finally
         {

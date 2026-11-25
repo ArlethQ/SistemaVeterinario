@@ -957,11 +957,10 @@ namespace Simetric.Services
                     (p.IdsubtipoNavigation != null && (p.IdsubtipoNavigation.Descripcion ?? "").ToLower().Contains(filtroLower)));
             }
 
-            int limite = idSucursalStock.HasValue || !string.IsNullOrWhiteSpace(tipoFiltroUpper) ? 120 : 15;
-            var productos = await query
-                .OrderBy(p => p.Nombre)
-                .Take(limite)
-                .ToListAsync();
+            var ordered = query.OrderBy(p => p.Nombre);
+            var productos = idSucursalStock.HasValue || !string.IsNullOrWhiteSpace(tipoFiltroUpper)
+                ? await ordered.ToListAsync()
+                : await ordered.Take(15).ToListAsync();
 
             return productos.Select(MapearAProductoDto).ToList();
         }
