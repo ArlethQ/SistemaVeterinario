@@ -31,6 +31,203 @@
 }else if(_tab=="excepciones"){
 <div class="card mb-3"><div class="card-body row g-2"><div class="col-md-3"><label>Profesional (Médico / Enfermero)</label><select class="form-select" value="@_excepcion.IdMedico" @onchange="SeleccionarProfesionalExcepcion"><option value="0">Seleccione</option>@foreach(var x in _medicos){<option value="@x.Id">@x.Descripcion</option>}</select></div><div class="col-md-3"><label>Motivo</label><input class="form-control" @bind="_excepcion.Motivo"/></div><div class="col-md-2"><label>Fecha</label><input type="date" class="form-control" @bind="_excepcion.Fecha"/></div><div class="col-md-1"><label>Desde</label><input class="form-control" @bind="_excepcion.Desde"/></div><div class="col-md-1"><label>Hasta</label><input class="form-control" @bind="_excepcion.Hasta"/></div><div class="col-md-2"><label>Localidad</label><select class="form-select @(_excepcion.IdMedico > 0 && !LocalidadesExcepcionDisponibles.Any() ? "is-invalid" : "")" @bind="_excepcion.IdLocalidad"><option value="0">@(_excepcion.IdMedico > 0 && !LocalidadesExcepcionDisponibles.Any() ? "Sin sucursal asignada" : "Seleccione")</option>@foreach(var x in LocalidadesExcepcionDisponibles){<option value="@x.Id">@x.Descripcion</option>}</select></div><div><SaveButton class="btn btn-primary" OnClick="GuardarExcepcion">Guardar bloqueo</SaveButton></div></div></div>
 <table class="table"><thead><tr><th>Fecha</th><th>Profesional</th><th>Motivo</th><th>Horario</th><th></th></tr></thead><tbody>@foreach(var x in _excepciones.Where(x=>x.Estado=="A")){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td>@x.Medico</td><td>@x.Motivo</td><td>@x.Desde - @x.Hasta</td><td><button class="btn btn-sm btn-outline-danger" @onclick="()=>DesactivarExcepcion(x.Id)">Desactivar</button></td></tr>}</tbody></table>
+}else if(ModoModal && FiltrarPorMedicoEnModal){
+<div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="fw-bold text-dark">
+            <i class="bi bi-calendar-plus text-primary me-2"></i>Nueva programación quirúrgica
+        </div>
+        @if (_cirugia.IdLocalidad > 0)
+        {
+            var nombreSuc = _localidades.FirstOrDefault(l => l.Id == _cirugia.IdLocalidad)?.Descripcion;
+            if (!string.IsNullOrWhiteSpace(nombreSuc))
+            {
+                <span class="badge rounded-pill text-bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-2">
+                    <i class="bi bi-geo-alt-fill me-1"></i>Sucursal: @nombreSuc
+                </span>
+            }
+        }
+    </div>
+    <div class="card-body p-4">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label fw-semibold small text-secondary mb-1">
+                    <i class="bi bi-building me-1 text-primary"></i>Sucursal de la cirugía *
+                </label>
+                <select class="form-select" value="@_cirugia.IdLocalidad" @onchange="OnLocalidadCirugiaChangedAsync">
+                    <option value="0">Seleccione sucursal...</option>
+                    @foreach(var x in LocalidadesCirugiaDisponibles){<option value="@x.Id">@x.Descripcion</option>}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-semibold small text-secondary mb-1">
+                    <i class="bi bi-person-badge me-1 text-primary"></i>Médico cirujano *
+                </label>
+                <select class="form-select" value="@_cirugia.IdMedico" @onchange="OnMedicoCirugiaChangedAsync" disabled="@(_cirugia.IdLocalidad <= 0)">
+                    <option value="0">@(_cirugia.IdLocalidad <= 0 ? "Primero seleccione una sucursal" : (MedicosCirugiaSelector.Any() ? "Seleccione un médico..." : "Sin médicos asignados a esta sucursal"))</option>
+                    @foreach(var x in MedicosCirugiaSelector)
+                    {
+                        var libres = ContarSlotsLibresMedico(x.Id);
+                        <option value="@x.Id">@x.Descripcion @(libres > 0 ? $"({libres} libres)" : "(sin horas en esta fecha)")</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-semibold small text-secondary mb-1">
+                    <i class="bi bi-heart-pulse me-1 text-primary"></i>Anestesiólogo <span class="fw-normal text-muted">(opcional)</span>
+                </label>
+                <select class="form-select" @bind="_cirugia.IdAnestesiologo">
+                    <option value="">Sin asignar</option>
+                    @foreach(var x in AnestesiologosDisponibles){<option value="@x.Id">@x.Descripcion</option>}
+                </select>
+            </div>
+
+            <div class="col-md-6 position-relative">
+                <label class="form-label fw-semibold small text-secondary mb-1">
+                    <i class="bi bi-search me-1 text-primary"></i>Paciente *
+                </label>
+                <input class="form-control" autocomplete="off" placeholder="Escriba nombre o NHCL para buscar paciente..." @bind="_filtroPaciente" @bind:event="oninput" @bind:after="BuscarPacientesAutoAsync" @onfocus="() => _mostrarPacientesSugeridos = !string.IsNullOrWhiteSpace(_filtroPaciente)" @onblur="CerrarPacientesSugeridosAsync" />
+                @if(_mostrarPacientesSugeridos && _pacientes.Count > 0 && !string.IsNullOrWhiteSpace(_filtroPaciente))
+                {
+                    <div class="list-group position-absolute bg-white border rounded shadow mt-1 w-100" style="z-index:1060;max-height:220px;overflow-y:auto;">
+                        @foreach(var x in _pacientes){<button type="button" class="list-group-item list-group-item-action py-2 px-3 small text-start" @onmousedown="() => SeleccionarPacienteCirugia(x)">@x.Descripcion</button>}
+                    </div>
+                }
+                <select class="form-select mt-2" @bind="_cirugia.Nhcl">
+                    @foreach(var x in _pacientes){<option value="@x.Id">@x.Descripcion</option>}
+                </select>
+            </div>
+
+            <div class="col-md-6 position-relative">
+                <label class="form-label fw-semibold small text-secondary mb-1">
+                    <i class="bi bi-clipboard2-pulse me-1 text-primary"></i>Procedimiento quirúrgico *
+                </label>
+                <input class="form-control" autocomplete="off" placeholder="Escriba para buscar procedimiento..." @bind="_filtroProcedimiento" @bind:event="oninput" @bind:after="BuscarProcedimientosAutoAsync" @onfocus="() => _mostrarProcedimientosSugeridos = !string.IsNullOrWhiteSpace(_filtroProcedimiento)" @onblur="CerrarProcedimientosSugeridosAsync" />
+                @if(_mostrarProcedimientosSugeridos && _procedimientos.Count > 0 && !string.IsNullOrWhiteSpace(_filtroProcedimiento))
+                {
+                    <div class="list-group position-absolute bg-white border rounded shadow mt-1 w-100" style="z-index:1060;max-height:220px;overflow-y:auto;">
+                        @foreach(var x in _procedimientos){<button type="button" class="list-group-item list-group-item-action py-2 px-3 small text-start" @onmousedown="() => SeleccionarProcedimientoCirugia(x)">@x.Descripcion</button>}
+                    </div>
+                }
+                <select class="form-select mt-2" @bind="_cirugia.IdProcedimiento">
+                    @foreach(var x in _procedimientos){<option value="@x.Id">@x.Descripcion</option>}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label fw-semibold small text-secondary mb-1">
+                    <i class="bi bi-calendar-event me-1 text-primary"></i>Fecha *
+                </label>
+                <input type="date" class="form-control" value="@_cirugia.Fecha.ToString("yyyy-MM-dd")" @onchange="OnFechaCirugiaChangedAsync" min="@DateTime.Today.ToString("yyyy-MM-dd")"/>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold small text-secondary mb-1">
+                    <i class="bi bi-clock me-1 text-primary"></i>Hora inicio (libre) *
+                </label>
+                <select class="form-select" value="@_cirugia.HoraInicio" @onchange="OnHoraInicioCirugiaChanged" disabled="@(_slotsLibresCirugia.Count == 0)">
+                    @if(_slotsLibresCirugia.Count == 0){<option value="">Sin horas libres</option>}else{<option value="">Seleccione</option>@foreach(var s in _slotsLibresCirugia){<option value="@s.Hora">@s.Hora</option>}}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold small text-secondary mb-1">
+                    <i class="bi bi-hourglass-split me-1 text-primary"></i>Hora fin / duración *
+                </label>
+                <select class="form-select" value="@_cirugia.HoraFin" @onchange="OnHoraFinCirugiaChanged" disabled="@(_horasFinDisponibles.Count == 0)">
+                    @if(_horasFinDisponibles.Count == 0){<option value="">--</option>}else{@foreach(var hf in _horasFinDisponibles){<option value="@hf.Hora">@hf.Etiqueta</option>}}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <SaveButton class="btn btn-primary w-100 fw-semibold py-2" OnClick="GuardarCirugia" Disabled="@(_cirugia.IdMedico <= 0 || _cirugia.IdLocalidad <= 0 || _slotsLibresCirugia.Count == 0 || string.IsNullOrWhiteSpace(_cirugia.HoraInicio) || string.IsNullOrWhiteSpace(_cirugia.HoraFin))">
+                    <i class="bi bi-check2-circle me-1"></i>Guardar cirugía
+                </SaveButton>
+            </div>
+
+            @if(_cirugia.IdMedico > 0 && _cirugia.IdLocalidad > 0 && !_cargandoSlotsCirugia)
+            {
+                var citasDia = _slotsTodosCirugia.Count(s => s.CitaExistente != null);
+                var bloqueosDia = _slotsTodosCirugia.Count(s => s.Bloqueado);
+                if(_slotsLibresCirugia.Count == 0)
+                {
+                    <div class="col-12">
+                        <div class="alert alert-warning py-2 px-3 mb-0 small d-flex align-items-center gap-2">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <span>El médico no tiene horas libres para el <strong>@_cirugia.Fecha.ToString("dd/MM/yyyy")</strong> en esta sucursal (sin horario asignado, turno finalizado, o ya ocupado por citas (@citasDia) / bloqueos (@bloqueosDia)). Pruebe seleccionando otra fecha.</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="col-12">
+                        <div class="d-flex flex-wrap gap-2 align-items-center small text-muted bg-light border rounded-3 px-3 py-2">
+                            <span><strong>Agenda del día:</strong> @_slotsTodosCirugia[0].Hora – @_slotsTodosCirugia[^1].Hora</span>
+                            <span class="badge text-bg-success">@_slotsLibresCirugia.Count libres</span>
+                            <span class="badge text-bg-secondary">@citasDia citas</span>
+                            <span class="badge text-bg-warning text-dark">@bloqueosDia bloqueos/cirugías</span>
+                            <span class="badge text-bg-info text-dark">@_ordenesActivasMedicoHoy órdenes activas</span>
+                            <span class="ms-auto text-muted">Si inicia al cierre del turno, puede elegir horas extra en <strong>Hora fin</strong>.</span>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+var cirugiasVisiblesModal = _cirugias.Where(x =>
+    x.Estado == "A" &&
+    _cirugia.IdMedico > 0 &&
+    x.Fecha.Date >= DateTime.Today &&
+    (x.IdMedico == _cirugia.IdMedico || x.IdAnestesiologo == _cirugia.IdMedico)).ToList();
+<div class="card border-0 shadow-sm rounded-3">
+    <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
+        <div class="fw-bold text-primary">
+            <i class="bi bi-calendar-check me-2"></i>Cirugías pendientes del médico seleccionado
+        </div>
+        @if (_cirugia.IdMedico > 0)
+        {
+            <span class="badge rounded-pill text-bg-primary px-3 py-2">@cirugiasVisiblesModal.Count pendiente(s)</span>
+        }
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-4">Fecha</th>
+                    <th>Médico</th>
+                    <th>Anestesiólogo</th>
+                    <th>Paciente</th>
+                    <th>Procedimiento</th>
+                    <th>Horario</th>
+                    <th class="text-end pe-4">Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_cirugia.IdMedico <= 0)
+                {
+                    <tr><td colspan="7" class="text-center text-muted py-4"><i class="bi bi-person-check me-2"></i>Seleccione un médico para ver sus cirugías pendientes.</td></tr>
+                }
+                else if (cirugiasVisiblesModal.Count == 0)
+                {
+                    <tr><td colspan="7" class="text-center text-muted py-4"><i class="bi bi-calendar-x me-2"></i>Este médico no tiene cirugías pendientes.</td></tr>
+                }
+                else
+                {
+                    @foreach(var x in cirugiasVisiblesModal)
+                    {
+                        <tr>
+                            <td class="ps-4 fw-semibold">@x.Fecha.ToString("yyyy-MM-dd")</td>
+                            <td>@x.Medico</td>
+                            <td>@(string.IsNullOrWhiteSpace(x.Anestesiologo) ? "-" : x.Anestesiologo)</td>
+                            <td class="fw-semibold">@x.Paciente</td>
+                            <td>@x.Procedimiento</td>
+                            <td><span class="badge text-bg-light border text-dark">@x.HoraInicio - @x.HoraFin</span></td>
+                            <td class="text-end pe-4"><button class="btn btn-sm btn-outline-danger" @onclick="()=>CancelarCirugia(x.Id)">Cancelar</button></td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
 }else{
 <div class="card mb-3"><div class="card-body row g-2">
 <div class="col-md-3"><label>Médico</label><select class="form-select" value="@_cirugia.IdMedico" @onchange="OnMedicoCirugiaChangedAsync"><option value="0">@(MedicosCirugiaDisponibles.Any() ? "Seleccione" : "Sin médicos disponibles en esta fecha")</option>@foreach(var x in MedicosCirugiaDisponibles){<option value="@x.Id">@x.Descripcion</option>}</select></div>
@@ -97,24 +294,28 @@ else
 [Parameter] public bool ModoModal { get; set; }
 [Parameter] public bool MostrarSelectorPacienteEnModal { get; set; }
 [Parameter] public bool FiltrarPorMedicoEnModal { get; set; }
+[Parameter] public bool PermitirElegirSucursalEnModal { get; set; }
 [Parameter] public int IdOrden { get; set; }
 [Parameter] public int Nhcl { get; set; }
 [SupplyParameterFromQuery(Name = "medico")] public int? MedicoAgenda { get; set; }
 [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
 bool _autorizado,_error,_mostrarPacientesSugeridos,_mostrarProcedimientosSugeridos,_cargandoSlotsCirugia;string _tab="horarios",_mensaje="",_filtroPaciente="",_filtroProcedimiento="";int _consultorioId,_ordenesActivasMedicoHoy;HorarioMedicoDto _horario=new();ExcepcionHorarioDto _excepcion=new();CirugiaProgramadaDto _cirugia=new();List<HorarioMedicoDto> _horarios=[];List<ExcepcionHorarioDto> _excepciones=[];List<CirugiaProgramadaDto> _cirugias=[];List<PisoClinicoDto> _pisos=[];List<ConsultorioClinicoDto> _consultorios=[];List<SelectorClinicoDto> _medicos=[],_localidades=[],_pacientes=[],_procedimientos=[];List<SlotHorarioMedicoDto> _slotsTodosCirugia=[];List<SlotHorarioMedicoDto> _slotsLibresCirugia=[];List<(string Hora, string Etiqueta, bool EsExtra)> _horasFinDisponibles=[];Dictionary<int, List<int>> _localidadesAsignadas=[];Dictionary<int, List<SlotHorarioMedicoDto>> _slotsPorMedicoCirugia=[];readonly Dictionary<string,string> Dias=new(){{"Lunes","Monday"},{"Martes","Tuesday"},{"Miércoles","Wednesday"},{"Jueves","Thursday"},{"Viernes","Friday"},{"Sábado","Saturday"},{"Domingo","Sunday"}};
-int LocalidadActivaCirugia => Session.Localidad > 0 ? Session.Localidad : _cirugia.IdLocalidad;
+int LocalidadActivaCirugia => PermitirElegirSucursalEnModal ? _cirugia.IdLocalidad : (Session.Localidad > 0 ? Session.Localidad : _cirugia.IdLocalidad);
 IEnumerable<SelectorClinicoDto> MedicosSoloCirugia => _medicos.Where(m => !EsProfesionalEnfermero(m.Id)
     && (LocalidadActivaCirugia <= 0 || (_localidadesAsignadas.TryGetValue(m.Id, out var locs) && locs.Contains(LocalidadActivaCirugia))));
+IEnumerable<SelectorClinicoDto> MedicosCirugiaSelector => MedicosSoloCirugia;
 IEnumerable<SelectorClinicoDto> MedicosCirugiaDisponibles => MedicosSoloCirugia.Where(m => TieneAlMenosUnSlotLibre(m.Id));
 IEnumerable<SelectorClinicoDto> AnestesiologosDisponibles => MedicosSoloCirugia.Where(m => m.Id != _cirugia.IdMedico && EstaDisponibleEnRangoCirugia(m.Id, _cirugia.HoraInicio, _cirugia.HoraFin));
 IEnumerable<SelectorClinicoDto> LocalidadesCirugiaDisponibles =>
-    Session.Localidad > 0 && _localidades.Any(l => l.Id == Session.Localidad)
-        ? _localidades.Where(l => l.Id == Session.Localidad)
-        : (_cirugia.IdMedico <= 0
-            ? _localidades
-            : (_localidadesAsignadas.TryGetValue(_cirugia.IdMedico, out var ids) && ids.Count > 0
-                ? _localidades.Where(l => ids.Contains(l.Id))
-                : _localidades));
+    PermitirElegirSucursalEnModal
+        ? _localidades
+        : (Session.Localidad > 0 && _localidades.Any(l => l.Id == Session.Localidad)
+            ? _localidades.Where(l => l.Id == Session.Localidad)
+            : (_cirugia.IdMedico <= 0
+                ? _localidades
+                : (_localidadesAsignadas.TryGetValue(_cirugia.IdMedico, out var ids) && ids.Count > 0
+                    ? _localidades.Where(l => ids.Contains(l.Id))
+                    : _localidades)));
 IEnumerable<ConsultorioClinicoDto> ConsultoriosDisponibles=>_consultorios.Where(c=>_horario.IdLocalidad==0||_pisos.Any(p=>p.Id==c.IdPiso&&p.IdLocalidad==_horario.IdLocalidad));
 IEnumerable<SelectorClinicoDto> LocalidadesDisponibles =>
     _horario.IdMedico <= 0
@@ -206,17 +407,25 @@ async Task Cambiar(string t){_tab=t;_mensaje="";await Cargar();if(_tab=="cirugia
 void AsegurarLocalidadCirugia()
 {
     var disp = LocalidadesCirugiaDisponibles.ToList();
+    if (PermitirElegirSucursalEnModal)
+    {
+        if (_cirugia.IdLocalidad <= 0 && disp.Count > 0)
+            _cirugia.IdLocalidad = disp[0].Id;
+        return;
+    }
     if (disp.Count > 0 && !disp.Any(l => l.Id == _cirugia.IdLocalidad))
         _cirugia.IdLocalidad = disp[0].Id;
 }
 
-bool TieneAlMenosUnSlotLibre(int idMedico)
+int ContarSlotsLibresMedico(int idMedico)
 {
-    if (!_slotsPorMedicoCirugia.TryGetValue(idMedico, out var slots) || slots.Count == 0) return false;
+    if (!_slotsPorMedicoCirugia.TryGetValue(idMedico, out var slots) || slots.Count == 0) return 0;
     var esHoy = _cirugia.Fecha.Date == DateTime.Today;
     var ahora = DateTime.Now.TimeOfDay;
-    return slots.Any(s => s.Disponible && (!esHoy || (TimeSpan.TryParse(s.Hora, out var sh) && sh >= ahora)));
+    return slots.Count(s => s.Disponible && (!esHoy || (TimeSpan.TryParse(s.Hora, out var sh) && sh >= ahora)));
 }
+
+bool TieneAlMenosUnSlotLibre(int idMedico) => ContarSlotsLibresMedico(idMedico) > 0;
 
 bool EstaDisponibleEnRangoCirugia(int idMedico, string horaInicio, string horaFin)
 {
@@ -256,13 +465,23 @@ async Task CargarDisponibilidadMedicosCirugiaAsync()
     var resultados = await Task.WhenAll(tareas);
     foreach (var (id, slots) in resultados)
         _slotsPorMedicoCirugia[id] = slots;
-    if (_cirugia.IdMedico > 0 && !TieneAlMenosUnSlotLibre(_cirugia.IdMedico))
-        _cirugia.IdMedico = 0;
+    if (_cirugia.IdMedico > 0)
+    {
+        if (PermitirElegirSucursalEnModal || FiltrarPorMedicoEnModal)
+        {
+            if (!MedicosSoloCirugia.Any(m => m.Id == _cirugia.IdMedico))
+                _cirugia.IdMedico = 0;
+        }
+        else if (!TieneAlMenosUnSlotLibre(_cirugia.IdMedico))
+        {
+            _cirugia.IdMedico = 0;
+        }
+    }
     ValidarAnestesiologoDisponible();
 }
 
 async Task OnMedicoCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdMedico=int.TryParse(e.Value?.ToString(),out var id)?id:0;AsegurarLocalidadCirugia();await CargarSlotsDisponiblesCirugiaAsync();ValidarAnestesiologoDisponible();}
-async Task OnLocalidadCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdLocalidad=int.TryParse(e.Value?.ToString(),out var id)?id:0;await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}
+async Task OnLocalidadCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdLocalidad=int.TryParse(e.Value?.ToString(),out var id)?id:0;if((PermitirElegirSucursalEnModal || FiltrarPorMedicoEnModal) && _cirugia.IdMedico>0 && !MedicosSoloCirugia.Any(m=>m.Id==_cirugia.IdMedico))_cirugia.IdMedico=0;await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}
 async Task OnFechaCirugiaChangedAsync(ChangeEventArgs e){if(DateTime.TryParse(e.Value?.ToString(),out var f))_cirugia.Fecha=f.Date;await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}
 void OnHoraInicioCirugiaChanged(ChangeEventArgs e){_cirugia.HoraInicio=e.Value?.ToString()??"";RecalcularHorasFinDisponibles();ValidarAnestesiologoDisponible();}
 void OnHoraFinCirugiaChanged(ChangeEventArgs e){_cirugia.HoraFin=e.Value?.ToString()??"";ValidarAnestesiologoDisponible();}
