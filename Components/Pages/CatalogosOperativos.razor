@@ -531,11 +531,12 @@
             if (!string.IsNullOrWhiteSpace(_filtro))
             {
                 var f = _filtro.Trim();
+                var filtroCategoria = f.TrimEnd('.');
                 query = query.Where(x =>
                     x.Descripcion.Contains(f, StringComparison.OrdinalIgnoreCase) ||
                     x.Codigo.Contains(f, StringComparison.OrdinalIgnoreCase) ||
                     x.Id.ToString().Contains(f, StringComparison.OrdinalIgnoreCase) ||
-                    x.Grupo.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                    (filtroCategoria.Length > 0 && x.Grupo.Contains(filtroCategoria, StringComparison.OrdinalIgnoreCase)) ||
                     x.Subgrupo.Contains(f, StringComparison.OrdinalIgnoreCase));
             }
 
@@ -757,6 +758,9 @@
     }
     private async Task Cargar()
     {
+        if (_tipo == "productos")
+            await EFactCatalog.ObtenerProductosTransfusionAsync();
+
         var tItems = Service.ObtenerCatalogoAsync(_tipo);
         var tGrupos = MuestraGrupo ? Service.ObtenerCatalogoAsync(TipoGrupo) : Task.FromResult(new List<CatalogoOperativoDto>());
         var tSubgrupos = _tipo == "productos" ? Service.ObtenerCatalogoAsync("subgrupos-productos") : Task.FromResult(new List<CatalogoOperativoDto>());

@@ -13,6 +13,8 @@ public interface IAdmisionFacturacionService
     Task<List<PacienteMascotaDto>> ObtenerMascotasPorClienteAsync(int idCliente);
     Task<List<PacienteMascotaDto>> BuscarMascotasAsync(string filtro, string origen = "");
     Task<int> GuardarMascotaAsync(PacienteMascotaDto mascota, int idUsuario);
+    Task<string?> ObtenerTipoSangreMascotaAsync(int idOrden, int nhcl);
+    Task<List<string>> ObtenerTiposSangrePorEspecieAsync(int especie);
     Task<List<CatalogoItemGenericoDto>> ObtenerEspeciesAsync();
     Task<List<CatalogoItemGenericoDto>> ObtenerRazasPorEspecieAsync(int idEspecie);
     Task<List<CatalogoItemGenericoDto>> ObtenerColoresAsync();
@@ -400,8 +402,97 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         throw new InvalidOperationException("SQL Server no confirmó el guardado del propietario.");
     }
 
+    private bool _tipoSangrePreparado;
+
+    private async Task PrepararTipoSangreAsync()
+    {
+        if (_tipoSangrePreparado) return;
+
+        await _db.ExecuteAsync("""
+            IF COL_LENGTH('dbo.vt_pacientes', 'mas_tipo_sangre') IS NULL
+                OR OBJECT_ID('dbo.vt_tipos_sangre_especie', 'U') IS NULL
+            BEGIN
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+                DECLARE @Resultado int;
+                EXEC @Resultado = sys.sp_getapplock @Resource = 'vt_pacientes.mas_tipo_sangre',
+                    @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000;
+                IF @Resultado < 0
+                    THROW 50001, 'No se pudo preparar el campo de tipo de sangre.', 1;
+                IF COL_LENGTH('dbo.vt_pacientes', 'mas_tipo_sangre') IS NULL
+                    ALTER TABLE dbo.vt_pacientes ADD mas_tipo_sangre nvarchar(50) NULL;
+                IF OBJECT_ID('dbo.vt_tipos_sangre_especie', 'U') IS NULL
+                    CREATE TABLE dbo.vt_tipos_sangre_especie (
+                        especie_id int NOT NULL,
+                        tipo_sangre nvarchar(50) COLLATE Latin1_General_100_CI_AS NOT NULL,
+                        PRIMARY KEY (especie_id, tipo_sangre)
+                    );
+                COMMIT TRANSACTION;
+            END;
+            """);
+        _tipoSangrePreparado = true;
+    }
+
+    public async Task<List<string>> ObtenerTiposSangrePorEspecieAsync(int especie)
+    {
+        if (especie <= 0) return [];
+        await PrepararTipoSangreAsync();
+        // Manual Veterinario Merck: sistema AB felino y tipificación DEA 1 canina.
+        return (await _db.QueryAsync<string>("""
+            SELECT tipo_sangre FROM dbo.vt_tipos_sangre_especie WHERE especie_id = @Especie
+            UNION
+            SELECT TRIM(mas_tipo_sangre) COLLATE Latin1_General_100_CI_AS
+            FROM dbo.vt_pacientes
+            WHERE mas_especie = @Especie AND NULLIF(TRIM(mas_tipo_sangre), '') IS NOT NULL
+            UNION
+            SELECT tipos.tipo_sangre COLLATE Latin1_General_100_CI_AS
+            FROM dbo.vt_especie e
+            CROSS APPLY (VALUES
+                (N'canino', N'DEA 1 positivo'),
+                (N'canino', N'DEA 1 positivo débil'),
+                (N'canino', N'DEA 1 negativo'),
+                (N'felino', N'A'),
+                (N'felino', N'B'),
+                (N'felino', N'AB')
+            ) tipos(grupo, tipo_sangre)
+            WHERE e.especie_id = @Especie
+                AND tipos.grupo = CASE
+                    WHEN LOWER(TRIM(e.especie_descripcion)) IN
+                        (N'canino', N'caninos', N'perro', N'perros', N'canis lupus familiaris', N'canis familiaris') THEN N'canino'
+                    WHEN LOWER(TRIM(e.especie_descripcion)) IN
+                        (N'felino', N'felinos', N'gato', N'gatos', N'felis catus') THEN N'felino'
+                END
+            ORDER BY tipo_sangre
+            """, new { Especie = especie })).ToList();
+    }
+
+    private const string RegistrarTipoSangreSql = """
+
+        IF @Guardado > 0 AND @MasEspecie > 0 AND NULLIF(@TipoSangre, '') IS NOT NULL
+            INSERT INTO dbo.vt_tipos_sangre_especie (especie_id, tipo_sangre)
+            SELECT @MasEspecie, @TipoSangre
+            WHERE NOT EXISTS (
+                SELECT 1 FROM dbo.vt_tipos_sangre_especie WITH (UPDLOCK, HOLDLOCK)
+                WHERE especie_id = @MasEspecie AND tipo_sangre = @TipoSangre
+            );
+        COMMIT TRANSACTION;
+        SELECT @Guardado;
+        """;
+
+    public async Task<string?> ObtenerTipoSangreMascotaAsync(int idOrden, int nhcl)
+    {
+        await PrepararTipoSangreAsync();
+        return await _db.ExecuteScalarAsync<string?>("""
+            SELECT p.mas_tipo_sangre
+            FROM dbo.vt_pacientes p
+            INNER JOIN dbo.vt_ordenAtencion o ON o.ordenAten_nhcl = p.mas_nhcl
+            WHERE o.ordenAten_id = @IdOrden AND p.mas_nhcl = @Nhcl
+            """, new { IdOrden = idOrden, Nhcl = nhcl });
+    }
+
     public async Task<List<PacienteMascotaDto>> ObtenerMascotasPorClienteAsync(int idCliente)
     {
+        await PrepararTipoSangreAsync();
         const string sql = @"
             SELECT
                 p.mas_nhcl AS MasNhcl,
@@ -410,6 +501,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 RTRIM(ISNULL(c.pa_cedula, '')) AS ClienteCedula,
                 RTRIM(ISNULL(c.pa_movil, '')) AS ClienteTelefono,
                 RTRIM(ISNULL(p.mas_nombre, '')) AS MasNombre,
+                p.mas_tipo_sangre AS MasTipoSangre,
                 RTRIM(ISNULL(p.mas_origen, 'M')) AS MasOrigen,
                 CASE WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'H' THEN 2 WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 1 ELSE 3 END AS MasSexo,
                 RTRIM(ISNULL(s.sexo, CASE WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'H' THEN 'Hembra' WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 'Macho' ELSE 'Indeterminado' END)) AS SexoDescripcion,
@@ -461,6 +553,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<List<PacienteMascotaDto>> BuscarMascotasAsync(string filtro, string origen = "")
     {
+        await PrepararTipoSangreAsync();
         const string sql = @"
             SELECT TOP 100
                 p.mas_nhcl AS MasNhcl,
@@ -469,6 +562,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 RTRIM(ISNULL(c.pa_cedula, '')) AS ClienteCedula,
                 RTRIM(ISNULL(c.pa_movil, '')) AS ClienteTelefono,
                 RTRIM(ISNULL(p.mas_nombre, '')) AS MasNombre,
+                p.mas_tipo_sangre AS MasTipoSangre,
                 RTRIM(ISNULL(p.mas_origen, 'M')) AS MasOrigen,
                 CASE WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'H' THEN 2 WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 1 ELSE 3 END AS MasSexo,
                 RTRIM(ISNULL(s.sexo, CASE WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'H' THEN 'Hembra' WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'M' THEN 'Macho' ELSE 'Indeterminado' END)) AS SexoDescripcion,
@@ -526,6 +620,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<int> GuardarMascotaAsync(PacienteMascotaDto mascota, int idUsuario)
     {
+        var tipoSangre = mascota.MasTipoSangre is { } valor
+            ? string.Join(" ", valor.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+            : null;
+        if (tipoSangre?.Length > 50)
+            throw new InvalidOperationException("El tipo de sangre admite hasta 50 caracteres.");
+
+        await PrepararTipoSangreAsync();
         try
         {
             if (mascota.Fallecido && mascota.MotivoFallece == -1)
@@ -572,8 +673,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             if (mascota.MasNhcl == 0)
             {
                 const string insertSql = @"
+                    SET XACT_ABORT ON;
+                    BEGIN TRANSACTION;
                     INSERT INTO vt_pacientes (
-                        mas_idcliente, mas_nombre, mas_sexo, mas_castrado, mas_especie,
+                        mas_idcliente, mas_nombre, mas_sexo, mas_castrado, mas_especie, mas_tipo_sangre,
                         mas_raza, mas_otros, mas_fechanace, mas_observacion, mas_estado,
                         mas_fechaingreso, mas_ultimamodi, mas_usuariomodi, mas_origen, mas_colortriaje,
                         mas_microchip, fallecido, fechafallecido, motivofallece,
@@ -582,7 +685,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         tue_sectorbarrio, tue_provincia, tue_ciudad
                     )
                     VALUES (
-                        @MasIdCliente, @MasNombre, @MasSexo, @MasCastrado, @MasEspecie,
+                        @MasIdCliente, @MasNombre, @MasSexo, @MasCastrado, @MasEspecie, NULLIF(@TipoSangre, ''),
                         @MasRaza, @MasOtros, @MasFechaNace, @MasObservacion, 'A',
                         GETDATE(), GETDATE(), @IdUsuario, @MasOrigen, @MasColorTriaje,
                         @MasMicrochip, @Fallecido, @FechaFallecido, @MotivoFallece,
@@ -590,12 +693,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         @TueOtraCategoria, @TueFormaObtencion, @TueOtraObtencion, @TueRegion,
                         @TueSectorBarrio, @TueProvincia, @TueCiudad
                     );
-                    SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                    DECLARE @Guardado int = CAST(SCOPE_IDENTITY() AS int);" + RegistrarTipoSangreSql;
 
                 int nuevoNhcl = await _db.ExecuteScalarAsync<int>(insertSql, new
                 {
                     mascota.MasIdCliente,
                     mascota.MasNombre,
+                    TipoSangre = tipoSangre,
                     MasSexo = sexoChar,
                     MasCastrado = castradoChar,
                     mascota.MasEspecie,
@@ -628,8 +732,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             else
             {
                 const string updateSql = @"
+                    SET XACT_ABORT ON;
+                    BEGIN TRANSACTION;
                     UPDATE vt_pacientes SET
                         mas_nombre = @MasNombre,
+                        mas_tipo_sangre = NULLIF(@TipoSangre, ''),
                         mas_sexo = @MasSexo,
                         mas_castrado = @MasCastrado,
                         mas_especie = @MasEspecie,
@@ -657,12 +764,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         tue_sectorbarrio = @TueSectorBarrio,
                         tue_provincia = @TueProvincia,
                         tue_ciudad = @TueCiudad
-                    WHERE mas_nhcl = @MasNhcl;";
+                    WHERE mas_nhcl = @MasNhcl;
+                    DECLARE @Guardado int = @@ROWCOUNT;" + RegistrarTipoSangreSql;
 
-                int rows = await _db.ExecuteAsync(updateSql, new
+                int rows = await _db.ExecuteScalarAsync<int>(updateSql, new
                 {
                     mascota.MasNhcl,
                     mascota.MasNombre,
+                    TipoSangre = tipoSangre,
                     MasSexo = sexoChar,
                     MasCastrado = castradoChar,
                     mascota.MasEspecie,

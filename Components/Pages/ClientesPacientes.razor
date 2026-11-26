@@ -15,21 +15,19 @@
 
 <div class="container-fluid py-3 clients-page">
     <!-- Encabezado -->
-    <div class="clients-hero d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded-3 bg-white">
+    <header class="clients-hero d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
         <div class="d-flex align-items-center gap-3">
             <div class="hero-icon"><i class="bi bi-people-fill"></i></div>
             <div>
-            <h4 class="mb-0 fw-bold">
-                <i class="bi bi-people-fill me-2"></i>Propietarios y Pacientes
-            </h4>
+            <h1 class="mb-0">Clientes, tutores y mascotas</h1>
             <small class="text-muted">
                 Gestión integral de propietarios, mascotas domésticas y fauna silvestre
             </small>
             </div>
         </div>
-        <div class="d-flex gap-2">
+        <div class="clients-hero-actions d-flex gap-2">
             <button class="btn btn-sm action-register-all" @onclick="IniciarRegistroCompleto">
-                <i class="bi bi-person-plus-fill me-1"></i>+ Registrar
+                <i class="bi bi-person-plus-fill me-1" aria-hidden="true"></i>Registrar
             </button>
             @if (Permisos.Permite("admision/ordenes"))
             {
@@ -38,7 +36,7 @@
                 </a>
             }
         </div>
-    </div>
+    </header>
 
     @if (!string.IsNullOrEmpty(_mensajeAlerta) && !_editandoMascotaNhcl.HasValue && !_editandoClienteId.HasValue)
     {
@@ -1904,6 +1902,7 @@
             MasOrigen = mas.MasOrigen,
             MasSexo = mas.MasSexo,
             MasCastrado = mas.MasCastrado,
+            MasTipoSangre = mas.MasTipoSangre,
             MasEspecie = mas.MasEspecie,
             EspecieDescripcion = mas.EspecieDescripcion,
             MasRaza = mas.MasRaza,
@@ -1986,6 +1985,8 @@
     {
         if (int.TryParse(e.Value?.ToString(), out int idEsp))
         {
+            if (_mascotaEditando.MasEspecie != idEsp)
+                _mascotaEditando.MasTipoSangre = null;
             _mascotaEditando.MasEspecie = idEsp;
             _nuevaEspecie = string.Empty;
             _nuevaRaza = string.Empty;
@@ -2416,6 +2417,9 @@
                                         <option value="NO">NO</option>
                                         <option value="SI">SÍ</option>
                                     </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <SelectorTipoSangre Id="mascota-tipo-sangre" @key="_mascotaEditando" Especie="@_mascotaEditando.MasEspecie" @bind-Value="_mascotaEditando.MasTipoSangre" />
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold">Fecha de Nacimiento Aprox.</label>

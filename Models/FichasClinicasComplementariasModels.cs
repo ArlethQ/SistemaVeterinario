@@ -43,7 +43,7 @@ public sealed class TransfusionDto
     public int IdOrden { get; set; }
     public int Nhcl { get; set; }
     public DateTime Fecha { get; set; } = DateTime.Now;
-    public string Producto { get; set; } = "Sangre entera";
+    public string Producto { get; set; } = "";
     public string IdentificadorUnidad { get; set; } = string.Empty;
     public DateTime? FechaVencimiento { get; set; }
     public string GrupoReceptor { get; set; } = string.Empty;

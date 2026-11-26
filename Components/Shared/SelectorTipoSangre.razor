@@ -1,0 +1,84 @@
+@inject IAdmisionFacturacionService Admision
+
+<label class="form-label small fw-bold" for="@Id">Tipo de sangre</label>
+<select id="@Id" class="form-select form-select-sm" disabled="@(Especie <= 0 || _cargando)"
+        @bind="_seleccion" @bind:after="AplicarSeleccionAsync">
+    <option value="@OpcionSinRegistrar">Sin registrar</option>
+    @foreach (var tipo in _opciones)
+    {
+        <option value="@tipo">@tipo</option>
+    }
+    @if (_seleccion != OpcionOtro && _seleccion != OpcionSinRegistrar &&
+         !_opciones.Any(x => Igual(x, _seleccion)))
+    {
+        <option value="@_seleccion">@_seleccion</option>
+    }
+    <option value="@OpcionOtro">Otro…</option>
+</select>
+@if (_seleccion == OpcionOtro)
+{
+    <label class="form-label small fw-bold mt-2" for="@(Id + "-otro")">Escribe el tipo de sangre</label>
+    <input id="@(Id + "-otro")" class="form-control form-control-sm" maxlength="50"
+           @bind="_tipoPersonalizado" @bind:after="ActualizarOtroAsync" @bind:event="oninput" />
+}
+@if (_error)
+{
+    <small class="text-danger" role="status">No se pudieron cargar los tipos de sangre.</small>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+    [Parameter] public int Especie { get; set; }
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    private const string OpcionOtro = "__otro__";
+    private const string OpcionSinRegistrar = "__sin_registrar__";
+    private int? _especieCargada;
+    private string _seleccion = OpcionSinRegistrar;
+    private string _tipoPersonalizado = "";
+    private List<string> _opciones = [];
+    private bool _cargando, _error;
+
+    private static bool Igual(string? a, string? b) =>
+        string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var especie = Especie;
+        if (_especieCargada == especie) return;
+        _especieCargada = especie;
+        _seleccion = string.IsNullOrWhiteSpace(Value) ? OpcionSinRegistrar : Value;
+        _tipoPersonalizado = "";
+        _opciones = [];
+        _error = false;
+        _cargando = especie > 0;
+        if (!_cargando) return;
+
+        try
+        {
+            var opciones = await Admision.ObtenerTiposSangrePorEspecieAsync(especie);
+            if (_especieCargada == especie)
+            {
+                _opciones = opciones;
+                _seleccion = opciones.FirstOrDefault(x => Igual(x, _seleccion)) ?? _seleccion;
+            }
+        }
+        catch
+        {
+            if (_especieCargada == especie) _error = true;
+        }
+        finally
+        {
+            if (_especieCargada == especie) _cargando = false;
+        }
+    }
+
+    private Task AplicarSeleccionAsync()
+    {
+        _tipoPersonalizado = "";
+        return ValueChanged.InvokeAsync(_seleccion is OpcionOtro or OpcionSinRegistrar ? null : _seleccion);
+    }
+
+    private Task ActualizarOtroAsync() => ValueChanged.InvokeAsync(_tipoPersonalizado);
+}

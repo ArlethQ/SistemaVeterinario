@@ -411,7 +411,7 @@ public class AuthService : IAuthService
                 (303, 'Signos y balance hídrico', 4, 'kardex/signos'),
                 (401, 'Ficha de hospitalización', 4, 'hospitalizacion/ficha'),
                 (402, 'Monitoreo 24 horas', 4, 'hospitalizacion/monitoreo'),
-                (403, 'Turnos, exámenes y transfusión', 4, 'hospitalizacion/fichas-complementarias'),
+                (403, 'Transfusiones sanguíneas', 4, 'hospitalizacion/fichas-complementarias'),
                 (404, 'Calculadora de infusiones', 4, 'hospitalizacion/calculadora-infusiones'),
                 (501, 'Pre-anestesia', 5, 'quirofano/preanestesia'),
                 (502, 'Checklist preoperatorio', 5, 'quirofano/preanestesia/checklist'),

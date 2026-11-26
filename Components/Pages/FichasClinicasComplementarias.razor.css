@@ -1,153 +1,77 @@
 .clinical-forms-page {
-    --clinical-blue: #1e3a8a;
-    --clinical-navy: #102a56;
+    --transfusion-ink: #102952;
+    --transfusion-border: #c5d9ee;
+    min-width: 0;
+    color: var(--transfusion-ink);
 }
 
 .clinical-titlebar {
-    align-items: center;
-    background: linear-gradient(120deg, var(--clinical-navy), #0d6efd);
-    border-radius: .65rem;
-    color: #fff;
     display: flex;
-    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
-    padding: 1rem 1.25rem;
+    gap: 12px 20px;
+    min-height: 92px;
+    padding: 15px 18px;
+    border: 1px solid #a8c9e8;
+    border-radius: 12px;
+    background: linear-gradient(110deg, #d4eaff, #eaf5ff 72%, #f6faff);
 }
 
-.clinical-kicker {
-    color: #9ec5fe;
-    font-size: .67rem;
+.clinical-titlebar h1 {
+    margin: 0 0 4px;
+    font-size: clamp(1.38rem, 1.05rem + 1vw, 1.9rem);
     font-weight: 800;
-    letter-spacing: .14em;
 }
 
-.patient-strip,
-.clinical-card {
-    overflow: hidden;
+.clinical-titlebar h1 i { color: #07568c; }
+.clinical-titlebar .btn { white-space: nowrap; }
+
+.clinical-forms-page .card, .history-panel {
+    min-width: 0;
+    border: 1px solid var(--transfusion-border) !important;
+    border-radius: 12px;
+    background: linear-gradient(145deg, #fff, #f1f7fe);
+    box-shadow: 0 3px 8px #173b6712;
 }
 
-.clinical-tabs {
-    display: grid;
-    gap: .65rem;
-    grid-template-columns: repeat(3, 1fr);
-}
-
-.clinical-tab {
-    align-items: center;
-    background: #fff;
-    border: 1px solid #d7dee8;
-    border-radius: .55rem;
-    box-shadow: 0 .125rem .25rem rgba(15, 23, 42, .05);
-    color: #334155;
+.section-header, .clinical-card > .card-header, .patient-strip > .card-header {
     display: flex;
-    gap: .7rem;
-    padding: .75rem .9rem;
-    text-align: left;
-}
-
-.clinical-tab:hover {
-    background: #f8fbff;
-    border-color: #86b7fe;
-}
-
-.clinical-tab.active {
-    background: linear-gradient(135deg, var(--clinical-blue), #2563eb);
-    border-color: var(--clinical-blue);
-    color: #fff;
-}
-
-.clinical-tab small {
-    display: block;
-    font-size: .72rem;
-    opacity: .75;
-}
-
-.tab-number,
-.section-index {
     align-items: center;
-    background: #e8eefc;
-    border-radius: 50%;
-    color: var(--clinical-blue);
-    display: inline-flex;
-    flex: 0 0 auto;
+    gap: 9px;
+    min-height: 40px;
+    margin: 0;
+    padding: 8px 13px;
+    border-radius: 11px 11px 0 0;
+    background: #064369 !important;
+    color: #fff;
+    font-size: .88rem;
     font-weight: 800;
-    height: 1.85rem;
-    justify-content: center;
-    width: 1.85rem;
 }
 
-.clinical-tab.active .tab-number,
-.section-header .section-index {
-    background: rgba(255, 255, 255, .95);
+.clinical-card .section-transfusion { background: #334f80 !important; }
+.clinical-card > .card-header.bg-dark { background: #075c68 !important; }
+.section-header small { display: block; font-weight: 400; }
+.clinical-card .form-label { margin-bottom: 4px; font-size: .78rem; font-weight: 700; }
+.clinical-forms-page ::deep :is(.form-control, .form-select) {
+    border-color: var(--transfusion-border);
+    border-radius: 7px;
 }
 
-.section-header {
-    align-items: center;
-    color: #fff;
-    display: flex;
-    gap: .65rem;
-    padding: .55rem .85rem;
+.history-table { border-radius: 0 0 11px 11px; }
+.history-table th {
+    --bs-table-bg: #cfe4f9;
+    --bs-table-color: var(--transfusion-ink);
+    white-space: nowrap;
 }
-
-.section-header small {
-    display: block;
-    font-weight: 400;
-    margin-top: .1rem;
-    opacity: .82;
+.history-table .table > :not(caption) > * > * {
+    padding: 9px 10px;
+    border-inline: 0;
+    border-bottom-color: #d7e5f3;
 }
-
-.section-turno { background: var(--clinical-blue); }
-.section-examen { background: #087990; }
-.section-transfusion { background: #a61e2c; }
-
-.clinical-card .form-label {
-    color: #475569;
-    font-size: .78rem;
-    font-weight: 650;
-    margin-bottom: .2rem;
-}
-
-.clinical-card .form-control,
-.clinical-card .form-select {
-    font-size: .83rem;
-}
-
-.history-table {
-    background: #fff;
-    border: 1px solid #dfe4ea;
-    border-radius: .5rem;
-    box-shadow: 0 .125rem .25rem rgba(15, 23, 42, .04);
-    overflow: hidden;
-}
-
-.history-table thead th {
-    background: #edf2f7;
-    border-bottom: 2px solid #cbd5e1;
-    color: #334155;
-    font-size: .73rem;
-    letter-spacing: .025em;
-    text-transform: uppercase;
-}
-
-.history-table tbody { font-size: .8rem; }
+.history-table tbody { font-size: .82rem; }
+.history-table tbody tr:nth-child(even) { --bs-table-bg: #f5f9fe; }
 
 @media (max-width: 767.98px) {
-    .clinical-titlebar {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .clinical-tabs { grid-template-columns: 1fr; }
     .patient-strip .border-end { border-right: 0 !important; }
-}
-
-@media print {
-    .clinical-titlebar {
-        background: #fff !important;
-        border: 1px solid #333;
-        color: #000;
-    }
-
-    .clinical-card,
-    .history-table { box-shadow: none !important; }
 }

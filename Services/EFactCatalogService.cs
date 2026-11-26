@@ -1,3 +1,4 @@
+using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Models;
 using Microsoft.EntityFrameworkCore;
 using Simetric.Data;
@@ -10,6 +11,7 @@ public interface IEFactCatalogService
     Task<List<CatalogoOperativoDto>> ObtenerCategoriasAsync();
     Task<List<CatalogoOperativoDto>> ObtenerSubcategoriasAsync();
     Task<List<CatalogoOperativoDto>> ObtenerProductosAsync();
+    Task<List<string>> ObtenerProductosTransfusionAsync();
     Task<List<TarifaIvaDto>> ObtenerTarifasIvaAsync();
     Task<bool> GuardarCategoriaAsync(CatalogoOperativoDto item);
     Task<bool> GuardarSubcategoriaAsync(CatalogoOperativoDto item);
@@ -23,16 +25,130 @@ public interface IEFactCatalogService
 /// </summary>
 public sealed class EFactCatalogService(
     IDbContextFactory<AppDbContext> dbFactory,
+    ISqlDataService clinica,
     SessionStateService session,
     ILogger<EFactCatalogService> logger) : IEFactCatalogService
 {
     private int UsuarioFacturacion => 1_000_000 + (session.Localidad > 0 ? session.Localidad : 1);
+    private const string CategoriaTransfusiones = "Transfusiones sanguíneas";
+
+    public async Task<List<string>> ObtenerProductosTransfusionAsync()
+    {
+        var sedeActual = session.Localidad > 0 ? session.Localidad : 1;
+        var sedes = await clinica.QueryAsync<int>("""
+            IF COL_LENGTH('dbo.vt_localidades', 'idEmpresa') IS NULL
+                SELECT CONVERT(int, loc_id)
+                FROM dbo.vt_localidades
+                WHERE ISNULL(loc_estado, 'A') = 'A';
+            ELSE
+                EXEC sys.sp_executesql N'
+                    SELECT CONVERT(int, sede.loc_id)
+                    FROM dbo.vt_localidades sede
+                    INNER JOIN dbo.vt_localidades actual
+                        ON actual.loc_id = @SedeActual AND sede.idEmpresa = actual.idEmpresa
+                    WHERE ISNULL(sede.loc_estado, ''A'') = ''A'';',
+                    N'@SedeActual int', @SedeActual = @SedeActual;
+            """, new { SedeActual = sedeActual });
+
+        List<string> opciones = [];
+        foreach (var sede in sedes.Where(id => id > 0).Append(sedeActual).Distinct().Order())
+        {
+            var productos = await PrepararProductosTransfusionAsync(1_000_000 + sede);
+            if (sede == sedeActual)
+                opciones = productos;
+        }
+
+        return opciones;
+    }
+
+    private async Task<List<string>> PrepararProductosTransfusionAsync(int usuario)
+    {
+        (string Codigo, string Nombre)[] productos =
+        [
+            ("TRANSF-01", "SANGRE ENTERA"),
+            ("TRANSF-02", "CONCENTRADO ERITROCITARIO"),
+            ("TRANSF-03", "PLASMA FRESCO CONGELADO"),
+            ("TRANSF-04", "PLASMA"),
+            ("TRANSF-05", "ALBÚMINA"),
+            ("TRANSF-06", "OTRO")
+        ];
+        var codigos = productos.Select(x => x.Codigo).ToArray();
+        var nombres = productos.Select(x => x.Nombre).ToArray();
+
+        await using var contexto = await dbFactory.CreateDbContextAsync();
+        return await contexto.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            await using var transaccion = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            var categoria = await db.Productotipos.FirstOrDefaultAsync(t =>
+                t.Idusuario == usuario && t.Descripcion == CategoriaTransfusiones);
+            if (categoria is null)
+            {
+                categoria = new Productotipo
+                {
+                    Idusuario = usuario,
+                    Descripcion = CategoriaTransfusiones,
+                    Perecible = true,
+                    Estado = true
+                };
+                db.Productotipos.Add(categoria);
+            }
+
+            var filas = await db.Productos.Where(p => p.Idusuario == usuario &&
+                ((p.CodigoPrincipal != null && codigos.Contains(p.CodigoPrincipal.Trim())) ||
+                 (p.Nombre != null && nombres.Contains(p.Nombre.Trim().ToUpper())))).ToListAsync();
+
+            var opciones = new List<string>();
+            foreach (var (codigo, nombre) in productos)
+            {
+                var producto = filas.FirstOrDefault(p =>
+                    string.Equals(p.CodigoPrincipal?.Trim(), codigo, StringComparison.OrdinalIgnoreCase))
+                    ?? filas.FirstOrDefault(p =>
+                        (nombre != "OTRO" || (categoria.Idtipoproducto > 0 && p.TipoProducto == categoria.Idtipoproducto)) &&
+                        string.Equals(p.Nombre?.Trim(), nombre, StringComparison.OrdinalIgnoreCase));
+
+                if (producto is null)
+                {
+                    producto = new Producto
+                    {
+                        Idusuario = usuario,
+                        CodigoPrincipal = codigo,
+                        Nombre = nombre,
+                        Tipocompravena = "B",
+                        UnidadMedida = "UNIDAD",
+                        FactorConversionInventario = 1m,
+                        Inventario = false,
+                        Estado = true
+                    };
+                    db.Productos.Add(producto);
+                }
+
+                if (producto.TipoProducto != categoria.Idtipoproducto)
+                {
+                    producto.TipoProductoNavigation = categoria;
+                    producto.Idsubtipo = null;
+                }
+
+                if (producto.Estado != false && producto.Nombre is { } descripcion &&
+                    descripcion.Trim().Length is > 0 and <= 60)
+                    opciones.Add(descripcion.Trim());
+            }
+
+            var nuevos = await db.SaveChangesAsync();
+            await transaccion.CommitAsync();
+            if (nuevos > 0)
+                InventarioService.InvalidarCache();
+            return opciones.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        });
+    }
 
     public async Task<List<CatalogoOperativoDto>> ObtenerCategoriasAsync()
     {
+        var usuario = UsuarioFacturacion;
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Productotipos.AsNoTracking()
-            .Where(x => x.Idusuario >= 1_000_000)
+            .Where(x => x.Idusuario >= 1_000_000 &&
+                (x.Descripcion != CategoriaTransfusiones || x.Idusuario == usuario))
             .OrderBy(x => x.Descripcion)
             .Select(x => new CatalogoOperativoDto
             {
@@ -63,9 +179,12 @@ public sealed class EFactCatalogService(
 
     public async Task<List<CatalogoOperativoDto>> ObtenerProductosAsync()
     {
+        var usuario = UsuarioFacturacion;
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Productos.AsNoTracking()
-            .Where(x => x.Idusuario >= 1_000_000)
+            .Where(x => x.Idusuario >= 1_000_000 &&
+                (x.TipoProductoNavigation == null ||
+                 x.TipoProductoNavigation.Descripcion != CategoriaTransfusiones || x.Idusuario == usuario))
             .OrderBy(x => x.Nombre)
             .Select(x => new CatalogoOperativoDto
             {

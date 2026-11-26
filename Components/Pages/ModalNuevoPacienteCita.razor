@@ -449,6 +449,9 @@ else if (_pasoActual == PasoModal.FormularioMascota)
                             <option value="SI">SÍ</option>
                         </select>
                     </div>
+                    <div class="col-md-3">
+                        <SelectorTipoSangre Id="cita-mascota-tipo-sangre" @key="_mascotaEditando" Especie="@_mascotaEditando.MasEspecie" @bind-Value="_mascotaEditando.MasTipoSangre" />
+                    </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-bold">Fecha de Nacimiento Aprox.</label>
                         <InputDate class="form-control form-control-sm" @bind-Value="_mascotaEditando.MasFechaNace" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
@@ -1006,6 +1009,8 @@ else if (_pasoActual == PasoModal.FormularioMascota)
     {
         if (int.TryParse(e.Value?.ToString(), out int idEsp))
         {
+            if (_mascotaEditando.MasEspecie != idEsp)
+                _mascotaEditando.MasTipoSangre = null;
             _mascotaEditando.MasEspecie = idEsp;
             _razas = await AdmisionService.ObtenerRazasPorEspecieAsync(idEsp);
             _mascotaEditando.MasRaza = _razas.FirstOrDefault()?.Id ?? 0;
