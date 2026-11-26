@@ -160,9 +160,67 @@ public sealed class EFactCatalogService(
             .ToListAsync();
     }
 
+    private static readonly string[] SubcategoriasProcedimientosProtegidas =
+    [
+        "Vacunación",
+        "Desparasitación",
+        "Antiparasitario externo"
+    ];
+
+    private static bool EsSubcategoriaProtegida(string? descripcion)
+    {
+        var texto = (descripcion ?? string.Empty).Trim();
+        return SubcategoriasProcedimientosProtegidas.Any(p =>
+            p.Equals(texto, StringComparison.OrdinalIgnoreCase)
+            || (p == "Vacunación" && texto.Equals("Vacunacion", StringComparison.OrdinalIgnoreCase))
+            || (p == "Desparasitación" && texto.Equals("Desparasitacion", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private async Task AsegurarSubcategoriasProcedimientosProtegidasAsync(AppDbContext db)
+    {
+        var tipoProcedimientos = await db.Productotipos
+            .FirstOrDefaultAsync(t => t.Idusuario >= 1_000_000
+                && t.Estado != false
+                && (t.Descripcion == "Procedimientos" || t.Descripcion == "Procedimiento"));
+        if (tipoProcedimientos is null) return;
+
+        var existentes = await db.Productosubtipos
+            .Where(s => s.Idtipoproducto == tipoProcedimientos.Idtipoproducto && s.Idusuario >= 1_000_000)
+            .ToListAsync();
+
+        bool cambios = false;
+        foreach (var nombre in SubcategoriasProcedimientosProtegidas)
+        {
+            var match = existentes.FirstOrDefault(e => EsSubcategoriaProtegida(e.Descripcion) &&
+                (string.Equals(e.Descripcion?.Trim(), nombre, StringComparison.OrdinalIgnoreCase)
+                 || (nombre == "Vacunación" && string.Equals(e.Descripcion?.Trim(), "Vacunacion", StringComparison.OrdinalIgnoreCase))
+                 || (nombre == "Desparasitación" && string.Equals(e.Descripcion?.Trim(), "Desparasitacion", StringComparison.OrdinalIgnoreCase))));
+            if (match is null)
+            {
+                db.Productosubtipos.Add(new Productosubtipo
+                {
+                    Idtipoproducto = tipoProcedimientos.Idtipoproducto,
+                    Idusuario = tipoProcedimientos.Idusuario > 0 ? tipoProcedimientos.Idusuario : UsuarioFacturacion,
+                    Descripcion = nombre,
+                    Estado = "A"
+                });
+                cambios = true;
+            }
+            else if (match.Estado == "I")
+            {
+                match.Estado = "A";
+                cambios = true;
+            }
+        }
+
+        if (cambios)
+            await db.SaveChangesAsync();
+    }
+
     public async Task<List<CatalogoOperativoDto>> ObtenerSubcategoriasAsync()
     {
         await using var db = await dbFactory.CreateDbContextAsync();
+        await AsegurarSubcategoriasProcedimientosProtegidasAsync(db);
         return await db.Productosubtipos.AsNoTracking()
             .Where(x => x.Idusuario >= 1_000_000)
             .OrderBy(x => x.Descripcion)
@@ -279,6 +337,8 @@ public sealed class EFactCatalogService(
                 entity = await db.Productosubtipos.FirstOrDefaultAsync(x =>
                     x.Idsubtipo == item.Id && x.Idusuario >= 1_000_000)
                     ?? throw new InvalidOperationException("La subcategoría no pertenece a esta veterinaria.");
+                if (EsSubcategoriaProtegida(entity.Descripcion) && (item.Estado == "I" || !string.Equals(entity.Descripcion?.Trim(), item.Descripcion.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidOperationException("Esta subcategoría es obligatoria del sistema y no se puede eliminar ni renombrar.");
             }
             else
             {

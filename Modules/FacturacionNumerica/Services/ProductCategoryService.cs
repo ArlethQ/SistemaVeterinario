@@ -202,6 +202,16 @@ namespace Simetric.Services
             if (item == null)
                 throw new InvalidOperationException("No tiene permisos para desactivar esta subcategoria.");
 
+            var descNorm = NormalizarDescripcion(item.Descripcion);
+            if (descNorm.Equals("Vacunación", StringComparison.OrdinalIgnoreCase)
+                || descNorm.Equals("Vacunacion", StringComparison.OrdinalIgnoreCase)
+                || descNorm.Equals("Desparasitación", StringComparison.OrdinalIgnoreCase)
+                || descNorm.Equals("Desparasitacion", StringComparison.OrdinalIgnoreCase)
+                || descNorm.Equals("Antiparasitario externo", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Esta subcategoría es obligatoria del sistema y no se puede eliminar.");
+            }
+
             item.Estado = "I";
             await context.SaveChangesAsync();
         }

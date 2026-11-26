@@ -1,0 +1,238 @@
+@inject IConsultaExternaService ConsultaService
+@inject IKardexService KardexService
+@inject SessionStateService Session
+
+@if (!string.IsNullOrWhiteSpace(_mensaje))
+{
+    <div class="alert @(_esError ? "alert-danger" : "alert-success") py-2 small mb-3" role="alert">@_mensaje</div>
+}
+
+<div class="row g-3">
+    @if (!SoloLectura)
+    {
+        <div class="col-xl-4">
+            <section class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                    <span>Nuevo registro</span>
+                    @if (!string.IsNullOrWhiteSpace(TipoFijo))
+                    {
+                        <span class="badge text-bg-primary">@TipoFijo</span>
+                    }
+                </div>
+                <div class="card-body d-flex flex-column gap-3">
+                    @if (string.IsNullOrWhiteSpace(TipoFijo))
+                    {
+                        <label class="small fw-semibold">
+                            Tipo
+                            <select class="form-select mt-1" @bind="_nueva.Tipo">
+                                <option value="Vacunación">Vacunación</option>
+                                <option value="Desparasitación">Desparasitación</option>
+                                <option value="Antiparasitario externo">Antiparasitario externo</option>
+                            </select>
+                        </label>
+                    }
+                    <label class="small fw-semibold">
+                        Vacuna o producto
+                        <select class="form-select mt-1" @bind="_nueva.IdProducto">
+                            <option value="0">Seleccione</option>
+                            @foreach (var producto in _catalogo)
+                            {
+                                <option value="@producto.Id">@producto.Descripcion</option>
+                            }
+                        </select>
+                    </label>
+                    <div class="row g-2">
+                        <label class="col-sm-6 small fw-semibold">
+                            Fecha de aplicación
+                            <input type="date" class="form-control mt-1" @bind="_nueva.Fecha" />
+                        </label>
+                        <label class="col-sm-6 small fw-semibold">
+                            Próximo refuerzo
+                            <input type="date" class="form-control mt-1" value="@FechaRefuerzoTexto" @onchange="CambiarFechaRefuerzo" />
+                        </label>
+                    </div>
+                    <label class="small fw-semibold">
+                        Observaciones
+                        <textarea class="form-control mt-1" rows="4" maxlength="2000" @bind="_nueva.ObservacionVacuna"
+                                  placeholder="Lote, fabricante, sitio de aplicación o reacción observada"></textarea>
+                    </label>
+                    <SaveButton class="btn btn-primary w-100 fw-semibold" Disabled="@_guardando" OnClick="GuardarAsync">
+                        @(_guardando ? "Guardando..." : "Guardar registro")
+                    </SaveButton>
+                </div>
+            </section>
+        </div>
+    }
+    <div class="@(SoloLectura ? "col-12" : "col-xl-8")">
+        <section class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Historial de vacunación</strong>
+                <span class="badge text-bg-primary">@_vacunas.Count registros</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-primary">
+                        <tr>
+                            <th>Aplicación</th>
+                            <th>Tipo</th>
+                            <th>Vacuna / producto</th>
+                            <th>Próximo refuerzo</th>
+                            <th>Observaciones</th>
+                            <th>Registrado por</th>
+                            @if (!SoloLectura)
+                            {
+                                <th></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (_vacunas.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="@(SoloLectura ? 6 : 7)" class="text-center text-muted py-4">
+                                    El paciente no tiene vacunas registradas.
+                                </td>
+                            </tr>
+                        }
+                        @foreach (var vacuna in _vacunas)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@vacuna.Fecha.ToString("dd/MM/yyyy")</td>
+                                <td>@vacuna.Tipo</td>
+                                <td class="fw-semibold">@(string.IsNullOrWhiteSpace(vacuna.NombreVacuna) ? "Sin producto asociado" : vacuna.NombreVacuna.ToUpperInvariant())</td>
+                                <td class="text-nowrap">@(vacuna.FechaRevacunacion?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                <td>@vacuna.ObservacionVacuna</td>
+                                <td>@vacuna.NombreMedico</td>
+                                @if (!SoloLectura)
+                                {
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => EliminarAsync(vacuna.VacunaId)">
+                                            Eliminar
+                                        </button>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int Nhcl { get; set; }
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int IdCliente { get; set; }
+    [Parameter] public string? TipoFijo { get; set; }
+    [Parameter] public bool SoloLectura { get; set; }
+    [Parameter] public EventCallback OnGuardado { get; set; }
+
+    private string? _mensaje;
+    private bool _esError;
+    private bool _guardando;
+    private int _nhclCargado;
+    private int _idClienteResuelto;
+    private int _idOrdenResuelto;
+    private List<CatalogoItemGenericoDto> _catalogo = [];
+    private List<VacunaPacienteDto> _vacunas = [];
+    private VacunaPacienteDto _nueva = new();
+
+    private string FechaRefuerzoTexto => _nueva.FechaRevacunacion?.ToString("yyyy-MM-dd") ?? string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_catalogo.Count == 0)
+            _catalogo = await ConsultaService.ObtenerCatalogoVacunasAsync();
+
+        if (!string.IsNullOrWhiteSpace(TipoFijo))
+            _nueva.Tipo = TipoFijo;
+        else if (string.IsNullOrWhiteSpace(_nueva.Tipo))
+            _nueva.Tipo = "Vacunación";
+
+        if (Nhcl > 0 && Nhcl != _nhclCargado)
+        {
+            _nhclCargado = Nhcl;
+            _idClienteResuelto = IdCliente;
+            _idOrdenResuelto = IdOrden;
+
+            if (_idClienteResuelto <= 0 || _idOrdenResuelto <= 0)
+            {
+                var cab = await KardexService.ObtenerCabeceraPacienteAsync(IdOrden, Nhcl);
+                if (cab is not null)
+                {
+                    if (_idClienteResuelto <= 0) _idClienteResuelto = cab.ClienteCodigo;
+                    if (_idOrdenResuelto <= 0) _idOrdenResuelto = cab.OrdenAtencionId;
+                }
+            }
+
+            _vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(Nhcl);
+            _nueva = CrearNuevaVacuna();
+        }
+    }
+
+    private VacunaPacienteDto CrearNuevaVacuna() => new()
+    {
+        Tipo = !string.IsNullOrWhiteSpace(TipoFijo) ? TipoFijo : "Vacunación",
+        Fecha = DateTime.Today,
+        FechaRevacunacion = DateTime.Today.AddYears(1)
+    };
+
+    private void CambiarFechaRefuerzo(ChangeEventArgs e)
+    {
+        _nueva.FechaRevacunacion = DateTime.TryParse(e.Value?.ToString(), out var fecha) ? fecha.Date : null;
+    }
+
+    private async Task GuardarAsync()
+    {
+        _mensaje = null;
+        if (Nhcl <= 0) { MostrarError("Seleccione un paciente."); return; }
+        if (_nueva.IdProducto <= 0) { MostrarError("Seleccione la vacuna o producto aplicado."); return; }
+        if (_nueva.Fecha.Date > DateTime.Today) { MostrarError("La fecha de aplicación no puede ser futura."); return; }
+        if (_nueva.FechaRevacunacion.HasValue && _nueva.FechaRevacunacion.Value.Date < _nueva.Fecha.Date)
+        {
+            MostrarError("El próximo refuerzo no puede ser anterior a la aplicación.");
+            return;
+        }
+
+        _guardando = true;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(TipoFijo))
+                _nueva.Tipo = TipoFijo;
+            _nueva.Nhcl = Nhcl;
+            _nueva.Orden = IdOrden > 0 ? IdOrden : _idOrdenResuelto;
+            int clienteId = IdCliente > 0 ? IdCliente : _idClienteResuelto;
+
+            await ConsultaService.AgregarVacunaAsync(_nueva, Session.IdUser, clienteId);
+            _vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(Nhcl);
+            _nueva = CrearNuevaVacuna();
+            _esError = false;
+            _mensaje = "Registro guardado correctamente.";
+            if (OnGuardado.HasDelegate)
+                await OnGuardado.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No se pudo guardar el registro: {ex.Message}");
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private async Task EliminarAsync(int vacunaId)
+    {
+        await ConsultaService.EliminarVacunaAsync(vacunaId, Session.IdUser);
+        _vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(Nhcl);
+        _esError = false;
+        _mensaje = "Registro eliminado.";
+    }
+
+    private void MostrarError(string mensaje)
+    {
+        _esError = true;
+        _mensaje = mensaje;
+    }
+}

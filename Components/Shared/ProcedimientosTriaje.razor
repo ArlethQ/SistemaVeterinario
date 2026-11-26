@@ -16,69 +16,78 @@
     @if (!SoloLectura)
     {
         <fieldset class="row g-2 m-0 mb-3 p-2 bg-light border rounded align-items-end" disabled="@(_cargandoCatalogo || _agregando)">
-            <label class="col-md-2 small fw-semibold">
-                Categoría de servicio
-                <input class="form-control form-control-sm" value="Procedimientos" readonly />
-            </label>
-            <label class="col-md-2 small fw-semibold">
-                Subcategoría
-                <select class="form-select form-select-sm" @bind="_subcategoria" @bind:after="LimpiarSeleccion">
-                    <option value="0">Todas las subcategorías</option>
-                    @foreach (var grupo in _subcategorias)
+            <label class="@(EsTipoVacunacion ? "col-md-4" : "col-md-3") small fw-semibold">
+                Tipo de procedimiento
+                <select class="form-select form-select-sm" @bind="_tipoSeleccionadoKey" @bind:after="OnTipoProcedimientoChanged">
+                    <option value="0">Todos los tipos</option>
+                    @foreach (var opt in _opcionesTipoProcedimiento)
                     {
-                        <option value="@grupo.IdSubgrupo">@grupo.Subgrupo</option>
+                        <option value="@opt.Key">@opt.Label</option>
                     }
                 </select>
             </label>
-            <div class="col-md-4">
-                <label class="form-label small fw-semibold mb-1" for="@($"buscar-procedimiento-{_identificador}")">Tipo de servicio (Catálogo PRODUCTO)</label>
-                <div class="input-group input-group-sm">
-                    <input id="@($"buscar-procedimiento-{_identificador}")" type="search" class="form-control" placeholder="Buscar por nombre o código"
-                           @bind="_busqueda" @bind:event="oninput" @bind:after="AbrirSugerencias" />
-                    <button type="button" class="btn btn-outline-secondary" aria-label="Mostrar procedimientos"
-                            aria-expanded="@_mostrarSugerencias" @onclick="() => _mostrarSugerencias = !_mostrarSugerencias">
-                        <i class="bi bi-chevron-down"></i>
+            @if (!EsTipoVacunacion)
+            {
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold mb-1" for="@($"buscar-procedimiento-{_identificador}")">Servicio</label>
+                    <div class="input-group input-group-sm">
+                        <input id="@($"buscar-procedimiento-{_identificador}")" type="search" class="form-control" placeholder="Buscar por nombre o código"
+                               @bind="_busqueda" @bind:event="oninput" @bind:after="AbrirSugerencias" />
+                        <button type="button" class="btn btn-outline-secondary" aria-label="Mostrar procedimientos"
+                                aria-expanded="@_mostrarSugerencias" @onclick="() => _mostrarSugerencias = !_mostrarSugerencias">
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
+                    </div>
+                    @if (_mostrarSugerencias)
+                    {
+                        <div class="position-relative">
+                            <div class="list-group position-absolute start-0 end-0 shadow-sm overflow-auto z-3" style="max-height: 12rem;">
+                                @foreach (var procedimiento in Coincidencias)
+                                {
+                                    <button type="button" class="list-group-item list-group-item-action small py-1"
+                                            @onclick="() => Seleccionar(procedimiento)">
+                                        @procedimiento.Descripcion <small class="text-muted">@procedimiento.Codigo</small>
+                                    </button>
+                                }
+                                @if (!Coincidencias.Any())
+                                {
+                                    <div class="list-group-item small text-muted">No se encontraron procedimientos disponibles.</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+                <label class="col-md-1 small fw-semibold">
+                    Cant.
+                    <input type="number" min="1" class="form-control form-control-sm" @bind="_cantidad" />
+                </label>
+                <label class="col-md-3 small fw-semibold">
+                    Observaciones
+                    <input class="form-control form-control-sm" maxlength="250" @bind="_observaciones" />
+                </label>
+                <div class="col-md-1">
+                    <button type="button" class="btn btn-sm btn-primary w-100" aria-label="Agregar procedimiento"
+                            disabled="@(_cargando || _seleccion is null || _cantidad < 1)" @onclick="AgregarSeleccionAsync">
+                        <i class="bi bi-plus-lg"></i>
                     </button>
                 </div>
-                @if (_mostrarSugerencias)
-                {
-                    <div class="position-relative">
-                        <div class="list-group position-absolute start-0 end-0 shadow-sm overflow-auto z-3" style="max-height: 12rem;">
-                            @foreach (var procedimiento in Coincidencias)
-                            {
-                                <button type="button" class="list-group-item list-group-item-action small py-1"
-                                        @onclick="() => Seleccionar(procedimiento)">
-                                    @procedimiento.Descripcion <small class="text-muted">@procedimiento.Codigo</small>
-                                </button>
-                            }
-                            @if (!Coincidencias.Any())
-                            {
-                                <div class="list-group-item small text-muted">No se encontraron procedimientos disponibles.</div>
-                            }
-                        </div>
-                    </div>
-                }
-            </div>
-            <label class="col-md-1 small fw-semibold">
-                Cant.
-                <input type="number" min="1" class="form-control form-control-sm" @bind="_cantidad" />
-            </label>
-            <label class="col-md-2 small fw-semibold">
-                Observaciones
-                <input class="form-control form-control-sm" maxlength="250" @bind="_observaciones" />
-            </label>
-            <div class="col-md-1">
-                <button type="button" class="btn btn-sm btn-primary w-100" aria-label="Agregar procedimiento"
-                        disabled="@(_cargando || _seleccion is null || _cantidad < 1)" @onclick="AgregarSeleccionAsync">
-                    <i class="bi bi-plus-lg"></i>
-                </button>
-            </div>
+            }
         </fieldset>
+        @if (EsTipoVacunacion && TieneOrden)
+        {
+            <div class="mb-3">
+                <VacunacionPanel @key="(Nhcl, _tipoVacunacionFijo)"
+                                 Nhcl="@Nhcl"
+                                 IdOrden="@IdOrden"
+                                 TipoFijo="@_tipoVacunacionFijo"
+                                 SoloLectura="@SoloLectura" />
+            </div>
+        }
         @if (_cargandoCatalogo)
         {
             <p class="text-muted small" role="status">Cargando catálogo…</p>
         }
-        else if (_catalogo.Count == 0 && _mensaje is null)
+        else if (!EsTipoVacunacion && _catalogo.Count == 0 && _mensaje is null)
         {
             <p class="text-muted small">No se encontraron artículos activos de Procedimientos para la sede de esta orden.</p>
         }
@@ -122,8 +131,17 @@
     [Parameter] public bool SoloLectura { get; set; }
     private bool TieneOrden => IdOrden > 0 && Nhcl > 0;
 
+    private sealed record OpcionTipoProcedimiento(string Key, string Label, int IdSubgrupo, string? TipoVacunacion);
+    private static readonly (string Key, string Label)[] TiposEspecialesVacunacion =
+    [
+        ("VAC:Vacunación", "Vacunación"),
+        ("VAC:Desparasitación", "Desparasitación"),
+        ("VAC:Antiparasitario externo", "Antiparasitario externo")
+    ];
+
     private List<CatalogoOperativoDto> _catalogo = [];
     private List<CatalogoOperativoDto> _subcategorias = [];
+    private List<OpcionTipoProcedimiento> _opcionesTipoProcedimiento = [];
     private List<ProcedimientoTriajeDto> _registrados = [];
     private bool _cargando = true;
     private bool _cargandoCatalogo = true;
@@ -131,12 +149,54 @@
     private bool _errorLista;
     private string? _mensaje;
     private string _busqueda = "";
+    private string _tipoSeleccionadoKey = "0";
     private int _subcategoria;
+    private string? _tipoVacunacionFijo;
+    private bool EsTipoVacunacion => !string.IsNullOrWhiteSpace(_tipoVacunacionFijo);
     private int _cantidad = 1;
     private string _observaciones = "";
     private readonly string _identificador = Guid.NewGuid().ToString("N");
     private bool _mostrarSugerencias;
     private CatalogoOperativoDto? _seleccion;
+
+    private static string? DetectarTipoVacunacion(string? nombre)
+    {
+        var texto = (nombre ?? string.Empty).Trim();
+        if (texto.Equals("Vacunación", StringComparison.OrdinalIgnoreCase) ||
+            texto.Equals("Vacunacion", StringComparison.OrdinalIgnoreCase) ||
+            texto.Equals("Vacunas", StringComparison.OrdinalIgnoreCase))
+            return "Vacunación";
+        if (texto.Equals("Desparasitación", StringComparison.OrdinalIgnoreCase) ||
+            texto.Equals("Desparasitacion", StringComparison.OrdinalIgnoreCase))
+            return "Desparasitación";
+        if (texto.Equals("Antiparasitario externo", StringComparison.OrdinalIgnoreCase))
+            return "Antiparasitario externo";
+        return null;
+    }
+
+    private void ConstruirOpcionesTipoProcedimiento()
+    {
+        var opciones = new List<OpcionTipoProcedimiento>();
+        foreach (var (key, label) in TiposEspecialesVacunacion)
+            opciones.Add(new OpcionTipoProcedimiento(key, label, 0, label));
+
+        foreach (var grupo in _subcategorias)
+        {
+            if (DetectarTipoVacunacion(grupo.Subgrupo) is not null)
+                continue;
+            int idSub = grupo.IdSubgrupo ?? 0;
+            opciones.Add(new OpcionTipoProcedimiento($"SUB:{idSub}", grupo.Subgrupo, idSub, null));
+        }
+        _opcionesTipoProcedimiento = opciones;
+    }
+
+    private void OnTipoProcedimientoChanged()
+    {
+        var opt = _opcionesTipoProcedimiento.FirstOrDefault(o => o.Key == _tipoSeleccionadoKey);
+        _subcategoria = opt?.IdSubgrupo ?? 0;
+        _tipoVacunacionFijo = opt?.TipoVacunacion;
+        LimpiarSeleccion();
+    }
 
     private void LimpiarSeleccion()
     {
@@ -182,11 +242,16 @@
                 _catalogo = await Admision.ObtenerCatalogoProcedimientosTriajeAsync(IdOrden, Nhcl);
                 _subcategorias = _catalogo.Where(p => p.IdSubgrupo > 0 && !string.IsNullOrWhiteSpace(p.Subgrupo))
                     .DistinctBy(p => p.IdSubgrupo).OrderBy(p => p.Subgrupo).ToList();
+                ConstruirOpcionesTipoProcedimiento();
             }
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Error al cargar el catálogo de procedimientos");
                 _mensaje = "No se pudo cargar el catálogo de Procedimientos.";
+            }
+            finally
+            {
+                ConstruirOpcionesTipoProcedimiento();
             }
         }
         _cargandoCatalogo = false;
