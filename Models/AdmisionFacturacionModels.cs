@@ -68,6 +68,8 @@ public class PacienteMascotaDto
     public string SexoDescripcion { get; set; } = string.Empty;
     public string MasCastrado { get; set; } = "NO";
     public string? MasTipoSangre { get; set; }
+    public bool CapturaManualTipoSangre { get; set; }
+    public bool LimpiarTipoSangre { get; set; }
 
     public int MasEspecie { get; set; } = 1;
     public string EspecieDescripcion { get; set; } = string.Empty;

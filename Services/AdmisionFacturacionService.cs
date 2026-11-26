@@ -468,7 +468,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     private const string RegistrarTipoSangreSql = """
 
-        IF @Guardado > 0 AND NOT EXISTS (
+        IF @Guardado > 0 AND (@TipoSangre IS NOT NULL OR @LimpiarTipoSangre = 1) AND NOT EXISTS (
             SELECT 1
             FROM dbo.vt_pacientes
             WHERE mas_nhcl = @PacienteGuardado
@@ -629,9 +629,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     public async Task<int> GuardarMascotaAsync(PacienteMascotaDto mascota, int idUsuario)
     {
-        var tipoSangre = mascota.MasTipoSangre is { } valor
+        var tipoSangre = mascota.MasTipoSangre is { } valor && !string.IsNullOrWhiteSpace(valor)
             ? string.Join(" ", valor.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
             : null;
+        if (mascota.CapturaManualTipoSangre && string.IsNullOrWhiteSpace(tipoSangre))
+            throw new InvalidOperationException("Escribe el tipo de sangre antes de guardar, o selecciona Sin registrar.");
         if (tipoSangre?.Length > 50)
             throw new InvalidOperationException("El tipo de sangre admite hasta 50 caracteres.");
 
@@ -710,6 +712,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     mascota.MasIdCliente,
                     mascota.MasNombre,
                     TipoSangre = tipoSangre,
+                    mascota.LimpiarTipoSangre,
                     MasSexo = sexoChar,
                     MasCastrado = castradoChar,
                     mascota.MasEspecie,
@@ -746,7 +749,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     BEGIN TRANSACTION;
                     UPDATE vt_pacientes SET
                         mas_nombre = @MasNombre,
-                        mas_tipo_sangre = NULLIF(@TipoSangre, ''),
+                        mas_tipo_sangre = CASE
+                            WHEN @LimpiarTipoSangre = 1 THEN NULL
+                            ELSE COALESCE(NULLIF(@TipoSangre, ''), mas_tipo_sangre)
+                        END,
                         mas_sexo = @MasSexo,
                         mas_castrado = @MasCastrado,
                         mas_especie = @MasEspecie,
@@ -783,6 +789,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                     mascota.MasNhcl,
                     mascota.MasNombre,
                     TipoSangre = tipoSangre,
+                    mascota.LimpiarTipoSangre,
                     MasSexo = sexoChar,
                     MasCastrado = castradoChar,
                     mascota.MasEspecie,

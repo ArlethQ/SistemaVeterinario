@@ -1638,7 +1638,10 @@
         _mensajeAlerta = string.Empty;
         _editandoClienteId = null;
         _viendoMascotaNhcl = null;
-        await CargarDatosMascotaAsync(mas);
+        await CargarPacientesClienteAsync(mas.MasIdCliente);
+        var fichaActual = ObtenerPacientes(mas.MasIdCliente).FirstOrDefault(x => x.MasNhcl == mas.MasNhcl);
+        if (fichaActual is null) return;
+        await CargarDatosMascotaAsync(fichaActual);
         _editandoMascotaNhcl = mas.MasNhcl;
     }
 
@@ -1986,7 +1989,11 @@
         if (int.TryParse(e.Value?.ToString(), out int idEsp))
         {
             if (_mascotaEditando.MasEspecie != idEsp)
+            {
                 _mascotaEditando.MasTipoSangre = null;
+                _mascotaEditando.LimpiarTipoSangre = true;
+                _mascotaEditando.CapturaManualTipoSangre = false;
+            }
             _mascotaEditando.MasEspecie = idEsp;
             _nuevaEspecie = string.Empty;
             _nuevaRaza = string.Empty;

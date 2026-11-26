@@ -1,23 +1,25 @@
 @inject IAdmisionFacturacionService Admision
 
 <label class="form-label small fw-bold" for="@Id">Tipo de sangre</label>
-<select id="@Id" class="form-select form-select-sm" disabled="@(Mascota.MasEspecie <= 0 || _cargando)"
-        @bind="_seleccion" @bind:after="AplicarSeleccion">
+<select @key="_opciones" id="@Id" class="form-select form-select-sm"
+        disabled="@(Mascota.MasEspecie <= 0 || _cargando)"
+        @bind:get="Seleccion" @bind:set="CambiarSeleccion">
     <option value="@OpcionSinRegistrar">Sin registrar</option>
     @foreach (var tipo in _opciones)
     {
-        <option value="@tipo">@tipo</option>
+        <option @key="tipo" value="@tipo">@tipo</option>
     }
-    @if (_seleccion != OpcionOtro && _seleccion != OpcionSinRegistrar && !_opciones.Contains(_seleccion))
+    @if (Seleccion is not (OpcionOtro or OpcionSinRegistrar) &&
+         !_opciones.Contains(Seleccion, StringComparer.OrdinalIgnoreCase))
     {
-        <option value="@_seleccion">@_seleccion</option>
+        <option value="@Seleccion">@Seleccion</option>
     }
     <option value="@OpcionOtro">Otro…</option>
 </select>
-@if (_seleccion == OpcionOtro)
+@if (Mascota.CapturaManualTipoSangre)
 {
     <label class="form-label small fw-bold mt-2" for="@(Id + "-otro")">Escribe el tipo de sangre</label>
-    <input id="@(Id + "-otro")" class="form-control form-control-sm" maxlength="50"
+    <input id="@(Id + "-otro")" class="form-control form-control-sm" maxlength="50" required
            @bind="Mascota.MasTipoSangre" @bind:event="oninput" />
 }
 @if (_error)
@@ -32,16 +34,37 @@
     private const string OpcionOtro = "__otro__";
     private const string OpcionSinRegistrar = "__sin_registrar__";
     private int? _especieCargada;
-    private string _seleccion = OpcionSinRegistrar;
     private List<string> _opciones = [];
     private bool _cargando, _error;
+
+    private string Seleccion
+    {
+        get
+        {
+            if (Mascota.CapturaManualTipoSangre) return OpcionOtro;
+
+            var registrado = Mascota.MasTipoSangre?.Trim();
+            if (string.IsNullOrEmpty(registrado)) return OpcionSinRegistrar;
+
+            return _opciones.FirstOrDefault(tipo =>
+                string.Equals(tipo, registrado, StringComparison.OrdinalIgnoreCase)) ?? registrado;
+        }
+    }
+
+    private void CambiarSeleccion(string? seleccion)
+    {
+        if (string.IsNullOrEmpty(seleccion)) return;
+
+        Mascota.CapturaManualTipoSangre = seleccion == OpcionOtro;
+        Mascota.LimpiarTipoSangre = seleccion == OpcionSinRegistrar;
+        Mascota.MasTipoSangre = seleccion is OpcionOtro or OpcionSinRegistrar ? null : seleccion;
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         var especie = Mascota.MasEspecie;
         if (_especieCargada == especie) return;
         _especieCargada = especie;
-        _seleccion = string.IsNullOrWhiteSpace(Mascota.MasTipoSangre)
-            ? OpcionSinRegistrar : Mascota.MasTipoSangre;
         _opciones = [];
         _error = false;
         _cargando = especie > 0;
@@ -50,12 +73,7 @@
         try
         {
             var opciones = await Admision.ObtenerTiposSangrePorEspecieAsync(especie);
-            if (_especieCargada == especie)
-            {
-                _opciones = opciones;
-                _seleccion = opciones.FirstOrDefault(x =>
-                    string.Equals(x, _seleccion, StringComparison.OrdinalIgnoreCase)) ?? _seleccion;
-            }
+            if (_especieCargada == especie) _opciones = opciones;
         }
         catch
         {
@@ -67,6 +85,4 @@
         }
     }
 
-    private void AplicarSeleccion() =>
-        Mascota.MasTipoSangre = _seleccion is OpcionOtro or OpcionSinRegistrar ? null : _seleccion;
 }
