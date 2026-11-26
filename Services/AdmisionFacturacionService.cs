@@ -1224,6 +1224,21 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             throw new InvalidOperationException("El médico seleccionado no atiende en la sucursal conectada.");
         }
 
+        // Asignar tipo de consulta automático según especialidad (salvo citas de cirugía programada tipo 3)
+        if (!orden.EsProcedimiento && orden.TipoConsulta != 3 && orden.IdEspecialidad > 0)
+        {
+            var espInfo = await _db.QueryFirstOrDefaultAsync<(string Codigo, string Descripcion)?>(
+                "SELECT RTRIM(ISNULL(es_codigo, '')) AS Codigo, RTRIM(ISNULL(es_descripcion, '')) AS Descripcion FROM vt_especialidades WHERE es_id = @IdEsp",
+                new { IdEsp = orden.IdEspecialidad });
+
+            if (espInfo.HasValue)
+            {
+                bool esMedGeneral = string.Equals(espInfo.Value.Codigo, "MG", StringComparison.OrdinalIgnoreCase)
+                    || espInfo.Value.Descripcion.Contains("MEDICINA GENERAL", StringComparison.OrdinalIgnoreCase);
+                orden.TipoConsulta = esMedGeneral ? 1 : 2;
+            }
+        }
+
 
         string etapaInicial = orden.EsProcedimiento ? "Consulta" : orden.TipoDespacho switch
         {
@@ -3145,7 +3160,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 o.ordenAten_nhcl AS Nhcl,
                 ISNULL(NULLIF(o.ordenAten_idlocalidad, 0), 1) AS IdLocalidad,
                 CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento,
-                RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad
+                ISNULL(o.ordenAten_esp_numero, 0) AS IdEspecialidad,
+                RTRIM(ISNULL(e.es_codigo, '')) AS CodigoEspecialidad,
+                RTRIM(ISNULL(e.es_descripcion, '')) AS Especialidad,
+                ISNULL((
+                    SELECT TOP (1) LTRIM(RTRIM(ISNULL(f.med_tipoconsulta, '')))
+                    FROM dbo.vt_fichamedica f
+                    WHERE f.med_orden = o.ordenAten_id
+                    ORDER BY f.sec DESC
+                ), '') AS TipoConsultaSoap
             FROM vt_ordenAtencion o
             LEFT JOIN vt_especialidades e ON e.es_id = o.ordenAten_esp_numero
             WHERE o.ordenAten_id = @IdOrden
@@ -3170,14 +3193,38 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         THEN 1 ELSE 0 END AS bit)
             """, new { IdOrden = idOrden });
 
-        if (!header.EsProcedimiento && !esCitaCirugiaSinSoap)
+        if (!esCitaCirugiaSinSoap)
         {
+            string tipoConsultaObjetivo;
+            decimal precioFallback;
+            if (header.EsProcedimiento)
+            {
+                tipoConsultaObjetivo = "PROCEDIMIENTO";
+                precioFallback = 5.00m;
+            }
+            else if (!string.IsNullOrWhiteSpace(header.TipoConsultaSoap)
+                     && !string.Equals(header.TipoConsultaSoap, "Consulta Externa", StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(header.TipoConsultaSoap, "PROCEDIMIENTO", StringComparison.OrdinalIgnoreCase))
+            {
+                tipoConsultaObjetivo = header.TipoConsultaSoap.Trim();
+                precioFallback = tipoConsultaObjetivo.Contains("ESPECIALISTA", StringComparison.OrdinalIgnoreCase) ? 50.00m : 30.00m;
+            }
+            else
+            {
+                bool esMedGeneral = header.IdEspecialidad <= 0
+                    || string.Equals(header.CodigoEspecialidad, "MG", StringComparison.OrdinalIgnoreCase)
+                    || header.Especialidad.Contains("MEDICINA GENERAL", StringComparison.OrdinalIgnoreCase);
+                tipoConsultaObjetivo = esMedGeneral ? "CONSULTA DE PLANTA" : "CONSULTA ESPECIALISTA DE LLAMADA";
+                precioFallback = esMedGeneral ? 30.00m : 50.00m;
+            }
+
             var prodConsulta = await _db.QueryFirstOrDefaultAsync<OrdenProductoQueryRow>("""
                 SELECT TOP (1)
                     p.CODIGO AS CodProducto,
                     ISNULL(NULLIF(RTRIM(p.CODIGO_PRINCIPAL), ''), 'CONS') AS CodPrincipal,
                     ISNULL(RTRIM(p.COD_AUXILIAR), '') AS CodAuxiliar,
                     RTRIM(ISNULL(p.NOMBRE, '')) AS Descripcion,
+                    CAST(ISNULL(p.VALOR_UNITARIO, 0) AS decimal(18,4)) AS PrecioUnitario,
                     ISNULL(RTRIM(p.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
                     ISNULL(RTRIM(p.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
                     p.TIPO_PRODUCTO AS TipoProducto,
@@ -3186,14 +3233,45 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
                 LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
                 WHERE ISNULL(p.ESTADO, 1) = 1
-                  AND (UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) IN ('CONSULTA', 'CONSULTAS')
-                       OR UPPER(LTRIM(RTRIM(ISNULL(p.NOMBRE, '')))) LIKE 'CONSULTA%')
-                ORDER BY CASE WHEN p.IDUSUARIO = @IdUsuario THEN 0 ELSE 1 END, p.CODIGO;
-                """, new { IdUsuario = idUsuarioCatalogo });
+                  AND UPPER(LTRIM(RTRIM(ISNULL(p.NOMBRE, '')))) = UPPER(@TipoConsulta)
+                ORDER BY
+                    CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) LIKE 'CONSULTA%' THEN 0 ELSE 1 END,
+                    CASE WHEN p.IDUSUARIO = @IdUsuario THEN 0 ELSE 1 END,
+                    p.CODIGO;
+                """, new { IdUsuario = idUsuarioCatalogo, TipoConsulta = tipoConsultaObjetivo });
 
-            var descConsulta = string.IsNullOrWhiteSpace(header.Especialidad)
-                ? "Consulta Veterinaria"
-                : $"Consulta Veterinaria - {header.Especialidad}";
+            if (prodConsulta is null && !header.EsProcedimiento)
+            {
+                prodConsulta = await _db.QueryFirstOrDefaultAsync<OrdenProductoQueryRow>("""
+                    SELECT TOP (1)
+                        p.CODIGO AS CodProducto,
+                        ISNULL(NULLIF(RTRIM(p.CODIGO_PRINCIPAL), ''), 'CONS') AS CodPrincipal,
+                        ISNULL(RTRIM(p.COD_AUXILIAR), '') AS CodAuxiliar,
+                        RTRIM(ISNULL(p.NOMBRE, '')) AS Descripcion,
+                        CAST(ISNULL(p.VALOR_UNITARIO, 0) AS decimal(18,4)) AS PrecioUnitario,
+                        ISNULL(RTRIM(p.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
+                        ISNULL(RTRIM(p.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
+                        p.TIPO_PRODUCTO AS TipoProducto,
+                        p.IDSUBTIPO AS SubtipoProducto
+                    FROM VeterinariaFacturacion.dbo.PRODUCTO p
+                    LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+                    LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s ON s.IDSUBTIPO = p.IDSUBTIPO
+                    WHERE ISNULL(p.ESTADO, 1) = 1
+                      AND (UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) IN ('CONSULTA', 'CONSULTAS')
+                           OR UPPER(LTRIM(RTRIM(ISNULL(p.NOMBRE, '')))) LIKE 'CONSULTA%')
+                    ORDER BY CASE WHEN p.IDUSUARIO = @IdUsuario THEN 0 ELSE 1 END, p.CODIGO;
+                    """, new { IdUsuario = idUsuarioCatalogo });
+            }
+
+            var descConsulta = !string.IsNullOrWhiteSpace(prodConsulta?.Descripcion)
+                ? prodConsulta.Descripcion
+                : tipoConsultaObjetivo;
+            var detalleConsulta = !header.EsProcedimiento && !string.IsNullOrWhiteSpace(header.Especialidad)
+                ? $"Orden #{idOrden} · {header.Especialidad}"
+                : $"Orden #{idOrden}";
+            var precioConsulta = prodConsulta is not null && prodConsulta.PrecioUnitario >= 0m
+                ? prodConsulta.PrecioUnitario
+                : precioFallback;
 
             resultado.Add(new ItemOrdenParaFacturaDto
             {
@@ -3203,9 +3281,9 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 CodPrincipal = !string.IsNullOrWhiteSpace(prodConsulta?.CodPrincipal) ? prodConsulta.CodPrincipal : "CONS",
                 CodAuxiliar = prodConsulta?.CodAuxiliar ?? string.Empty,
                 Descripcion = descConsulta,
-                Detalle = $"Orden #{idOrden}",
+                Detalle = detalleConsulta,
                 Cantidad = 1m,
-                PrecioUnitario = 30.00m,
+                PrecioUnitario = precioConsulta,
                 TarifaIva = NormalizarTarifaIvaProducto(prodConsulta?.PorcentajeImpuestoRaw),
                 CodigoImpuestoSri = !string.IsNullOrWhiteSpace(prodConsulta?.CodigoImpuestoSri) ? prodConsulta.CodigoImpuestoSri : "2",
                 TipoProducto = prodConsulta?.TipoProducto,
@@ -3597,7 +3675,10 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         public int Nhcl { get; set; }
         public int IdLocalidad { get; set; }
         public bool EsProcedimiento { get; set; }
+        public int IdEspecialidad { get; set; }
+        public string CodigoEspecialidad { get; set; } = string.Empty;
         public string Especialidad { get; set; } = string.Empty;
+        public string TipoConsultaSoap { get; set; } = string.Empty;
     }
 
     private sealed class OrdenProductoQueryRow

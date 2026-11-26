@@ -32,6 +32,36 @@ public sealed class EFactCatalogService(
     private int UsuarioFacturacion => 1_000_000 + (session.Localidad > 0 ? session.Localidad : 1);
     private const string CategoriaTransfusiones = "Transfusiones sanguíneas";
 
+    public static readonly HashSet<string> TiposConsultaPredeterminados = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CONSULTA DE PLANTA",
+        "CONSULTA ESPECIALISTA DE LLAMADA",
+        "PROCEDIMIENTO"
+    };
+
+    public static bool EsTipoConsultaPredeterminado(string? nombre, string? subcategoria = null)
+    {
+        var n = (nombre ?? string.Empty).Trim();
+        if (!TiposConsultaPredeterminados.Contains(n)) return false;
+        if (string.IsNullOrWhiteSpace(subcategoria)) return true;
+        return subcategoria.Trim().StartsWith("CONSULTA", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<bool> EsEntidadConsultaPredeterminadaAsync(AppDbContext db, Producto entity)
+    {
+        var nombre = (entity.Nombre ?? string.Empty).Trim();
+        if (!TiposConsultaPredeterminados.Contains(nombre)) return false;
+        if (!entity.Idsubtipo.HasValue || entity.Idsubtipo.Value <= 0) return false;
+
+        var subDesc = await db.Productosubtipos.AsNoTracking()
+            .Where(s => s.Idsubtipo == entity.Idsubtipo.Value)
+            .Select(s => s.Descripcion)
+            .FirstOrDefaultAsync();
+
+        return !string.IsNullOrWhiteSpace(subDesc)
+            && subDesc.Trim().StartsWith("CONSULTA", StringComparison.OrdinalIgnoreCase);
+    }
+
     public async Task<List<string>> ObtenerProductosTransfusionAsync()
     {
         var sedeActual = session.Localidad > 0 ? session.Localidad : 1;
@@ -368,11 +398,13 @@ public sealed class EFactCatalogService(
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             Producto entity;
+            bool esConsultaPredeterminada = false;
             if (item.Id > 0)
             {
                 entity = await db.Productos.FirstOrDefaultAsync(x =>
                     x.Codigo == item.Id && x.Idusuario >= 1_000_000)
                     ?? throw new InvalidOperationException("El producto no pertenece a esta veterinaria.");
+                esConsultaPredeterminada = await EsEntidadConsultaPredeterminadaAsync(db, entity);
             }
             else
             {
@@ -381,32 +413,40 @@ public sealed class EFactCatalogService(
             }
 
             var cultura = System.Globalization.CultureInfo.GetCultureInfo("es-EC");
-            entity.Nombre = string.Join(" ", item.Descripcion
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                .ToUpper(cultura);
+            if (!esConsultaPredeterminada)
+            {
+                entity.Nombre = string.Join(" ", item.Descripcion
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    .ToUpper(cultura);
+            }
             entity.CodigoPrincipal = string.IsNullOrWhiteSpace(item.Codigo) ? null : item.Codigo.Trim();
             entity.ValorUnitario = item.Precio;
             entity.Precio2 = item.Precio2;
             entity.Precio3 = item.Precio3;
-            bool esServicio = item.Tipo == "S" || string.Equals(item.Tipo, "SERVICIO", StringComparison.OrdinalIgnoreCase);
+            bool esServicio = esConsultaPredeterminada
+                || item.Tipo == "S"
+                || string.Equals(item.Tipo, "SERVICIO", StringComparison.OrdinalIgnoreCase);
 
-            if (item.IdGrupo.HasValue && item.IdGrupo.Value > 0)
+            if (!esConsultaPredeterminada)
             {
-                var cat = await db.Productotipos.AsNoTracking().FirstOrDefaultAsync(c =>
-                    c.Idtipoproducto == item.IdGrupo.Value && c.Idusuario >= 1_000_000);
-                if (cat != null)
+                if (item.IdGrupo.HasValue && item.IdGrupo.Value > 0)
                 {
-                    bool catEsServicio = cat.Perecible == false;
-                    if (catEsServicio != esServicio)
+                    var cat = await db.Productotipos.AsNoTracking().FirstOrDefaultAsync(c =>
+                        c.Idtipoproducto == item.IdGrupo.Value && c.Idusuario >= 1_000_000);
+                    if (cat != null)
                     {
-                        item.IdGrupo = null;
-                        item.IdSubgrupo = null;
+                        bool catEsServicio = cat.Perecible == false;
+                        if (catEsServicio != esServicio)
+                        {
+                            item.IdGrupo = null;
+                            item.IdSubgrupo = null;
+                        }
                     }
                 }
-            }
 
-            entity.TipoProducto = item.IdGrupo;
-            entity.Idsubtipo = item.IdSubgrupo;
+                entity.TipoProducto = item.IdGrupo;
+                entity.Idsubtipo = item.IdSubgrupo;
+            }
             entity.Tipocompravena = esServicio ? "S" : "B";
             entity.Inventario = esServicio ? false : item.Inventario;
             entity.SujetoFiscalizacion = esServicio ? false : item.SujetoFiscalizacion;
@@ -418,7 +458,7 @@ public sealed class EFactCatalogService(
                 : Math.Round(item.FactorConversion, 4);
             entity.Codigoimpuesto = item.CodigoImpuesto == "2" ? "2" : null;
             entity.Porcentajeimpuesto = entity.Codigoimpuesto == "2" ? item.PorcentajeImpuesto : null;
-            entity.Estado = item.Estado != "I";
+            entity.Estado = esConsultaPredeterminada || item.Estado != "I";
             await db.SaveChangesAsync();
             item.Id = entity.Codigo;
             item.Descripcion = entity.Nombre ?? item.Descripcion.Trim();
@@ -442,6 +482,9 @@ public sealed class EFactCatalogService(
             var entity = await db.Productos.FirstOrDefaultAsync(x =>
                 x.Codigo == codigo && x.Idusuario >= 1_000_000);
             if (entity is null) return false;
+            if (await EsEntidadConsultaPredeterminadaAsync(db, entity))
+                return false;
+
             entity.Estado = false;
             await db.SaveChangesAsync();
             InventarioService.InvalidarCache();

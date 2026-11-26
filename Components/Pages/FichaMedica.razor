@@ -1460,11 +1460,23 @@
     private List<VacunaPacienteDto> Vacunas { get; set; } = new();
     private List<CatalogoItemGenericoDto> CatalogoVacunas { get; set; } = new();
     private List<string> TiposConsultaCatalogo { get; set; } = new();
-    private IEnumerable<string> TiposConsultaDisponibles =>
-        !string.IsNullOrWhiteSpace(Ficha.MedTipoConsulta) &&
-        !TiposConsultaCatalogo.Any(x => string.Equals(x, Ficha.MedTipoConsulta, StringComparison.OrdinalIgnoreCase))
-            ? TiposConsultaCatalogo.Append(Ficha.MedTipoConsulta)
-            : TiposConsultaCatalogo;
+    private IEnumerable<string> TiposConsultaDisponibles
+    {
+        get
+        {
+            var filtrados = TiposConsultaCatalogo
+                .Where(x => !string.Equals(x.Trim(), "PROCEDIMIENTO", StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(Ficha.MedTipoConsulta) &&
+                !string.Equals(Ficha.MedTipoConsulta.Trim(), "PROCEDIMIENTO", StringComparison.OrdinalIgnoreCase) &&
+                !filtrados.Any(x => string.Equals(x, Ficha.MedTipoConsulta, StringComparison.OrdinalIgnoreCase)))
+            {
+                return filtrados.Append(Ficha.MedTipoConsulta);
+            }
+
+            return filtrados;
+        }
+    }
 
     private string FiltroCie10 { get; set; } = string.Empty;
     private DiagnosticoCie10Dto NuevoDiagnostico { get; set; } = new();

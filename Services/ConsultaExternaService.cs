@@ -373,6 +373,7 @@ public class ConsultaExternaService : IConsultaExternaService
     private sealed class OrdenTipoConsultaInfo
     {
         public int? TipoConsultaOrden { get; set; }
+        public bool EsProcedimiento { get; set; }
         public int IdEspecialidad { get; set; }
         public int IdLocalidad { get; set; }
         public string CodigoEspecialidad { get; set; } = string.Empty;
@@ -389,6 +390,7 @@ public class ConsultaExternaService : IConsultaExternaService
                 const string sqlOrden = @"
                     SELECT TOP 1
                         o.ordenAten_tipoConsulta AS TipoConsultaOrden,
+                        CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS bit) AS EsProcedimiento,
                         ISNULL(o.ordenAten_esp_numero, 0) AS IdEspecialidad,
                         ISNULL(o.ordenAten_idlocalidad, 0) AS IdLocalidad,
                         RTRIM(ISNULL(e.es_codigo, '')) AS CodigoEspecialidad,
@@ -404,26 +406,29 @@ public class ConsultaExternaService : IConsultaExternaService
             }
         }
 
+        var opciones = await ObtenerTiposConsultaCatalogoAsync(ordenInfo?.IdLocalidad ?? 0);
+
+        if (ordenInfo?.EsProcedimiento == true)
+        {
+            return opciones.FirstOrDefault(x => string.Equals(x, "PROCEDIMIENTO", StringComparison.OrdinalIgnoreCase))
+                ?? "PROCEDIMIENTO";
+        }
+
         bool esEspecialista = false;
         if (ordenInfo != null)
         {
-            if (ordenInfo.TipoConsultaOrden == 2)
-            {
-                esEspecialista = true;
-            }
-            else if (ordenInfo.TipoConsultaOrden is 1 or 4)
-            {
-                esEspecialista = false;
-            }
-            else if (ordenInfo.IdEspecialidad > 0)
+            if (ordenInfo.IdEspecialidad > 0)
             {
                 bool esMedGeneral = string.Equals(ordenInfo.CodigoEspecialidad, "MG", StringComparison.OrdinalIgnoreCase)
                     || ordenInfo.DescripcionEspecialidad.Contains("MEDICINA GENERAL", StringComparison.OrdinalIgnoreCase);
                 esEspecialista = !esMedGeneral;
             }
+            else if (ordenInfo.TipoConsultaOrden == 2)
+            {
+                esEspecialista = true;
+            }
         }
 
-        var opciones = await ObtenerTiposConsultaCatalogoAsync(ordenInfo?.IdLocalidad ?? 0);
         if (esEspecialista)
         {
             return opciones.FirstOrDefault(x => string.Equals(x, "CONSULTA ESPECIALISTA DE LLAMADA", StringComparison.OrdinalIgnoreCase))

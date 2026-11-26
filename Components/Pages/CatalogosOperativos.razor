@@ -263,7 +263,16 @@
                                                     <button class="btn btn-outline-primary" title="Editar" @onclick="() => Editar(x)">Editar</button>
                                                     @if (_tipo == "productos")
                                                     {
-                                                        <button class="btn btn-outline-danger" title="Eliminar" @onclick="() => PrepararEliminar(x)">Eliminar</button>
+                                                        @if (EsProductoConsultaPredeterminado(x))
+                                                        {
+                                                            <button class="btn btn-outline-secondary" disabled title="Tipo de consulta predeterminado del sistema (no se puede eliminar)">
+                                                                <i class="bi bi-lock-fill me-1"></i>Default
+                                                            </button>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button class="btn btn-outline-danger" title="Eliminar" @onclick="() => PrepararEliminar(x)">Eliminar</button>
+                                                        }
                                                     }
                                                 </div>
                                             </td>
@@ -308,14 +317,24 @@
                             <button type="button" class="btn-close" @onclick="CerrarModalEdicion" disabled="@_guardando"></button>
                         </div>
                         <div class="modal-body">
+                            @{
+                                bool esConsultaDefaultEdit = _tipo == "productos" && _edit.Id > 0 && EsProductoConsultaPredeterminado(_edit);
+                            }
+                            @if (esConsultaDefaultEdit)
+                            {
+                                <div class="alert alert-info py-2 px-3 small mb-2">
+                                    <i class="bi bi-lock-fill me-1"></i>
+                                    <strong>Tipo de consulta predeterminado:</strong> puede modificar el precio, código e IVA, pero no renombrarlo, cambiarlo de categoría ni eliminarlo.
+                                </div>
+                            }
                             <label class="form-label small fw-semibold">Descripción</label>
-                            <input class="form-control mb-2" maxlength="300" @bind="_edit.Descripcion" @bind:event="oninput" />
+                            <input class="form-control mb-2" maxlength="300" @bind="_edit.Descripcion" @bind:event="oninput" disabled="@esConsultaDefaultEdit" />
                             @if (_tipo == "productos")
                             {
                                 <div class="row g-2 mb-2">
                                     <div class="col-md-6">
                                         <label class="form-label small fw-semibold">Tipo</label>
-                                        <select class="form-select" @bind="_edit.Tipo" @bind:after="CambiarTipoProducto">
+                                        <select class="form-select" @bind="_edit.Tipo" @bind:after="CambiarTipoProducto" disabled="@esConsultaDefaultEdit">
                                             <option value="B">Bien (B)</option>
                                             <option value="S">Servicio (S)</option>
                                         </select>
@@ -360,7 +379,7 @@
                             @if (MuestraGrupo)
                             {
                                 <label class="form-label small fw-semibold">@EtiquetaGrupo</label>
-                                <select class="form-select mb-2" @bind="_edit.IdGrupo" @bind:after="CambiarCategoria">
+                                <select class="form-select mb-2" @bind="_edit.IdGrupo" @bind:after="CambiarCategoria" disabled="@esConsultaDefaultEdit">
                                     <option value="">Seleccione</option>
                                     @foreach (var g in CategoriasDisponibles) { <option value="@g.Id">@g.Descripcion</option> }
                                 </select>
@@ -370,7 +389,7 @@
                                 <div class="row g-2 mb-2">
                                     <div class="col-md-6">
                                         <label class="form-label small fw-semibold">Subcategoría</label>
-                                        <select class="form-select" @bind="_edit.IdSubgrupo">
+                                        <select class="form-select" @bind="_edit.IdSubgrupo" disabled="@esConsultaDefaultEdit">
                                             <option value="">Sin subcategoría</option>
                                             @foreach (var s in SubcategoriasDisponibles) { <option value="@s.Id">@s.Descripcion</option> }
                                         </select>
@@ -900,9 +919,21 @@
         _aplicaIva = x.CodigoImpuesto == "2";
         _mostrarModalEdicion = true;
     }
+    private static bool EsProductoConsultaPredeterminado(CatalogoOperativoDto x) =>
+        EFactCatalogService.EsTipoConsultaPredeterminado(x.Descripcion, x.Subgrupo);
+
     private void Ver(CatalogoOperativoDto x) => _vista = x;
     private void CerrarVista() => _vista = null;
-    private void PrepararEliminar(CatalogoOperativoDto x) => _pendienteEliminar = x;
+    private void PrepararEliminar(CatalogoOperativoDto x)
+    {
+        if (EsProductoConsultaPredeterminado(x))
+        {
+            _error = true;
+            _mensaje = "Los tipos de consulta predeterminados del sistema no se pueden eliminar.";
+            return;
+        }
+        _pendienteEliminar = x;
+    }
     private void CancelarEliminar() => _pendienteEliminar = null;
     private async Task ConfirmarEliminar()
     {
