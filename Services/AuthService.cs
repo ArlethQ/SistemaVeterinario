@@ -421,7 +421,6 @@ public class AuthService : IAuthService
                 (506, 'Sala de recuperación', 5, 'quirofano/recuperacion'),
                 (601, 'Historia clínica SOAP', 6, 'consulta/fichamedica'),
                 (602, 'Apuntes a historias', 6, 'consulta/historial/apuntes'),
-                (603, 'Vacunación', 6, 'consulta/vacunas'),
                 (604, 'Evolución médica', 4, 'consulta/evoluciones'),
                 (605, 'Recetario médico', 6, 'consulta/recetario'),
                 (606, 'Recetas sin orden', 6, 'consulta/recetario/sin-orden'),

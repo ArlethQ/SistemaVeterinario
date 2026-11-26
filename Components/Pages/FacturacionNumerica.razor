@@ -5868,8 +5868,11 @@
 
     private bool EsDetalleBloqueadoOrden(DetalleFacturaDto detalle) =>
         origenesDetalleOrden.TryGetValue(detalle, out var org) &&
-        (EsConsumoClinico(detalle) || string.Equals(org.Origen, "CONSULTA", StringComparison.OrdinalIgnoreCase) ||
-         string.Equals(org.Origen, "CONSULTA_INSUMO", StringComparison.OrdinalIgnoreCase));
+        (EsConsumoClinico(detalle)
+         || string.Equals(org.Origen, "CONSULTA", StringComparison.OrdinalIgnoreCase)
+         || string.Equals(org.Origen, "CONSULTA_INSUMO", StringComparison.OrdinalIgnoreCase)
+         || string.Equals(org.Origen, "PROCEDIMIENTO", StringComparison.OrdinalIgnoreCase)
+         || string.Equals(org.Origen, "VACUNACION", StringComparison.OrdinalIgnoreCase));
 
     private void QuitarDetalle(int index)
     {

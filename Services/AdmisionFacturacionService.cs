@@ -3231,6 +3231,29 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             ORDER BY p.proc_fecha, p.proc_idProdu;
             """, new { IdOrden = idOrden })).ToList();
 
+        var vacunasOrden = (await _db.QueryAsync<OrdenProductoQueryRow>("""
+            SELECT
+                'VACUNACION' AS Origen,
+                v.vacuna_id AS SecOrigen,
+                ISNULL(pr.CODIGO, ISNULL(v.vacuna_idprod, 0)) AS CodProducto,
+                ISNULL(RTRIM(pr.CODIGO_PRINCIPAL), '') AS CodPrincipal,
+                ISNULL(RTRIM(pr.COD_AUXILIAR), '') AS CodAuxiliar,
+                COALESCE(NULLIF(RTRIM(pr.NOMBRE), ''), NULLIF(RTRIM(v.vacuna_tipo), ''), 'Vacunación / Desparasitación') AS Descripcion,
+                COALESCE(NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(250), v.vacuna_observacion))), ''), RTRIM(ISNULL(v.vacuna_tipo, 'Aplicación clínica'))) AS Detalle,
+                CAST(1 AS decimal(18,4)) AS Cantidad,
+                CAST(ISNULL(pr.VALOR_UNITARIO, 0) AS decimal(18,4)) AS PrecioUnitario,
+                ISNULL(RTRIM(pr.CODIGOIMPUESTO), '2') AS CodigoImpuestoSri,
+                ISNULL(RTRIM(pr.PORCENTAJEIMPUESTO), '') AS PorcentajeImpuestoRaw,
+                pr.TIPO_PRODUCTO AS TipoProducto,
+                pr.IDSUBTIPO AS SubtipoProducto
+            FROM dbo.vt_vacunas v WITH (NOLOCK)
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr WITH (NOLOCK) ON pr.CODIGO = v.vacuna_idprod
+            WHERE v.vacuna_orden = @IdOrden
+              AND ISNULL(v.vacuna_estado, 'A') = 'A'
+              AND ISNULL(v.vacuna_idprod, 0) > 0
+            ORDER BY v.vacuna_id;
+            """, new { IdOrden = idOrden })).ToList();
+
         if (colsCirFact.Contains("id_orden"))
         {
             var cirugiasAgendadas = await _db.QueryAsync<OrdenProductoQueryRow>("""
@@ -3429,7 +3452,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
             WHERE c.IdOrden = @IdOrden;
             """, new { IdOrden = idOrden, proceso.RequiereHospitalizacion, proceso.RequiereCirugia, IdUsuario = idUsuarioCatalogo });
 
-        foreach (var row in procedimientos.Concat(aplicadosConsulta).Concat(laboratorios).Concat(imagenes).Concat(fisioterapias).Concat(medicinas).Concat(clinicos))
+        foreach (var row in procedimientos.Concat(vacunasOrden).Concat(aplicadosConsulta).Concat(laboratorios).Concat(imagenes).Concat(fisioterapias).Concat(medicinas).Concat(clinicos))
         {
             resultado.Add(new ItemOrdenParaFacturaDto
             {
