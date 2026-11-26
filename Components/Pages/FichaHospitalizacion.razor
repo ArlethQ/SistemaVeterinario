@@ -625,7 +625,7 @@
                                     var clase = esHorario
                                         ? hora >= 19 || hora <= 6 ? "ficha-col-hora ficha-col-noche" : "ficha-col-hora"
                                         : "ficha-col-campo";
-                                    <th scope="col" class="@clase">@encabezados[columna]</th>
+                                    <th scope="col" class="@clase @(EsColumnaNumerica(encabezados[columna]) ? "ficha-col-numero" : "")">@encabezados[columna]</th>
                                 }
                             </tr>
                         </thead>
@@ -644,7 +644,16 @@
                                         else
                                         {
                                             <td>
-                                                <input maxlength="200" class="form-control form-control-sm"
+                                                @{
+                                                    var numerico = EsColumnaNumerica(encabezados[columna]);
+                                                    var valor = detalle.Obtener(clave);
+                                                    var tipo = numerico && (valor.Length == 0 || decimal.TryParse(valor,
+                                                        System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _))
+                                                        ? "number" : "text";
+                                                }
+                                                <input type="@tipo" step="@(tipo == "number" ? "any" : null)"
+                                                       inputmode="@(numerico ? "decimal" : null)" maxlength="200"
+                                                       class="form-control form-control-sm @(numerico ? "ficha-numero" : "")"
                                                        disabled="@(_sheet.Cerrada || _guardando)" aria-label="@($"{etiqueta} · {encabezados[columna]}")"
                                                        @bind:get="detalle.Obtener(clave)" @bind:set="v => detalle.Registrar(clave, v)" />
                                             </td>
@@ -665,6 +674,11 @@
     [Parameter] public int Nhcl { get; set; }
     [Parameter] public bool ModoModal { get; set; }
     [Parameter] public bool FormatoActualizado { get; set; }
+
+    private static bool EsColumnaNumerica(string etiqueta) => etiqueta is
+        "ml" or "ml/h" or "ml/día" or "Dosis (ml/h)" or "Bureta (ml)" or
+        "Reposición por deshidratación (%)" or "Kcal/d" or "Kcal/1000 g" or "g/día" or
+        "% RER" or "N.º de raciones" or "ml o g por ración";
 
     private string Titulo => FormatoActualizado ? "Ficha de Hospitalización actualizada" : "Ficha de Hospitalización 24h";
     private string SufijoMatriz => FormatoActualizado ? "" : " Y MATRIZ HORARIA (07:00 A 06:00)";

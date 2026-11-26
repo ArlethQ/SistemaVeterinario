@@ -35,7 +35,7 @@ public sealed class DetalleFichaHospitalizacion
         foreach (var anterior in anteriores)
         {
             string?[] valores = [anterior.Fluidoterapia, null, null, anterior.MlDia, anterior.MlH,
-                anterior.Gotas, anterior.Mpd, .. Matriz24HorasBaseDto.HorasOrden.Select(anterior.GetValorHora)];
+                .. Matriz24HorasBaseDto.HorasOrden.Select(anterior.GetValorHora)];
             if (valores.All(string.IsNullOrWhiteSpace)) continue;
 
             int fila = 0;
@@ -61,7 +61,7 @@ public sealed class DetalleFichaHospitalizacion
     }
 
     public static readonly SeccionFichaHospitalizacion PlanFluidoterapia =
-        new("Plan de fluidoterapia", ["Fluido", "Mantenimiento / bolos de rescate", "Reposición por deshidratación (%)", "ml/día", "ml/h", "gotas/min", "M+P+D"], 7, Horaria: true);
+        new("Plan de fluidoterapia", ["Fluido", "Mantenimiento / bolos de rescate", "Reposición por deshidratación (%)", "ml/día", "ml/h"], 7, Horaria: true);
 
     public static readonly SeccionFichaHospitalizacion[] Secciones =
     [
