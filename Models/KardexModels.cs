@@ -64,6 +64,7 @@ public class PacienteHeaderDto
     public int OrdenAtencionId { get; set; }
     public string PacienteNombre { get; set; } = string.Empty;
     public string ClienteNombre { get; set; } = string.Empty;
+    public string ClienteTelefono { get; set; } = string.Empty;
     public string ClienteCedula { get; set; } = string.Empty;
     public int ClienteCodigo { get; set; }
     public string Sexo { get; set; } = string.Empty;

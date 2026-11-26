@@ -135,6 +135,7 @@ public class KardexService : IKardexService
                             THEN RTRIM(ISNULL(c.pa_apellidos, '')) + ' ' + RTRIM(ISNULL(c.pa_nombres, ''))
                         ELSE 'Cliente #' + CAST(ISNULL(o.ordenAten_idcliente, ISNULL(p.mas_idcliente, 0)) AS VARCHAR(20))
                     END AS ClienteNombre,
+                    RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(c.pa_movil)), ''), ISNULL(c.pa_telefono, ''))) AS ClienteTelefono,
                     RTRIM(ISNULL(c.pa_cedula, '')) AS ClienteCedula,
                     ISNULL(c.pa_codigo, ISNULL(o.ordenAten_idcliente, 0)) AS ClienteCodigo,
                     CASE WHEN RTRIM(ISNULL(p.mas_sexo, '')) = 'H' THEN 'Hembra'

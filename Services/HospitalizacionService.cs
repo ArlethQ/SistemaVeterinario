@@ -5,6 +5,7 @@ using HosvetKardex.Web.Models;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using System.Text;
+using System.Text.Json;
 using System.Globalization;
 
 namespace HosvetKardex.Web.Services;
@@ -21,7 +22,7 @@ public interface IHospitalizacionService
     Task<int> CrearNuevoFormularioSignosAsync(int idOrdenAtencion, int nhcl, int idUsuario);
 
     // 2. Ficha de Hospitalización 24h (Hosp_FichaHospitalizacion.aspx)
-    Task<FichaHospitalizacionSheetDto> CargarFichaHospitalizacionAsync(int idOrden, int nhcl, int hoja = 1, int idUsuario = 0);
+    Task<FichaHospitalizacionSheetDto> CargarFichaHospitalizacionAsync(int idOrden, int nhcl, int hoja = 1, int idUsuario = 0, bool incluirDetalle = false);
     Task GuardarFichaHospitalizacionAsync(FichaHospitalizacionSheetDto sheet, int idUsuario);
     Task<int> CrearNuevaHojaFichaAsync(int idOrden, int nhcl, int idUsuario);
     Task CerrarFichaHospitalizacionAsync(int idOrden);
@@ -550,7 +551,7 @@ public class HospitalizacionService : IHospitalizacionService
     // 2. FICHA DE HOSPITALIZACIÓN 24 HORAS (Hosp_FichaHospitalizacion.aspx)
     // ========================================================================
 
-    public async Task<FichaHospitalizacionSheetDto> CargarFichaHospitalizacionAsync(int idOrden, int nhcl, int hoja = 1, int idUsuario = 0)
+    public async Task<FichaHospitalizacionSheetDto> CargarFichaHospitalizacionAsync(int idOrden, int nhcl, int hoja = 1, int idUsuario = 0, bool incluirDetalle = false)
     {
         await ValidarOrdenPacienteAsync(idOrden, nhcl);
         if (hoja <= 0) hoja = 1;
@@ -660,6 +661,16 @@ public class HospitalizacionService : IHospitalizacionService
         if (b3.Count == 0)
             b3 = Enumerable.Range(1, 7).Select(i => new FichaBloque3FluidoterapiaDto { Fila = i, IdOrden = idOrden, Nhcl = nhcl, Hoja = hoja }).ToList();
 
+        DetalleFichaHospitalizacion? detalle = null;
+        if (incluirDetalle)
+        {
+            var datos = await _db.QueryFirstOrDefaultAsync<string>(
+                "SELECT datos FROM dbo.hvt_ficha_hospitalizacion_detalle WHERE idorden=@IdOrden AND nhcl=@Nhcl AND hoja=@Hoja",
+                new { IdOrden = idOrden, Nhcl = nhcl, Hoja = hoja });
+            detalle = datos is null ? new() : JsonSerializer.Deserialize<DetalleFichaHospitalizacion>(datos) ?? new();
+            detalle.IntegrarFluidoterapia(b3);
+        }
+
         var primera = b1.FirstOrDefault();
 
         return new FichaHospitalizacionSheetDto
@@ -674,6 +685,7 @@ public class HospitalizacionService : IHospitalizacionService
             MedicoResponsable = medico,
             Cerrada = string.Equals(cierre.Trim(), "S", StringComparison.OrdinalIgnoreCase),
             HojasDisponibles = hojas,
+            DetalleActualizado = detalle,
             Bloque1Medicacion = b1,
             Bloque2Alimentacion = b2,
             Bloque3Fluidoterapia = b3,
@@ -747,6 +759,11 @@ public class HospitalizacionService : IHospitalizacionService
         ValidarFilas(sheet.Bloque3Fluidoterapia, 7, "fluidoterapia");
 
         var sql = new StringBuilder("SET XACT_ABORT ON; BEGIN TRANSACTION;");
+        sql.Append("""
+            IF EXISTS (SELECT 1 FROM vt_ordenAtencion WITH (UPDLOCK, HOLDLOCK)
+                       WHERE ordenAten_id=@IdOrden AND cierrehospi='S')
+                THROW 50002, 'La ficha de hospitalización está cerrada.', 1;
+            """);
         var parametros = new DynamicParameters(new
         {
             sheet.IdOrden,
@@ -769,18 +786,32 @@ public class HospitalizacionService : IHospitalizacionService
             ("alimentacion", "Alimentacion"), ("cald", "Cald"), ("calv", "Calv"),
             ("gr", "Gr"), ("ritmo", "Ritmo")
         ]);
-        AgregarActualizacionBloque(sql, parametros, "hvt_bloque3ficha", "B3", sheet.Bloque3Fluidoterapia,
-        [
-            ("fluidoterapia", "Fluidoterapia"), ("mpd", "Mpd"), ("mldia", "MlDia"),
-            ("mlh", "MlH"), ("gotas", "Gotas")
-        ]);
+        if (sheet.DetalleActualizado is null)
+        {
+            AgregarActualizacionBloque(sql, parametros, "hvt_bloque3ficha", "B3", sheet.Bloque3Fluidoterapia,
+            [
+                ("fluidoterapia", "Fluidoterapia"), ("mpd", "Mpd"), ("mldia", "MlDia"),
+                ("mlh", "MlH"), ("gotas", "Gotas")
+            ]);
+        }
+        if (sheet.DetalleActualizado is not null)
+        {
+            parametros.Add("DetalleFicha", JsonSerializer.Serialize(sheet.DetalleActualizado));
+            sql.Append("""
+                UPDATE dbo.hvt_ficha_hospitalizacion_detalle WITH (UPDLOCK, HOLDLOCK)
+                SET datos=@DetalleFicha
+                WHERE idorden=@IdOrden AND nhcl=@Nhcl AND hoja=@Hoja;
+                IF @@ROWCOUNT = 0
+                    INSERT INTO dbo.hvt_ficha_hospitalizacion_detalle (idorden, nhcl, hoja, datos)
+                    VALUES (@IdOrden, @Nhcl, @Hoja, @DetalleFicha);
+                """);
+        }
+
         sql.Append("COMMIT TRANSACTION;");
 
         await using var connection = new SqlConnection(_db.GetConnectionString());
         await connection.OpenAsync();
-        var filasActualizadas = await connection.ExecuteAsync(sql.ToString(), parametros, commandTimeout: 15);
-        if (filasActualizadas != 24)
-            throw new InvalidOperationException($"Se esperaban 24 filas y SQL actualizó {filasActualizadas}. No se confirmó el guardado.");
+        await connection.ExecuteAsync(sql.ToString(), parametros, commandTimeout: 15);
 
         await _db.RegistrarBitacoraAsync(
             $"Guardó Ficha Hospitalización Orden={sheet.IdOrden} Hoja={sheet.Hoja}",

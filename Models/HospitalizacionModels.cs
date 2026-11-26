@@ -236,6 +236,8 @@ public class FichaHospitalizacionSheetDto
     public bool Cerrada { get; set; }
     public List<int> HojasDisponibles { get; set; } = [1];
 
+    public DetalleFichaHospitalizacion? DetalleActualizado { get; set; }
+
     public List<FichaBloque1MedicacionDto> Bloque1Medicacion { get; set; } = [];
     public List<FichaBloque2AlimentacionDto> Bloque2Alimentacion { get; set; } = [];
     public List<FichaBloque3FluidoterapiaDto> Bloque3Fluidoterapia { get; set; } = [];

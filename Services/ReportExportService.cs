@@ -1019,6 +1019,8 @@ public class ReportExportService : IReportExportService
         List<ViaAdministracionDto> vias,
         List<RitmoHorarioDto> ritmos)
     {
+        var horas = Matriz24HorasBaseDto.HorasOrden;
+        string titulo = sheet.DetalleActualizado is null ? "FICHA DE HOSPITALIZACIÓN 24 HORAS" : "FICHA DE HOSPITALIZACIÓN ACTUALIZADA";
         var qrBytes = GenerarCodigoQrPng($"EFORVETS-FICHA|ORDEN:{sheet.IdOrden}|NHCL:{sheet.Nhcl}|HOJA:{sheet.Hoja}");
         var viasMap = vias.ToDictionary(v => v.Id, v => v.Via);
         var ritmosMap = ritmos.ToDictionary(r => r.Id, r => r.Des_Ritmo);
@@ -1038,7 +1040,7 @@ public class ReportExportService : IReportExportService
                         row.RelativeItem().Column(c =>
                         {
                             c.Item().Text("e-ForVets — Gestión veterinaria").Bold().FontSize(11).FontColor(Colors.Blue.Darken3);
-                            c.Item().Text($"FICHA DE HOSPITALIZACIÓN 24 HORAS — HOJA #{sheet.Hoja} | FECHA: {sheet.Fecha:yyyy-MM-dd}").Bold().FontSize(9);
+                            c.Item().Text($"{titulo} — HOJA #{sheet.Hoja} | FECHA: {sheet.Fecha:yyyy-MM-dd}").Bold().FontSize(9);
                         });
                         row.ConstantItem(42).Image(qrBytes);
                     });
@@ -1053,7 +1055,7 @@ public class ReportExportService : IReportExportService
 
                 page.Content().Column(col =>
                 {
-                    col.Item().PaddingBottom(2).Text("BLOQUE 1: MEDICACIÓN INTRAHOSPITALARIA (24 HORAS: 07:00 A 06:00)").Bold().FontColor(Colors.Blue.Darken3);
+                    col.Item().PaddingBottom(2).Text(sheet.DetalleActualizado is null ? "BLOQUE 1: MEDICACIÓN INTRAHOSPITALARIA (24 HORAS: 07:00 A 06:00)" : "BLOQUE 1: MEDICACIÓN INTRAHOSPITALARIA").Bold().FontColor(Colors.Blue.Darken3);
                     col.Item().Table(t =>
                     {
                         t.ColumnsDefinition(c =>
@@ -1063,7 +1065,7 @@ public class ReportExportService : IReportExportService
                             c.RelativeColumn(1.1f);
                             c.RelativeColumn(1.2f);
                             c.RelativeColumn(1.2f);
-                            for (int h = 0; h < 24; h++) c.RelativeColumn(0.75f);
+                            for (int h = 0; h < horas.Length; h++) c.RelativeColumn(0.75f);
                         });
 
                         t.Header(h =>
@@ -1073,8 +1075,8 @@ public class ReportExportService : IReportExportService
                             h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(2).AlignCenter().Text("ml").Bold();
                             h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(2).AlignCenter().Text("Vía").Bold();
                             h.Cell().Border(0.5f).Background(Colors.Indigo.Lighten4).Padding(2).AlignCenter().Text("Ritmo").Bold();
-                            foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
-                                h.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(1).AlignCenter().Text($"{hr}h").Bold();
+                            foreach (var hr in horas)
+                                h.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(1).AlignCenter().Text(sheet.DetalleActualizado is null ? $"{hr}h" : hr.ToString()).Bold();
                         });
 
                         foreach (var r in sheet.Bloque1Medicacion.Where(x => !string.IsNullOrWhiteSpace(x.Medicacion)))
@@ -1084,12 +1086,12 @@ public class ReportExportService : IReportExportService
                             t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.Ml?.ToString("N2") ?? "");
                             t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.Via.HasValue && viasMap.TryGetValue(r.Via.Value, out var v) ? v : "");
                             t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.Ritmo.HasValue && ritmosMap.TryGetValue(r.Ritmo.Value, out var rt) ? rt : "");
-                            foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
+                            foreach (var hr in horas)
                                 t.Cell().Border(0.5f).Padding(1).AlignCenter().Text(r.GetValorHora(hr) ?? "");
                         }
                     });
 
-                    col.Item().PaddingTop(5).PaddingBottom(2).Text("BLOQUE 2: ALIMENTACIÓN (24 HORAS)").Bold().FontColor(Colors.Blue.Darken3);
+                    col.Item().PaddingTop(5).PaddingBottom(2).Text(sheet.DetalleActualizado is null ? "BLOQUE 2: ALIMENTACIÓN (24 HORAS)" : "BLOQUE 2: ALIMENTACIÓN").Bold().FontColor(Colors.Blue.Darken3);
                     col.Item().Table(t =>
                     {
                         t.ColumnsDefinition(c =>
@@ -1099,7 +1101,7 @@ public class ReportExportService : IReportExportService
                             c.RelativeColumn(1.1f);
                             c.RelativeColumn(1.2f);
                             c.RelativeColumn(1.2f);
-                            for (int h = 0; h < 24; h++) c.RelativeColumn(0.75f);
+                            for (int h = 0; h < horas.Length; h++) c.RelativeColumn(0.75f);
                         });
 
                         t.Header(h =>
@@ -1109,8 +1111,8 @@ public class ReportExportService : IReportExportService
                             h.Cell().Border(0.5f).Background(Colors.Green.Lighten4).Padding(2).AlignCenter().Text("Kcal/v").Bold();
                             h.Cell().Border(0.5f).Background(Colors.Green.Lighten4).Padding(2).AlignCenter().Text("gr").Bold();
                             h.Cell().Border(0.5f).Background(Colors.Green.Lighten4).Padding(2).AlignCenter().Text("Ritmo").Bold();
-                            foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
-                                h.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(1).AlignCenter().Text($"{hr}h").Bold();
+                            foreach (var hr in horas)
+                                h.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(1).AlignCenter().Text(sheet.DetalleActualizado is null ? $"{hr}h" : hr.ToString()).Bold();
                         });
 
                         foreach (var r in sheet.Bloque2Alimentacion.Where(x => !string.IsNullOrWhiteSpace(x.Alimentacion)))
@@ -1120,46 +1122,77 @@ public class ReportExportService : IReportExportService
                             t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.Calv?.ToString("N1") ?? "");
                             t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.Gr ?? "");
                             t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.Ritmo.HasValue && ritmosMap.TryGetValue(r.Ritmo.Value, out var rt) ? rt : "");
-                            foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
+                            foreach (var hr in horas)
                                 t.Cell().Border(0.5f).Padding(1).AlignCenter().Text(r.GetValorHora(hr) ?? "");
                         }
                     });
 
-                    col.Item().PaddingTop(5).PaddingBottom(2).Text("BLOQUE 3: FLUIDOTERAPIA (24 HORAS)").Bold().FontColor(Colors.Blue.Darken3);
-                    col.Item().Table(t =>
+                    if (sheet.DetalleActualizado is null)
                     {
-                        t.ColumnsDefinition(c =>
+                        col.Item().PaddingTop(5).PaddingBottom(2).Text("BLOQUE 3: FLUIDOTERAPIA (24 HORAS)").Bold().FontColor(Colors.Blue.Darken3);
+                        col.Item().Table(t =>
                         {
-                            c.RelativeColumn(3.2f);
-                            c.RelativeColumn(1.1f);
-                            c.RelativeColumn(1.1f);
-                            c.RelativeColumn(1.2f);
-                            c.RelativeColumn(1.2f);
-                            for (int h = 0; h < 24; h++) c.RelativeColumn(0.75f);
-                        });
+                            t.ColumnsDefinition(c =>
+                            {
+                                c.RelativeColumn(3.2f);
+                                c.RelativeColumn(1.1f);
+                                c.RelativeColumn(1.1f);
+                                c.RelativeColumn(1.2f);
+                                c.RelativeColumn(1.2f);
+                                for (int h = 0; h < horas.Length; h++) c.RelativeColumn(0.75f);
+                            });
 
-                        t.Header(h =>
-                        {
-                            h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(2).Text("Fluido").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(2).AlignCenter().Text("M+P+D").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(2).AlignCenter().Text("ml/día").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(2).AlignCenter().Text("ml/h").Bold();
-                            h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(2).AlignCenter().Text("gotas").Bold();
-                            foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
-                                h.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(1).AlignCenter().Text($"{hr}h").Bold();
-                        });
+                            t.Header(h =>
+                            {
+                                h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(2).Text("Fluido").Bold();
+                                h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(2).AlignCenter().Text("M+P+D").Bold();
+                                h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(2).AlignCenter().Text("ml/día").Bold();
+                                h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(2).AlignCenter().Text("ml/h").Bold();
+                                h.Cell().Border(0.5f).Background(Colors.Cyan.Lighten4).Padding(2).AlignCenter().Text("gotas").Bold();
+                                foreach (var hr in horas)
+                                    h.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(1).AlignCenter().Text(sheet.DetalleActualizado is null ? $"{hr}h" : hr.ToString()).Bold();
+                            });
 
-                        foreach (var r in sheet.Bloque3Fluidoterapia.Where(x => !string.IsNullOrWhiteSpace(x.Fluidoterapia)))
+                            foreach (var r in sheet.Bloque3Fluidoterapia.Where(x => !string.IsNullOrWhiteSpace(x.Fluidoterapia)))
+                            {
+                                t.Cell().Border(0.5f).Padding(2).Text(r.Fluidoterapia ?? "");
+                                t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.Mpd ?? "");
+                                t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.MlDia ?? "");
+                                t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.MlH ?? "");
+                                t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.Gotas ?? "");
+                                foreach (var hr in horas)
+                                    t.Cell().Border(0.5f).Padding(1).AlignCenter().Text(r.GetValorHora(hr) ?? "");
+                            }
+                        });
+                    }
+
+                    if (sheet.DetalleActualizado is { } detalle)
+                    {
+                        foreach (var seccion in DetalleFichaHospitalizacion.Secciones)
                         {
-                            t.Cell().Border(0.5f).Padding(2).Text(r.Fluidoterapia ?? "");
-                            t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.Mpd ?? "");
-                            t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.MlDia ?? "");
-                            t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.MlH ?? "");
-                            t.Cell().Border(0.5f).Padding(2).AlignCenter().Text(r.Gotas ?? "");
-                            foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
-                                t.Cell().Border(0.5f).Padding(1).AlignCenter().Text(r.GetValorHora(hr) ?? "");
+                            var filas = detalle.ObtenerFilas(seccion).ToArray();
+                            if (filas.Length == 0) continue;
+
+                            var encabezados = seccion.Encabezados;
+                            col.Item().PaddingTop(5).PaddingBottom(2).Text(seccion.Titulo).Bold().FontColor(Colors.Blue.Darken3);
+                            col.Item().Table(tabla =>
+                            {
+                                tabla.ColumnsDefinition(columnas =>
+                                {
+                                    for (int columna = 0; columna < encabezados.Length; columna++)
+                                        columnas.RelativeColumn(columna < seccion.Campos.Length ? 2 : 1);
+                                });
+                                tabla.Header(cabecera =>
+                                {
+                                    foreach (var encabezado in encabezados)
+                                        cabecera.Cell().Background(Colors.Blue.Lighten4).Padding(2).Text(encabezado).Bold();
+                                });
+                                foreach (var fila in filas)
+                                    foreach (var valor in fila)
+                                        tabla.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(2).Text(valor);
+                            });
                         }
-                    });
+                    }
                 });
 
                 page.Footer().AlignCenter().Text(x =>
@@ -1181,13 +1214,15 @@ public class ReportExportService : IReportExportService
         List<ViaAdministracionDto> vias,
         List<RitmoHorarioDto> ritmos)
     {
+        var horas = Matriz24HorasBaseDto.HorasOrden;
+        int ultimaColumna = 5 + horas.Length;
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add($"Ficha Hoja {sheet.Hoja}");
 
         ws.Cell(1, 1).Value = $"e-ForVets - FICHA DE HOSPITALIZACIÓN (Hoja #{sheet.Hoja} - Fecha: {sheet.Fecha:yyyy-MM-dd})";
-        ws.Range(1, 1, 1, 29).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
+        ws.Range(1, 1, 1, ultimaColumna).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#1E3A8A")).Font.SetFontColor(XLColor.White);
         ws.Cell(2, 1).Value = $"Orden: {sheet.IdOrden} | NHCL: {sheet.Nhcl} | Paciente: {paciente.PacienteNombre} | Peso: {sheet.Peso ?? 0:N2} kg | Médico: {sheet.MedicoResponsable}";
-        ws.Range(2, 1, 2, 29).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#DBEAFE"));
+        ws.Range(2, 1, 2, ultimaColumna).Merge().Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#DBEAFE"));
 
         int row = 4;
         ws.Cell(row, 1).Value = "MEDICACIÓN";
@@ -1195,9 +1230,9 @@ public class ReportExportService : IReportExportService
         ws.Cell(row, 3).Value = "ml";
         ws.Cell(row, 4).Value = "Vía";
         ws.Cell(row, 5).Value = "Ritmo";
-        for (int i = 0; i < 24; i++)
-            ws.Cell(row, 6 + i).Value = $"{Matriz24HorasBaseDto.HorasOrden[i]}h";
-        ws.Range(row, 1, row, 29).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#C7D2FE"));
+        for (int i = 0; i < horas.Length; i++)
+            ws.Cell(row, 6 + i).Value = sheet.DetalleActualizado is null ? $"{horas[i]}h" : horas[i].ToString();
+        ws.Range(row, 1, row, ultimaColumna).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#C7D2FE"));
         row++;
 
         foreach (var r in sheet.Bloque1Medicacion)
@@ -1207,8 +1242,8 @@ public class ReportExportService : IReportExportService
             ws.Cell(row, 3).Value = r.Ml;
             ws.Cell(row, 4).Value = vias.FirstOrDefault(v => v.Id == r.Via)?.Via ?? "";
             ws.Cell(row, 5).Value = ritmos.FirstOrDefault(rt => rt.Id == r.Ritmo)?.Des_Ritmo ?? "";
-            for (int i = 0; i < 24; i++)
-                ws.Cell(row, 6 + i).Value = r.GetValorHora(Matriz24HorasBaseDto.HorasOrden[i]);
+            for (int i = 0; i < horas.Length; i++)
+                ws.Cell(row, 6 + i).Value = r.GetValorHora(horas[i]);
             row++;
         }
 
@@ -1218,9 +1253,9 @@ public class ReportExportService : IReportExportService
         ws.Cell(row, 3).Value = "Kcal/v";
         ws.Cell(row, 4).Value = "gr";
         ws.Cell(row, 5).Value = "Ritmo";
-        for (int i = 0; i < 24; i++)
-            ws.Cell(row, 6 + i).Value = $"{Matriz24HorasBaseDto.HorasOrden[i]}h";
-        ws.Range(row, 1, row, 29).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#BBF7D0"));
+        for (int i = 0; i < horas.Length; i++)
+            ws.Cell(row, 6 + i).Value = sheet.DetalleActualizado is null ? $"{horas[i]}h" : horas[i].ToString();
+        ws.Range(row, 1, row, ultimaColumna).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#BBF7D0"));
         row++;
 
         foreach (var r in sheet.Bloque2Alimentacion)
@@ -1230,35 +1265,62 @@ public class ReportExportService : IReportExportService
             ws.Cell(row, 3).Value = r.Calv;
             ws.Cell(row, 4).Value = r.Gr;
             ws.Cell(row, 5).Value = ritmos.FirstOrDefault(rt => rt.Id == r.Ritmo)?.Des_Ritmo ?? "";
-            for (int i = 0; i < 24; i++)
-                ws.Cell(row, 6 + i).Value = r.GetValorHora(Matriz24HorasBaseDto.HorasOrden[i]);
+            for (int i = 0; i < horas.Length; i++)
+                ws.Cell(row, 6 + i).Value = r.GetValorHora(horas[i]);
             row++;
         }
 
-        row++;
-        ws.Cell(row, 1).Value = "FLUIDOTERAPIA";
-        ws.Cell(row, 2).Value = "M+P+D";
-        ws.Cell(row, 3).Value = "ml/día";
-        ws.Cell(row, 4).Value = "ml/h";
-        ws.Cell(row, 5).Value = "gotas";
-        for (int i = 0; i < 24; i++)
-            ws.Cell(row, 6 + i).Value = $"{Matriz24HorasBaseDto.HorasOrden[i]}h";
-        ws.Range(row, 1, row, 29).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#A5F3FC"));
-        row++;
-
-        foreach (var r in sheet.Bloque3Fluidoterapia)
+        if (sheet.DetalleActualizado is null)
         {
-            ws.Cell(row, 1).Value = r.Fluidoterapia;
-            ws.Cell(row, 2).Value = r.Mpd;
-            ws.Cell(row, 3).Value = r.MlDia;
-            ws.Cell(row, 4).Value = r.MlH;
-            ws.Cell(row, 5).Value = r.Gotas;
-            for (int i = 0; i < 24; i++)
-                ws.Cell(row, 6 + i).Value = r.GetValorHora(Matriz24HorasBaseDto.HorasOrden[i]);
             row++;
+            ws.Cell(row, 1).Value = "FLUIDOTERAPIA";
+            ws.Cell(row, 2).Value = "M+P+D";
+            ws.Cell(row, 3).Value = "ml/día";
+            ws.Cell(row, 4).Value = "ml/h";
+            ws.Cell(row, 5).Value = "gotas";
+            for (int i = 0; i < horas.Length; i++)
+                ws.Cell(row, 6 + i).Value = sheet.DetalleActualizado is null ? $"{horas[i]}h" : horas[i].ToString();
+            ws.Range(row, 1, row, ultimaColumna).Style.Font.SetBold(true).Fill.SetBackgroundColor(XLColor.FromHtml("#A5F3FC"));
+            row++;
+
+            foreach (var r in sheet.Bloque3Fluidoterapia)
+            {
+                ws.Cell(row, 1).Value = r.Fluidoterapia;
+                ws.Cell(row, 2).Value = r.Mpd;
+                ws.Cell(row, 3).Value = r.MlDia;
+                ws.Cell(row, 4).Value = r.MlH;
+                ws.Cell(row, 5).Value = r.Gotas;
+                for (int i = 0; i < horas.Length; i++)
+                    ws.Cell(row, 6 + i).Value = r.GetValorHora(horas[i]);
+                row++;
+            }
         }
 
         ws.Columns().AdjustToContents();
+        if (sheet.DetalleActualizado is { } detalle)
+        {
+            var detalleWs = wb.Worksheets.Add("Detalle actualizado");
+            int filaExcel = 1;
+            foreach (var seccion in DetalleFichaHospitalizacion.Secciones)
+            {
+                var encabezados = seccion.Encabezados;
+                detalleWs.Cell(filaExcel++, 1).Value = seccion.Titulo;
+                for (int columna = 0; columna < encabezados.Length; columna++)
+                    detalleWs.Cell(filaExcel, columna + 1).Value = encabezados[columna];
+                detalleWs.Range(filaExcel, 1, filaExcel, encabezados.Length).Style.Font.SetBold(true)
+                    .Fill.SetBackgroundColor(XLColor.FromHtml("#DBEAFE"));
+                filaExcel++;
+                foreach (var fila in detalle.ObtenerFilas(seccion))
+                {
+                    for (int columna = 0; columna < fila.Length; columna++)
+                        detalleWs.Cell(filaExcel, columna + 1).Value = fila[columna];
+                    filaExcel++;
+                }
+                filaExcel++;
+            }
+            detalleWs.ColumnsUsed().AdjustToContents(12, 40);
+            detalleWs.CellsUsed().Style.Alignment.WrapText = true;
+        }
         using var ms = new MemoryStream();
         wb.SaveAs(ms);
         return ms.ToArray();

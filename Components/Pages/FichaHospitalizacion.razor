@@ -8,14 +8,14 @@
 @inject SessionStateService Session
 @inject IJSRuntime JS
 
-<PageTitle>Ficha de Hospitalización 24h — e-ForVets</PageTitle>
+<PageTitle>@Titulo — e-ForVets</PageTitle>
 
-<div class="ficha-view @(ModoModal ? "ficha-embedded" : "")">
+<div class="ficha-view @(FormatoActualizado ? "ficha-ajustada" : "") @(ModoModal ? "ficha-embedded" : "")">
     <header class="ficha-hero no-print">
         <div class="ficha-heading">
             <i class="bi bi-hospital" aria-hidden="true"></i>
             <div>
-                <h1>Ficha de Hospitalización 24h</h1>
+                <h1>@Titulo</h1>
                 <p>Seguimiento del paciente y registro de cuidados por turno.</p>
             </div>
         </div>
@@ -38,6 +38,16 @@
     <div class="card ficha-panel mb-3 no-print">
         <div class="card-body py-2 px-3">
             <div class="row g-2 align-items-center">
+                @if (!ModoModal && !FormatoActualizado)
+                {
+                    <div class="col-12 text-end">
+                        <a class="btn btn-sm btn-outline-primary" href="@(_paciente is null
+                            ? "/hospitalizacion/ficha-actualizada"
+                            : $"/hospitalizacion/ficha-actualizada/{IdOrden}/{Nhcl}")">
+                            Ficha actualizada
+                        </a>
+                    </div>
+                }
                 @if (!ModoModal)
                 {
                     <div class="col-md-4 position-relative">
@@ -80,10 +90,10 @@
                             <SaveButton class="btn btn-primary fw-semibold" OnClick="GuardarFichaAsync" Disabled="@(_guardando || _sheet.Cerrada)">
                                 💾 @(_guardando ? "Guardando..." : "Guardar Hoja")
                             </SaveButton>
-                            <button class="btn btn-outline-primary" @onclick="NuevaHojaAsync" disabled="@_sheet.Cerrada">
+                            <button class="btn btn-outline-primary" @onclick="NuevaHojaAsync" disabled="@(_sheet.Cerrada || _guardando)">
                                 ➕ Nueva Hoja
                             </button>
-                            <button class="btn btn-outline-warning text-dark" @onclick="CerrarFichaAsync" disabled="@_sheet.Cerrada">
+                            <button class="btn btn-outline-warning text-dark" @onclick="CerrarFichaAsync" disabled="@(_sheet.Cerrada || _guardando)">
                                 🔒 Cerrar Ficha
                             </button>
                         </div>
@@ -105,7 +115,7 @@
     {
         <div class="d-flex align-items-center gap-2 text-primary py-3 px-2">
             <div class="spinner-border spinner-border-sm" role="status"></div>
-            <span class="fw-semibold small">Cargando Ficha de Hospitalización 24h...</span>
+            <span class="fw-semibold small">Cargando @Titulo…</span>
         </div>
     }
     else
@@ -170,7 +180,7 @@
                         </div>
                         <div class="col-md-2 border-end">
                             <label class="text-muted d-block">Condición Clínica</label>
-                            <select class="form-select form-select-sm" @bind="_sheet.CondicionId" disabled="@_sheet.Cerrada">
+                            <select class="form-select form-select-sm" @bind="_sheet.CondicionId" disabled="@(_sheet.Cerrada || _guardando)">
                                 <option value="">-- Seleccione --</option>
                                 @foreach (var c in _condiciones)
                                 {
@@ -194,9 +204,27 @@
                                    @bind="_sheet.Fecha" disabled="@_sheet.Cerrada" />
                         </div>
                     </div>
+                    @if (FormatoActualizado && _paciente is not null)
+                    {
+                        <div class="row row-cols-md-5 small g-2 mt-2 ficha-patient">
+                            <div class="col"><div class="text-muted">Teléfono del tutor</div>@(string.IsNullOrWhiteSpace(_pacienteVista.ClienteTelefono) ? "—" : _pacienteVista.ClienteTelefono)</div>
+                            <div class="col"><div class="text-muted">Raza / Sexo</div>@_pacienteVista.Raza / @_pacienteVista.Sexo</div>
+                            <div class="col"><div class="text-muted">Fecha de ingreso</div>@(_fechaIngreso?.ToString("dd/MM/yyyy") ?? "—")</div>
+
+                            <div class="col"><div class="text-muted">Hora de ingreso</div>@(_fechaIngreso?.ToString("HH:mm") ?? "—")</div>
+                            <div class="col"><div class="text-muted">Médico tratante</div>@_sheet.MedicoResponsable</div>
+                        </div>
+                    }
                 </div>
             </div>
 
+            @if (_sheet.DetalleActualizado is { } datosCabecera)
+            {
+                @foreach (var seccion in DetalleFichaHospitalizacion.Secciones.Take(2))
+                {
+                    @SeccionActualizada(seccion, datosCabecera)
+                }
+            }
             <!-- BUSCADOR RÁPIDO DE FÁRMACOS / INSUMOS PARA ASIGNAR A FILAS -->
             <div class="card ficha-panel mb-3 no-print">
                 <div class="card-body py-2 px-3">
@@ -245,21 +273,21 @@
             <!-- BLOQUE 1: MEDICACIÓN (12 FILAS X 24 HORAS: 07h..24h, 01h..06h) -->
             <div class="card ficha-panel mb-3">
                 <div class="card-header ficha-section">
-                    <span class="fw-bold small">1. MEDICACIÓN — PRINCIPIO ACTIVO, DOSIS Y MATRIZ HORARIA (07:00 A 06:00)</span>
+                    <span class="fw-bold small">1. MEDICACIÓN — PRINCIPIO ACTIVO, DOSIS@(SufijoMatriz)</span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.74rem;">
                         <thead class="table-light">
                             <tr>
-                                <th style="width:28px;">#</th>
-                                <th style="min-width:170px;">Principio Activo / Medicamento</th>
+                                <th class="ficha-col-indice" style="width:28px;">#</th>
+                                <th class="ficha-col-nombre" style="min-width:170px;">Medicamento</th>
                                 <th style="width:62px;">mg/kg</th>
                                 <th style="width:58px;">ml</th>
                                 <th style="min-width:85px;">Vía</th>
                                 <th style="min-width:90px;">Ritmo</th>
                                 @foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
                                 {
-                                    <th class="@(hr >= 19 || hr <= 6 ? "bg-dark text-white" : "bg-info bg-opacity-25")" style="min-width:34px;">@hr</th>
+                                    <th class="ficha-col-hora @(hr >= 19 || hr <= 6 ? "ficha-col-noche bg-dark text-white" : "bg-info bg-opacity-25")" style="min-width:34px;">@hr</th>
                                 }
                             </tr>
                         </thead>
@@ -281,7 +309,7 @@
                                                @bind="row.Ml" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <select class="form-select form-select-sm px-1 py-0" @bind="row.Via" disabled="@_sheet.Cerrada">
+                                        <select class="form-select form-select-sm px-1 py-0" @bind="row.Via" disabled="@(_sheet.Cerrada || _guardando)">
                                             <option value="">-</option>
                                             @foreach (var v in _vias)
                                             {
@@ -290,7 +318,7 @@
                                         </select>
                                     </td>
                                     <td class="p-1">
-                                        <select class="form-select form-select-sm px-1 py-0" @bind="row.Ritmo" disabled="@_sheet.Cerrada">
+                                        <select class="form-select form-select-sm px-1 py-0" @bind="row.Ritmo" disabled="@(_sheet.Cerrada || _guardando)">
                                             <option value="">-</option>
                                             @foreach (var rt in _ritmos)
                                             {
@@ -319,21 +347,21 @@
             <!-- BLOQUE 2: ALIMENTACIÓN (5 FILAS X 24 HORAS) -->
             <div class="card ficha-panel mb-3">
                 <div class="card-header ficha-section">
-                    <span class="fw-bold small">2. ALIMENTACIÓN — CÁLCULO CALÓRICO Y MATRIZ HORARIA (07:00 A 06:00)</span>
+                    <span class="fw-bold small">2. ALIMENTACIÓN — CÁLCULO CALÓRICO@(SufijoMatriz)</span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.74rem;">
                         <thead class="table-light">
                             <tr>
-                                <th style="width:28px;">#</th>
-                                <th style="min-width:170px;">Alimentación / Dieta</th>
+                                <th class="ficha-col-indice" style="width:28px;">#</th>
+                                <th class="ficha-col-nombre" style="min-width:170px;">Alimentación</th>
                                 <th style="width:62px;">Kcal/d</th>
                                 <th style="width:58px;">Kcal/v</th>
                                 <th style="min-width:85px;">gr</th>
                                 <th style="min-width:90px;">Ritmo</th>
                                 @foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
                                 {
-                                    <th class="@(hr >= 19 || hr <= 6 ? "bg-dark text-white" : "bg-success bg-opacity-25")" style="min-width:34px;">@hr</th>
+                                    <th class="ficha-col-hora @(hr >= 19 || hr <= 6 ? "ficha-col-noche bg-dark text-white" : "bg-success bg-opacity-25")" style="min-width:34px;">@hr</th>
                                 }
                             </tr>
                         </thead>
@@ -359,7 +387,7 @@
                                                @bind="row.Gr" disabled="@_sheet.Cerrada" />
                                     </td>
                                     <td class="p-1">
-                                        <select class="form-select form-select-sm px-1 py-0" @bind="row.Ritmo" disabled="@_sheet.Cerrada">
+                                        <select class="form-select form-select-sm px-1 py-0" @bind="row.Ritmo" disabled="@(_sheet.Cerrada || _guardando)">
                                             <option value="">-</option>
                                             @foreach (var rt in _ritmos)
                                             {
@@ -385,70 +413,80 @@
                 </div>
             </div>
 
-            <!-- BLOQUE 3: FLUIDOTERAPIA (7 FILAS X 24 HORAS) -->
-            <div class="card ficha-panel mb-3">
-                <div class="card-header ficha-section">
-                    <span class="fw-bold small">3. FLUIDOTERAPIA — INFUSIÓN CONTINUA Y MATRIZ HORARIA (07:00 A 06:00)</span>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.74rem;">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width:28px;">#</th>
-                                <th style="min-width:170px;">Fluido / Solución</th>
-                                <th style="width:62px;">M+P+D</th>
-                                <th style="width:58px;">ml/día</th>
-                                <th style="min-width:85px;">ml/h</th>
-                                <th style="min-width:90px;">gotas/min</th>
-                                @foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
-                                {
-                                    <th class="@(hr >= 19 || hr <= 6 ? "bg-dark text-white" : "bg-info bg-opacity-25")" style="min-width:34px;">@hr</th>
-                                }
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var row in _sheet.Bloque3Fluidoterapia)
-                            {
+            @if (!FormatoActualizado)
+            {
+                <!-- BLOQUE 3: FLUIDOTERAPIA (7 FILAS X 24 HORAS) -->
+                <div class="card ficha-panel mb-3">
+                    <div class="card-header ficha-section">
+                        <span class="fw-bold small">3. FLUIDOTERAPIA — INFUSIÓN CONTINUA@(SufijoMatriz)</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.74rem;">
+                            <thead class="table-light">
                                 <tr>
-                                    <td class="fw-bold text-muted">@row.Fila</td>
-                                    <td class="p-1">
-                                        <input type="text" class="form-control form-control-sm px-1 py-0"
-                                               @bind="row.Fluidoterapia" disabled="@_sheet.Cerrada" />
-                                    </td>
-                                    <td class="p-1">
-                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
-                                               @bind="row.Mpd" disabled="@_sheet.Cerrada" />
-                                    </td>
-                                    <td class="p-1">
-                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
-                                               @bind="row.MlDia" disabled="@_sheet.Cerrada" />
-                                    </td>
-                                    <td class="p-1">
-                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
-                                               @bind="row.MlH" disabled="@_sheet.Cerrada" />
-                                    </td>
-                                    <td class="p-1">
-                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
-                                               @bind="row.Gotas" disabled="@_sheet.Cerrada" />
-                                    </td>
+                                    <th class="ficha-col-indice" style="width:28px;">#</th>
+                                    <th class="ficha-col-nombre" style="min-width:170px;">Fluido</th>
+                                    <th style="width:62px;">M+P+D</th>
+                                    <th style="width:58px;">ml/día</th>
+                                    <th style="min-width:85px;">ml/h</th>
+                                    <th style="min-width:90px;">gotas/min</th>
                                     @foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
                                     {
-                                        int hLocal = hr;
-                                        <td class="p-0">
-                                            <input type="text" class="form-control form-control-sm border-0 px-0 py-1 text-center fw-bold"
-                                                   style="font-size:0.72rem;"
-                                                   value="@row.GetValorHora(hLocal)"
-                                                   @onchange="e => row.SetValorHora(hLocal, e.Value?.ToString())"
-                                                   disabled="@_sheet.Cerrada" />
-                                        </td>
+                                        <th class="ficha-col-hora @(hr >= 19 || hr <= 6 ? "ficha-col-noche bg-dark text-white" : "bg-info bg-opacity-25")" style="min-width:34px;">@hr</th>
                                     }
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in _sheet.Bloque3Fluidoterapia)
+                                {
+                                    <tr>
+                                        <td class="fw-bold text-muted">@row.Fila</td>
+                                        <td class="p-1">
+                                            <input type="text" class="form-control form-control-sm px-1 py-0"
+                                                   @bind="row.Fluidoterapia" disabled="@_sheet.Cerrada" />
+                                        </td>
+                                        <td class="p-1">
+                                            <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
+                                                   @bind="row.Mpd" disabled="@_sheet.Cerrada" />
+                                        </td>
+                                        <td class="p-1">
+                                            <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
+                                                   @bind="row.MlDia" disabled="@_sheet.Cerrada" />
+                                        </td>
+                                        <td class="p-1">
+                                            <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
+                                                   @bind="row.MlH" disabled="@_sheet.Cerrada" />
+                                        </td>
+                                        <td class="p-1">
+                                            <input type="number" min="0" step="0.01" class="form-control form-control-sm px-1 py-0 text-center"
+                                                   @bind="row.Gotas" disabled="@_sheet.Cerrada" />
+                                        </td>
+                                        @foreach (var hr in Matriz24HorasBaseDto.HorasOrden)
+                                        {
+                                            int hLocal = hr;
+                                            <td class="p-0">
+                                                <input type="text" class="form-control form-control-sm border-0 px-0 py-1 text-center fw-bold"
+                                                       style="font-size:0.72rem;"
+                                                       value="@row.GetValorHora(hLocal)"
+                                                       @onchange="e => row.SetValorHora(hLocal, e.Value?.ToString())"
+                                                       disabled="@_sheet.Cerrada" />
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+            }
 
+            @if (_sheet.DetalleActualizado is { } datosClinicos)
+            {
+                @foreach (var seccion in DetalleFichaHospitalizacion.Secciones.Skip(2))
+                {
+                    @SeccionActualizada(seccion, datosClinicos)
+                }
+            }
             <!-- BLOQUE 4: NOTAS IMPORTANTES Y OBSERVACIONES DE HOSPITALIZACIÓN -->
             <div class="row g-3">
                 <div class="col-md-6">
@@ -460,7 +498,7 @@
                             <div class="input-group input-group-sm mb-2 no-print">
                                 <input type="text" class="form-control" placeholder="Agregar nota importante..."
                                        @bind="_nuevaNotaImportante" disabled="@_sheet.Cerrada" />
-                                <button class="btn btn-warning fw-semibold" @onclick='() => AgregarNotaAsync("I")' disabled="@_sheet.Cerrada">
+                                <button class="btn btn-warning fw-semibold" @onclick='() => AgregarNotaAsync("I")' disabled="@(_sheet.Cerrada || _guardando)">
                                     Agregar
                                 </button>
                             </div>
@@ -498,7 +536,7 @@
                             <div class="input-group input-group-sm mb-2 no-print">
                                 <input type="text" class="form-control" placeholder="Agregar observación clínica..."
                                        @bind="_nuevaObservacion" disabled="@_sheet.Cerrada" />
-                                <button class="btn btn-secondary" @onclick='() => AgregarNotaAsync("O")' disabled="@_sheet.Cerrada">
+                                <button class="btn btn-secondary" @onclick='() => AgregarNotaAsync("O")' disabled="@(_sheet.Cerrada || _guardando)">
                                     Agregar
                                 </button>
                             </div>
@@ -533,10 +571,104 @@
 </div>
 
 @code {
+    private RenderFragment SeccionActualizada(SeccionFichaHospitalizacion seccion, DetalleFichaHospitalizacion detalle) =>
+        @<section class="card ficha-panel mb-3">
+            <div class="card-header ficha-section">@seccion.Titulo</div>
+            @if (seccion.Titulo == "Control ecográfico torácico")
+            {
+                <p class="small text-muted px-3 my-2">
+                    LBL, LBM, LBS: líneas B leves, moderadas o severas.
+                    SAIL, SAIM, SAIS: síndrome alveolo-intersticial leve, moderado o severo.
+                    DPL, DPM, DPS: derrame pleural leve, moderado o severo.
+                    CSP: consolidación subpleural. NP: nódulo pulmonar. NT: neumotórax.
+                    PI: pleura irregular. HI y HD: hemitórax izquierdo y derecho. EDP: edema pulmonar.
+                </p>
+            }
+            @{ var etiquetas = DetalleFichaHospitalizacion.EtiquetasDeFila(seccion); }
+            @if (seccion.TextoLargo || (!seccion.Horaria && seccion.Filas == 1 && etiquetas.Length == 0))
+            {
+                <div class="card-body row g-2">
+                    @for (int columna = 0; columna < seccion.Campos.Length; columna++)
+                    {
+                        var etiqueta = seccion.Campos[columna];
+                        var clave = seccion.Clave(0, columna);
+                        <label class="@(seccion.TextoLargo ? "col-md-6" : "col-md-4") small fw-semibold">
+                            @etiqueta
+                            @if (seccion.TextoLargo)
+                            {
+                                <textarea rows="2" maxlength="2000" class="form-control form-control-sm"
+                                          disabled="@(_sheet.Cerrada || _guardando)"
+                                          @bind:get="detalle.Obtener(clave)" @bind:set="v => detalle.Registrar(clave, v)"></textarea>
+                            }
+                            else
+                            {
+                                <input maxlength="200" class="form-control form-control-sm"
+                                       disabled="@(_sheet.Cerrada || _guardando)"
+                                       @bind:get="detalle.Obtener(clave)" @bind:set="v => detalle.Registrar(clave, v)" />
+                            }
+                        </label>
+                    }
+                </div>
+            }
+            else
+            {
+                var encabezados = seccion.Encabezados;
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0 ficha-tabla-ampliada">
+                        <thead>
+                            <tr>
+                                @for (int columna = 0; columna < encabezados.Length; columna++)
+                                {
+
+                                    var esHorario = columna >= seccion.Campos.Length;
+                                    var hora = esHorario ? Matriz24HorasBaseDto.HorasOrden[columna - seccion.Campos.Length] : 0;
+                                    var clase = esHorario
+                                        ? hora >= 19 || hora <= 6 ? "ficha-col-hora ficha-col-noche" : "ficha-col-hora"
+                                        : "ficha-col-campo";
+                                    <th scope="col" class="@clase">@encabezados[columna]</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int fila = 0; fila < Math.Max(detalle.FilasDisponibles(seccion), etiquetas.Length); fila++)
+                            {
+                                var etiqueta = etiquetas.Length > 0 ? etiquetas[fila] : $"Fila {fila + 1}";
+                                <tr>
+                                    @for (int columna = 0; columna < encabezados.Length; columna++)
+                                    {
+                                        var clave = seccion.Clave(fila, columna);
+                                        if (columna == 0 && etiquetas.Length > 0)
+                                        {
+                                            <th scope="row">@etiqueta</th>
+                                        }
+                                        else
+                                        {
+                                            <td>
+                                                <input maxlength="200" class="form-control form-control-sm"
+                                                       disabled="@(_sheet.Cerrada || _guardando)" aria-label="@($"{etiqueta} · {encabezados[columna]}")"
+                                                       @bind:get="detalle.Obtener(clave)" @bind:set="v => detalle.Registrar(clave, v)" />
+                                            </td>
+                                        }
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>;
+}
+
+@code {
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
     [Parameter] public bool ModoModal { get; set; }
+    [Parameter] public bool FormatoActualizado { get; set; }
+
+    private string Titulo => FormatoActualizado ? "Ficha de Hospitalización actualizada" : "Ficha de Hospitalización 24h";
+    private string SufijoMatriz => FormatoActualizado ? "" : " Y MATRIZ HORARIA (07:00 A 06:00)";
+    private DateTime? _fechaIngreso;
 
     private string _filtroOrden = string.Empty;
     private List<OrdenActivaResumenDto> _ordenesActivas = [];
@@ -562,6 +694,7 @@
     private bool _borradorRestaurado;
     private bool _pendienteRestaurarBorrador;
     private int _versionBorrador;
+    private int _versionCarga;
     private string _jsonInicial = string.Empty;
     private int _versionCatalogo;
     private string? _mensajeAlerta;
@@ -577,6 +710,9 @@
     protected override async Task OnInitializedAsync()
     {
         _cargandoInicial = true;
+        if (FormatoActualizado)
+            _sheet.DetalleActualizado = new();
+
         try
         {
             var tVias = KardexService.ObtenerViasAdministracionAsync();
@@ -621,9 +757,7 @@
     private async Task SeleccionarOrdenSugeridaAsync(OrdenActivaResumenDto ord)
     {
         _mostrarSugerenciasOrden = false;
-        IdOrden = ord.IdOrdenAtencion;
-        Nhcl = ord.Nhcl;
-        try { await CargarFichaCompletaAsync(IdOrden, Nhcl, 1); }
+        try { await CargarFichaCompletaAsync(ord.IdOrdenAtencion, ord.Nhcl, 1); }
         catch (Exception ex) { MostrarError(ex, "No se pudo abrir la ficha seleccionada"); }
     }
 
@@ -661,9 +795,7 @@
             var ord = _ordenesActivas.FirstOrDefault(x => x.IdOrdenAtencion == idOrd);
             if (ord is not null)
             {
-                IdOrden = ord.IdOrdenAtencion;
-                Nhcl = ord.Nhcl;
-                try { await CargarFichaCompletaAsync(IdOrden, Nhcl, 1); }
+                try { await CargarFichaCompletaAsync(ord.IdOrdenAtencion, ord.Nhcl, 1); }
                 catch (Exception ex) { MostrarError(ex, "No se pudo abrir la ficha seleccionada"); }
             }
         }
@@ -671,14 +803,23 @@
 
     private async Task CargarFichaCompletaAsync(int idOrden, int nhcl, int hoja)
     {
+        var version = ++_versionCarga;
         var tPac = KardexService.ObtenerCabeceraPacienteAsync(idOrden, nhcl);
-        var tSheet = HospService.CargarFichaHospitalizacionAsync(idOrden, nhcl, hoja, Session.IdUser);
+        var tSheet = HospService.CargarFichaHospitalizacionAsync(idOrden, nhcl, hoja, Session.IdUser, FormatoActualizado);
         await Task.WhenAll(tPac, tSheet);
 
-        _paciente = await tPac;
-        if (_paciente is not null)
+        var paciente = await tPac;
+        if (paciente is not null)
         {
-            Nhcl = _paciente.Nhcl;
+            var ingreso = FormatoActualizado
+                ? await HospService.ObtenerIngresoHospitalizacionAsync(idOrden, paciente.Nhcl)
+                : null;
+            if (version != _versionCarga) return;
+            _fechaIngreso = ingreso?.FechaIngreso;
+
+            _paciente = paciente;
+            IdOrden = idOrden;
+            Nhcl = paciente.Nhcl;
             Session.SeleccionarOrden(idOrden, Nhcl, _paciente.PacienteNombre);
             _sheet = await tSheet;
             _jsonInicial = JsonSerializer.Serialize(_sheet);
@@ -696,7 +837,7 @@
         }
     }
 
-    private string ClaveBorrador => $"ficha24h_{_paciente?.OrdenAtencionId ?? IdOrden}_{_sheet.Hoja}";
+    private string ClaveBorrador => $"ficha24h{(FormatoActualizado ? "_actualizada" : "")}_{_paciente?.OrdenAtencionId ?? IdOrden}_{_sheet.Hoja}";
 
     private async Task ProgramarBorradorAutoAsync()
     {
@@ -739,6 +880,7 @@
                     _borradorRestaurado = false;
                     return;
                 }
+                borrador.DetalleActualizado?.IntegrarFluidoterapia(borrador.Bloque3Fluidoterapia);
                 _sheet = borrador;
                 _borradorRestaurado = true;
                 StateHasChanged();
@@ -769,7 +911,7 @@
 
     private async Task GuardarFichaAsync()
     {
-        if (_paciente is null) return;
+        if (_paciente is null || _sheet.Cerrada || _guardando) return;
         _guardando = true;
         try
         {
@@ -793,7 +935,7 @@
 
     private async Task NuevaHojaAsync()
     {
-        if (_paciente is null) return;
+        if (_paciente is null || _sheet.Cerrada || _guardando) return;
         _guardando = true;
         try
         {
@@ -809,7 +951,7 @@
 
     private async Task CerrarFichaAsync()
     {
-        if (_paciente is null) return;
+        if (_paciente is null || _sheet.Cerrada || _guardando) return;
         _guardando = true;
         try
         {
@@ -910,6 +1052,21 @@
     {
         var producto = ProductoSeleccionado();
         if (producto is null) return;
+        if (_sheet.DetalleActualizado is { } detalle)
+        {
+            var plan = DetalleFichaHospitalizacion.PlanFluidoterapia;
+            for (int fila = 0; fila < detalle.FilasDisponibles(plan); fila++)
+            {
+                var clave = plan.Clave(fila, 0);
+                if (!string.IsNullOrWhiteSpace(detalle.Obtener(clave))) continue;
+                detalle.Registrar(clave, producto.DisplayName);
+                return;
+            }
+
+            MostrarError(null, "No existen filas libres en el plan de fluidoterapia");
+            return;
+        }
+
         var libre = _sheet.Bloque3Fluidoterapia.FirstOrDefault(x => string.IsNullOrWhiteSpace(x.Fluidoterapia));
         if (libre is not null) libre.Fluidoterapia = producto.DisplayName;
         else MostrarError(null, "No existen filas libres en fluidoterapia");
@@ -930,7 +1087,7 @@
             if (tipo == "I") _nuevaNotaImportante = string.Empty;
             else _nuevaObservacion = string.Empty;
 
-            await CargarFichaCompletaAsync(IdOrden, Nhcl, _sheet.Hoja);
+            await ActualizarNotasAsync();
         }
         catch (Exception ex) { MostrarError(ex, "No se pudo guardar la nota"); }
     }
@@ -940,28 +1097,38 @@
         try
         {
             await HospService.EliminarNotaImportanteAsync(idNota);
-            await CargarFichaCompletaAsync(IdOrden, Nhcl, _sheet.Hoja);
+            await ActualizarNotasAsync();
         }
         catch (Exception ex) { MostrarError(ex, "No se pudo eliminar la nota"); }
     }
+
+    private async Task ActualizarNotasAsync()
+    {
+        var hoja = _sheet;
+        var datos = await HospService.CargarFichaHospitalizacionAsync(hoja.IdOrden, hoja.Nhcl, hoja.Hoja, Session.IdUser);
+        hoja.NotasImportantes = datos.NotasImportantes;
+        hoja.ObservacionesGenerales = datos.ObservacionesGenerales;
+    }
+
+    private string NombreExportacion => $"FichaHospitalizacion{(FormatoActualizado ? "_Actualizada" : "")}_Orden{IdOrden}_Hoja{_sheet.Hoja}";
 
     private async Task ExportarPdfAsync()
     {
         if (_paciente is null) return;
         var bytes = ReportService.GenerarFichaHospitalizacionPdf(_paciente, _sheet, _vias, _ritmos);
-        await JS.InvokeVoidAsync("hosvetDownloadFile", $"FichaHospitalizacion_Orden{IdOrden}_Hoja{_sheet.Hoja}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"{NombreExportacion}.pdf", "application/pdf", Convert.ToBase64String(bytes));
     }
 
     private async Task ExportarExcelAsync()
     {
         if (_paciente is null) return;
         var bytes = ReportService.GenerarFichaHospitalizacionExcel(_paciente, _sheet, _vias, _ritmos);
-        await JS.InvokeVoidAsync("hosvetDownloadFile", $"FichaHospitalizacion_Orden{IdOrden}_Hoja{_sheet.Hoja}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+        await JS.InvokeVoidAsync("hosvetDownloadFile", $"{NombreExportacion}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
     }
 
     private async Task ImprimirVistaAsync()
     {
-        await JS.InvokeVoidAsync("hosvetPrintElement", "area-impresion-ficha");
+        await JS.InvokeVoidAsync("hosvetPrintElement", "area-impresion-ficha", FormatoActualizado ? "landscape" : "portrait");
     }
 
     private void MostrarError(Exception? ex, string mensaje)
