@@ -44,18 +44,18 @@
             <div class="card-body row g-2 align-items-end">
                 <div class="col-md-2">
                     <label class="form-label small mb-1">Desde</label>
-                    <input type="date" class="form-control form-control-sm" @bind="_desde" @bind:after="Cargar" />
+                    <input type="date" class="form-control form-control-sm" @bind="_desde" @bind:after="BuscarPrimeraPaginaAsync" />
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small mb-1">Hasta</label>
-                    <input type="date" class="form-control form-control-sm" @bind="_hasta" @bind:after="Cargar" />
+                    <input type="date" class="form-control form-control-sm" @bind="_hasta" @bind:after="BuscarPrimeraPaginaAsync" />
                 </div>
                 <div class="col-md-5">
                     <label class="form-label small mb-1">Usuario o detalle</label>
-                    <input class="form-control form-control-sm" autocomplete="off" placeholder="Escriba usuario o detalle para filtrar..." @bind="_filtro" @bind:event="oninput" @bind:after="Cargar" />
+                    <input class="form-control form-control-sm" autocomplete="off" placeholder="Escriba usuario o detalle para filtrar..." @bind="_filtro" @bind:event="oninput" @bind:after="BuscarPrimeraPaginaAsync" />
                 </div>
                 <div class="col-md-3 text-md-end">
-                    <small class="text-muted">Mostrando @_items.Count registro(s) recientes del rango</small>
+                    <small class="text-muted">Total: <strong>@_totalRegistros.ToString("N0")</strong> registro(s)</small>
                 </div>
             </div>
         </div>
@@ -105,6 +105,43 @@
                     }
                 </tbody>
             </table>
+            @if (_totalRegistros > 0)
+            {
+                var inicio = ((_pagina - 1) * TamanoPagina) + 1;
+                var fin = Math.Min(_pagina * TamanoPagina, _totalRegistros);
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 px-3 py-2 border-top bg-light">
+                    <small class="text-muted">
+                        Mostrando <strong>@inicio–@fin</strong> de <strong>@_totalRegistros.ToString("N0")</strong> · Página <strong>@_pagina</strong> de <strong>@TotalPaginas</strong>
+                    </small>
+                    @if (TotalPaginas > 1)
+                    {
+                        <nav aria-label="Paginación de bitácora">
+                            <ul class="pagination pagination-sm mb-0">
+                                <li class="page-item @(_pagina <= 1 ? "disabled" : "")">
+                                    <button type="button" class="page-link" @onclick="() => IrAPaginaAsync(_pagina - 1)" disabled="@(_pagina <= 1)">Anterior</button>
+                                </li>
+                                @foreach (var p in PaginasVisibles)
+                                {
+                                    if (p == -1)
+                                    {
+                                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                                    }
+                                    else
+                                    {
+                                        var num = p;
+                                        <li class="page-item @(num == _pagina ? "active" : "")">
+                                            <button type="button" class="page-link" @onclick="() => IrAPaginaAsync(num)">@num</button>
+                                        </li>
+                                    }
+                                }
+                                <li class="page-item @(_pagina >= TotalPaginas ? "disabled" : "")">
+                                    <button type="button" class="page-link" @onclick="() => IrAPaginaAsync(_pagina + 1)" disabled="@(_pagina >= TotalPaginas)">Siguiente</button>
+                                </li>
+                            </ul>
+                        </nav>
+                    }
+                </div>
+            }
         </div>
     </div>
 
@@ -173,10 +210,36 @@
 }
 
 @code {
+    private const int TamanoPagina = 50;
     bool _autorizado;
     string _filtro = "", _error = "", _mensajeExito = "";
     DateTime _desde = DateTime.Today.AddMonths(-1), _hasta = DateTime.Today;
     List<BitacoraDto> _items = [];
+    int _pagina = 1;
+    int _totalRegistros;
+    int TotalPaginas => Math.Max(1, (int)Math.Ceiling(_totalRegistros / (double)TamanoPagina));
+
+    IEnumerable<int> PaginasVisibles
+    {
+        get
+        {
+            var paginas = new List<int>();
+            int total = TotalPaginas;
+            if (total <= 7)
+            {
+                for (int i = 1; i <= total; i++) paginas.Add(i);
+                return paginas;
+            }
+            paginas.Add(1);
+            int desde = Math.Max(2, _pagina - 1);
+            int hasta = Math.Min(total - 1, _pagina + 1);
+            if (desde > 2) paginas.Add(-1);
+            for (int i = desde; i <= hasta; i++) paginas.Add(i);
+            if (hasta < total - 1) paginas.Add(-1);
+            paginas.Add(total);
+            return paginas;
+        }
+    }
 
     bool _mostrarMenuDepurar;
     bool _mostrarModalDepurar;
@@ -198,12 +261,35 @@
         await Cargar();
     }
 
+    async Task BuscarPrimeraPaginaAsync()
+    {
+        _pagina = 1;
+        await Cargar();
+    }
+
+    async Task IrAPaginaAsync(int nuevaPagina)
+    {
+        int destino = Math.Clamp(nuevaPagina, 1, TotalPaginas);
+        if (destino == _pagina) return;
+        _pagina = destino;
+        await Cargar();
+    }
+
     async Task Cargar()
     {
         try
         {
             _error = "";
-            _items = await Service.ObtenerBitacoraAsync(_desde, _hasta, _filtro);
+            var (items, total) = await Service.ObtenerBitacoraPaginadaAsync(_desde, _hasta, _filtro, _pagina, TamanoPagina);
+            _items = items;
+            _totalRegistros = total;
+            if (_pagina > TotalPaginas)
+            {
+                _pagina = TotalPaginas;
+                var retry = await Service.ObtenerBitacoraPaginadaAsync(_desde, _hasta, _filtro, _pagina, TamanoPagina);
+                _items = retry.Items;
+                _totalRegistros = retry.Total;
+            }
         }
         catch (Exception)
         {

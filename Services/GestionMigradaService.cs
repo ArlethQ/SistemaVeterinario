@@ -37,6 +37,7 @@ public interface IGestionMigradaService
     Task<List<CatalogoOperativoDto>> ObtenerCatalogoAsync(string tipo);
     Task<bool> GuardarCatalogoAsync(string tipo, CatalogoOperativoDto item, int idUsuario);
     Task<List<BitacoraDto>> ObtenerBitacoraAsync(DateTime desde, DateTime hasta, string filtro);
+    Task<(List<BitacoraDto> Items, int Total)> ObtenerBitacoraPaginadaAsync(DateTime desde, DateTime hasta, string filtro, int pagina, int tamanoPagina = 50);
     Task<(int Eliminables, int Protegidos)> PrevisualizarDepuracionBitacoraAsync(DateTime fechaCorte);
     Task<int> DepurarBitacoraAsync(DateTime fechaCorte, string etiquetaPeriodo, int idUsuario);
 }
@@ -670,6 +671,34 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         RTRIM(ISNULL(v.vit_detalle,'')) Detalle,RTRIM(ISNULL(v.ip,'')) Ip,RTRIM(ISNULL(v.hostname,'')) Equipo
         FROM vt_vitacora v WITH (NOLOCK) LEFT JOIN vt_usuarios u WITH (NOLOCK) ON u.user_numero=v.vit_idUser
         WHERE v.vit_idFechaMod>=@Desde AND v.vit_idFechaMod<DATEADD(day,1,@Hasta) AND (@Filtro='' OR v.vit_detalle LIKE '%'+@Filtro+'%' OR u.user_nombre LIKE '%'+@Filtro+'%') ORDER BY v.vit_idFechaMod DESC",new{Desde=desde.Date,Hasta=hasta.Date,Filtro=filtro??""})).ToList();
+
+    public async Task<(List<BitacoraDto> Items, int Total)> ObtenerBitacoraPaginadaAsync(DateTime desde, DateTime hasta, string filtro, int pagina, int tamanoPagina = 50)
+    {
+        pagina = Math.Max(1, pagina);
+        tamanoPagina = Math.Clamp(tamanoPagina, 10, 200);
+        int offset = (pagina - 1) * tamanoPagina;
+        var args = new { Desde = desde.Date, Hasta = hasta.Date, Filtro = (filtro ?? string.Empty).Trim(), Offset = offset, Tamano = tamanoPagina };
+
+        const string where = @"
+            FROM vt_vitacora v WITH (NOLOCK)
+            LEFT JOIN vt_usuarios u WITH (NOLOCK) ON u.user_numero = v.vit_idUser
+            WHERE v.vit_idFechaMod >= @Desde
+              AND v.vit_idFechaMod < DATEADD(day, 1, @Hasta)
+              AND (@Filtro = '' OR v.vit_detalle LIKE '%' + @Filtro + '%' OR u.user_nombre LIKE '%' + @Filtro + '%')";
+
+        int total = await db.ExecuteScalarAsync<int>($"SELECT COUNT(1) {where};", args);
+        var items = (await db.QueryAsync<BitacoraDto>($@"
+            SELECT v.vit_id Id, v.vit_idFechaMod Fecha, ISNULL(v.vit_idUser, 0) IdUsuario,
+                   RTRIM(ISNULL(u.user_nombre, '')) Usuario,
+                   RTRIM(ISNULL(v.vit_detalle, '')) Detalle,
+                   RTRIM(ISNULL(v.ip, '')) Ip,
+                   RTRIM(ISNULL(v.hostname, '')) Equipo
+            {where}
+            ORDER BY v.vit_idFechaMod DESC, v.vit_id DESC
+            OFFSET @Offset ROWS FETCH NEXT @Tamano ROWS ONLY;", args)).ToList();
+
+        return (items, total);
+    }
 
     private const string SqlOrdenesProtegidasBitacora = """
         DECLARE @OrdenesProtegidas TABLE (IdOrden INT PRIMARY KEY);
