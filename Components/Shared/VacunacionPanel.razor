@@ -251,6 +251,8 @@
         _vacunas = await ConsultaService.ObtenerVacunasPacienteAsync(Nhcl);
         _esError = false;
         _mensaje = "Registro eliminado.";
+        if (OnGuardado.HasDelegate)
+            await OnGuardado.InvokeAsync();
     }
 
     private void MostrarError(string mensaje)

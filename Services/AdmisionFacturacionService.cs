@@ -1810,17 +1810,33 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         var cantidad = columnas.Contains("proc_cantidad") ? "ISNULL(p.proc_cantidad, 1)" : "1";
         var observaciones = columnas.Contains("proc_observaciones") ? "ISNULL(CONVERT(nvarchar(250), p.proc_observaciones), '')" : "''";
         var estado = columnas.Contains("proc_estado") ? "ISNULL(CONVERT(nvarchar(30), p.proc_estado), '')" : "''";
-        var precio = columnas.Contains("proc_precio") ? "p.proc_precio" : "NULL";
+        var precio = columnas.Contains("proc_precio") ? "COALESCE(NULLIF(p.proc_precio, 0), producto.VALOR_UNITARIO)" : "producto.VALOR_UNITARIO";
         return (await _db.QueryAsync<ProcedimientoTriajeDto>($"""
             SELECT p.proc_idProdu AS Id, ISNULL(producto.CODIGO_PRINCIPAL, '') AS Codigo,
                 COALESCE(producto.NOMBRE, CONCAT('Procedimiento #', p.proc_idProdu)) AS Descripcion,
                 ISNULL(subtipo.DESCRIPCION, '') AS Subgrupo, {cantidad} AS Cantidad,
-                {observaciones} AS Observaciones, {estado} AS Estado, {precio} AS Precio
+                {observaciones} AS Observaciones, {estado} AS Estado, {precio} AS Precio,
+                p.proc_fecha AS OrdenFecha
             FROM vt_procedimientos p
             LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO producto ON producto.CODIGO = p.proc_idProdu
             LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO subtipo ON subtipo.IDSUBTIPO = producto.IDSUBTIPO
             WHERE p.proc_idOrden = @IdOrden AND p.proc_nhcl = @Nhcl
-            ORDER BY p.proc_fecha, p.proc_idProdu
+            UNION ALL
+            SELECT ISNULL(v.vacuna_idprod, 0) AS Id, ISNULL(producto.CODIGO_PRINCIPAL, '') AS Codigo,
+                COALESCE(NULLIF(RTRIM(producto.NOMBRE), ''), NULLIF(RTRIM(v.vacuna_tipo), ''), 'Aplicación clínica') AS Descripcion,
+                COALESCE(NULLIF(RTRIM(v.vacuna_tipo), ''), ISNULL(subtipo.DESCRIPCION, ''), 'Vacunación') AS Subgrupo,
+                1 AS Cantidad,
+                ISNULL(CONVERT(nvarchar(250), v.vacuna_observacion), '') AS Observaciones,
+                'Registrado' AS Estado,
+                producto.VALOR_UNITARIO AS Precio,
+                v.vacuna_fecha AS OrdenFecha
+            FROM vt_vacunas v WITH (NOLOCK)
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO producto WITH (NOLOCK) ON producto.CODIGO = v.vacuna_idprod
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO subtipo WITH (NOLOCK) ON subtipo.IDSUBTIPO = producto.IDSUBTIPO
+            WHERE v.vacuna_orden = @IdOrden
+              AND v.vacuna_nhcl = @Nhcl
+              AND ISNULL(v.vacuna_estado, 'A') = 'A'
+            ORDER BY OrdenFecha, Id
             """, new { IdOrden = idOrden, Nhcl = nhcl })).ToList();
     }
 
