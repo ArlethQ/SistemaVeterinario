@@ -37,6 +37,8 @@ public interface IGestionMigradaService
     Task<List<CatalogoOperativoDto>> ObtenerCatalogoAsync(string tipo);
     Task<bool> GuardarCatalogoAsync(string tipo, CatalogoOperativoDto item, int idUsuario);
     Task<List<BitacoraDto>> ObtenerBitacoraAsync(DateTime desde, DateTime hasta, string filtro);
+    Task<(int Eliminables, int Protegidos)> PrevisualizarDepuracionBitacoraAsync(DateTime fechaCorte);
+    Task<int> DepurarBitacoraAsync(DateTime fechaCorte, string etiquetaPeriodo, int idUsuario);
 }
 
 public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogService eFactCatalog, SessionStateService session) : IGestionMigradaService
@@ -664,8 +666,98 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         if(string.IsNullOrWhiteSpace(x.Descripcion))return false;x.Descripcion=x.Descripcion.Trim();var q=SqlCatalogo(tipo);if(await db.QueryFirstOrDefaultAsync<int>(q.Existe,x)>0)return false;var esGrupo=tipo.StartsWith("grupos-",StringComparison.Ordinal);if(!esGrupo&&!x.IdGrupo.HasValue)return false;var ok=await db.ExecuteAsync(x.Id>0?q.Update:q.Insert,x)>0;if(ok)await db.RegistrarBitacoraAsync($"Catálogo {tipo}: {x.Descripcion}",idUsuario);return ok;
     }
     public async Task<List<BitacoraDto>> ObtenerBitacoraAsync(DateTime desde,DateTime hasta,string filtro)=>(await db.QueryAsync<BitacoraDto>(@"
-        SELECT v.vit_id Id,v.vit_idFechaMod Fecha,ISNULL(v.vit_idUser,0) IdUsuario,RTRIM(ISNULL(u.user_nombre,'')) Usuario,
+        SELECT TOP 500 v.vit_id Id,v.vit_idFechaMod Fecha,ISNULL(v.vit_idUser,0) IdUsuario,RTRIM(ISNULL(u.user_nombre,'')) Usuario,
         RTRIM(ISNULL(v.vit_detalle,'')) Detalle,RTRIM(ISNULL(v.ip,'')) Ip,RTRIM(ISNULL(v.hostname,'')) Equipo
-        FROM vt_vitacora v LEFT JOIN vt_usuarios u ON u.user_numero=v.vit_idUser
+        FROM vt_vitacora v WITH (NOLOCK) LEFT JOIN vt_usuarios u WITH (NOLOCK) ON u.user_numero=v.vit_idUser
         WHERE v.vit_idFechaMod>=@Desde AND v.vit_idFechaMod<DATEADD(day,1,@Hasta) AND (@Filtro='' OR v.vit_detalle LIKE '%'+@Filtro+'%' OR u.user_nombre LIKE '%'+@Filtro+'%') ORDER BY v.vit_idFechaMod DESC",new{Desde=desde.Date,Hasta=hasta.Date,Filtro=filtro??""})).ToList();
+
+    private const string SqlOrdenesProtegidasBitacora = """
+        DECLARE @OrdenesProtegidas TABLE (IdOrden INT PRIMARY KEY);
+        INSERT INTO @OrdenesProtegidas (IdOrden)
+        SELECT DISTINCT o.ordenAten_id
+        FROM vt_ordenAtencion o WITH (NOLOCK)
+        WHERE ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+           OR (o.ordenAten_estado = 'T' AND (
+                o.ordenAten_fecha >= DATEADD(day, -2, @Hoy)
+                OR o.ordenAten_fechaProcesado >= DATEADD(day, -2, @Hoy)
+           ));
+        """;
+
+    private const string CondicionProtegidaBitacora = """
+        (
+            v.vit_detalle LIKE '%Orden #%'
+            AND EXISTS (
+                SELECT 1
+                FROM @OrdenesProtegidas p
+                WHERE v.vit_detalle = CONCAT('Recepción confirmada Orden #', p.IdOrden)
+                   OR v.vit_detalle = CONCAT('Inicio de triaje Orden #', p.IdOrden)
+                   OR v.vit_detalle = CONCAT('Triaje de ingreso completado Orden #', p.IdOrden)
+                   OR v.vit_detalle = CONCAT('Inicio de consulta Orden #', p.IdOrden)
+                   OR v.vit_detalle = CONCAT('Asignación de orden #', p.IdOrden)
+                   OR v.vit_detalle LIKE CONCAT('Prioridad inicial Orden #', p.IdOrden, ' %')
+                   OR v.vit_detalle LIKE CONCAT('Ficha Médica SOAP guardada Orden #', p.IdOrden, ' %')
+                   OR v.vit_detalle LIKE CONCAT('Tiempo en espera Orden #', p.IdOrden, ':%')
+                   OR v.vit_detalle LIKE CONCAT('Cambio de médico/especialidad en orden #', p.IdOrden, ':%')
+            )
+        )
+        """;
+
+    private sealed class PreviewDepuracionRow
+    {
+        public int Eliminables { get; set; }
+        public int Protegidos { get; set; }
+    }
+
+    public async Task<(int Eliminables, int Protegidos)> PrevisualizarDepuracionBitacoraAsync(DateTime fechaCorte)
+    {
+        if (!session.IsAuthenticated || session.TipoUser != 1)
+            return (0, 0);
+
+        var hoy = DateTime.Today;
+        var corteSeguro = fechaCorte.Date > hoy ? hoy : fechaCorte.Date;
+
+        var sql = $@"
+            {SqlOrdenesProtegidasBitacora}
+            SELECT
+                ISNULL(SUM(CASE WHEN v.vit_idFechaMod < @Corte AND NOT {CondicionProtegidaBitacora} THEN 1 ELSE 0 END), 0) AS Eliminables,
+                ISNULL(SUM(CASE WHEN v.vit_idFechaMod >= @Hoy OR (v.vit_idFechaMod < @Corte AND {CondicionProtegidaBitacora}) THEN 1 ELSE 0 END), 0) AS Protegidos
+            FROM vt_vitacora v WITH (NOLOCK);";
+
+        var res = await db.QueryFirstOrDefaultAsync<PreviewDepuracionRow>(sql, new { Hoy = hoy, Corte = corteSeguro });
+        return (res?.Eliminables ?? 0, res?.Protegidos ?? 0);
+    }
+
+    public async Task<int> DepurarBitacoraAsync(DateTime fechaCorte, string etiquetaPeriodo, int idUsuario)
+    {
+        if (!session.IsAuthenticated || session.TipoUser != 1)
+            throw new UnauthorizedAccessException("Solo el administrador puede depurar la bitácora.");
+
+        var hoy = DateTime.Today;
+        var corteSeguro = fechaCorte.Date > hoy ? hoy : fechaCorte.Date;
+
+        var sqlLote = $@"
+            {SqlOrdenesProtegidasBitacora}
+            DELETE TOP (5000) v
+            FROM vt_vitacora v
+            WHERE v.vit_idFechaMod < @Corte
+              AND NOT {CondicionProtegidaBitacora};";
+
+        int totalEliminados = 0;
+        for (int iter = 0; iter < 200; iter++)
+        {
+            int eliminados = await db.ExecuteAsync(sqlLote, new { Hoy = hoy, Corte = corteSeguro });
+            if (eliminados <= 0) break;
+            totalEliminados += eliminados;
+            if (eliminados < 5000) break;
+        }
+
+        if (totalEliminados > 0)
+        {
+            await db.RegistrarBitacoraAsync(
+                $"Depuración segura de bitácora ({etiquetaPeriodo}): {totalEliminados:N0} registro(s) eliminado(s) anteriores al {corteSeguro:dd/MM/yyyy}",
+                idUsuario);
+        }
+
+        return totalEliminados;
+    }
 }
