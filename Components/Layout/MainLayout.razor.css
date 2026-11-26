@@ -63,3 +63,53 @@
 .header-clock{flex-shrink:0}
 @media(min-width:801px) and (max-width:1200px){.header-clock{display:none}}
 @media(max-width:520px){.header-clock{display:none}}
+
+/* Campanita de notificaciones clínicas */
+.header-notif{position:relative;flex-shrink:0}
+.header-notif-btn{position:relative;border:0;cursor:pointer;transition:background .15s ease,transform .15s ease}
+.header-notif-btn.has-unread{color:#0059b3;background:#e1f0ff}
+.header-notif-btn.is-emergency{color:#b91c1c;background:#fee2e2;animation:notif-emergency-pulse 1.2s ease-in-out infinite}
+.header-notif-btn.has-unread svg,.header-notif-btn.is-emergency svg{animation:notif-bell-ring 2.6s ease-in-out infinite;transform-origin:top center}
+.header-notif-badge{position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:#ef4444;color:#fff;font-size:.64rem;font-weight:800;display:grid;place-items:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(239,68,68,.45)}
+.header-notif-badge.emergency{background:#dc2626;animation:notif-emergency-pulse 1s ease-in-out infinite}
+.notif-backdrop{position:fixed;inset:0;z-index:1040}
+.notif-dropdown{position:absolute;right:0;top:calc(100% + 12px);width:360px;max-width:92vw;background:#fff;border:1px solid #d7e5f5;border-radius:14px;box-shadow:0 16px 38px rgba(15,43,82,.18);z-index:1050;overflow:hidden}
+.notif-dropdown-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #e6eff9;background:#f7fbff}
+.notif-dropdown-header strong{display:block;color:#102d58;font-size:.86rem}
+.notif-dropdown-header small{color:#5e7594;font-size:.7rem}
+.notif-header-actions{display:flex;align-items:center;gap:8px}
+.notif-icon-action{border:1px solid #dbe7f5;background:#fff;border-radius:8px;width:30px;height:30px;display:grid;place-items:center;cursor:pointer}
+.notif-mark-all{border:0;background:transparent;color:#0b66d6;font-size:.73rem;font-weight:700;cursor:pointer;padding:4px 6px;border-radius:6px}
+.notif-mark-all:hover{background:#e7f2ff}
+.notif-dropdown-body{max-height:380px;overflow-y:auto;display:flex;flex-direction:column}
+.notif-empty{padding:28px 18px;text-align:center;color:#6c829e;font-size:.8rem;display:flex;flex-direction:column;align-items:center;gap:6px}
+.notif-empty i{font-size:1.4rem;color:#9eb3cc}
+.notif-item{width:100%;border:0;border-bottom:1px solid #eef4fb;background:#fff;padding:11px 14px;display:flex;align-items:flex-start;gap:10px;text-align:left;cursor:pointer;transition:background .12s ease}
+.notif-item:last-child{border-bottom:0}
+.notif-item:hover{background:#f3f8ff}
+.notif-item.is-unread{background:#f2f8ff}
+.notif-item.is-emergency{background:#fff5f5;border-left:4px solid #dc2626}
+.notif-item.is-emergency:hover{background:#feecec}
+.notif-item-icon{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex-shrink:0;font-size:.95rem}
+.notif-item-icon.orden{background:#e1f0ff;color:#0b66d6}
+.notif-item-icon.cita{background:#fff1dc;color:#c26d00}
+.notif-item-icon.emergency{background:#fee2e2;color:#dc2626}
+.notif-item-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.notif-item-top{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.notif-item-top strong{font-size:.78rem;color:#122d58}
+.notif-item-patient{font-size:.75rem;color:#274469;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notif-item-copy small{font-size:.7rem;color:#637a97;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notif-unread-dot{width:8px;height:8px;border-radius:50%;background:#0b70e2;flex-shrink:0}
+.notif-pill-emergencia{padding:2px 6px;border-radius:999px;background:#dc2626;color:#fff;font-size:.6rem;font-weight:800;letter-spacing:.04em;flex-shrink:0}
+.notif-toast{position:fixed;top:76px;right:20px;z-index:1080;width:340px;max-width:calc(100vw - 24px);display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:13px;background:#fff;border:1px solid #c7ddf8;border-left:5px solid #0b70e2;box-shadow:0 14px 34px rgba(15,43,82,.22)}
+.notif-toast.is-emergency{background:#fff5f5;border-color:#fca5a5;border-left-color:#dc2626;box-shadow:0 14px 36px rgba(220,38,38,.28)}
+.notif-toast-icon{width:34px;height:34px;border-radius:10px;background:#e1f0ff;color:#0b70e2;display:grid;place-items:center;flex-shrink:0;font-size:1rem}
+.notif-toast.is-emergency .notif-toast-icon{background:#fee2e2;color:#dc2626}
+.notif-toast-body{flex:1;min-width:0;cursor:pointer}
+.notif-toast-body strong{display:block;font-size:.82rem;color:#102d58}
+.notif-toast.is-emergency .notif-toast-body strong{color:#b91c1c}
+.notif-toast-body div{font-size:.76rem;color:#2b466b;font-weight:600}
+.notif-toast-body small{display:block;font-size:.7rem;color:#637a97}
+.notif-toast-close{border:0;background:transparent;color:#6c829e;font-size:1.2rem;line-height:1;cursor:pointer;padding:0 2px}
+@keyframes notif-bell-ring{0%,100%{transform:rotate(0)}8%{transform:rotate(14deg)}16%{transform:rotate(-12deg)}24%{transform:rotate(8deg)}32%{transform:rotate(-5deg)}40%{transform:rotate(0)}}
+@keyframes notif-emergency-pulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.45)}50%{box-shadow:0 0 0 7px rgba(220,38,38,0)}}

@@ -129,13 +129,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                AND (@MedicoDestino IS NULL OR @MedicoDestino = @UsuarioSesion))))
         AND (@EsAdmin = 1 OR ISNULL(vt_citas.ci_localidad, 1) IN (" + SucursalesAsignadas + "))";
     private readonly ILogger<AdmisionFacturacionService> _logger;
+    private readonly NotificacionClinicaHub? _notificacionHub;
     private readonly Dictionary<string, HashSet<string>> _columnCache = new(StringComparer.OrdinalIgnoreCase);
 
-    public AdmisionFacturacionService(ISqlDataService db, ILogger<AdmisionFacturacionService> logger, SessionStateService session)
+    public AdmisionFacturacionService(ISqlDataService db, ILogger<AdmisionFacturacionService> logger, SessionStateService session, NotificacionClinicaHub? notificacionHub = null)
     {
         _db = db;
         _logger = logger;
         _session = session;
+        _notificacionHub = notificacionHub;
     }
 
     private async Task<HashSet<string>> ObtenerColumnasTablaAsync(string tableName)
@@ -1334,7 +1336,13 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 orden.TipoConsulta
             });
 
-            if (idNueva > 0) return idNueva;
+            if (idNueva > 0)
+            {
+                if (orden.IdMedico > 0) _notificacionHub?.NotificarCambio(orden.IdMedico);
+                if (orden.IdEnfermero > 0) _notificacionHub?.NotificarCambio(orden.IdEnfermero);
+                else if (orden.EsProcedimiento || !orden.TriajeMedico) _notificacionHub?.NotificarCambio(null);
+                return idNueva;
+            }
         }
         catch (Exception ex)
         {
@@ -2504,7 +2512,11 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                 CiEspecialidad = cita.CiEspecialidad > 0 ? (int?)cita.CiEspecialidad : null
             });
 
-            if (idNueva > 0) return idNueva;
+            if (idNueva > 0)
+            {
+                _notificacionHub?.NotificarCambio(cita.CiUsuario > 0 ? cita.CiUsuario : null);
+                return idNueva;
+            }
         }
         catch (Exception ex)
         {

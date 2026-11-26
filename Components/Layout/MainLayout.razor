@@ -2,6 +2,8 @@
 @implements IAsyncDisposable
 @inject SessionStateService Session
 @inject IAuthService Auth
+@inject INotificacionClinicaService NotificacionService
+@inject NotificacionClinicaHub NotificacionHub
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -53,6 +55,88 @@
             </div>
             <div class="session-actions">
                 <div class="header-clock"><RelojSistema Compacto="true" /></div>
+                @if (_notificaciones.Habilitado)
+                {
+                    <div class="header-notif">
+                        <button type="button"
+                                class="header-icon header-notif-btn @(_notificaciones.TotalEmergenciasNoLeidas > 0 ? "is-emergency" : (_notificaciones.TotalNoLeidas > 0 ? "has-unread" : ""))"
+                                @onclick="AlternarPanelNotificaciones"
+                                aria-label="Notificaciones clínicas"
+                                title="@(_notificaciones.TotalEmergenciasNoLeidas > 0 ? $"¡{_notificaciones.TotalEmergenciasNoLeidas} emergencia(s) pendiente(s)!" : (_notificaciones.TotalNoLeidas > 0 ? $"{_notificaciones.TotalNoLeidas} notificación(es) nueva(s)" : "Notificaciones"))">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
+                                <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5" />
+                                <path d="M9.5 17a2.5 2.5 0 0 0 5 0" />
+                            </svg>
+                            @if (_notificaciones.TotalNoLeidas > 0)
+                            {
+                                <span class="header-notif-badge @(_notificaciones.TotalEmergenciasNoLeidas > 0 ? "emergency" : "")">
+                                    @(_notificaciones.TotalNoLeidas > 9 ? "9+" : _notificaciones.TotalNoLeidas.ToString())
+                                </span>
+                            }
+                        </button>
+                        @if (_panelNotificacionesAbierto)
+                        {
+                            <div class="notif-backdrop" @onclick="CerrarPanelNotificaciones"></div>
+                            <div class="notif-dropdown" role="dialog" aria-label="Panel de notificaciones">
+                                <div class="notif-dropdown-header">
+                                    <div>
+                                        <strong>Notificaciones</strong>
+                                        <small>@(_notificaciones.TotalNoLeidas > 0 ? $"{_notificaciones.TotalNoLeidas} nueva(s)" : "Todo al día")</small>
+                                    </div>
+                                    <div class="notif-header-actions">
+                                        <button type="button" class="notif-icon-action" title="@(_sonidoSilenciado ? "Activar sonido" : "Silenciar sonido")" @onclick="AlternarSilencio">
+                                            <i class="bi @(_sonidoSilenciado ? "bi-volume-mute-fill text-muted" : "bi-volume-up-fill text-primary")"></i>
+                                        </button>
+                                        @if (_notificaciones.TotalNoLeidas > 0)
+                                        {
+                                            <button type="button" class="notif-mark-all" @onclick="MarcarTodasComoLeidasAsync">Marcar leídas</button>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="notif-dropdown-body">
+                                    @if (_notificaciones.Items.Count == 0)
+                                    {
+                                        <div class="notif-empty">
+                                            <i class="bi bi-bell-slash"></i>
+                                            <span>No tienes órdenes ni citas asignadas pendientes.</span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var item in _notificaciones.Items)
+                                        {
+                                            <button type="button"
+                                                    class="notif-item @(item.Leida ? "is-read" : "is-unread") @(item.EsEmergencia ? "is-emergency" : "")"
+                                                    @onclick="() => AbrirNotificacionAsync(item)">
+                                                <span class="notif-item-icon @(item.EsEmergencia ? "emergency" : (item.Tipo == "CITA" ? "cita" : "orden"))">
+                                                    <i class="bi @(item.EsEmergencia ? "bi-exclamation-triangle-fill" : (item.Tipo == "CITA" ? "bi-calendar2-check-fill" : "bi-clipboard2-pulse-fill"))"></i>
+                                                </span>
+                                                <span class="notif-item-copy">
+                                                    <span class="notif-item-top">
+                                                        <strong>@item.Titulo</strong>
+                                                        @if (item.EsEmergencia)
+                                                        {
+                                                            <span class="notif-pill-emergencia">EMERGENCIA</span>
+                                                        }
+                                                        else if (!item.Leida)
+                                                        {
+                                                            <span class="notif-unread-dot" aria-label="Nueva"></span>
+                                                        }
+                                                    </span>
+                                                    <span class="notif-item-patient">@item.Paciente @(!string.IsNullOrWhiteSpace(item.Propietario) ? $"· {item.Propietario}" : "")</span>
+                                                    @if (!string.IsNullOrWhiteSpace(item.Detalle))
+                                                    {
+                                                        <small>@item.Detalle</small>
+                                                    }
+                                                </span>
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
                 @if (Permisos.Permite("admision/citas"))
                 {
                     <a class="header-icon" href="/admision/citas" aria-label="Abrir agenda de citas" title="Agenda de citas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 2v6M17 2v6M3 11h18M7 15h3M14 15h3M7 18h3" /></svg></a>
@@ -66,6 +150,24 @@
         <article class="workspace-content">@Body</article>
     </main>
 </div>
+
+@if (_toastActivo is not null)
+{
+    <div class="notif-toast @(_toastActivo.EsEmergencia ? "is-emergency" : "")" role="alert">
+        <div class="notif-toast-icon">
+            <i class="bi @(_toastActivo.EsEmergencia ? "bi-exclamation-triangle-fill" : (_toastActivo.Tipo == "CITA" ? "bi-calendar2-check-fill" : "bi-bell-fill"))"></i>
+        </div>
+        <div class="notif-toast-body" @onclick="() => AbrirNotificacionAsync(_toastActivo)">
+            <strong>@_toastActivo.Titulo</strong>
+            <div>@_toastActivo.Paciente @(!string.IsNullOrWhiteSpace(_toastActivo.Propietario) ? $"· {_toastActivo.Propietario}" : "")</div>
+            @if (!string.IsNullOrWhiteSpace(_toastActivo.Detalle))
+            {
+                <small>@_toastActivo.Detalle</small>
+            }
+        </div>
+        <button type="button" class="notif-toast-close" aria-label="Cerrar aviso" @onclick="() => _toastActivo = null">&times;</button>
+    </div>
+}
 
 <div id="blazor-error-ui" data-nosnippet>Ha ocurrido un error inesperado. <a href="." class="reload">Recargar</a><span class="dismiss">🗙</span></div>
 
@@ -98,6 +200,18 @@
     private bool _sidebarCollapsed;
     private DotNetObjectReference<MainLayout>? _dotNetRef;
     private List<CatalogoItemGenericoDto> _localidades = [];
+    private NotificacionClinicaEstadoDto _notificaciones = new();
+    private bool _panelNotificacionesAbierto;
+    private bool _sonidoSilenciado;
+    private bool _notificacionesInicializadas;
+    private bool _consultandoNotificaciones;
+    private HashSet<string> _clavesConocidas = [];
+    private HashSet<string> _clavesLeidas = [];
+    private NotificacionClinicaItemDto? _toastActivo;
+    private CancellationTokenSource? _notifCts;
+    private CancellationTokenSource? _toastCts;
+
+    private string ClaveStorageLeidas => $"eForVets.notif.leidas.{Session.IdUser}.{DateTime.UtcNow.AddHours(-5):yyyyMMdd}";
 
     protected override async Task OnInitializedAsync()
     {
@@ -105,6 +219,146 @@
         {
             _localidades = await Auth.ObtenerLocalidadesUsuarioAsync();
         }
+        if (Session.IsAuthenticated)
+        {
+            NotificacionHub.OnNuevaActividad += ManejarActividadHub;
+            await ActualizarNotificacionesAsync(esCargaInicial: true);
+            IniciarPollingNotificaciones();
+        }
+    }
+
+    private void IniciarPollingNotificaciones()
+    {
+        _notifCts?.Cancel();
+        _notifCts?.Dispose();
+        _notifCts = new CancellationTokenSource();
+        var token = _notifCts.Token;
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    await InvokeAsync(() => ActualizarNotificacionesAsync(esCargaInicial: false));
+                }
+            }
+            catch (OperationCanceledException) { }
+        }, token);
+    }
+
+    private void ManejarActividadHub(int? idUsuarioDestino)
+    {
+        if (!Session.IsAuthenticated || !_notificaciones.Habilitado) return;
+        if (idUsuarioDestino.HasValue && idUsuarioDestino.Value > 0 && idUsuarioDestino.Value != Session.IdUser && !_notificaciones.EsEnfermero)
+            return;
+
+        _ = InvokeAsync(() => ActualizarNotificacionesAsync(esCargaInicial: false));
+    }
+
+    private async Task ActualizarNotificacionesAsync(bool esCargaInicial)
+    {
+        if (_consultandoNotificaciones || !Session.IsAuthenticated) return;
+        _consultandoNotificaciones = true;
+        try
+        {
+            var nuevoEstado = await NotificacionService.ObtenerNotificacionesActivasAsync();
+            foreach (var item in nuevoEstado.Items)
+                item.Leida = _clavesLeidas.Contains(item.Clave);
+
+            if (esCargaInicial || !_notificacionesInicializadas)
+            {
+                _clavesConocidas = nuevoEstado.Items.Select(i => i.Clave).ToHashSet(StringComparer.Ordinal);
+                _notificacionesInicializadas = true;
+                _notificaciones = nuevoEstado;
+                StateHasChanged();
+                return;
+            }
+
+            var nuevas = nuevoEstado.Items.Where(i => !_clavesConocidas.Contains(i.Clave)).ToList();
+            foreach (var n in nuevas)
+                _clavesConocidas.Add(n.Clave);
+
+            _notificaciones = nuevoEstado;
+            StateHasChanged();
+
+            if (nuevas.Count > 0)
+            {
+                bool hayEmergencia = nuevas.Any(i => i.EsEmergencia);
+                var destacada = nuevas.FirstOrDefault(i => i.EsEmergencia) ?? nuevas[0];
+                MostrarToast(destacada);
+
+                if (!_sonidoSilenciado)
+                {
+                    try { await JS.InvokeVoidAsync("hosvetNotificaciones.reproducirAlerta", hayEmergencia); }
+                    catch { }
+                }
+            }
+        }
+        finally
+        {
+            _consultandoNotificaciones = false;
+        }
+    }
+
+    private void MostrarToast(NotificacionClinicaItemDto item)
+    {
+        _toastActivo = item;
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        _toastCts = new CancellationTokenSource();
+        var token = _toastCts.Token;
+        int duracionMs = item.EsEmergencia ? 10000 : 6000;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(duracionMs, token);
+                await InvokeAsync(() =>
+                {
+                    if (_toastActivo?.Clave == item.Clave)
+                    {
+                        _toastActivo = null;
+                        StateHasChanged();
+                    }
+                });
+            }
+            catch (OperationCanceledException) { }
+        }, token);
+    }
+
+    private void AlternarPanelNotificaciones() => _panelNotificacionesAbierto = !_panelNotificacionesAbierto;
+    private void CerrarPanelNotificaciones() => _panelNotificacionesAbierto = false;
+    private void AlternarSilencio() => _sonidoSilenciado = !_sonidoSilenciado;
+
+    private async Task GuardarLeidasAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("hosvetNotificaciones.guardarLeidas", ClaveStorageLeidas, _clavesLeidas.ToArray());
+        }
+        catch { }
+    }
+
+    private async Task MarcarTodasComoLeidasAsync()
+    {
+        foreach (var item in _notificaciones.Items)
+        {
+            item.Leida = true;
+            _clavesLeidas.Add(item.Clave);
+        }
+        await GuardarLeidasAsync();
+        StateHasChanged();
+    }
+
+    private async Task AbrirNotificacionAsync(NotificacionClinicaItemDto item)
+    {
+        item.Leida = true;
+        _clavesLeidas.Add(item.Clave);
+        _panelNotificacionesAbierto = false;
+        if (_toastActivo?.Clave == item.Clave) _toastActivo = null;
+        await GuardarLeidasAsync();
+        Nav.NavigateTo(item.RutaDestino);
     }
 
     private static string LimpiarNombreSucursal(string? nombre) =>
@@ -137,6 +391,19 @@
                 await JS.InvokeVoidAsync("hosvetSessionWatcher.iniciar", _dotNetRef);
             }
             catch (JSException) { }
+
+            try
+            {
+                var leidas = await JS.InvokeAsync<string[]?>("hosvetNotificaciones.obtenerLeidas", ClaveStorageLeidas);
+                if (leidas is { Length: > 0 })
+                {
+                    _clavesLeidas = leidas.ToHashSet(StringComparer.Ordinal);
+                    foreach (var item in _notificaciones.Items)
+                        item.Leida = _clavesLeidas.Contains(item.Clave);
+                    StateHasChanged();
+                }
+            }
+            catch (JSException) { }
         }
     }
 
@@ -157,6 +424,11 @@
 
     public async ValueTask DisposeAsync()
     {
+        NotificacionHub.OnNuevaActividad -= ManejarActividadHub;
+        _notifCts?.Cancel();
+        _notifCts?.Dispose();
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
         try { await JS.InvokeVoidAsync("hosvetSessionWatcher.detener"); } catch { }
         _dotNetRef?.Dispose();
     }

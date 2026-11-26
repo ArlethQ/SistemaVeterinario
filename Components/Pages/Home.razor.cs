@@ -7,11 +7,13 @@ using Microsoft.JSInterop;
 
 namespace HosvetKardex.Web.Components.Pages;
 
-public partial class Home
+public partial class Home : IDisposable
 {
 
     [Inject] private ISqlDataService Sql { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private INotificacionClinicaService NotificacionClinicaService { get; set; } = default!;
+    [Inject] private NotificacionClinicaHub NotificacionHub { get; set; } = default!;
     [Inject] private Simetric.Services.EContax.EContaxInventarioService Inventario { get; set; } = default!;
 
     private static readonly System.Globalization.CultureInfo Ecuador = new("es-EC");
@@ -69,6 +71,7 @@ public partial class Home
     private List<CitaMedicaDto> _citasHoy = [];
     private List<AtencionPorDia> _atenciones = [];
     private Simetric.DTOs.EContax.EContaxInventarioDashboardDto? _inventario;
+    private NotificacionClinicaEstadoDto _notificacionesClinicas = new();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -204,6 +207,7 @@ public partial class Home
 
     protected override async Task OnInitializedAsync()
     {
+        NotificacionHub.OnNuevaActividad += OnNotificacionHubActividad;
         _cargando = true;
         await Task.Yield();
         try
@@ -217,8 +221,10 @@ public partial class Home
 
             var atencionesTask = Puede("kardex/ordenes") ? CargarAtencionesAsync() : Task.CompletedTask;
             var inventarioTask = Puede("contabilidad/inventarios") ? CargarAlertasInventarioAsync() : Task.CompletedTask;
+            var notifTask = NotificacionClinicaService.ObtenerNotificacionesActivasAsync();
 
-            await Task.WhenAll(ordenesTask, citasTask, cuentaTask, atencionesTask, inventarioTask);
+            await Task.WhenAll(ordenesTask, citasTask, cuentaTask, atencionesTask, inventarioTask, notifTask);
+            _notificacionesClinicas = await notifTask;
 
             var ordenes = (await ordenesTask).Where(o => o.Estado is "A" or "E").ToList();
             if (Puede("kardex/ordenes"))
@@ -306,5 +312,19 @@ public partial class Home
         };
 
         Nav.NavigateTo(url);
+    }
+
+    private void OnNotificacionHubActividad(int? idUsuarioDestino)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            _notificacionesClinicas = await NotificacionClinicaService.ObtenerNotificacionesActivasAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        NotificacionHub.OnNuevaActividad -= OnNotificacionHubActividad;
     }
 }

@@ -1043,3 +1043,94 @@ window.hosvetDialog = {
     }
 };
 
+window.hosvetNotificaciones = (() => {
+    let audioCtx = null;
+    let desbloqueado = false;
+
+    const asegurarContexto = () => {
+        const AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtor) return null;
+        if (!audioCtx) {
+            audioCtx = new AudioCtor();
+        }
+        if (audioCtx.state === "suspended") {
+            audioCtx.resume().catch(() => { });
+        }
+        return audioCtx;
+    };
+
+    const desbloquear = () => {
+        if (desbloqueado && audioCtx && audioCtx.state === "running") return;
+        const ctx = asegurarContexto();
+        if (ctx) {
+            desbloqueado = true;
+        }
+    };
+
+    ["click", "keydown", "touchstart"].forEach(evt => {
+        window.addEventListener(evt, desbloquear, { passive: true });
+    });
+
+    const tocarTono = (ctx, inicio, duracion, frecuencia, volumen, tipo = "sine") => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = tipo;
+        osc.frequency.setValueAtTime(frecuencia, inicio);
+
+        gain.gain.setValueAtTime(0.0001, inicio);
+        gain.gain.exponentialRampToValueAtTime(volumen, inicio + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, inicio + duracion);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(inicio);
+        osc.stop(inicio + duracion + 0.02);
+    };
+
+    const reproducirAlerta = (esEmergencia = false) => {
+        try {
+            const ctx = asegurarContexto();
+            if (!ctx) return false;
+            const now = ctx.currentTime + 0.02;
+
+            if (esEmergencia) {
+                // Alerta de emergencia más larga e intensa (~3.1 segundos, 4 ciclos de doble tono)
+                for (let ciclo = 0; ciclo < 4; ciclo++) {
+                    const base = now + ciclo * 0.76;
+                    tocarTono(ctx, base, 0.28, 920, 0.26, "triangle");
+                    tocarTono(ctx, base + 0.24, 0.36, 1240, 0.28, "sawtooth");
+                }
+            } else {
+                // Campanita corta y agradable para orden o cita normal (~0.6 segundos)
+                tocarTono(ctx, now, 0.22, 880, 0.18, "sine");
+                tocarTono(ctx, now + 0.16, 0.36, 1174.66, 0.20, "sine");
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
+    const obtenerLeidas = (clave) => {
+        try {
+            const raw = localStorage.getItem(clave);
+            return raw ? JSON.parse(raw) : [];
+        } catch {
+            return [];
+        }
+    };
+
+    const guardarLeidas = (clave, lista) => {
+        try {
+            localStorage.setItem(clave, JSON.stringify(lista || []));
+        } catch { }
+    };
+
+    return {
+        reproducirAlerta,
+        obtenerLeidas,
+        guardarLeidas
+    };
+})();
+
+

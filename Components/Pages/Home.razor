@@ -218,11 +218,40 @@
             </section>
         }
 
-        @if (PuedeAlguno("contabilidad/inventarios", "admision/citas"))
+        @if (PuedeAlguno("contabilidad/inventarios", "admision/citas") || _notificacionesClinicas.Habilitado)
         {
             <section class="dashboard-panel">
-                <header class="panel-heading"><h2><i class="bi bi-bell-fill alert-bell" aria-hidden="true"></i> Recordatorios y Alertas</h2></header>
+                <header class="panel-heading">
+                    <h2>
+                        <i class="bi bi-bell-fill alert-bell" aria-hidden="true"></i> Recordatorios y Alertas
+                        @if (_notificacionesClinicas.Items.Count > 0)
+                        {
+                            <span class="dashboard-notif-count @(_notificacionesClinicas.Items.Any(n => n.EsEmergencia) ? "emergency" : "")">
+                                @_notificacionesClinicas.Items.Count nueva(s)
+                            </span>
+                        }
+                    </h2>
+                </header>
                 <div class="reminder-list">
+                    @foreach (var notif in _notificacionesClinicas.Items.Take(5))
+                    {
+                        var tonoNotif = notif.EsEmergencia ? "red notif-emergency-card" : (notif.Tipo == "CITA" ? "orange" : "blue");
+                        var iconoNotif = notif.EsEmergencia ? "bi-exclamation-triangle-fill" : (notif.Tipo == "CITA" ? "bi-calendar2-check-fill" : "bi-clipboard2-pulse-fill");
+                        <a class="reminder @tonoNotif" href="@notif.RutaDestino">
+                            <i class="bi @iconoNotif reminder-icon" aria-hidden="true"></i>
+                            <span>
+                                <b>
+                                    @notif.Titulo
+                                    @if (notif.EsEmergencia)
+                                    {
+                                        <span class="dashboard-emergency-tag">EMERGENCIA</span>
+                                    }
+                                </b>
+                                <small>@notif.Paciente @(!string.IsNullOrWhiteSpace(notif.Detalle) ? $"· {notif.Detalle}" : "")</small>
+                            </span>
+                            <i class="bi bi-chevron-right ms-auto" aria-hidden="true"></i>
+                        </a>
+                    }
                     @foreach (var aviso in Alertas.Where(a => Puede(a.Ruta)))
                     {
                         <a class="reminder @aviso.Color" href="@aviso.Ruta">
