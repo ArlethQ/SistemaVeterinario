@@ -745,16 +745,18 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         var corteSeguro = fechaCorte.Date > hoy ? hoy : fechaCorte.Date;
 
         var sqlLote = $@"
+            SET NOCOUNT ON;
             {SqlOrdenesProtegidasBitacora}
             DELETE TOP (5000) v
             FROM vt_vitacora v
             WHERE v.vit_idFechaMod < @Corte
-              AND NOT {CondicionProtegidaBitacora};";
+              AND NOT {CondicionProtegidaBitacora};
+            SELECT @@ROWCOUNT;";
 
         int totalEliminados = 0;
         for (int iter = 0; iter < 200; iter++)
         {
-            int eliminados = await db.ExecuteAsync(sqlLote, new { Hoy = hoy, Corte = corteSeguro });
+            int eliminados = await db.ExecuteScalarAsync<int>(sqlLote, new { Hoy = hoy, Corte = corteSeguro });
             if (eliminados <= 0) break;
             totalEliminados += eliminados;
             if (eliminados < 5000) break;
