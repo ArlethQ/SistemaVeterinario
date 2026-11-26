@@ -22,6 +22,12 @@
         @if (_paciente is not null)
         {
             <div class="ficha-actions">
+                @if (FormatoActualizado && Permisos.Permite("quirofano/protocolo"))
+                {
+                    <a class="btn btn-outline-primary" href="/quirofano/protocolo/@IdOrden/@Nhcl">
+                        <i class="bi bi-clipboard-check" aria-hidden="true"></i> Chequeo quirúrgico
+                    </a>
+                }
                 <button type="button" class="app-doc-action app-doc-pdf" @onclick="ExportarPdfAsync">
                     <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Descargar PDF
                 </button>
@@ -135,7 +141,7 @@
         <div id="area-impresion-ficha" @onfocusout="GuardarBorradorAutoAsync" @oninput="ProgramarBorradorAutoAsync">
             <!-- CABECERA DEL PACIENTE Y METADATOS DE LA HOJA -->
             <div class="card ficha-panel mb-3">
-                <div class="card-header ficha-section ficha-sheet-header">
+                <div class="card-header ficha-section ficha-sheet-header @ClasePlegada("paciente")">
                     <div>
                         <span class="fw-bold"><i class="bi bi-clipboard2-pulse me-1" aria-hidden="true"></i> Ficha de hospitalización</span>
                         @if (_sheet.Cerrada)
@@ -158,6 +164,7 @@
                             🩺 Ir a Monitoreo 24h
                         </a>
                         }
+                        @ControlSeccion("paciente", "Datos del paciente")
                     </div>
                 </div>
                 <div class="card-body py-2 px-3">
@@ -227,6 +234,13 @@
             }
             <!-- BUSCADOR RÁPIDO DE FÁRMACOS / INSUMOS PARA ASIGNAR A FILAS -->
             <div class="card ficha-panel mb-3 no-print">
+                @if (FormatoActualizado)
+                {
+                    <div class="card-header ficha-section @ClasePlegada("catalogo")">
+                        <span>Catálogo de fármacos e insumos</span>
+                        @ControlSeccion("catalogo", "Catálogo de fármacos e insumos")
+                    </div>
+                }
                 <div class="card-body py-2 px-3">
                     <div class="row g-2 align-items-center small">
                         <div class="col-md-4">
@@ -272,8 +286,9 @@
 
             <!-- BLOQUE 1: MEDICACIÓN (12 FILAS X 24 HORAS: 07h..24h, 01h..06h) -->
             <div class="card ficha-panel mb-3">
-                <div class="card-header ficha-section">
+                <div class="card-header ficha-section @ClasePlegada("medicacion")">
                     <span class="fw-bold small">1. MEDICACIÓN — PRINCIPIO ACTIVO, DOSIS@(SufijoMatriz)</span>
+                    @ControlSeccion("medicacion", "medicacion")
                 </div>
                 <div class="table-responsive">
                     <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.74rem;">
@@ -346,8 +361,9 @@
 
             <!-- BLOQUE 2: ALIMENTACIÓN (5 FILAS X 24 HORAS) -->
             <div class="card ficha-panel mb-3">
-                <div class="card-header ficha-section">
+                <div class="card-header ficha-section @ClasePlegada("alimentacion")">
                     <span class="fw-bold small">2. ALIMENTACIÓN — CÁLCULO CALÓRICO@(SufijoMatriz)</span>
+                    @ControlSeccion("alimentacion", "alimentacion")
                 </div>
                 <div class="table-responsive">
                     <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.74rem;">
@@ -417,9 +433,10 @@
             {
                 <!-- BLOQUE 3: FLUIDOTERAPIA (7 FILAS X 24 HORAS) -->
                 <div class="card ficha-panel mb-3">
-                    <div class="card-header ficha-section">
+                    <div class="card-header ficha-section @ClasePlegada("fluidoterapia")">
                         <span class="fw-bold small">3. FLUIDOTERAPIA — INFUSIÓN CONTINUA@(SufijoMatriz)</span>
-                    </div>
+                        @ControlSeccion("fluidoterapia", "fluidoterapia")
+                </div>
                     <div class="table-responsive">
                         <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.74rem;">
                             <thead class="table-light">
@@ -491,9 +508,10 @@
             <div class="row g-3">
                 <div class="col-md-6">
                     <div class="card ficha-panel h-100">
-                        <div class="card-header ficha-section">
+                        <div class="card-header ficha-section @ClasePlegada("alertas")">
                             ⚠️ ALERTAS Y NOTAS IMPORTANTES
-                        </div>
+                            @ControlSeccion("alertas", "alertas")
+                </div>
                         <div class="card-body p-2">
                             <div class="input-group input-group-sm mb-2 no-print">
                                 <input type="text" class="form-control" placeholder="Agregar nota importante..."
@@ -529,9 +547,10 @@
 
                 <div class="col-md-6">
                     <div class="card ficha-panel h-100">
-                        <div class="card-header ficha-section">
+                        <div class="card-header ficha-section @ClasePlegada("observaciones")">
                             📝 OBSERVACIONES CLÍNICAS DE LA FICHA
-                        </div>
+                            @ControlSeccion("observaciones", "observaciones")
+                </div>
                         <div class="card-body p-2">
                             <div class="input-group input-group-sm mb-2 no-print">
                                 <input type="text" class="form-control" placeholder="Agregar observación clínica..."
@@ -573,7 +592,10 @@
 @code {
     private RenderFragment SeccionActualizada(SeccionFichaHospitalizacion seccion, DetalleFichaHospitalizacion detalle) =>
         @<section class="card ficha-panel mb-3">
-            <div class="card-header ficha-section">@seccion.Titulo</div>
+            <div class="card-header ficha-section @ClasePlegada(seccion.Titulo)">
+                <span>@seccion.Titulo</span>
+                @ControlSeccion(seccion.Titulo, seccion.Titulo)
+            </div>
             @if (seccion.Titulo == "Control ecográfico torácico")
             {
                 <p class="small text-muted px-3 my-2">
@@ -674,6 +696,29 @@
     [Parameter] public int Nhcl { get; set; }
     [Parameter] public bool ModoModal { get; set; }
     [Parameter] public bool FormatoActualizado { get; set; }
+
+    private readonly HashSet<string> _seccionesPlegadas = [];
+
+    private string ClasePlegada(string clave) => _seccionesPlegadas.Contains(clave) ? "ficha-plegada" : "";
+
+    private RenderFragment ControlSeccion(string clave, string titulo) => @<text>
+        @if (FormatoActualizado)
+        {
+            var plegada = _seccionesPlegadas.Contains(clave);
+            <button type="button" class="btn btn-sm btn-outline-light ficha-control-seccion no-print"
+                    aria-expanded="@(!plegada ? "true" : "false")"
+                    aria-label="@($"{(plegada ? "Desplegar" : "Plegar")} {titulo}")"
+                    @onclick="() => AlternarSeccion(clave)">
+                <i class="bi @(plegada ? "bi-chevron-down" : "bi-chevron-up")" aria-hidden="true"></i>
+            </button>
+        }
+    </text>;
+
+    private void AlternarSeccion(string clave)
+    {
+        if (!_seccionesPlegadas.Remove(clave))
+            _seccionesPlegadas.Add(clave);
+    }
 
     private static bool EsColumnaNumerica(string etiqueta) => etiqueta is
         "ml" or "ml/h" or "ml/día" or "Dosis (ml/h)" or "Bureta (ml)" or
