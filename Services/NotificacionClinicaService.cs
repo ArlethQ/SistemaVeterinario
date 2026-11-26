@@ -116,7 +116,7 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                 SELECT ISNULL(u.user_tipouser_numero, 0) AS TipoUser,
                        ISNULL(t.tipuser_descripcion, '') AS RolDescripcion
                 FROM vt_usuarios u WITH (NOLOCK)
-                LEFT JOIN vt_tipouser t WITH (NOLOCK) ON u.user_tipouser_numero = t.tipuser_numero
+                LEFT JOIN vt_tipos_usuarios t WITH (NOLOCK) ON u.user_tipouser_numero = t.tipuser_numero
                 WHERE u.user_numero = @IdUser AND ISNULL(u.user_estado, 'A') = 'A';
                 """, new { IdUser = _session.IdUser });
 
@@ -124,7 +124,7 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
             var tipoUser = perfil?.TipoUser ?? _session.TipoUser;
 
             bool esMedico = tipoUser == 2 || rolDesc.Contains("MEDIC") || rolDesc.Contains("VETERIN");
-            bool esEnfermero = rolDesc.Contains("ENFERMER");
+            bool esEnfermero = tipoUser == 11 || rolDesc.Contains("ENFERMER");
             bool esAdmin = _session.EsAdministrador || tipoUser == 1;
 
             estado.EsMedico = esMedico;

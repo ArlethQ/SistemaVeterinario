@@ -215,16 +215,30 @@
 
     protected override async Task OnInitializedAsync()
     {
+        Session.OnChange += ManejarCambioSesion;
+        NotificacionHub.OnNuevaActividad += ManejarActividadHub;
         if (Session.IsAuthenticated && Session.EsAdministrador)
         {
             _localidades = await Auth.ObtenerLocalidadesUsuarioAsync();
         }
         if (Session.IsAuthenticated)
         {
-            NotificacionHub.OnNuevaActividad += ManejarActividadHub;
             await ActualizarNotificacionesAsync(esCargaInicial: true);
             IniciarPollingNotificaciones();
         }
+    }
+
+    private void ManejarCambioSesion()
+    {
+        if (!Session.IsAuthenticated) return;
+        _ = InvokeAsync(async () =>
+        {
+            if (!_notificacionesInicializadas)
+            {
+                await ActualizarNotificacionesAsync(esCargaInicial: true);
+                IniciarPollingNotificaciones();
+            }
+        });
     }
 
     private void IniciarPollingNotificaciones()
@@ -424,6 +438,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        Session.OnChange -= ManejarCambioSesion;
         NotificacionHub.OnNuevaActividad -= ManejarActividadHub;
         _notifCts?.Cancel();
         _notifCts?.Dispose();
