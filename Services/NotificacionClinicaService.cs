@@ -167,8 +167,7 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                             CONCAT(@PrefijoPrioridad, o.ordenAten_id, ' green'))
                         ORDER BY v.vit_idFechaMod
                     ) prioridad
-                    WHERE CAST(o.ordenAten_fecha AS DATE) >= @Hoy
-                      AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                    WHERE ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                       AND (
                           o.ordenAten_idMedico = @IdUser
                           OR o.ordenAten_idEnfermero = @IdUser
@@ -202,7 +201,10 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                     if (!string.IsNullOrWhiteSpace(o.Especialidad)) partesDetalle.Add(o.Especialidad.Trim());
                     else if (!string.IsNullOrWhiteSpace(o.Etapa)) partesDetalle.Add(o.Etapa.Trim());
                     if (!string.IsNullOrWhiteSpace(o.Turno)) partesDetalle.Add($"Turno {o.Turno}");
-                    if (!string.IsNullOrWhiteSpace(o.Hora)) partesDetalle.Add(o.Hora);
+                    var fechaHoraOrden = o.Fecha.Date == hoy
+                        ? (string.IsNullOrWhiteSpace(o.Hora) ? "Hoy" : $"Hoy {o.Hora}")
+                        : (string.IsNullOrWhiteSpace(o.Hora) ? o.Fecha.ToString("dd/MM/yyyy") : $"{o.Fecha:dd/MM/yyyy} {o.Hora}");
+                    partesDetalle.Add(fechaHoraOrden);
 
                     string ruta = esEnfermero && o.IdMedico != _session.IdUser
                         ? "/admision/triaje"

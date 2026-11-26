@@ -12,6 +12,7 @@ public partial class Home : IDisposable
 
     [Inject] private ISqlDataService Sql { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private SessionStateService Session { get; set; } = default!;
     [Inject] private INotificacionClinicaService NotificacionClinicaService { get; set; } = default!;
     [Inject] private NotificacionClinicaHub NotificacionHub { get; set; } = default!;
     [Inject] private Simetric.Services.EContax.EContaxInventarioService Inventario { get; set; } = default!;
@@ -207,6 +208,7 @@ public partial class Home : IDisposable
 
     protected override async Task OnInitializedAsync()
     {
+        Session.OnChange += OnSesionCambiada;
         NotificacionHub.OnNuevaActividad += OnNotificacionHubActividad;
         _cargando = true;
         await Task.Yield();
@@ -314,6 +316,16 @@ public partial class Home : IDisposable
         Nav.NavigateTo(url);
     }
 
+    private void OnSesionCambiada()
+    {
+        if (!Session.IsAuthenticated) return;
+        _ = InvokeAsync(async () =>
+        {
+            _notificacionesClinicas = await NotificacionClinicaService.ObtenerNotificacionesActivasAsync();
+            StateHasChanged();
+        });
+    }
+
     private void OnNotificacionHubActividad(int? idUsuarioDestino)
     {
         _ = InvokeAsync(async () =>
@@ -325,6 +337,7 @@ public partial class Home : IDisposable
 
     public void Dispose()
     {
+        Session.OnChange -= OnSesionCambiada;
         NotificacionHub.OnNuevaActividad -= OnNotificacionHubActividad;
     }
 }

@@ -227,13 +227,13 @@
                         @if (_notificacionesClinicas.Items.Count > 0)
                         {
                             <span class="dashboard-notif-count @(_notificacionesClinicas.Items.Any(n => n.EsEmergencia) ? "emergency" : "")">
-                                @_notificacionesClinicas.Items.Count nueva(s)
+                                @_notificacionesClinicas.Items.Count pendiente(s)
                             </span>
                         }
                     </h2>
                 </header>
-                <div class="reminder-list">
-                    @foreach (var notif in _notificacionesClinicas.Items.Take(5))
+                <div class="reminder-list" style="max-height: 360px; overflow-y: auto;">
+                    @foreach (var notif in _notificacionesClinicas.Items)
                     {
                         var tonoNotif = notif.EsEmergencia ? "red notif-emergency-card" : (notif.Tipo == "CITA" ? "orange" : "blue");
                         var iconoNotif = notif.EsEmergencia ? "bi-exclamation-triangle-fill" : (notif.Tipo == "CITA" ? "bi-calendar2-check-fill" : "bi-clipboard2-pulse-fill");
