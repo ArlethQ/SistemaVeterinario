@@ -33,6 +33,7 @@ public sealed class NotificacionClinicaItemDto
     public string HoraTexto { get; set; } = string.Empty;
     public DateTime FechaEvento { get; set; }
     public string RutaDestino { get; set; } = "/dashboard";
+    public string TextoAccion { get; set; } = "Abrir";
     public bool Leida { get; set; }
 }
 
@@ -206,11 +207,23 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                         : (string.IsNullOrWhiteSpace(o.Hora) ? o.Fecha.ToString("dd/MM/yyyy") : $"{o.Fecha:dd/MM/yyyy} {o.Hora}");
                     partesDetalle.Add(fechaHoraOrden);
 
-                    string ruta = esEnfermero && o.IdMedico != _session.IdUser
-                        ? "/admision/triaje"
-                        : (o.Etapa?.Contains("Hosp", StringComparison.OrdinalIgnoreCase) == true
-                            ? $"/hospitalizacion/ficha/{o.IdOrden}/{o.Nhcl}"
-                            : "/kardex/ordenes");
+                    string ruta;
+                    string textoAccion;
+                    if (esEnfermero && o.IdMedico != _session.IdUser)
+                    {
+                        ruta = o.IdOrden > 0 && o.Nhcl > 0 ? $"/admision/triaje/{o.IdOrden}/{o.Nhcl}" : "/admision/triaje";
+                        textoAccion = "Ir a Triaje";
+                    }
+                    else if (o.Etapa?.Contains("Hosp", StringComparison.OrdinalIgnoreCase) == true && o.IdOrden > 0 && o.Nhcl > 0)
+                    {
+                        ruta = $"/hospitalizacion/ficha/{o.IdOrden}/{o.Nhcl}";
+                        textoAccion = "Ir a Ficha 24h";
+                    }
+                    else
+                    {
+                        ruta = o.IdOrden > 0 && o.Nhcl > 0 ? $"/consulta/fichamedica/{o.IdOrden}/{o.Nhcl}" : "/consulta/fichamedica";
+                        textoAccion = "Ir al SOAP";
+                    }
 
                     items.Add(new NotificacionClinicaItemDto
                     {
@@ -221,13 +234,14 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                         EsEmergencia = esEmergencia,
                         Titulo = esEmergencia
                             ? $"EMERGENCIA · Orden #{o.IdOrden}"
-                            : (o.EsProcedimiento ? $"Procedimiento · Orden #{o.IdOrden}" : $"Orden asignada #{o.IdOrden}"),
+                            : (o.EsProcedimiento ? $"Procedimiento · Orden #{o.IdOrden}" : $"Orden #{o.IdOrden}"),
                         Paciente = string.IsNullOrWhiteSpace(o.Mascota) ? $"NHCL #{o.Nhcl}" : o.Mascota.Trim(),
                         Propietario = o.Propietario?.Trim() ?? string.Empty,
                         Detalle = string.Join(" · ", partesDetalle),
                         HoraTexto = string.IsNullOrWhiteSpace(o.Hora) ? o.Fecha.ToString("dd/MM") : o.Hora,
                         FechaEvento = CombinarFechaHora(o.Fecha, o.Hora),
-                        RutaDestino = ruta
+                        RutaDestino = ruta,
+                        TextoAccion = textoAccion
                     });
                 }
             }
@@ -295,7 +309,8 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                             : $"{tipoLabel} · {c.Observacion.Trim()}",
                         HoraTexto = fechaHora.Trim(),
                         FechaEvento = CombinarFechaHora(c.Fecha, c.Hora),
-                        RutaDestino = "/admision/citas"
+                        RutaDestino = "/admision/citas",
+                        TextoAccion = "Ver agenda"
                     });
                 }
             }

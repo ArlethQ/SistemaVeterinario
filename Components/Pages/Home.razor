@@ -182,7 +182,64 @@
     </div>
 
     <div class="dashboard-bottom">
-        @if (Puede("kardex/ordenes"))
+        @if (_notificacionesClinicas.Habilitado)
+        {
+            var ordenesAsignadas = _notificacionesClinicas.Items.Where(n => n.Tipo == "ORDEN").ToList();
+            <section class="dashboard-panel">
+                <header class="panel-heading">
+                    <h2>
+                        <i class="bi bi-clipboard2-pulse-fill" aria-hidden="true"></i> Mis Órdenes Pendientes
+                        @if (ordenesAsignadas.Count > 0)
+                        {
+                            <span class="dashboard-notif-count @(ordenesAsignadas.Any(n => n.EsEmergencia) ? "emergency" : "")">
+                                @ordenesAsignadas.Count pendiente(s)
+                            </span>
+                        }
+                    </h2>
+                    @if (Puede("admision/ordenes"))
+                    {
+                        <a class="panel-link" href="/admision/ordenes">Ver recepción <i class="bi bi-arrow-right"></i></a>
+                    }
+                </header>
+                @if (ordenesAsignadas.Count > 0)
+                {
+                    <div class="assigned-orders-list">
+                        @foreach (var ord in ordenesAsignadas)
+                        {
+                            <div class="assigned-order-row @(ord.EsEmergencia ? "is-emergency" : "")">
+                                <span class="assigned-order-icon @(ord.EsEmergencia ? "emergency" : "")">
+                                    <i class="bi @(ord.EsEmergencia ? "bi-exclamation-triangle-fill" : "bi-clipboard2-pulse-fill")" aria-hidden="true"></i>
+                                </span>
+                                <div class="assigned-order-copy">
+                                    <div class="assigned-order-title">
+                                        <strong>@ord.Titulo</strong>
+                                        @if (ord.EsEmergencia)
+                                        {
+                                            <span class="dashboard-emergency-tag">EMERGENCIA</span>
+                                        }
+                                    </div>
+                                    <div class="assigned-order-patient">
+                                        <b>@ord.Paciente</b>@(!string.IsNullOrWhiteSpace(ord.Propietario) ? $" · {ord.Propietario}" : "")
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(ord.Detalle))
+                                    {
+                                        <small>@ord.Detalle</small>
+                                    }
+                                </div>
+                                <a class="assigned-order-cta @(ord.EsEmergencia ? "emergency" : "")" href="@ord.RutaDestino">
+                                    <i class="bi bi-journal-medical" aria-hidden="true"></i> @ord.TextoAccion
+                                </a>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="dashboard-empty">No tienes órdenes pendientes asignadas en este momento.</p>
+                }
+            </section>
+        }
+        else if (Puede("kardex/ordenes"))
         {
             <section class="dashboard-panel">
                 <header class="panel-heading">
@@ -220,44 +277,39 @@
 
         @if (PuedeAlguno("contabilidad/inventarios", "admision/citas") || _notificacionesClinicas.Habilitado)
         {
+            var citasNotif = _notificacionesClinicas.Items.Where(n => n.Tipo == "CITA").ToList();
             <section class="dashboard-panel">
                 <header class="panel-heading">
                     <h2>
-                        <i class="bi bi-bell-fill alert-bell" aria-hidden="true"></i> Recordatorios y Alertas
-                        @if (_notificacionesClinicas.Items.Count > 0)
+                        <i class="bi bi-bell-fill alert-bell" aria-hidden="true"></i> Citas y Alertas
+                        @if (citasNotif.Count > 0)
                         {
-                            <span class="dashboard-notif-count @(_notificacionesClinicas.Items.Any(n => n.EsEmergencia) ? "emergency" : "")">
-                                @_notificacionesClinicas.Items.Count pendiente(s)
-                            </span>
+                            <span class="dashboard-notif-count">@citasNotif.Count cita(s)</span>
                         }
                     </h2>
-                </header>
-                <div class="reminder-list" style="max-height: 360px; overflow-y: auto;">
-                    @foreach (var notif in _notificacionesClinicas.Items)
+                    @if (Puede("admision/citas"))
                     {
-                        var tonoNotif = notif.EsEmergencia ? "red notif-emergency-card" : (notif.Tipo == "CITA" ? "orange" : "blue");
-                        var iconoNotif = notif.EsEmergencia ? "bi-exclamation-triangle-fill" : (notif.Tipo == "CITA" ? "bi-calendar2-check-fill" : "bi-clipboard2-pulse-fill");
-                        <a class="reminder @tonoNotif" href="@notif.RutaDestino">
-                            <i class="bi @iconoNotif reminder-icon" aria-hidden="true"></i>
-                            <span>
-                                <b>
-                                    @notif.Titulo
-                                    @if (notif.EsEmergencia)
-                                    {
-                                        <span class="dashboard-emergency-tag">EMERGENCIA</span>
-                                    }
-                                </b>
-                                <small>@notif.Paciente @(!string.IsNullOrWhiteSpace(notif.Detalle) ? $"· {notif.Detalle}" : "")</small>
-                            </span>
-                            <i class="bi bi-chevron-right ms-auto" aria-hidden="true"></i>
-                        </a>
+                        <a class="panel-link" href="/admision/citas">Agenda <i class="bi bi-arrow-right"></i></a>
                     }
+                </header>
+                <div class="reminder-list">
                     @foreach (var aviso in Alertas.Where(a => Puede(a.Ruta)))
                     {
                         <a class="reminder @aviso.Color" href="@aviso.Ruta">
                             <i class="bi @aviso.Icono reminder-icon" aria-hidden="true"></i>
                             <span><b>@aviso.Nombre</b><small>@aviso.Detalle</small></span>
                             <i class="bi bi-chevron-right ms-auto" aria-hidden="true"></i>
+                        </a>
+                    }
+                    @foreach (var cita in citasNotif.Take(6))
+                    {
+                        <a class="reminder @(cita.EsEmergencia ? "red notif-emergency-card" : "orange")" href="@cita.RutaDestino">
+                            <i class="bi bi-calendar2-check-fill reminder-icon" aria-hidden="true"></i>
+                            <span>
+                                <b>@cita.Titulo</b>
+                                <small>@cita.Paciente @(!string.IsNullOrWhiteSpace(cita.Detalle) ? $"· {cita.Detalle}" : "")</small>
+                            </span>
+                            <span class="reminder-action-pill">@cita.TextoAccion</span>
                         </a>
                     }
                 </div>
