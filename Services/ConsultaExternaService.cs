@@ -23,6 +23,7 @@ public interface IConsultaExternaService
     Task<bool> AgregarAntecedenteAsync(AntecedenteClinicoDto dto, int idUsuario, int idCliente);
     Task<List<VacunaPacienteDto>> ObtenerVacunasPacienteAsync(int nhcl);
     Task<List<CatalogoItemGenericoDto>> ObtenerCatalogoVacunasAsync();
+    Task<List<CatalogoItemGenericoDto>> ObtenerCatalogoVacunasPorTipoAsync(string tipoProcedimiento);
     Task<bool> AgregarVacunaAsync(VacunaPacienteDto dto, int idUsuario, int idCliente);
     Task<bool> EliminarVacunaAsync(int vacunaId, int idUsuario);
 
@@ -908,6 +909,46 @@ public class ConsultaExternaService : IConsultaExternaService
               AND p.IDUSUARIO >= 1000000
               AND UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) LIKE '%VACUN%'
             ORDER BY Descripcion ASC";
+        return (await _db.QueryAsync<CatalogoItemGenericoDto>(sql)).ToList();
+    }
+
+    public async Task<List<CatalogoItemGenericoDto>> ObtenerCatalogoVacunasPorTipoAsync(string tipoProcedimiento)
+    {
+        var tipo = (tipoProcedimiento ?? string.Empty).Trim().ToUpperInvariant();
+        string filtroSql;
+        if (tipo.Contains("DESPARASIT"))
+        {
+            filtroSql = "UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) IN (N'DESPARASITACIÓN', N'DESPARASITACION')";
+        }
+        else if (tipo.Contains("ANTIPARASIT"))
+        {
+            filtroSql = "UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) = N'ANTIPARASITARIO EXTERNO'";
+        }
+        else
+        {
+            filtroSql = @"(
+                UPPER(LTRIM(RTRIM(ISNULL(s.DESCRIPCION, '')))) IN (N'VACUNACIÓN', N'VACUNACION', N'VACUNAS')
+                OR UPPER(LTRIM(RTRIM(ISNULL(t.DESCRIPCION, '')))) IN (N'VACUNAS', N'VACUNACIÓN', N'VACUNACION')
+            )";
+        }
+
+        string sql = $@"
+            SELECT
+                p.CODIGO AS Id,
+                CONCAT(
+                    UPPER(REPLACE(REPLACE(RTRIM(ISNULL(p.NOMBRE, '')), CHAR(13), ''), CHAR(10), '')),
+                    CASE WHEN ISNULL(p.VALOR_UNITARIO, 0) > 0 THEN CONCAT(' ($', FORMAT(p.VALOR_UNITARIO, 'N2'), ')') ELSE '' END
+                ) AS Descripcion
+            FROM VeterinariaFacturacion.dbo.PRODUCTO p WITH (NOLOCK)
+            INNER JOIN VeterinariaFacturacion.dbo.PRODUCTOTIPO t WITH (NOLOCK) ON t.IDTIPOPRODUCTO = p.TIPO_PRODUCTO
+            LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTOSUBTIPO s WITH (NOLOCK) ON s.IDSUBTIPO = p.IDSUBTIPO
+            WHERE ISNULL(p.ESTADO, 1) = 1
+              AND ISNULL(t.ESTADO, 1) = 1
+              AND ISNULL(s.ESTADO, 'A') <> 'I'
+              AND p.IDUSUARIO >= 1000000
+              AND {filtroSql}
+            ORDER BY p.NOMBRE;";
+
         return (await _db.QueryAsync<CatalogoItemGenericoDto>(sql)).ToList();
     }
 

@@ -32,9 +32,9 @@
                         </label>
                     }
                     <label class="small fw-semibold">
-                        Vacuna o producto
+                        @EtiquetaProducto
                         <select class="form-select mt-1" @bind="_nueva.IdProducto">
-                            <option value="0">Seleccione</option>
+                            <option value="0">Seleccione @EtiquetaProducto.ToLowerInvariant()...</option>
                             @foreach (var producto in _catalogo)
                             {
                                 <option value="@producto.Id">@producto.Descripcion</option>
@@ -66,7 +66,7 @@
     <div class="@(SoloLectura ? "col-12" : "col-xl-8")">
         <section class="card shadow-sm border-0 h-100">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <strong>Historial de vacunación</strong>
+                <strong>@TituloHistorial</strong>
                 <span class="badge text-bg-primary">@_vacunas.Count registros</span>
             </div>
             <div class="table-responsive">
@@ -75,7 +75,7 @@
                         <tr>
                             <th>Aplicación</th>
                             <th>Tipo</th>
-                            <th>Vacuna / producto</th>
+                            <th>@EtiquetaProducto</th>
                             <th>Próximo refuerzo</th>
                             <th>Observaciones</th>
                             <th>Registrado por</th>
@@ -90,7 +90,7 @@
                         {
                             <tr>
                                 <td colspan="@(SoloLectura ? 6 : 7)" class="text-center text-muted py-4">
-                                    El paciente no tiene vacunas registradas.
+                                    El paciente no tiene registros aplicados.
                                 </td>
                             </tr>
                         }
@@ -132,23 +132,46 @@
     private bool _esError;
     private bool _guardando;
     private int _nhclCargado;
+    private string? _tipoCatalogoCargado;
     private int _idClienteResuelto;
     private int _idOrdenResuelto;
     private List<CatalogoItemGenericoDto> _catalogo = [];
     private List<VacunaPacienteDto> _vacunas = [];
     private VacunaPacienteDto _nueva = new();
 
+    private string TipoEfectivo => !string.IsNullOrWhiteSpace(TipoFijo)
+        ? TipoFijo!
+        : (string.IsNullOrWhiteSpace(_nueva.Tipo) ? "Vacunación" : _nueva.Tipo);
+
+    private string EtiquetaProducto => TipoEfectivo switch
+    {
+        "Desparasitación" => "Desparasitante",
+        "Antiparasitario externo" => "Antiparasitario externo",
+        _ => "Vacuna"
+    };
+
+    private string TituloHistorial => TipoEfectivo switch
+    {
+        "Desparasitación" => "Historial de desparasitación y vacunas",
+        "Antiparasitario externo" => "Historial de antiparasitarios y vacunas",
+        _ => "Historial de vacunación"
+    };
+
     private string FechaRefuerzoTexto => _nueva.FechaRevacunacion?.ToString("yyyy-MM-dd") ?? string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_catalogo.Count == 0)
-            _catalogo = await ConsultaService.ObtenerCatalogoVacunasAsync();
-
         if (!string.IsNullOrWhiteSpace(TipoFijo))
             _nueva.Tipo = TipoFijo;
         else if (string.IsNullOrWhiteSpace(_nueva.Tipo))
             _nueva.Tipo = "Vacunación";
+
+        if (!string.Equals(_tipoCatalogoCargado, TipoEfectivo, StringComparison.OrdinalIgnoreCase))
+        {
+            _tipoCatalogoCargado = TipoEfectivo;
+            _catalogo = await ConsultaService.ObtenerCatalogoVacunasPorTipoAsync(TipoEfectivo);
+            _nueva.IdProducto = 0;
+        }
 
         if (Nhcl > 0 && Nhcl != _nhclCargado)
         {
