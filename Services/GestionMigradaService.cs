@@ -705,7 +705,7 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         INSERT INTO @OrdenesProtegidas (IdOrden)
         SELECT DISTINCT o.ordenAten_id
         FROM vt_ordenAtencion o WITH (NOLOCK)
-        WHERE ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+        WHERE (ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E') AND o.ordenAten_fecha >= DATEADD(day, -30, @Hoy))
            OR (o.ordenAten_estado = 'T' AND (
                 o.ordenAten_fecha >= DATEADD(day, -2, @Hoy)
                 OR o.ordenAten_fechaProcesado >= DATEADD(day, -2, @Hoy)
