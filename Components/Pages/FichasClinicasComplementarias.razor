@@ -220,7 +220,7 @@
 
             Nhcl = paciente.Nhcl;
             _paciente = paciente;
-            _tipoSangre = tipoSangre;
+            _tipoSangre = string.IsNullOrWhiteSpace(tipoSangre) ? null : tipoSangre.Trim();
             _transfusiones = transfusiones;
             _mensaje = "";
             Session.SeleccionarOrden(idOrden, Nhcl, paciente.PacienteNombre);
@@ -233,7 +233,17 @@
         }
     }
     private async Task RecargarAsync() => _transfusiones = await FichasService.ObtenerTransfusionesAsync(IdOrden, Nhcl);
-    private void NuevaTrans(){_trans=new(){IdOrden=IdOrden,Nhcl=Nhcl,Fecha=DateTime.Now};_mon=new();}
+    private void NuevaTrans()
+    {
+        _trans = new()
+        {
+            IdOrden = IdOrden,
+            Nhcl = Nhcl,
+            Fecha = DateTime.Now,
+            GrupoReceptor = _tipoSangre ?? string.Empty
+        };
+        _mon = new();
+    }
     private void EditarTrans(TransfusionDto x){_trans=x;_mon=new(){IdTransfusion=x.Id,FechaHora=DateTime.Now};}
     private async Task GuardarTransAsync()=>await EjecutarAsync(async()=>{_trans.Id=await FichasService.GuardarTransfusionAsync(_trans,Session.IdUser);await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Transfusión guardada.");
     private async Task AgregarMonAsync()=>await EjecutarAsync(async()=>{_mon.IdTransfusion=_trans.Id;await FichasService.AgregarMonitoreoAsync(_mon,IdOrden,Session.IdUser);await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Control agregado.");
