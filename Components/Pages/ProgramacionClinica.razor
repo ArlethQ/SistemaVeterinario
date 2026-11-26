@@ -125,23 +125,39 @@
                             {
                                 var indice = idx;
                                 var valorActual = _cirugia.IdsCirujanosAdicionales[indice];
+                                var conflictoEste = valorActual > 0 && !CirujanoAdicionalDisponibleEnHorario(valorActual);
                                 <div class="col-md-4">
                                     <div class="input-group input-group-sm">
-                                        <select class="form-select" value="@valorActual" @onchange="e => ActualizarCirujanoAdicional(indice, e)">
+                                        <select class="form-select @(conflictoEste ? "is-invalid" : "")" value="@valorActual" @onchange="e => ActualizarCirujanoAdicional(indice, e)">
                                             <option value="0">Seleccione cirujano adicional...</option>
                                             @foreach (var m in CirujanosAdicionalesDisponibles(indice))
                                             {
-                                                var libres = ContarSlotsLibresMedico(m.Id);
-                                                <option value="@m.Id">@m.Descripcion @(libres > 0 ? $"({libres} libres)" : "(sin horas en esta fecha)")</option>
+                                                var disp = CirujanoAdicionalDisponibleEnHorario(m.Id);
+                                                <option value="@m.Id" disabled="@(!disp && m.Id != valorActual)">
+                                                    @m.Descripcion @(disp ? "" : "— No disponible en este horario")
+                                                </option>
                                             }
                                         </select>
                                         <button type="button" class="btn btn-outline-danger" title="Quitar cirujano" @onclick="() => QuitarCirujanoAdicional(indice)">
                                             <i class="bi bi-x-lg"></i>
                                         </button>
                                     </div>
+                                    @if (conflictoEste)
+                                    {
+                                        <div class="text-danger small mt-1" style="font-size:.72rem;">
+                                            <i class="bi bi-exclamation-circle-fill me-1"></i>No disponible en este horario.
+                                        </div>
+                                    }
                                 </div>
                             }
                         </div>
+                        @if (HayConflictoCirujanosAdicionales)
+                        {
+                            <div class="alert alert-danger py-2 px-3 mt-2 mb-0 small d-flex align-items-center gap-2">
+                                <i class="bi bi-exclamation-triangle-fill"></i>
+                                <span><strong>No disponible en el horario seleccionado:</strong> @string.Join(", ", CirujanosAdicionalesConConflicto) (tiene cita, bloqueo, otra cirugía o está fuera de turno). Quítelo o elija otro horario.</span>
+                            </div>
+                        }
                     </div>
                 </div>
             }
@@ -201,7 +217,7 @@
                 </select>
             </div>
             <div class="col-md-3 d-flex align-items-end">
-                <SaveButton class="btn btn-primary w-100 fw-semibold py-2" OnClick="GuardarCirugia" Disabled="@(_cirugia.IdMedico <= 0 || _cirugia.IdLocalidad <= 0 || _slotsLibresCirugia.Count == 0 || string.IsNullOrWhiteSpace(_cirugia.HoraInicio) || string.IsNullOrWhiteSpace(_cirugia.HoraFin))">
+                <SaveButton class="btn btn-primary w-100 fw-semibold py-2" OnClick="GuardarCirugia" Disabled="@(_cirugia.IdMedico <= 0 || _cirugia.IdLocalidad <= 0 || _slotsLibresCirugia.Count == 0 || string.IsNullOrWhiteSpace(_cirugia.HoraInicio) || string.IsNullOrWhiteSpace(_cirugia.HoraFin) || HayConflictoCirujanosAdicionales)">
                     <i class="bi bi-check2-circle me-1"></i>Guardar cirugía
                 </SaveButton>
             </div>
@@ -323,22 +339,38 @@ var cirugiasVisiblesModal = _cirugias.Where(x =>
                 {
                     var indice = idx;
                     var valorActual = _cirugia.IdsCirujanosAdicionales[indice];
+                    var conflictoEste = valorActual > 0 && !CirujanoAdicionalDisponibleEnHorario(valorActual);
                     <div class="col-md-4">
                         <div class="input-group input-group-sm">
-                            <select class="form-select" value="@valorActual" @onchange="e => ActualizarCirujanoAdicional(indice, e)">
+                            <select class="form-select @(conflictoEste ? "is-invalid" : "")" value="@valorActual" @onchange="e => ActualizarCirujanoAdicional(indice, e)">
                                 <option value="0">Seleccione cirujano adicional...</option>
                                 @foreach (var m in CirujanosAdicionalesDisponibles(indice))
                                 {
-                                    <option value="@m.Id">@m.Descripcion</option>
+                                    var disp = CirujanoAdicionalDisponibleEnHorario(m.Id);
+                                    <option value="@m.Id" disabled="@(!disp && m.Id != valorActual)">
+                                        @m.Descripcion @(disp ? "" : "— No disponible en este horario")
+                                    </option>
                                 }
                             </select>
                             <button type="button" class="btn btn-outline-danger" title="Quitar cirujano" @onclick="() => QuitarCirujanoAdicional(indice)">
                                 <i class="bi bi-x-lg"></i>
                             </button>
                         </div>
+                        @if (conflictoEste)
+                        {
+                            <div class="text-danger small mt-1" style="font-size:.72rem;">
+                                <i class="bi bi-exclamation-circle-fill me-1"></i>No disponible en este horario.
+                            </div>
+                        }
                     </div>
                 }
             </div>
+            @if (HayConflictoCirujanosAdicionales)
+            {
+                <div class="alert alert-danger py-1 px-2 mt-2 mb-0 small">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i><strong>No disponible en este horario:</strong> @string.Join(", ", CirujanosAdicionalesConConflicto) (tiene cita, bloqueo, otra cirugía o está fuera de turno).
+                </div>
+            }
         </div>
     </div>
 }
@@ -350,7 +382,7 @@ var cirugiasVisiblesModal = _cirugias.Where(x =>
 <div class="col-md-2"><label>Fecha</label><input type="date" class="form-control" value="@_cirugia.Fecha.ToString("yyyy-MM-dd")" @onchange="OnFechaCirugiaChangedAsync" min="@DateTime.Today.ToString("yyyy-MM-dd")"/></div>
 <div class="col-md-2"><label>Hora inicio (libre)</label><select class="form-select" value="@_cirugia.HoraInicio" @onchange="OnHoraInicioCirugiaChanged" disabled="@(_slotsLibresCirugia.Count == 0)">@if(_slotsLibresCirugia.Count == 0){<option value="">Sin horas libres</option>}else{<option value="">Seleccione</option>@foreach(var s in _slotsLibresCirugia){<option value="@s.Hora">@s.Hora</option>}}</select></div>
 <div class="col-md-2"><label>Hora fin / duración</label><select class="form-select" value="@_cirugia.HoraFin" @onchange="OnHoraFinCirugiaChanged" disabled="@(_horasFinDisponibles.Count == 0)">@if(_horasFinDisponibles.Count == 0){<option value="">--</option>}else{@foreach(var hf in _horasFinDisponibles){<option value="@hf.Hora">@hf.Etiqueta</option>}}</select></div>
-<div class="col-md-2 align-self-end"><SaveButton class="btn btn-primary" OnClick="GuardarCirugia" Disabled="@(_slotsLibresCirugia.Count == 0 || string.IsNullOrWhiteSpace(_cirugia.HoraInicio) || string.IsNullOrWhiteSpace(_cirugia.HoraFin))">Guardar cirugía</SaveButton></div>
+<div class="col-md-2 align-self-end"><SaveButton class="btn btn-primary" OnClick="GuardarCirugia" Disabled="@(_slotsLibresCirugia.Count == 0 || string.IsNullOrWhiteSpace(_cirugia.HoraInicio) || string.IsNullOrWhiteSpace(_cirugia.HoraFin) || HayConflictoCirujanosAdicionales)">Guardar cirugía</SaveButton></div>
 @if(_cirugia.IdMedico > 0 && _cirugia.IdLocalidad > 0 && !_cargandoSlotsCirugia){
     var citasDia = _slotsTodosCirugia.Count(s => s.CitaExistente != null);
     var bloqueosDia = _slotsTodosCirugia.Count(s => s.Bloqueado);
@@ -417,17 +449,31 @@ IEnumerable<SelectorClinicoDto> MedicosCirugiaSelector => MedicosSoloCirugia;
 IEnumerable<SelectorClinicoDto> MedicosCirugiaDisponibles => MedicosSoloCirugia.Where(m => TieneAlMenosUnSlotLibre(m.Id));
 IEnumerable<SelectorClinicoDto> AnestesiologosDisponibles => MedicosSoloCirugia.Where(m => m.Id != _cirugia.IdMedico && !_cirugia.IdsCirujanosAdicionales.Contains(m.Id) && EstaDisponibleEnRangoCirugia(m.Id, _cirugia.HoraInicio, _cirugia.HoraFin));
 
+bool CirujanoAdicionalDisponibleEnHorario(int idMedico)
+{
+    if (idMedico <= 0) return true;
+    if (!string.IsNullOrWhiteSpace(_cirugia.HoraInicio) && !string.IsNullOrWhiteSpace(_cirugia.HoraFin))
+        return EstaDisponibleEnRangoCirugia(idMedico, _cirugia.HoraInicio, _cirugia.HoraFin);
+    return TieneAlMenosUnSlotLibre(idMedico);
+}
+
+List<string> CirujanosAdicionalesConConflicto => _cirugia.IdsCirujanosAdicionales
+    .Where(id => id > 0 && !CirujanoAdicionalDisponibleEnHorario(id))
+    .Distinct()
+    .Select(id => _medicos.FirstOrDefault(m => m.Id == id)?.Descripcion ?? $"Médico #{id}")
+    .ToList();
+
+bool HayConflictoCirujanosAdicionales => CirujanosAdicionalesConConflicto.Count > 0;
+
 IEnumerable<SelectorClinicoDto> CirujanosAdicionalesDisponibles(int indice)
 {
-    var valorActual = indice >= 0 && indice < _cirugia.IdsCirujanosAdicionales.Count ? _cirugia.IdsCirujanosAdicionales[indice] : 0;
     var seleccionadosOtros = _cirugia.IdsCirujanosAdicionales
         .Where((id, i) => i != indice && id > 0)
         .ToHashSet();
     return MedicosSoloCirugia.Where(m =>
         m.Id != _cirugia.IdMedico &&
         m.Id != _cirugia.IdAnestesiologo &&
-        !seleccionadosOtros.Contains(m.Id) &&
-        (m.Id == valorActual || PermitirElegirSucursalEnModal || FiltrarPorMedicoEnModal || EstaDisponibleEnRangoCirugia(m.Id, _cirugia.HoraInicio, _cirugia.HoraFin)));
+        !seleccionadosOtros.Contains(m.Id));
 }
 
 void AgregarCirujanoAdicional() => _cirugia.IdsCirujanosAdicionales.Add(0);
