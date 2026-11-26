@@ -1,15 +1,14 @@
 @inject IAdmisionFacturacionService Admision
 
 <label class="form-label small fw-bold" for="@Id">Tipo de sangre</label>
-<select id="@Id" class="form-select form-select-sm" disabled="@(Especie <= 0 || _cargando)"
-        @bind="_seleccion" @bind:after="AplicarSeleccionAsync">
+<select id="@Id" class="form-select form-select-sm" disabled="@(Mascota.MasEspecie <= 0 || _cargando)"
+        @bind="_seleccion" @bind:after="AplicarSeleccion">
     <option value="@OpcionSinRegistrar">Sin registrar</option>
     @foreach (var tipo in _opciones)
     {
         <option value="@tipo">@tipo</option>
     }
-    @if (_seleccion != OpcionOtro && _seleccion != OpcionSinRegistrar &&
-         !_opciones.Any(x => Igual(x, _seleccion)))
+    @if (_seleccion != OpcionOtro && _seleccion != OpcionSinRegistrar && !_opciones.Contains(_seleccion))
     {
         <option value="@_seleccion">@_seleccion</option>
     }
@@ -19,7 +18,7 @@
 {
     <label class="form-label small fw-bold mt-2" for="@(Id + "-otro")">Escribe el tipo de sangre</label>
     <input id="@(Id + "-otro")" class="form-control form-control-sm" maxlength="50"
-           @bind="_tipoPersonalizado" @bind:after="ActualizarOtroAsync" @bind:event="oninput" />
+           @bind="Mascota.MasTipoSangre" @bind:event="oninput" />
 }
 @if (_error)
 {
@@ -28,28 +27,21 @@
 
 @code {
     [Parameter, EditorRequired] public string Id { get; set; } = "";
-    [Parameter] public int Especie { get; set; }
-    [Parameter] public string? Value { get; set; }
-    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter, EditorRequired] public PacienteMascotaDto Mascota { get; set; } = default!;
 
     private const string OpcionOtro = "__otro__";
     private const string OpcionSinRegistrar = "__sin_registrar__";
     private int? _especieCargada;
     private string _seleccion = OpcionSinRegistrar;
-    private string _tipoPersonalizado = "";
     private List<string> _opciones = [];
     private bool _cargando, _error;
-
-    private static bool Igual(string? a, string? b) =>
-        string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-
     protected override async Task OnParametersSetAsync()
     {
-        var especie = Especie;
+        var especie = Mascota.MasEspecie;
         if (_especieCargada == especie) return;
         _especieCargada = especie;
-        _seleccion = string.IsNullOrWhiteSpace(Value) ? OpcionSinRegistrar : Value;
-        _tipoPersonalizado = "";
+        _seleccion = string.IsNullOrWhiteSpace(Mascota.MasTipoSangre)
+            ? OpcionSinRegistrar : Mascota.MasTipoSangre;
         _opciones = [];
         _error = false;
         _cargando = especie > 0;
@@ -61,7 +53,8 @@
             if (_especieCargada == especie)
             {
                 _opciones = opciones;
-                _seleccion = opciones.FirstOrDefault(x => Igual(x, _seleccion)) ?? _seleccion;
+                _seleccion = opciones.FirstOrDefault(x =>
+                    string.Equals(x, _seleccion, StringComparison.OrdinalIgnoreCase)) ?? _seleccion;
             }
         }
         catch
@@ -74,11 +67,6 @@
         }
     }
 
-    private Task AplicarSeleccionAsync()
-    {
-        _tipoPersonalizado = "";
-        return ValueChanged.InvokeAsync(_seleccion is OpcionOtro or OpcionSinRegistrar ? null : _seleccion);
-    }
-
-    private Task ActualizarOtroAsync() => ValueChanged.InvokeAsync(_tipoPersonalizado);
+    private void AplicarSeleccion() =>
+        Mascota.MasTipoSangre = _seleccion is OpcionOtro or OpcionSinRegistrar ? null : _seleccion;
 }

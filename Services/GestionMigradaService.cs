@@ -502,7 +502,7 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
                 SELECT TOP 1
                     @IdCliente = ISNULL(p.mas_idcliente, 0),
                     @NombreProp = LTRIM(RTRIM(ISNULL(c.pa_apellidos, '') + ' ' + ISNULL(c.pa_nombres, ''))),
-                    @TipoOrigen = ISNULL(NULLIF(RTRIM(p.mas_tipo), ''), 'M')
+                    @TipoOrigen = ISNULL(NULLIF(RTRIM(p.mas_origen), ''), 'M')
                 FROM vt_pacientes p
                 LEFT JOIN vt_clientes c ON c.pa_codigo = p.mas_idcliente
                 WHERE p.mas_nhcl = @Nhcl;

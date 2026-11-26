@@ -468,6 +468,15 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
     private const string RegistrarTipoSangreSql = """
 
+        IF @Guardado > 0 AND NOT EXISTS (
+            SELECT 1
+            FROM dbo.vt_pacientes
+            WHERE mas_nhcl = @PacienteGuardado
+              AND ISNULL(mas_tipo_sangre, N'') COLLATE Latin1_General_100_BIN2 =
+                  ISNULL(@TipoSangre, N'') COLLATE Latin1_General_100_BIN2
+        )
+            THROW 50002, 'El tipo de sangre no quedó guardado en la ficha del paciente.', 1;
+
         IF @Guardado > 0 AND @MasEspecie > 0 AND NULLIF(@TipoSangre, '') IS NOT NULL
             INSERT INTO dbo.vt_tipos_sangre_especie (especie_id, tipo_sangre)
             SELECT @MasEspecie, @TipoSangre
@@ -693,7 +702,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         @TueOtraCategoria, @TueFormaObtencion, @TueOtraObtencion, @TueRegion,
                         @TueSectorBarrio, @TueProvincia, @TueCiudad
                     );
-                    DECLARE @Guardado int = CAST(SCOPE_IDENTITY() AS int);" + RegistrarTipoSangreSql;
+                    DECLARE @Guardado int = CAST(SCOPE_IDENTITY() AS int);
+                    DECLARE @PacienteGuardado int = @Guardado;" + RegistrarTipoSangreSql;
 
                 int nuevoNhcl = await _db.ExecuteScalarAsync<int>(insertSql, new
                 {
@@ -765,7 +775,8 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
                         tue_provincia = @TueProvincia,
                         tue_ciudad = @TueCiudad
                     WHERE mas_nhcl = @MasNhcl;
-                    DECLARE @Guardado int = @@ROWCOUNT;" + RegistrarTipoSangreSql;
+                    DECLARE @Guardado int = @@ROWCOUNT;
+                    DECLARE @PacienteGuardado int = @MasNhcl;" + RegistrarTipoSangreSql;
 
                 int rows = await _db.ExecuteScalarAsync<int>(updateSql, new
                 {
