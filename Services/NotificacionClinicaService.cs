@@ -177,15 +177,17 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                     FROM vt_ordenAtencion o WITH (NOLOCK)
                     LEFT JOIN vt_pacientes p WITH (NOLOCK) ON o.ordenAten_nhcl = p.mas_nhcl
                     LEFT JOIN vt_especialidades es WITH (NOLOCK) ON o.ordenAten_esp_numero = es.es_id
-                    WHERE ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
+                    WHERE o.ordenAten_fecha >= DATEADD(day, -7, @Hoy)
+                      AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
+                      AND (@Localidad <= 0 OR o.ordenAten_idlocalidad = @Localidad)
+                      AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                       AND (
-                          o.ordenAten_idMedico = @IdUser
+                          (o.ordenAten_idMedico = @IdUser AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0)
                           OR o.ordenAten_idEnfermero = @IdUser
                           OR (
                               @EsEnfermero = 1
                               AND ISNULL(o.ordenAten_idEnfermero, 0) = 0
                               AND (ISNULL(o.ordenAten_esProcedimiento, 0) = 1 OR ISNULL(o.ordenAten_triajeMedico, 0) = 0)
-                              AND o.ordenAten_idlocalidad = @Localidad
                           )
                       )
                     ORDER BY o.ordenAten_id DESC;
@@ -193,6 +195,7 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
 
                 var ordenes = await _db.QueryAsync<OrdenNotifRow>(sqlOrdenes, new
                 {
+                    Hoy = hoy,
                     IdUser = _session.IdUser,
                     EsEnfermero = esEnfermero ? 1 : 0,
                     Localidad = _session.Localidad
