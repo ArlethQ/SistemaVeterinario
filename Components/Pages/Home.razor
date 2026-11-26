@@ -226,9 +226,18 @@
                                         <small>@ord.Detalle</small>
                                     }
                                 </div>
-                                <a class="assigned-order-cta @(ord.EsEmergencia ? "emergency" : "")" href="@ord.RutaDestino">
-                                    <i class="bi bi-journal-medical" aria-hidden="true"></i> @ord.TextoAccion
-                                </a>
+                                @if (ord.EsOtraSede)
+                                {
+                                    <span class="assigned-order-cta other-branch" title="@($"Esta orden corresponde a la sede {ord.NombreSede}. Cambie a esa sede para abrir el SOAP.")">
+                                        <i class="bi bi-geo-alt-fill" aria-hidden="true"></i> @ord.TextoAccion
+                                    </span>
+                                }
+                                else
+                                {
+                                    <a class="assigned-order-cta @(ord.EsEmergencia ? "emergency" : "")" href="@ord.RutaDestino">
+                                        <i class="bi bi-journal-medical" aria-hidden="true"></i> @ord.TextoAccion
+                                    </a>
+                                }
                             </div>
                         }
                     </div>
@@ -303,14 +312,28 @@
                     }
                     @foreach (var cita in citasNotif.Take(6))
                     {
-                        <a class="reminder @(cita.EsEmergencia ? "red notif-emergency-card" : "orange")" href="@cita.RutaDestino">
-                            <i class="bi bi-calendar2-check-fill reminder-icon" aria-hidden="true"></i>
-                            <span>
-                                <b>@cita.Titulo</b>
-                                <small>@cita.Paciente @(!string.IsNullOrWhiteSpace(cita.Detalle) ? $"· {cita.Detalle}" : "")</small>
-                            </span>
-                            <span class="reminder-action-pill">@cita.TextoAccion</span>
-                        </a>
+                        if (cita.EsOtraSede)
+                        {
+                            <div class="reminder @(cita.EsEmergencia ? "red notif-emergency-card" : "orange")">
+                                <i class="bi bi-calendar2-check-fill reminder-icon" aria-hidden="true"></i>
+                                <span>
+                                    <b>@cita.Titulo</b>
+                                    <small>@cita.Paciente @(!string.IsNullOrWhiteSpace(cita.Detalle) ? $"· {cita.Detalle}" : "")</small>
+                                </span>
+                                <span class="reminder-action-pill other-branch"><i class="bi bi-geo-alt-fill me-1"></i>@cita.TextoAccion</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <a class="reminder @(cita.EsEmergencia ? "red notif-emergency-card" : "orange")" href="@cita.RutaDestino">
+                                <i class="bi bi-calendar2-check-fill reminder-icon" aria-hidden="true"></i>
+                                <span>
+                                    <b>@cita.Titulo</b>
+                                    <small>@cita.Paciente @(!string.IsNullOrWhiteSpace(cita.Detalle) ? $"· {cita.Detalle}" : "")</small>
+                                </span>
+                                <span class="reminder-action-pill">@cita.TextoAccion</span>
+                            </a>
+                        }
                     }
                 </div>
             </section>

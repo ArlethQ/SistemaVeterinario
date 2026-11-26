@@ -50,6 +50,8 @@ public sealed class NotificacionClinicaItemDto
     public DateTime FechaEvento { get; set; }
     public string RutaDestino { get; set; } = "/dashboard";
     public string TextoAccion { get; set; } = "Abrir";
+    public bool EsOtraSede { get; set; }
+    public string NombreSede { get; set; } = string.Empty;
     public bool Leida { get; set; }
 }
 
@@ -108,6 +110,8 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
         public bool EsProcedimiento { get; set; }
         public int IdMedico { get; set; }
         public int IdEnfermero { get; set; }
+        public int IdLocalidad { get; set; }
+        public string Localidad { get; set; } = string.Empty;
     }
 
     private sealed class CitaNotifRow
@@ -121,6 +125,8 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
         public int TipoConsulta { get; set; }
         public string Observacion { get; set; } = string.Empty;
         public string EstadoCita { get; set; } = string.Empty;
+        public int IdLocalidad { get; set; }
+        public string Localidad { get; set; } = string.Empty;
     }
 
     public async Task<NotificacionClinicaEstadoDto> ObtenerNotificacionesActivasAsync()
@@ -144,11 +150,10 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
 
             bool esMedico = tipoUser == 2 || rolDesc.Contains("MEDIC") || rolDesc.Contains("VETERIN");
             bool esEnfermero = tipoUser == 11 || rolDesc.Contains("ENFERMER");
-            bool esAdmin = _session.EsAdministrador || tipoUser == 1;
 
             estado.EsMedico = esMedico;
             estado.EsEnfermero = esEnfermero;
-            estado.Habilitado = esMedico || esEnfermero || esAdmin;
+            estado.Habilitado = esMedico || esEnfermero;
 
             if (!estado.Habilitado)
                 return estado;
@@ -173,13 +178,15 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                         RTRIM(ISNULL(p.mas_colortriaje, 'green')) AS ColorTriaje,
                         CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS BIT) AS EsProcedimiento,
                         ISNULL(o.ordenAten_idMedico, 0) AS IdMedico,
-                        ISNULL(o.ordenAten_idEnfermero, 0) AS IdEnfermero
+                        ISNULL(o.ordenAten_idEnfermero, 0) AS IdEnfermero,
+                        ISNULL(o.ordenAten_idlocalidad, 0) AS IdLocalidad,
+                        RTRIM(ISNULL(loc.loc_descripcion, '')) AS Localidad
                     FROM vt_ordenAtencion o WITH (NOLOCK)
                     LEFT JOIN vt_pacientes p WITH (NOLOCK) ON o.ordenAten_nhcl = p.mas_nhcl
                     LEFT JOIN vt_especialidades es WITH (NOLOCK) ON o.ordenAten_esp_numero = es.es_id
+                    LEFT JOIN vt_localidades loc WITH (NOLOCK) ON o.ordenAten_idlocalidad = loc.loc_id
                     WHERE o.ordenAten_fecha >= DATEADD(day, -7, @Hoy)
                       AND o.ordenAten_fecha < DATEADD(day, 1, @Hoy)
-                      AND (@Localidad <= 0 OR o.ordenAten_idlocalidad = @Localidad)
                       AND ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                       AND (
                           (o.ordenAten_idMedico = @IdUser AND ISNULL(o.ordenAten_esProcedimiento, 0) = 0)
@@ -188,6 +195,7 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                               @EsEnfermero = 1
                               AND ISNULL(o.ordenAten_idEnfermero, 0) = 0
                               AND (ISNULL(o.ordenAten_esProcedimiento, 0) = 1 OR ISNULL(o.ordenAten_triajeMedico, 0) = 0)
+                              AND (@Localidad <= 0 OR o.ordenAten_idlocalidad = @Localidad)
                           )
                       )
                     ORDER BY o.ordenAten_id DESC;
@@ -209,6 +217,9 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                         (o.Etapa?.Contains("EMERGENCIA", StringComparison.OrdinalIgnoreCase) == true) ||
                         (o.Especialidad?.Contains("EMERGENCIA", StringComparison.OrdinalIgnoreCase) == true);
 
+                    var nombreSede = LimpiarNombreSede(o.Localidad);
+                    bool esOtraSede = o.IdLocalidad > 0 && _session.Localidad > 0 && o.IdLocalidad != _session.Localidad;
+
                     var partesDetalle = new List<string>();
                     if (!string.IsNullOrWhiteSpace(o.Especialidad)) partesDetalle.Add(o.Especialidad.Trim());
                     else if (!string.IsNullOrWhiteSpace(o.Etapa)) partesDetalle.Add(o.Etapa.Trim());
@@ -217,10 +228,17 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                         ? (string.IsNullOrWhiteSpace(o.Hora) ? "Hoy" : $"Hoy {o.Hora}")
                         : (string.IsNullOrWhiteSpace(o.Hora) ? o.Fecha.ToString("dd/MM/yyyy") : $"{o.Fecha:dd/MM/yyyy} {o.Hora}");
                     partesDetalle.Add(fechaHoraOrden);
+                    if (esOtraSede && !string.IsNullOrWhiteSpace(nombreSede))
+                        partesDetalle.Add($"Sede {nombreSede}");
 
                     string ruta;
                     string textoAccion;
-                    if (esEnfermero && o.IdMedico != _session.IdUser)
+                    if (esOtraSede)
+                    {
+                        ruta = string.Empty;
+                        textoAccion = string.IsNullOrWhiteSpace(nombreSede) ? "Otra sede" : $"Otra sede ({nombreSede})";
+                    }
+                    else if (esEnfermero && o.IdMedico != _session.IdUser)
                     {
                         ruta = o.IdOrden > 0 && o.Nhcl > 0 ? $"/admision/triaje/{o.IdOrden}/{o.Nhcl}" : "/admision/triaje";
                         textoAccion = "Ir a Triaje";
@@ -243,6 +261,8 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                         IdReferencia = o.IdOrden,
                         Nhcl = o.Nhcl,
                         EsEmergencia = esEmergencia,
+                        EsOtraSede = esOtraSede,
+                        NombreSede = nombreSede,
                         Titulo = esEmergencia
                             ? $"EMERGENCIA · Orden #{o.IdOrden}"
                             : (o.EsProcedimiento ? $"Procedimiento · Orden #{o.IdOrden}" : $"Orden #{o.IdOrden}"),
@@ -266,21 +286,24 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
             {
                 const string sqlCitas = """
                     SELECT TOP 20
-                        ci_id AS IdCita,
-                        ISNULL(ci_nhcl, 0) AS Nhcl,
-                        ISNULL(ci_nombremas, '') AS Mascota,
-                        ISNULL(ci_nombre, '') AS Propietario,
-                        ci_fecha AS Fecha,
-                        ISNULL(RTRIM(ci_hora), '') AS Hora,
-                        ISNULL(ci_tipoConsulta, 1) AS TipoConsulta,
-                        ISNULL(ci_observacion, '') AS Observacion,
-                        ISNULL(ci_estadocita, 'N') AS EstadoCita
-                    FROM vt_citas WITH (NOLOCK)
-                    WHERE ci_usuario = @IdUser
-                      AND CAST(ci_fecha AS DATE) >= @Hoy
-                      AND ISNULL(ci_estado, 'A') = 'A'
-                      AND ISNULL(ci_estadocita, 'N') NOT IN ('X', 'A', 'CANCELADA')
-                    ORDER BY ci_id DESC;
+                        c.ci_id AS IdCita,
+                        ISNULL(c.ci_nhcl, 0) AS Nhcl,
+                        ISNULL(c.ci_nombremas, '') AS Mascota,
+                        ISNULL(c.ci_nombre, '') AS Propietario,
+                        c.ci_fecha AS Fecha,
+                        ISNULL(RTRIM(c.ci_hora), '') AS Hora,
+                        ISNULL(c.ci_tipoConsulta, 1) AS TipoConsulta,
+                        ISNULL(c.ci_observacion, '') AS Observacion,
+                        ISNULL(c.ci_estadocita, 'N') AS EstadoCita,
+                        ISNULL(c.ci_localidad, 0) AS IdLocalidad,
+                        RTRIM(ISNULL(loc.loc_descripcion, '')) AS Localidad
+                    FROM vt_citas c WITH (NOLOCK)
+                    LEFT JOIN vt_localidades loc WITH (NOLOCK) ON c.ci_localidad = loc.loc_id
+                    WHERE c.ci_usuario = @IdUser
+                      AND CAST(c.ci_fecha AS DATE) >= @Hoy
+                      AND ISNULL(c.ci_estado, 'A') = 'A'
+                      AND ISNULL(c.ci_estadocita, 'N') NOT IN ('X', 'A', 'CANCELADA')
+                    ORDER BY c.ci_id DESC;
                     """;
 
                 var citas = await _db.QueryAsync<CitaNotifRow>(sqlCitas, new
@@ -292,6 +315,9 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                 foreach (var c in citas)
                 {
                     bool esEmergencia = c.Observacion?.Contains("EMERGENCIA", StringComparison.OrdinalIgnoreCase) == true;
+                    var nombreSede = LimpiarNombreSede(c.Localidad);
+                    bool esOtraSede = c.IdLocalidad > 0 && _session.Localidad > 0 && c.IdLocalidad != _session.Localidad;
+
                     string tipoLabel = c.TipoConsulta switch
                     {
                         2 => "Especialidad",
@@ -305,6 +331,12 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                         ? $"Hoy {c.Hora}"
                         : $"{c.Fecha:dd/MM} {c.Hora}";
 
+                    string detalle = string.IsNullOrWhiteSpace(c.Observacion)
+                        ? tipoLabel
+                        : $"{tipoLabel} · {c.Observacion.Trim()}";
+                    if (esOtraSede && !string.IsNullOrWhiteSpace(nombreSede))
+                        detalle = $"{detalle} · Sede {nombreSede}";
+
                     items.Add(new NotificacionClinicaItemDto
                     {
                         Clave = $"CITA-{c.IdCita}",
@@ -312,16 +344,18 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                         IdReferencia = c.IdCita,
                         Nhcl = c.Nhcl,
                         EsEmergencia = esEmergencia,
+                        EsOtraSede = esOtraSede,
+                        NombreSede = nombreSede,
                         Titulo = esEmergencia ? $"EMERGENCIA · Cita {fechaHora}" : $"Nueva cita · {fechaHora}",
                         Paciente = string.IsNullOrWhiteSpace(c.Mascota) ? "Paciente" : c.Mascota.Trim(),
                         Propietario = c.Propietario?.Trim() ?? string.Empty,
-                        Detalle = string.IsNullOrWhiteSpace(c.Observacion)
-                            ? tipoLabel
-                            : $"{tipoLabel} · {c.Observacion.Trim()}",
+                        Detalle = detalle,
                         HoraTexto = fechaHora.Trim(),
                         FechaEvento = CombinarFechaHora(c.Fecha, c.Hora),
-                        RutaDestino = "/admision/citas",
-                        TextoAccion = "Ver agenda"
+                        RutaDestino = esOtraSede ? string.Empty : "/admision/citas",
+                        TextoAccion = esOtraSede
+                            ? (string.IsNullOrWhiteSpace(nombreSede) ? "Otra sede" : $"Otra sede ({nombreSede})")
+                            : "Ver agenda"
                     });
                 }
             }
@@ -343,6 +377,12 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
 
         return estado;
     }
+
+    private static string LimpiarNombreSede(string? nombre) =>
+        (nombre ?? string.Empty)
+            .Replace(" USFQ", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("USFQ", "", StringComparison.OrdinalIgnoreCase)
+            .Trim();
 
     private static DateTime CombinarFechaHora(DateTime fecha, string? hora)
     {
