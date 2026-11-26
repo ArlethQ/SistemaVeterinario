@@ -1338,6 +1338,7 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
 
             if (idNueva > 0)
             {
+                _notificacionHub?.RegistrarPrioridadOrden(idNueva, orden.ColorTriaje);
                 if (orden.IdMedico > 0) _notificacionHub?.NotificarCambio(orden.IdMedico);
                 if (orden.IdEnfermero > 0) _notificacionHub?.NotificarCambio(orden.IdEnfermero);
                 else if (orden.EsProcedimiento || !orden.TriajeMedico) _notificacionHub?.NotificarCambio(null);

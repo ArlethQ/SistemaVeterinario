@@ -1,21 +1,37 @@
+using System.Collections.Concurrent;
 using HosvetKardex.Web.Data;
 
 namespace HosvetKardex.Web.Services;
 
 public sealed class NotificacionClinicaHub
 {
+    private readonly ConcurrentDictionary<int, string> _prioridadesRecientes = new();
+
     public event Action<int?>? OnNuevaActividad;
+
+    public void RegistrarPrioridadOrden(int idOrden, string? colorTriaje)
+    {
+        if (idOrden > 0 && !string.IsNullOrWhiteSpace(colorTriaje))
+            _prioridadesRecientes[idOrden] = colorTriaje.Trim().ToLowerInvariant();
+    }
+
+    public string? ObtenerPrioridadReciente(int idOrden) =>
+        _prioridadesRecientes.TryGetValue(idOrden, out var color) ? color : null;
 
     public void NotificarCambio(int? idUsuarioDestino = null)
     {
-        try
+        _ = Task.Run(async () =>
         {
-            OnNuevaActividad?.Invoke(idUsuarioDestino);
-        }
-        catch
-        {
-            // Evitar que un suscriptor desconectado interrumpa el guardado principal.
-        }
+            try
+            {
+                await Task.Delay(250);
+                OnNuevaActividad?.Invoke(idUsuarioDestino);
+            }
+            catch
+            {
+                // Evitar que un suscriptor desconectado interrumpa el guardado principal.
+            }
+        });
     }
 }
 
@@ -54,18 +70,20 @@ public interface INotificacionClinicaService
 
 public sealed class NotificacionClinicaService : INotificacionClinicaService
 {
-    private const string PrefijoPrioridad = "Prioridad inicial Orden #";
     private readonly ISqlDataService _db;
     private readonly SessionStateService _session;
+    private readonly NotificacionClinicaHub _hub;
     private readonly ILogger<NotificacionClinicaService> _logger;
 
     public NotificacionClinicaService(
         ISqlDataService db,
         SessionStateService session,
+        NotificacionClinicaHub hub,
         ILogger<NotificacionClinicaService> logger)
     {
         _db = db;
         _session = session;
+        _hub = hub;
         _logger = logger;
     }
 
@@ -142,7 +160,7 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
             try
             {
                 const string sqlOrdenes = """
-                    SELECT TOP 30
+                    SELECT TOP 25
                         o.ordenAten_id AS IdOrden,
                         ISNULL(o.ordenAten_nhcl, 0) AS Nhcl,
                         ISNULL(p.mas_nombre, '') AS Mascota,
@@ -152,22 +170,13 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
                         ISNULL(NULLIF(RTRIM(o.ordenAten_turno), ''), '') AS Turno,
                         ISNULL(RTRIM(o.ordenAten_hora), '') AS Hora,
                         o.ordenAten_fecha AS Fecha,
-                        RTRIM(COALESCE(prioridad.Color, p.mas_colortriaje, 'green')) AS ColorTriaje,
+                        RTRIM(ISNULL(p.mas_colortriaje, 'green')) AS ColorTriaje,
                         CAST(ISNULL(o.ordenAten_esProcedimiento, 0) AS BIT) AS EsProcedimiento,
                         ISNULL(o.ordenAten_idMedico, 0) AS IdMedico,
                         ISNULL(o.ordenAten_idEnfermero, 0) AS IdEnfermero
                     FROM vt_ordenAtencion o WITH (NOLOCK)
                     LEFT JOIN vt_pacientes p WITH (NOLOCK) ON o.ordenAten_nhcl = p.mas_nhcl
                     LEFT JOIN vt_especialidades es WITH (NOLOCK) ON o.ordenAten_esp_numero = es.es_id
-                    OUTER APPLY (
-                        SELECT TOP (1) RIGHT(RTRIM(v.vit_detalle), CHARINDEX(' ', REVERSE(RTRIM(v.vit_detalle))) - 1) AS Color
-                        FROM vt_vitacora v WITH (NOLOCK)
-                        WHERE v.vit_detalle IN (
-                            CONCAT(@PrefijoPrioridad, o.ordenAten_id, ' red'),
-                            CONCAT(@PrefijoPrioridad, o.ordenAten_id, ' yellow'),
-                            CONCAT(@PrefijoPrioridad, o.ordenAten_id, ' green'))
-                        ORDER BY v.vit_idFechaMod
-                    ) prioridad
                     WHERE ISNULL(o.ordenAten_estado, 'A') IN ('A', 'E')
                       AND (
                           o.ordenAten_idMedico = @IdUser
@@ -184,8 +193,6 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
 
                 var ordenes = await _db.QueryAsync<OrdenNotifRow>(sqlOrdenes, new
                 {
-                    PrefijoPrioridad,
-                    Hoy = hoy,
                     IdUser = _session.IdUser,
                     EsEnfermero = esEnfermero ? 1 : 0,
                     Localidad = _session.Localidad
@@ -193,8 +200,9 @@ public sealed class NotificacionClinicaService : INotificacionClinicaService
 
                 foreach (var o in ordenes)
                 {
+                    var colorEfectivo = _hub.ObtenerPrioridadReciente(o.IdOrden) ?? o.ColorTriaje;
                     bool esEmergencia =
-                        string.Equals(o.ColorTriaje?.Trim(), "red", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(colorEfectivo?.Trim(), "red", StringComparison.OrdinalIgnoreCase) ||
                         (o.Etapa?.Contains("EMERGENCIA", StringComparison.OrdinalIgnoreCase) == true) ||
                         (o.Especialidad?.Contains("EMERGENCIA", StringComparison.OrdinalIgnoreCase) == true);
 

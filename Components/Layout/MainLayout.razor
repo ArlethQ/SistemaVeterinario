@@ -55,7 +55,7 @@
             </div>
             <div class="session-actions">
                 <div class="header-clock"><RelojSistema Compacto="true" /></div>
-                @if (_notificaciones.Habilitado)
+                @if (MostrarCampanita)
                 {
                     <div class="header-notif">
                         <button type="button"
@@ -94,7 +94,14 @@
                                     </div>
                                 </div>
                                 <div class="notif-dropdown-body">
-                                    @if (_notificaciones.Items.Count == 0)
+                                    @if (!_notificacionesInicializadas)
+                                    {
+                                        <div class="notif-empty">
+                                            <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                                            <span>Cargando notificaciones...</span>
+                                        </div>
+                                    }
+                                    else if (_notificaciones.Items.Count == 0)
                                     {
                                         <div class="notif-empty">
                                             <i class="bi bi-bell-slash"></i>
@@ -212,6 +219,10 @@
     private CancellationTokenSource? _notifCts;
     private CancellationTokenSource? _toastCts;
 
+    private bool MostrarCampanita =>
+        Session.IsAuthenticated &&
+        (_notificaciones.Habilitado || Session.TipoUser is 1 or 2 or 11 || Session.EsAdministrador);
+
     private string ClaveStorageLeidas => $"eForVets.notif.leidas.{Session.IdUser}.{DateTime.UtcNow.AddHours(-5):yyyyMMdd}";
 
     protected override async Task OnInitializedAsync()
@@ -250,7 +261,7 @@
         var token = _notifCts.Token;
         _ = Task.Run(async () =>
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
             try
             {
                 while (await timer.WaitForNextTickAsync(token))
