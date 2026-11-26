@@ -62,6 +62,13 @@
                                                           Etiqueta="Espera"
                                                           InicioUtc="AClinicaUtc(orden.FechaAsignacion)"
                                                           FinUtc="FinEsperaUtc(orden)" />
+                                        @if (!EstaEnEspera(orden) && InicioAtencionUtc(orden) is DateTime inicioAtencion)
+                                        {
+                                            <ContadorAtencion @key="(orden.IdOrden, inicioAtencion, FinAtencionUtc(orden))"
+                                                              Etiqueta="@(Triaje ? "Triaje" : "Consulta")"
+                                                              InicioUtc="inicioAtencion"
+                                                              FinUtc="FinAtencionUtc(orden)" />
+                                        }
                                     </div>
                                 </td>
                                 <td>
@@ -211,6 +218,18 @@
         if (finLocal is not DateTime fin)
             return null;
         return AClinicaUtc(fin < orden.FechaAsignacion ? orden.FechaAsignacion : fin);
+    }
+
+    private DateTime? InicioAtencionUtc(OrdenAtencionResumenDto orden)
+    {
+        var inicioLocal = Triaje ? orden.InicioTriaje : orden.InicioConsulta;
+        return inicioLocal is DateTime inicio ? AClinicaUtc(inicio) : null;
+    }
+
+    private DateTime? FinAtencionUtc(OrdenAtencionResumenDto orden)
+    {
+        var finLocal = Triaje ? orden.FinTriaje : orden.FinConsulta;
+        return finLocal is DateTime fin ? AClinicaUtc(fin) : null;
     }
 
     private bool EmergenciaSinConfirmar(OrdenAtencionResumenDto orden) =>
