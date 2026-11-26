@@ -718,10 +718,19 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
 
         var sql = $@"
             {SqlOrdenesProtegidasBitacora}
+            ;WITH Evaluado AS (
+                SELECT
+                    v.vit_idFechaMod,
+                    CASE
+                        WHEN v.vit_idFechaMod < @Corte AND {CondicionProtegidaBitacora} THEN 1
+                        ELSE 0
+                    END AS EsProtegidoOrden
+                FROM vt_vitacora v WITH (NOLOCK)
+            )
             SELECT
-                ISNULL(SUM(CASE WHEN v.vit_idFechaMod < @Corte AND NOT {CondicionProtegidaBitacora} THEN 1 ELSE 0 END), 0) AS Eliminables,
-                ISNULL(SUM(CASE WHEN v.vit_idFechaMod >= @Hoy OR (v.vit_idFechaMod < @Corte AND {CondicionProtegidaBitacora}) THEN 1 ELSE 0 END), 0) AS Protegidos
-            FROM vt_vitacora v WITH (NOLOCK);";
+                ISNULL(SUM(CASE WHEN vit_idFechaMod < @Corte AND EsProtegidoOrden = 0 THEN 1 ELSE 0 END), 0) AS Eliminables,
+                ISNULL(SUM(CASE WHEN vit_idFechaMod >= @Corte OR EsProtegidoOrden = 1 THEN 1 ELSE 0 END), 0) AS Protegidos
+            FROM Evaluado;";
 
         var res = await db.QueryFirstOrDefaultAsync<PreviewDepuracionRow>(sql, new { Hoy = hoy, Corte = corteSeguro });
         return (res?.Eliminables ?? 0, res?.Protegidos ?? 0);
