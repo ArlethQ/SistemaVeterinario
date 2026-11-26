@@ -96,7 +96,11 @@
                     {
                         <tr><td>@procedimiento.Descripcion</td><td>@procedimiento.Subgrupo</td><td>@procedimiento.Cantidad</td><td>@procedimiento.Observaciones</td><td>@(procedimiento.Precio?.ToString("N2") ?? "—")</td><td>@procedimiento.Estado</td></tr>
                     }
-                    @if (_cargando)
+                    @if (!TieneOrden)
+                    {
+                        <tr><td colspan="6" class="text-muted">Selecciona una mascota y abre una orden para ver sus procedimientos.</td></tr>
+                    }
+                    else if (_cargando)
                     {
                         <tr><td colspan="6" class="text-muted" role="status">Cargando procedimientos…</td></tr>
                     }
@@ -116,6 +120,7 @@
     [Parameter] public bool DesdeHistorial { get; set; }
     [Parameter] public bool DesdeSoap { get; set; }
     [Parameter] public bool SoloLectura { get; set; }
+    private bool TieneOrden => IdOrden > 0 && Nhcl > 0;
 
     private List<CatalogoOperativoDto> _catalogo = [];
     private List<CatalogoOperativoDto> _subcategorias = [];
@@ -164,7 +169,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(CargarCatalogoAsync(), CargarRegistradosAsync());
+        if (TieneOrden)
+            await Task.WhenAll(CargarCatalogoAsync(), CargarRegistradosAsync());
     }
 
     private async Task CargarCatalogoAsync()

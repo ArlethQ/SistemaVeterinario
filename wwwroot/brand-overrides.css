@@ -19,7 +19,11 @@
     --doc-action-text: #fff;
 }
 
-body :is(button, a).app-doc-action:is(.app-doc-pdf, .app-doc-excel, .app-doc-print):not([hidden]) {
+.app-doc-print { --doc-action-bg: #f1e8fc; --doc-action-border: #d6bde9; --doc-action-text: #503275; }
+.app-pharmacy-action { --doc-action-bg: #e3f5ec; --doc-action-border: #afd9c5; --doc-action-text: #175d46; }
+.app-prescription-action { --doc-action-bg: #e4f2ff; --doc-action-border: #adcdea; --doc-action-text: #124e7c; }
+
+body :is(button, a).app-doc-action:is(.app-doc-pdf, .app-doc-excel, .app-doc-print, .app-pharmacy-action, .app-prescription-action):not([hidden]) {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -48,6 +52,18 @@ body :is(button, a).app-doc-action.app-doc-icon:not([hidden]) {
 .app-doc-action:not(:disabled, .disabled, [aria-disabled="true"]):hover { filter: brightness(.94); }
 .app-doc-action:is(:disabled, .disabled, [aria-disabled="true"]) { opacity: .63; }
 .app-doc-action i { color: inherit !important; flex-shrink: 0; }
+
+.app-prescription-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    margin-inline-start: auto;
+    overflow-x: auto;
+    padding: 3px;
+}
+.app-prescription-actions > * { flex: 0 0 auto; }
 
 .app-workflow-action {
     display: inline-flex;

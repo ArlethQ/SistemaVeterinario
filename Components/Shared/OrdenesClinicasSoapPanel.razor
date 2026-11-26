@@ -66,17 +66,19 @@
                                 title="Cargar las medicinas registradas en la evolución médica anterior">
                             <i class="bi bi-arrow-counterclockwise me-1"></i>@(_cargandoEvolucionAnterior ? "Cargando..." : "Cargar de evolución anterior")
                         </button>
-                        <a href="/farmacia" class="btn btn-xs btn-outline-info text-dark py-0 px-2" title="Ver receta en Cola de Farmacia">
-                            <i class="ri-medicine-bottle-line me-1"></i>Cola Farmacia
-                        </a>
-                        <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 app-doc-action app-doc-print"
-                                @onclick="ImprimirRecetaMedicaPdfAsync" title="Imprimir Receta Médica">
-                            <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Receta
-                        </button>
-                        <button type="button" class="btn btn-xs btn-outline-primary py-0"
-                                @onclick='() => Nav.NavigateTo($"/consulta/recetario/{IdOrden}/{Nhcl}")'>
-                            Abrir Recetario Completo
-                        </button>
+                        <div class="app-prescription-actions">
+                            <a href="/farmacia" class="btn app-doc-action app-pharmacy-action" title="Ver receta en Cola de Farmacia">
+                                <i class="ri-medicine-bottle-line me-1"></i>Cola Farmacia
+                            </a>
+                            <button type="button" class="btn app-doc-action app-doc-print"
+                                    @onclick="ImprimirRecetaMedicaPdfAsync" title="Imprimir Receta Médica">
+                                <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Receta
+                            </button>
+                            <button type="button" class="btn app-doc-action app-prescription-action"
+                                    @onclick='() => Nav.NavigateTo($"/consulta/recetario/{IdOrden}/{Nhcl}")'>
+                                <i class="bi bi-prescription2" aria-hidden="true"></i>Abrir Recetario
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="card-body">
@@ -441,6 +443,10 @@
 
                     <div class="row g-3">
                         <div class="col-12">
+                            <ProcedimientosTriaje @key="(IdOrden, Nhcl, _versionProcedimientos)"
+                                                 IdOrden="@IdOrden" Nhcl="@Nhcl" SoloLectura="true" />
+                        </div>
+                        <div class="col-12">
                             <div class="border rounded">
                                 <div class="bg-info bg-opacity-10 px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
                                     <span class="fw-bold text-primary small">
@@ -594,12 +600,17 @@
                         </div>
                     </div>
 
-                    @if (_cargarDatosAnamnesis || _procedimientosAgregadosEnSesion > 0)
-                    {
-                        <ProcedimientosTriaje @key="(IdOrden, Nhcl, _versionProcedimientos)" IdOrden="@IdOrden" Nhcl="@Nhcl" SoloLectura="true" />
-                    }
                 </div>
             </div>
+        </div>
+    </div>
+}
+
+else
+{
+    <div class="card mt-3">
+        <div class="card-body">
+            <ProcedimientosTriaje SoloLectura="true" />
         </div>
     </div>
 }
@@ -638,7 +649,6 @@
     private HashSet<int> _imagenAnamnesisSecs = [];
     private List<FisioterapiaOrdenDto> _ordenesFisio = [];
     private HashSet<int> _fisioAnamnesisSecs = [];
-    private int _procedimientosAgregadosEnSesion;
 
     private List<RecetaMedicamentoItemDto> AplicadosVisibles =>
         _cargarDatosAnamnesis ? _aplicadosItems : _aplicadosItems.Where(x => !_aplicadosAnamnesisSecs.Contains(x.Sec)).ToList();
@@ -726,7 +736,6 @@
         _ordenCargada = IdOrden;
         _nhclCargado = Nhcl;
         _cargarDatosAnamnesis = true;
-        _procedimientosAgregadosEnSesion = 0;
         _cacheServiciosPorCategoria.Remove("Procedimientos");
         _subcategoriaProcedimiento = 0;
         ActualizarCantidadLetras();
@@ -1280,7 +1289,6 @@
                             idProcedimiento, (int)Math.Max(1, Math.Round(_cantidadServicio)),
                             _observacionServicio.Trim(), desdeHistorial: false, desdeSoap: true))
                         throw new InvalidOperationException("El procedimiento no se guardó.");
-                    _procedimientosAgregadosEnSesion++;
                     _versionProcedimientos++;
                     break;
 
