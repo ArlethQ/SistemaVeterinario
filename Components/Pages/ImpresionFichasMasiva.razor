@@ -12,18 +12,18 @@
 
 @if (_autorizado)
 {
-    <div class="container-fluid py-3">
+    <div class="@(ModoModal ? "py-1" : "container-fluid py-3")">
         <!-- ENCABEZADO -->
         <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
             <div>
                 <small class="text-primary fw-bold text-uppercase">Expediente Clínico &amp; Reclamo de Seguros</small>
-                <h3 class="fw-bold mb-0 text-dark">Expediente de Fichas Médicas por Mascota</h3>
-                <small class="text-muted">Elija el animal en el dropbox y filtre por orden o fecha para generar el expediente consolidado en PDF</small>
+                <h3 class="@(ModoModal ? "h5 fw-bold mb-0 text-dark" : "fw-bold mb-0 text-dark")">Expediente de Fichas Médicas</h3>
+                <small class="text-muted">@(ModoModal ? "Filtre por orden o fecha para generar el expediente consolidado en PDF" : "Elija el animal en el dropbox y filtre por orden o fecha para generar el expediente consolidado en PDF")</small>
             </div>
             <div class="d-flex gap-2">
                 @if (AtencionesFiltradas.Any(x => x.Seleccionado))
                 {
-                    <button class="btn btn-danger fw-semibold d-flex align-items-center gap-2 shadow-sm"
+                    <button class="btn btn-danger btn-sm fw-semibold d-flex align-items-center gap-2 shadow-sm"
                             disabled="@_generandoPdf"
                             @onclick="GenerarExpedienteConsolidadoPdfAsync">
                         @if (_generandoPdf)
@@ -33,15 +33,18 @@
                         }
                         else
                         {
-                            <i class="bi bi-file-earmark-pdf-fill fs-5"></i>
+                            <i class="bi bi-file-earmark-pdf-fill"></i>
                             <span>Descargar Expediente Consolidado (@AtencionesFiltradas.Count(x => x.Seleccionado))</span>
                         }
                     </button>
                 }
-                <a class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" href="/consulta/fichamedica">
-                    <i class="bi bi-journal-medical"></i>
-                    <span>Ir a Historia SOAP</span>
-                </a>
+                @if (!ModoModal)
+                {
+                    <a class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" href="/consulta/fichamedica">
+                        <i class="bi bi-journal-medical"></i>
+                        <span>Ir a Historia SOAP</span>
+                    </a>
+                }
             </div>
         </div>
 
@@ -58,22 +61,25 @@
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body p-3">
                 <div class="row g-3 align-items-end">
-                    <!-- 1. Elegir Animal / Mascota -->
-                    <div class="col-12 col-md-5">
-                        <label class="form-label small fw-bold text-dark mb-1">
-                            <i class="bi bi-heart-pulse-fill text-primary me-1"></i> Animal / Mascota:
-                        </label>
-                        <select class="form-select fw-semibold" value="@_nhclInput" @onchange="OnMascotaDropdownChangedAsync">
-                            <option value="0">-- Seleccione una mascota (@_listaMascotas.Count registradas) --</option>
-                            @foreach (var m in _listaMascotas)
-                            {
-                                <option value="@m.MasNhcl">@m.MasNombre (NHCL: #@m.MasNhcl) · Tutor: @m.ClienteNombre (@m.EspecieDescripcion)</option>
-                            }
-                        </select>
-                    </div>
+                    @if (!ModoModal)
+                    {
+                        <!-- 1. Elegir Animal / Mascota -->
+                        <div class="col-12 col-md-5">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="bi bi-heart-pulse-fill text-primary me-1"></i> Animal / Mascota:
+                            </label>
+                            <select class="form-select fw-semibold" value="@_nhclInput" @onchange="OnMascotaDropdownChangedAsync">
+                                <option value="0">-- Seleccione una mascota (@_listaMascotas.Count registradas) --</option>
+                                @foreach (var m in _listaMascotas)
+                                {
+                                    <option value="@m.MasNhcl">@m.MasNombre (NHCL: #@m.MasNhcl) · Tutor: @m.ClienteNombre (@m.EspecieDescripcion)</option>
+                                }
+                            </select>
+                        </div>
+                    }
 
                     <!-- 2. Filtrar por Orden de la Mascota -->
-                    <div class="col-12 col-md-4">
+                    <div class="@(ModoModal ? "col-12 col-md-7" : "col-12 col-md-4")">
                         <label class="form-label small fw-bold text-dark mb-1">
                             <i class="bi bi-funnel-fill text-primary me-1"></i> Orden de Atención:
                         </label>
@@ -90,7 +96,7 @@
                     </div>
 
                     <!-- 3. Historias por Fecha / Día -->
-                    <div class="col-12 col-md-3">
+                    <div class="@(ModoModal ? "col-12 col-md-5" : "col-12 col-md-3")">
                         <label class="form-label small fw-bold text-dark mb-1">
                             <i class="bi bi-calendar-event text-primary me-1"></i> Historias por Fecha / Día:
                         </label>
@@ -387,6 +393,7 @@
 
 @code {
     [Parameter] public int NhclParam { get; set; }
+    [Parameter] public bool ModoModal { get; set; }
 
     private bool _autorizado;
     private bool _cargando;
@@ -476,11 +483,14 @@
         }
         _autorizado = true;
 
-        try
+        if (!ModoModal || NhclParam <= 0)
         {
-            _listaMascotas = await AdmisionService.BuscarMascotasAsync(string.Empty);
+            try
+            {
+                _listaMascotas = await AdmisionService.BuscarMascotasAsync(string.Empty);
+            }
+            catch { }
         }
-        catch { }
 
         int nhclACargar = NhclParam > 0 ? NhclParam : (Session.NhclActivo ?? 0);
 

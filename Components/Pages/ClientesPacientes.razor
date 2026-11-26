@@ -183,15 +183,11 @@
                                 </div>
                                 <div class="pet-card-actions">
                                     <button class="btn btn-sm action-record" @onclick="() => EditarMascotaAsync(mas)">Ver y editar ficha</button>
-                                    @if (Permisos.Permite("consulta/historial"))
-                                    {
-                                        <button class="btn btn-sm action-history" @onclick='() => NavManager.NavigateTo($"/consulta/historial/{mas.MasNhcl}")'>Historia</button>
-                                    }
                                     @if (Permisos.Permite("admision/ordenes"))
                                     {
                                         <button class="btn btn-sm action-order" @onclick='() => NavManager.NavigateTo($"/admision/ordenes?nhcl={mas.MasNhcl}")'>Orden</button>
                                     }
-                                    <button class="btn btn-sm action-summary" @onclick="() => AbrirModalResumen(mas)">Resumen</button>
+                                    <button class="btn btn-sm action-summary" @onclick="() => AbrirModalResumen(mas)">Resumen / Historia</button>
                                 </div>
                             </article>
                         }
@@ -289,103 +285,70 @@
 
     @if (_modalResumenAbierto && _mascotaResumen != null)
     {
+        var tutorHeader = _clientes.FirstOrDefault(c => c.PaCodigo == _mascotaResumen.MasIdCliente);
+        var gruposSidebar = _pestanasResumen.GroupBy(t => t.Grupo).ToList();
         <div class="patient-modal-backdrop" @onclick="CerrarModalResumen"></div>
-        <section class="summary-modal" role="dialog" aria-modal="true" aria-label="Resumen del paciente">
-            <header class="summary-modal-header">
-                <div>
-                    <small>NHCL #@_mascotaResumen.MasNhcl · @(string.IsNullOrWhiteSpace(_mascotaResumen.RazaDescripcion) ? _mascotaResumen.EspecieDescripcion : _mascotaResumen.RazaDescripcion)</small>
-                    <h5 class="mb-0">Resumen del paciente: @_mascotaResumen.MasNombre</h5>
+        <section class="summary-expediente-modal" role="dialog" aria-modal="true" aria-label="Resumen e historia del paciente">
+            <header class="summary-expediente-header">
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button"
+                            class="summary-sidebar-toggle @(_sidebarResumenAbierta ? "active" : "")"
+                            title="@(_sidebarResumenAbierta ? "Ocultar menú lateral" : "Mostrar menú lateral")"
+                            aria-pressed="@_sidebarResumenAbierta"
+                            @onclick="() => _sidebarResumenAbierta = !_sidebarResumenAbierta">
+                        <i class="bi bi-layout-sidebar"></i>
+                    </button>
+                    <div>
+                        <small class="text-uppercase fw-bold text-muted">
+                            NHCL #@_mascotaResumen.MasNhcl · @_mascotaResumen.EspecieDescripcion · @TextoSexo(_mascotaResumen) · Tutor: @(tutorHeader?.NombreCompleto ?? _mascotaResumen.ClienteNombre)
+                        </small>
+                        <h5 class="mb-0 fw-bold text-dark">Resumen / Historia: @_mascotaResumen.MasNombre</h5>
+                    </div>
                 </div>
 
-                @if (_pestanaResumenActiva != "resumen")
-                {
-                    <div class="summary-order-filter ms-auto me-3 position-relative">
-                        <button type="button"
-                                class="summary-order-selector-btn"
-                                @onclick="ToggleDropdownOrdenes"
-                                title="Seleccionar orden para esta mascota">
-                            <span class="order-label text-primary fw-bold">
-                                <i class="bi bi-file-earmark-medical me-1"></i> Orden:
-                            </span>
-                            <span class="order-value @(_ordenIdSeleccionada.HasValue ? "fw-bold text-dark" : "text-muted fst-italic")">
-                                @_ordenSeleccionadaTexto
-                            </span>
-                            <i class="bi bi-chevron-down text-muted ms-2" style="font-size: .75rem;"></i>
-                        </button>
+                <div class="d-flex align-items-center gap-2 ms-auto me-2">
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-2">
+                        <i class="bi bi-file-earmark-medical me-1"></i>NHCL #@_mascotaResumen.MasNhcl
+                    </span>
+                </div>
 
-                        @if (_mostrarDropdownOrdenes)
-                        {
-                            <div class="dropdown-backdrop-transparent" @onclick="() => _mostrarDropdownOrdenes = false"></div>
-                            <div class="summary-orders-dropdown shadow">
-                                @if (_cargandoOrdenesPaciente)
-                                {
-                                    <div class="dropdown-item text-muted small py-2 text-center">
-                                        <span class="spinner-border spinner-border-sm me-1"></span> Cargando órdenes...
-                                    </div>
-                                }
-                                else if (_ordenesPaciente.Count > 0)
-                                {
-                                    <div class="dropdown-header small text-uppercase fw-bold text-secondary py-1 px-3 border-bottom d-flex justify-content-between align-items-center">
-                                        <span>Órdenes de @_mascotaResumen.MasNombre</span>
-                                        <span class="badge bg-light text-secondary border">@_ordenesPaciente.Count</span>
-                                    </div>
-                                    <div class="dropdown-scrollable">
-                                        @foreach (var ord in _ordenesPaciente)
-                                        {
-                                            <button type="button"
-                                                    class="dropdown-item py-2 px-3 @(ord.IdOrden == _ordenIdSeleccionada ? "active-order" : "")"
-                                                    @onclick="() => SeleccionarOrden(ord)">
-                                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                                    <strong class="text-primary">Orden #@ord.IdOrden</strong>
-                                                    <span class="badge @(ord.Estado == "A" ? "bg-success-subtle text-success" : "bg-secondary-subtle text-secondary") border">
-                                                        @(ord.Estado == "A" ? "Activa" : (ord.Estado == "T" ? "Terminada" : ord.Estado))
-                                                    </span>
-                                                </div>
-                                                <div class="small text-muted d-flex justify-content-between">
-                                                    <span><i class="bi bi-calendar3 me-1"></i>@ord.Fecha.ToString("dd/MM/yyyy") @ord.Hora</span>
-                                                    <span class="text-truncate ms-2" style="max-width: 150px;">@ord.Especialidad</span>
-                                                </div>
-                                            </button>
-                                        }
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="dropdown-item text-muted small py-3 text-center">
-                                        <span>No hay órdenes registradas para esta mascota.</span>
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                }
-
-                <button type="button" class="modal-close" title="Cerrar" @onclick="CerrarModalResumen">×</button>
+                <button type="button" class="summary-modal-close" title="Cerrar" @onclick="CerrarModalResumen">×</button>
             </header>
 
-            <div class="summary-tabs-bar">
-                <ul class="nav nav-tabs flex-nowrap">
-                    @foreach (var tab in _pestanasResumen.Where(item => item.Id != "triaje" || Permisos.Permite("admision/triaje")))
-                    {
-                        <li class="nav-item">
-                            <button type="button"
-                                    class="nav-link @(_pestanaResumenActiva == tab.Id ? "active fw-bold text-dark" : "text-primary")"
-                                    @onclick="() => CambiarPestanaResumenAsync(tab.Id)">
-                                <span class="me-1">@tab.Icono</span> @tab.Titulo
-                            </button>
-                        </li>
-                    }
-                </ul>
-            </div>
-
-            <div class="summary-modal-body">
-                <div class="summary-tab-content">
-                    @switch (_pestanaResumenActiva)
-                    {
-                        case "resumen":
-                            @if (_mascotaResumen != null)
+            <div class="summary-expediente-workspace">
+                @if (_sidebarResumenAbierta)
+                {
+                    <aside class="summary-expediente-sidebar" aria-label="Menú de resumen e historia">
+                        @for (var gIdx = 0; gIdx < gruposSidebar.Count; gIdx++)
+                        {
+                            var grupo = gruposSidebar[gIdx];
+                            if (gIdx > 0)
                             {
-                                var tutor = _clientes.FirstOrDefault(c => c.PaCodigo == _mascotaResumen.MasIdCliente);
+                                <div class="summary-sidebar-divider"></div>
+                            }
+                            if (!string.IsNullOrWhiteSpace(grupo.Key))
+                            {
+                                <div class="summary-sidebar-group-title">@grupo.Key</div>
+                            }
+                            @foreach (var tab in grupo)
+                            {
+                                var activa = _pestanaResumenActiva == tab.Id;
+                                <button type="button"
+                                        title="@tab.Titulo"
+                                        class="summary-sidebar-item @(activa ? "active" : "")"
+                                        @onclick="() => CambiarPestanaResumenAsync(tab.Id)">
+                                    <i class="bi @tab.Icono summary-sidebar-icon"></i>
+                                    <span class="summary-sidebar-label">@tab.Titulo</span>
+                                </button>
+                            }
+                        }
+                    </aside>
+                }
+
+                <div class="summary-expediente-body">
+                    @if (_pestanaResumenActiva == "resumen")
+                    {
+                                var tutor = tutorHeader;
                                 var fotoUrl = ObtenerFotoPaciente(_mascotaResumen.MasNhcl);
 
                                 <div class="resumen-container">
@@ -739,193 +702,27 @@
                                         </div>
                                     </div>
                                 </div>
-                            }
-                            break;
-                        case "triaje":
-                            <div class="triaje-modal-tab-container py-1 mx-auto" style="max-width: 980px;">
-                                <div class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Vista de triaje">
-                                    <button type="button" class="btn btn-sm @(!_verHistorialTriaje ? "btn-primary" : "btn-outline-primary")"
-                                            aria-pressed="@(!_verHistorialTriaje ? "true" : "false")" @onclick="() => _verHistorialTriaje = false">Triaje de la orden</button>
-                                    <button type="button" class="btn btn-sm @(_verHistorialTriaje ? "btn-primary" : "btn-outline-primary")"
-                                            aria-pressed="@(_verHistorialTriaje ? "true" : "false")" @onclick="() => _verHistorialTriaje = true">Historial de triajes</button>
-                                </div>
-                                @if (_verHistorialTriaje)
-                                {
-                                    <HistorialTriaje Nhcl="@_mascotaResumen.MasNhcl" />
-                                }
-                                else if (_ordenIdSeleccionada.HasValue && _ordenIdSeleccionada.Value > 0)
-                                {
-                                    <TriajeIngreso IdOrden="@_ordenIdSeleccionada.Value"
-                                                   Nhcl="@_mascotaResumen.MasNhcl"
-                                                   ModoModal="true"
-                                                   OnGuardado="ActualizarMascotaTrasTriaje" />
-                                }
-                                else
-                                {
-                                    <div class="card shadow-sm border-0 py-4 text-center text-muted">
-                                        <div class="card-body">
-                                            <span class="fs-1 d-block mb-2 text-warning">🌡️</span>
-                                            <h5>Selecciona una orden para ver o registrar el triaje</h5>
-                                            <p class="small text-muted mb-3">
-                                                Las constantes fisiológicas y el temperamento están enlazados a la orden de atención.
-                                            </p>
-                                            @if (_ordenesPaciente.Count > 0)
-                                            {
-                                                <div class="d-inline-flex flex-wrap gap-2 justify-content-center" style="max-width: 600px;">
-                                                    @foreach (var o in _ordenesPaciente.Take(5))
-                                                    {
-                                                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => SeleccionarOrden(o)">
-                                                            <i class="bi bi-file-earmark-medical me-1"></i>Orden #@o.IdOrden (@o.Fecha.ToString("dd/MM/yyyy"))
-                                                        </button>
-                                                    }
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-secondary-subtle text-secondary py-2 px-3">
-                                                    Este paciente aún no tiene órdenes de atención registradas.
-                                                </span>
-                                            }
-                                        </div>
-                                    </div>
-                                }
-                            </div>
-                            break;
-                        case "kardex":
-                            <div class="kardex-modal-tab-container py-1">
-                                @if (_ordenIdSeleccionada.HasValue && _ordenIdSeleccionada.Value > 0)
-                                {
-                                    <KardexEnfermeria IdOrden="@_ordenIdSeleccionada" Nhcl="@_mascotaResumen.MasNhcl" ModoModal="true" />
-                                }
-                                else
-                                {
-                                    <div class="card shadow-sm border-0 py-4 text-center text-muted">
-                                        <div class="card-body">
-                                            <span class="fs-1 d-block mb-2 text-warning">📋</span>
-                                            <h5>Selecciona una orden para ver el Kardex de Enfermería</h5>
-                                            <p class="small text-muted mb-3">
-                                                La administración de medicamentos y la sábana de 5 días están enlazadas a la orden de atención.
-                                            </p>
-                                            @if (_ordenesPaciente.Count > 0)
-                                            {
-                                                <div class="d-inline-flex flex-wrap gap-2 justify-content-center" style="max-width: 600px;">
-                                                    @foreach (var o in _ordenesPaciente.Take(5))
-                                                    {
-                                                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => SeleccionarOrden(o)">
-                                                            <i class="bi bi-file-earmark-medical me-1"></i>Orden #@o.IdOrden (@o.Fecha.ToString("dd/MM/yyyy"))
-                                                        </button>
-                                                    }
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-secondary-subtle text-secondary py-2 px-3">
-                                                    Este paciente aún no tiene órdenes de atención registradas.
-                                                </span>
-                                            }
-                                        </div>
-                                    </div>
-                                }
-                            </div>
-                            break;
-                        case "signos":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">📈</span>
-                                <h4>Signos</h4>
-                                <p class="text-muted">Contenido de Signos para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "ficha24h":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">📄</span>
-                                <h4>Ficha 24h</h4>
-                                <p class="text-muted">Contenido de Ficha 24h para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "monitoreo":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">🩺</span>
-                                <h4>Monitoreo</h4>
-                                <p class="text-muted">Contenido de Monitoreo para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "preanestesia":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">🧪</span>
-                                <h4>Pre-Anestesia</h4>
-                                <p class="text-muted">Contenido de Pre-Anestesia para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "anestesia":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">🫁</span>
-                                <h4>Anestesia</h4>
-                                <p class="text-muted">Contenido de Anestesia para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "quirofano":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">🔪</span>
-                                <h4>Protocolo Quirúrgico</h4>
-                                <p class="text-muted">Contenido de Protocolo Quirúrgico para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "recuperacion":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">🛏️</span>
-                                <h4>Recuperación</h4>
-                                <p class="text-muted">Contenido de Recuperación para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "soap":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">📋</span>
-                                <h4>Historia Clínica SOAP</h4>
-                                <p class="text-muted">Contenido de Historia Clínica SOAP para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "evolucion":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">📝</span>
-                                <h4>Evolución Médica</h4>
-                                <p class="text-muted">Contenido de Evolución Médica para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "recetario":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">💊</span>
-                                <h4>Recetario</h4>
-                                <p class="text-muted">Contenido de Recetario para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "consentimientos":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">📄</span>
-                                <h4>Consentimientos y Alta</h4>
-                                <p class="text-muted">Contenido de Consentimientos y Alta para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "laboratorio":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">🔬</span>
-                                <h4>Laboratorio</h4>
-                                <p class="text-muted">Contenido de Laboratorio para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "rx":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">☢️</span>
-                                <h4>RX / Ecografía</h4>
-                                <p class="text-muted">Contenido de RX / Ecografía para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
-                        case "informes":
-                            <div class="summary-placeholder">
-                                <span class="placeholder-icon">📑</span>
-                                <h4>Informes</h4>
-                                <p class="text-muted">Contenido de Informes para <strong>@_mascotaResumen.MasNombre</strong> listo para implementar.</p>
-                            </div>
-                            break;
+                    }
+                    else if (_pestanaResumenActiva is "resumen-clinico" or "crecimiento" or "apuntes" or "archivos")
+                    {
+                        <HistorialPaciente @key="_mascotaResumen.MasNhcl"
+                                           Nhcl="@_mascotaResumen.MasNhcl"
+                                           ModoModal="true"
+                                           TabActivaModal="@MapearTabHistorial(_pestanaResumenActiva)"
+                                           OnAbrirOrden="AbrirOrdenEnHistorial" />
+                    }
+                    else if (_pestanaResumenActiva == "historial-ordenes")
+                    {
+                        <HistorialOrdenesPaciente @key="_mascotaResumen.MasNhcl"
+                                                  Nhcl="@_mascotaResumen.MasNhcl"
+                                                  OrdenInicial="@_ordenHistorialInicial"
+                                                  OnOrdenInicialConsumida="() => _ordenHistorialInicial = null" />
+                    }
+                    else if (_pestanaResumenActiva == "expediente-fichas")
+                    {
+                        <ImpresionFichasMasiva @key="_mascotaResumen.MasNhcl"
+                                               NhclParam="@_mascotaResumen.MasNhcl"
+                                               ModoModal="true" />
                     }
                 </div>
             </div>
@@ -1646,29 +1443,28 @@
     }
 
     private bool _modalResumenAbierto;
+    private bool _sidebarResumenAbierta = true;
     private PacienteMascotaDto? _mascotaResumen;
     private string _pestanaResumenActiva = "resumen";
-    private bool _verHistorialTriaje;
+    private int? _ordenHistorialInicial;
 
-    private readonly (string Id, string Titulo, string Icono)[] _pestanasResumen = new[]
+    private readonly (string Id, string Icono, string Titulo, string Grupo)[] _pestanasResumen =
+    [
+        ("resumen", "bi-house", "Resumen", ""),
+        ("resumen-clinico", "bi-clipboard2-pulse", "Resumen Clínico", "HISTORIA CLÍNICA"),
+        ("historial-ordenes", "bi-clock-history", "Historial de Órdenes", "HISTORIA CLÍNICA"),
+        ("crecimiento", "bi-graph-up-arrow", "Curva de Crecimiento", "HISTORIA CLÍNICA"),
+        ("apuntes", "bi-journal-text", "Apuntes", "HISTORIA CLÍNICA"),
+        ("archivos", "bi-paperclip", "Archivos Adjuntos", "HISTORIA CLÍNICA"),
+        ("expediente-fichas", "bi-file-earmark-pdf", "Expediente Seguros / Fichas", "EXPEDIENTE Y FICHAS")
+    ];
+
+    private static string MapearTabHistorial(string tabModal) => tabModal switch
     {
-        ("resumen", "Resumen", "📋"),
-        ("triaje", "Triaje", "🌡️"),
-        ("kardex", "Kardex", "📁"),
-        ("signos", "Signos", "📈"),
-        ("ficha24h", "Ficha 24h", "📄"),
-        ("monitoreo", "Monitoreo", "🩺"),
-        ("preanestesia", "Pre-Anestesia", "🧪"),
-        ("anestesia", "Anestesia", "🫁"),
-        ("quirofano", "Protocolo Quirúrgico", "🔪"),
-        ("recuperacion", "Recuperación", "🛏️"),
-        ("soap", "Historia Clínica SOAP", "📋"),
-        ("evolucion", "Evolución Médica", "📝"),
-        ("recetario", "Recetario", "💊"),
-        ("consentimientos", "Consentimientos y Alta", "📄"),
-        ("laboratorio", "Laboratorio", "🔬"),
-        ("rx", "RX / Ecografía", "☢️"),
-        ("informes", "Informes", "📑")
+        "crecimiento" => "crecimiento",
+        "apuntes" => "apuntes",
+        "archivos" => "archivos",
+        _ => "resumen"
     };
 
 
@@ -1747,127 +1543,33 @@
         }
     }
 
-    private List<OrdenPacienteResumenDto> _ordenesPaciente = new();
-    private bool _cargandoOrdenesPaciente;
-    private bool _mostrarDropdownOrdenes;
-    private int? _ordenIdSeleccionada;
-
-    private string _ordenSeleccionadaTexto
-    {
-        get
-        {
-            if (!_ordenIdSeleccionada.HasValue)
-                return "Seleccione la orden...";
-
-            var ord = _ordenesPaciente.FirstOrDefault(o => o.IdOrden == _ordenIdSeleccionada.Value);
-            if (ord != null)
-                return $"#{ord.IdOrden} ({ord.Fecha:dd/MM/yyyy})";
-
-            return $"#{_ordenIdSeleccionada.Value}";
-        }
-    }
-
-    private async Task CargarOrdenesPacienteAsync(int nhcl)
-    {
-        _ordenesPaciente.Clear();
-        _ordenIdSeleccionada = null; // Default: Seleccione la orden...
-        _mostrarDropdownOrdenes = false;
-        _cargandoOrdenesPaciente = true;
-        try
-        {
-            _ordenesPaciente = await AdmisionService.ObtenerOrdenesPacienteAsync(nhcl);
-        }
-        catch
-        {
-            _ordenesPaciente = new();
-        }
-        finally
-        {
-            _cargandoOrdenesPaciente = false;
-            StateHasChanged();
-        }
-    }
-
-    private void ToggleDropdownOrdenes()
-    {
-        _mostrarDropdownOrdenes = !_mostrarDropdownOrdenes;
-    }
-
-    private void SeleccionarOrden(OrdenPacienteResumenDto ord)
-    {
-        _ordenIdSeleccionada = ord.IdOrden;
-        _mostrarDropdownOrdenes = false;
-        if (_mascotaResumen != null)
-        {
-            SessionState.SeleccionarOrden(ord.IdOrden, _mascotaResumen.MasNhcl, _mascotaResumen.MasNombre);
-        }
-    }
-
     private void CambiarPestanaResumenAsync(string tabId)
     {
+        _ordenHistorialInicial = null;
         _pestanaResumenActiva = tabId;
-        _mostrarDropdownOrdenes = false;
-        if ((tabId == "triaje" || tabId == "kardex") && _mascotaResumen != null)
-        {
-            if (!_ordenIdSeleccionada.HasValue && _ordenesPaciente.Count > 0)
-            {
-                var primera = _ordenesPaciente[0];
-                SeleccionarOrden(primera);
-            }
-        }
     }
 
-    private void ActualizarMascotaTrasTriaje(FichaMedicaCompletaDto ficha)
+    private void AbrirOrdenEnHistorial(int idOrden)
     {
-        if (_mascotaResumen != null)
-        {
-            string colorNormalizado = ficha.Temperamento switch
-            {
-                "AGRESIVO" => "red",
-                "A LA DEFENSIVA" => "yellow",
-                _ => "green"
-            };
-            _mascotaResumen.MasColorTriaje = colorNormalizado;
-            _mascotaResumen.MasCastrado = ficha.Esterilizado == "S" ? "SI" : "NO";
-
-            foreach (var lista in _mascotasPorCliente.Values)
-            {
-                var m = lista.FirstOrDefault(x => x.MasNhcl == _mascotaResumen.MasNhcl);
-                if (m != null)
-                {
-                    m.MasColorTriaje = colorNormalizado;
-                    m.MasCastrado = _mascotaResumen.MasCastrado;
-                }
-            }
-            StateHasChanged();
-        }
+        _ordenHistorialInicial = idOrden;
+        _pestanaResumenActiva = "historial-ordenes";
     }
 
     private async Task AbrirModalResumen(PacienteMascotaDto mas)
     {
         _mascotaResumen = mas;
-        _verHistorialTriaje = false;
+        _ordenHistorialInicial = null;
         _pestanaResumenActiva = "resumen";
+        _sidebarResumenAbierta = true;
         _modalResumenAbierto = true;
-        _mostrarDropdownOrdenes = false;
         await CargarRecordatoriosAsync(mas.MasNhcl);
-        await CargarOrdenesPacienteAsync(mas.MasNhcl);
-
-        if (_ordenesPaciente.Count > 0)
-        {
-            _ordenIdSeleccionada = _ordenesPaciente[0].IdOrden;
-            SessionState.SeleccionarOrden(_ordenIdSeleccionada.Value, mas.MasNhcl, mas.MasNombre);
-        }
-        else
-        {
-            _ordenIdSeleccionada = null;
-        }
     }
 
     private void CerrarModalResumen()
     {
         _modalResumenAbierto = false;
         _mascotaResumen = null;
+        _ordenHistorialInicial = null;
     }
 
     private void CancelarEdicionMascota()

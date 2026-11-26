@@ -13,6 +13,8 @@ public interface IAdministracionClinicaService
     Task<List<AlertaClinicaDto>> ObtenerAlertasAsync(DateTime desde, DateTime hasta, string estado);
     Task<List<PacienteFallecidoDto>> ObtenerFallecidosAsync(DateTime desde, DateTime hasta);
     Task<List<HistorialPacienteItemDto>> ObtenerResumenHistorialAsync(int nhcl);
+    Task<List<OrdenHistorialClinicoResumenDto>> ObtenerHistorialOrdenesPacienteAsync(int nhcl);
+    Task<List<ProcedimientoOrdenResumenDto>> ObtenerProcedimientosOrdenAsync(int idOrden, int nhcl);
     Task<List<MedicionCrecimientoDto>> ObtenerCurvaCrecimientoAsync(int nhcl);
     Task<PacienteResumenCrecimientoDto?> ObtenerInfoPacienteCrecimientoAsync(int nhcl);
     Task<List<LocalidadAdministrativaDto>> ObtenerLocalidadesAsync();
@@ -317,6 +319,273 @@ public sealed class AdministracionClinicaService : IAdministracionClinicaService
             }
         }
         return resultado;
+    }
+
+    private sealed class TablaColumnaRow
+    {
+        public string Tabla { get; set; } = string.Empty;
+        public string Columna { get; set; } = string.Empty;
+    }
+
+    public async Task<List<OrdenHistorialClinicoResumenDto>> ObtenerHistorialOrdenesPacienteAsync(int nhcl)
+    {
+        if (nhcl <= 0) return [];
+
+        const string sqlMeta = @"
+            SELECT o.name AS Tabla, c.name AS Columna
+            FROM sys.objects o
+            INNER JOIN sys.columns c ON c.object_id = o.object_id
+            WHERE o.type = 'U'
+              AND o.name IN (
+                  'vt_ordenAtencion', 'vt_fichamedica', 'vt_diagnosticos', 'vt_EvolucionMedico', 'vt_medicinas', 'vt_vacunas',
+                  'vt_labOrdenes', 'vt_rxOrdenes', 'vt_fisioterapia_ordenes', 'vt_procedimientos',
+                  'vt_labInformes', 'vt_rxInformes', 'vt_ecoInformes', 'vt_endoInformes', 'vt_medInformes',
+                  'hvt_ingresoHospitalizacion', 'hvt_bloque1ficha', 'hvt_bloque2ficha', 'hvt_bloque3ficha', 'hvt_bloqueMonitoreo',
+                  'qvt_enfSignosVitales', 'qvt_productosUtilizados',
+                  'qvt_calendario_cirugias', 'qvt_preanestesia', 'qvt_verificacion', 'qvt_RegistroAnestesia',
+                  'qvt_monitorizacion_anestesia', 'qvt_Protocolo', 'qvt_recuperacion', 'qvt_post_operatorio',
+                  'qvt_observaciones_recuperacion', 'vt_cirugia_ordenes', 'vt_autorizaciones', 'qvt_formulario_alta'
+              )";
+
+        var metaRows = await _db.QueryAsync<TablaColumnaRow>(sqlMeta);
+        var tablas = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var r in metaRows)
+        {
+            if (!tablas.TryGetValue(r.Tabla, out var set))
+            {
+                set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                tablas[r.Tabla] = set;
+            }
+            set.Add(r.Columna);
+        }
+
+        bool Tiene(string tabla, string col) =>
+            tablas.TryGetValue(tabla, out var cols) && cols.Contains(col);
+
+        string ExistsClause(string tabla, string col, string extraWhere = "") =>
+            Tiene(tabla, col)
+                ? $"EXISTS (SELECT 1 FROM dbo.{tabla} t WHERE t.{col} = o.ordenAten_id{extraWhere})"
+                : string.Empty;
+
+        string CombinarFlag(params string[] clausulas)
+        {
+            var validas = clausulas.Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
+            return validas.Count == 0
+                ? "CAST(0 AS bit)"
+                : $"CASE WHEN {string.Join(" OR ", validas)} THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END";
+        }
+
+        string horaExpr = Tiene("vt_ordenAtencion", "ordenAten_hora")
+            ? "RTRIM(ISNULL(CONVERT(nvarchar(20), o.ordenAten_hora), ''))"
+            : "''";
+        string etapaExpr = Tiene("vt_ordenAtencion", "ordenAten_etapa")
+            ? "RTRIM(ISNULL(CONVERT(nvarchar(60), o.ordenAten_etapa), ''))"
+            : "''";
+        string esProcExpr = Tiene("vt_ordenAtencion", "ordenAten_esProcedimiento")
+            ? "CAST(CASE WHEN ISNULL(o.ordenAten_esProcedimiento, 0) = 1 THEN 1 ELSE 0 END AS bit)"
+            : "CAST(0 AS bit)";
+
+        string motivoExpr = Tiene("vt_fichamedica", "med_orden") && Tiene("vt_fichamedica", "med_motivo")
+            ? "ISNULL((SELECT TOP 1 RTRIM(CONVERT(nvarchar(500), f.med_motivo)) FROM dbo.vt_fichamedica f WHERE f.med_orden = o.ordenAten_id ORDER BY f.sec DESC), '')"
+            : "''";
+
+        string diagExpr = Tiene("vt_diagnosticos", "dig_id_orden")
+            ? @"ISNULL(STUFF((
+                    SELECT ', ' + RTRIM(c.cie_diagnostico)
+                    FROM dbo.vt_diagnosticos d
+                    INNER JOIN dbo.vt_cie10 c ON d.dig_codigoDiag = c.cie_codigo
+                    WHERE d.dig_id_orden = o.ordenAten_id
+                    FOR XML PATH(''), TYPE
+                ).value('.', 'nvarchar(max)'), 1, 2, ''), '')"
+            : "''";
+
+        bool tieneFicha = Tiene("vt_fichamedica", "med_orden");
+        bool puedeDiferenciarTriaje = tieneFicha && Tiene("vt_fichamedica", "med_motivo");
+        string condSoloTriaje = puedeDiferenciarTriaje
+            ? @"LTRIM(RTRIM(CONVERT(nvarchar(max), ISNULL(t.med_motivo, '')))) = 'Triaje y signos vitales'"
+              + (Tiene("vt_fichamedica", "med_anamnesis") ? " AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), ISNULL(t.med_anamnesis, '')))), '') IS NULL" : "")
+              + (Tiene("vt_fichamedica", "med_objetivo") ? " AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), ISNULL(t.med_objetivo, '')))), '') IS NULL" : "")
+              + (Tiene("vt_fichamedica", "med_analisis") ? " AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), ISNULL(t.med_analisis, '')))), '') IS NULL" : "")
+              + (Tiene("vt_fichamedica", "med_plan") ? " AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), ISNULL(t.med_plan, '')))), '') IS NULL" : "")
+              + (Tiene("vt_fichamedica", "tratamiento") ? " AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), ISNULL(t.tratamiento, '')))), '') IS NULL" : "")
+              + (Tiene("vt_fichamedica", "observacionesyrecomendaciones") ? " AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), ISNULL(t.observacionesyrecomendaciones, '')))), '') IS NULL" : "")
+              + (Tiene("vt_fichamedica", "med_apuntes") ? " AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), ISNULL(t.med_apuntes, '')))), '') IS NULL" : "")
+              + (Tiene("vt_fichamedica", "med_pregunta") ? " AND ISNULL(t.med_pregunta, 'N') <> 'S'" : "")
+              + (Tiene("vt_fichamedica", "med_requiereHospitalizacion") ? " AND ISNULL(t.med_requiereHospitalizacion, 0) = 0" : "")
+              + (Tiene("vt_diagnosticos", "dig_id_orden") ? " AND NOT EXISTS (SELECT 1 FROM dbo.vt_diagnosticos d WHERE d.dig_id_orden = o.ordenAten_id)" : "")
+            : "1 = 0";
+
+        string flagVacunas = CombinarFlag(
+            ExistsClause("vt_vacunas", "vacuna_orden",
+                Tiene("vt_vacunas", "vacuna_estado") ? " AND ISNULL(t.vacuna_estado, 'A') = 'A'" : ""));
+
+        string flagEvol = CombinarFlag(
+            ExistsClause("vt_EvolucionMedico", "idOrden",
+                Tiene("vt_EvolucionMedico", "estadoEvolucion") ? " AND ISNULL(t.estadoEvolucion, 'A') = 'A'" : ""));
+
+        string flagReceta = CombinarFlag(ExistsClause("vt_medicinas", "med_id_orden"));
+
+        string flagDiagComp = CombinarFlag(
+            ExistsClause("vt_labOrdenes", "labO_id_orden"),
+            ExistsClause("vt_rxOrdenes", "rxO_id_orden"),
+            ExistsClause("vt_fisioterapia_ordenes", "fisioO_id_orden",
+                Tiene("vt_fisioterapia_ordenes", "fisioO_estado") ? " AND ISNULL(t.fisioO_estado, 'A') = 'A'" : ""),
+            ExistsClause("vt_procedimientos", "proc_idOrden",
+                Tiene("vt_procedimientos", "proc_estado") ? " AND ISNULL(CONVERT(nvarchar(30), t.proc_estado), 'A') <> 'I'" : ""),
+            ExistsClause("vt_labInformes", "blazor_id_orden",
+                Tiene("vt_labInformes", "estado") ? " AND ISNULL(t.estado, 'A') = 'A'" : ""),
+            ExistsClause("vt_rxInformes", "blazor_id_orden",
+                Tiene("vt_rxInformes", "estado") ? " AND ISNULL(t.estado, 'A') = 'A'" : ""),
+            ExistsClause("vt_ecoInformes", "blazor_id_orden",
+                Tiene("vt_ecoInformes", "estado") ? " AND ISNULL(t.estado, 'A') = 'A'" : ""),
+            ExistsClause("vt_endoInformes", "blazor_id_orden",
+                Tiene("vt_endoInformes", "estado") ? " AND ISNULL(t.estado, 'A') = 'A'" : ""),
+            ExistsClause("vt_medInformes", "blazor_id_orden",
+                Tiene("vt_medInformes", "estado") ? " AND ISNULL(t.estado, 'A') = 'A'" : "")
+        );
+
+        var condicionesIngHosp = new List<string>();
+        if (Tiene("hvt_ingresoHospitalizacion", "reqHospitalizacionOverride"))
+            condicionesIngHosp.Add("ISNULL(t.reqHospitalizacionOverride, 0) = 1");
+        if (Tiene("vt_fichamedica", "med_requiereHospitalizacion"))
+            condicionesIngHosp.Add("EXISTS (SELECT 1 FROM dbo.vt_fichamedica fm WHERE fm.med_orden = o.ordenAten_id AND ISNULL(fm.med_requiereHospitalizacion, 0) = 1)");
+        if (Tiene("hvt_ingresoHospitalizacion", "indicaciones"))
+            condicionesIngHosp.Add("NULLIF(LTRIM(RTRIM(ISNULL(t.indicaciones, ''))), '') IS NOT NULL");
+        if (Tiene("hvt_ingresoHospitalizacion", "hidratacionFluidoterapia"))
+            condicionesIngHosp.Add("NULLIF(LTRIM(RTRIM(ISNULL(t.hidratacionFluidoterapia, ''))), '') IS NOT NULL");
+        if (Tiene("hvt_ingresoHospitalizacion", "dietaCuidados"))
+            condicionesIngHosp.Add("NULLIF(LTRIM(RTRIM(ISNULL(t.dietaCuidados, ''))), '') IS NOT NULL");
+
+        string extraIngHosp = (Tiene("hvt_ingresoHospitalizacion", "estado") ? " AND ISNULL(t.estado, 'A') = 'A'" : "")
+            + (condicionesIngHosp.Count > 0 ? $" AND ({string.Join(" OR ", condicionesIngHosp)})" : "");
+
+        string flagHosp = CombinarFlag(
+            ExistsClause("hvt_ingresoHospitalizacion", "idOrden", extraIngHosp),
+            ExistsClause("hvt_bloque1ficha", "idorden"),
+            ExistsClause("hvt_bloque2ficha", "idorden"),
+            ExistsClause("hvt_bloque3ficha", "idorden"),
+            ExistsClause("hvt_bloqueMonitoreo", "idorden"),
+            ExistsClause("qvt_enfSignosVitales", "idOrdenAtencion"),
+            ExistsClause("qvt_productosUtilizados", "ordenId",
+                Tiene("qvt_productosUtilizados", "estado") ? " AND ISNULL(t.estado, 'Vigente') IN ('Vigente', 'A')" : "")
+        );
+
+        // Las hospitalizaciones con ficha médica siempre muestran SOAP completo
+        string flagSoap = tieneFicha
+            ? $"CASE WHEN EXISTS (SELECT 1 FROM dbo.vt_fichamedica t WHERE t.med_orden = o.ordenAten_id AND (NOT ({condSoloTriaje}) OR ({flagHosp}) = 1)) THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END"
+            : "CAST(0 AS bit)";
+
+        string flagTriaje = puedeDiferenciarTriaje
+            ? $"CASE WHEN EXISTS (SELECT 1 FROM dbo.vt_fichamedica t WHERE t.med_orden = o.ordenAten_id AND ({condSoloTriaje})) AND ({flagHosp}) = 0 AND NOT EXISTS (SELECT 1 FROM dbo.vt_fichamedica t WHERE t.med_orden = o.ordenAten_id AND NOT ({condSoloTriaje})) THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END"
+            : "CAST(0 AS bit)";
+
+        string flagCirugia = CombinarFlag(
+            ExistsClause("qvt_calendario_cirugias", "id_orden",
+                Tiene("qvt_calendario_cirugias", "estado") ? " AND ISNULL(t.estado, 'A') = 'A'" : ""),
+            ExistsClause("vt_cirugia_ordenes", "cirO_id_orden",
+                Tiene("vt_cirugia_ordenes", "cirO_estado") ? " AND ISNULL(t.cirO_estado, 'PENDIENTE_CITA') <> 'ANULADA'" : ""),
+            ExistsClause("qvt_preanestesia", "orden"),
+            ExistsClause("qvt_verificacion", "fichamedr"),
+            ExistsClause("qvt_RegistroAnestesia", "idOrden"),
+            ExistsClause("qvt_monitorizacion_anestesia", "id_orden"),
+            ExistsClause("qvt_Protocolo", "idOrden"),
+            ExistsClause("qvt_recuperacion", "idOrden"),
+            ExistsClause("qvt_post_operatorio", "idOrden"),
+            ExistsClause("qvt_observaciones_recuperacion", "idOrden",
+                Tiene("qvt_observaciones_recuperacion", "estado") ? " AND ISNULL(t.estado, 'A') = 'A'" : "")
+        );
+
+        string flagConsent = CombinarFlag(
+            ExistsClause("vt_autorizaciones", "orden"),
+            ExistsClause("qvt_formulario_alta", "idOrden")
+        );
+
+        string origenCirExpr = Tiene("vt_cirugia_ordenes", "cirO_id_orden") && Tiene("vt_cirugia_ordenes", "cirO_nhcl")
+            ? $@"CASE WHEN ({flagCirugia}) = 1 AND ({flagSoap}) = 0 THEN (
+                    SELECT TOP 1 co.cirO_id_orden
+                    FROM dbo.vt_cirugia_ordenes co
+                    WHERE co.cirO_nhcl = o.ordenAten_nhcl
+                      AND co.cirO_id_orden < o.ordenAten_id
+                      {(Tiene("vt_cirugia_ordenes", "cirO_estado") ? "AND ISNULL(co.cirO_estado, 'PENDIENTE_CITA') <> 'ANULADA'" : "")}
+                    ORDER BY co.cirO_id_orden DESC
+                ) ELSE NULL END"
+            : "CAST(NULL AS int)";
+
+        string sql = $@"
+            SELECT
+                o.ordenAten_id AS IdOrden,
+                o.ordenAten_nhcl AS Nhcl,
+                ISNULL(o.ordenAten_fecha, GETDATE()) AS Fecha,
+                {horaExpr} AS Hora,
+                RTRIM(ISNULL(CONVERT(nvarchar(30), o.ordenAten_estado), '')) AS Estado,
+                {etapaExpr} AS Etapa,
+                {esProcExpr} AS EsProcedimiento,
+                RTRIM(ISNULL(u.user_nombre, 'Sin médico asignado')) AS Medico,
+                RTRIM(ISNULL(e.es_descripcion, 'Consulta General')) AS Especialidad,
+                {motivoExpr} AS Motivo,
+                {diagExpr} AS Diagnosticos,
+                {flagSoap} AS TieneSoap,
+                {flagTriaje} AS TieneTriaje,
+                {flagVacunas} AS TieneVacunas,
+                {flagEvol} AS TieneEvoluciones,
+                {flagReceta} AS TieneReceta,
+                {flagDiagComp} AS TieneDiagnosticosComplementarios,
+                {flagHosp} AS TieneHospitalizacion,
+                {flagCirugia} AS TieneCirugia,
+                {flagConsent} AS TieneConsentimientos,
+                {origenCirExpr} AS IdOrdenOrigenCirugia
+            FROM dbo.vt_ordenAtencion o
+            LEFT JOIN dbo.vt_usuarios u ON u.user_numero = o.ordenAten_idMedico
+            LEFT JOIN dbo.vt_especialidades e ON e.es_id = o.ordenAten_esp_numero
+            WHERE o.ordenAten_nhcl = @Nhcl
+            ORDER BY o.ordenAten_fecha DESC, o.ordenAten_id DESC";
+
+        return (await _db.QueryAsync<OrdenHistorialClinicoResumenDto>(sql, new { Nhcl = nhcl })).ToList();
+    }
+
+    public async Task<List<ProcedimientoOrdenResumenDto>> ObtenerProcedimientosOrdenAsync(int idOrden, int nhcl)
+    {
+        if (idOrden <= 0 || nhcl <= 0) return [];
+        try
+        {
+            var cols = new HashSet<string>(
+                await _db.QueryAsync<string>(@"
+                    SELECT c.name
+                    FROM sys.columns c
+                    INNER JOIN sys.objects o ON o.object_id = c.object_id
+                    WHERE o.type = 'U' AND o.name = 'vt_procedimientos'"),
+                StringComparer.OrdinalIgnoreCase);
+
+            if (!cols.Contains("proc_idOrden")) return [];
+
+            string cantCol = cols.Contains("proc_cantidad") ? "CAST(ISNULL(NULLIF(p.proc_cantidad, 0), 1) AS decimal(18,2))" : "CAST(1 AS decimal(18,2))";
+            string obsCol = cols.Contains("proc_observaciones") ? "ISNULL(CONVERT(nvarchar(250), p.proc_observaciones), '')" : "''";
+            string estCol = cols.Contains("proc_estado") ? "ISNULL(CONVERT(nvarchar(30), p.proc_estado), '')" : "''";
+            string descCol = cols.Contains("proc_descripcion")
+                ? "COALESCE(NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(pr.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), ''), ''), NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(250), p.proc_descripcion))), ''), CONCAT('Procedimiento #', p.proc_idProdu))"
+                : "COALESCE(NULLIF(REPLACE(REPLACE(RTRIM(ISNULL(pr.NOMBRE COLLATE DATABASE_DEFAULT, '')), CHAR(13), ''), CHAR(10), ''), ''), CONCAT('Procedimiento #', p.proc_idProdu))";
+            string filtroEst = cols.Contains("proc_estado") ? "AND ISNULL(CONVERT(nvarchar(30), p.proc_estado), 'A') <> 'I'" : "";
+
+            string sql = $@"
+                SELECT
+                    ISNULL(p.proc_idProdu, 0) AS IdProducto,
+                    RTRIM(ISNULL(CONVERT(nvarchar(50), pr.CODIGO_PRINCIPAL), CAST(p.proc_idProdu AS nvarchar(50)))) AS Codigo,
+                    {descCol} AS Descripcion,
+                    {cantCol} AS Cantidad,
+                    {obsCol} AS Observaciones,
+                    {estCol} AS Estado,
+                    ISNULL(p.proc_fecha, GETDATE()) AS Fecha
+                FROM dbo.vt_procedimientos p
+                LEFT JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO = p.proc_idProdu
+                WHERE p.proc_idOrden = @IdOrden AND p.proc_nhcl = @Nhcl {filtroEst}
+                ORDER BY p.proc_fecha DESC, p.proc_idProdu";
+
+            return (await _db.QueryAsync<ProcedimientoOrdenResumenDto>(sql, new { IdOrden = idOrden, Nhcl = nhcl })).ToList();
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     public async Task<List<MedicionCrecimientoDto>> ObtenerCurvaCrecimientoAsync(int nhcl)

@@ -11,7 +11,9 @@
 
 @if (_autorizado)
 {
-<div class="container-fluid py-3">
+<div class="@(ModoModal ? "py-1" : "container-fluid py-3")">
+    @if (!ModoModal)
+    {
     <!-- CABECERA DEL PACIENTE -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <div>
@@ -69,12 +71,15 @@
             }
         </div>
     </div>
+    }
 
     @if (!string.IsNullOrWhiteSpace(_error))
     {
         <div class="alert alert-danger py-2">@_error</div>
     }
 
+    @if (!ModoModal)
+    {
     <!-- PESTAÑAS -->
     <ul class="nav nav-tabs mb-3">
         <li class="nav-item">
@@ -98,6 +103,7 @@
             </button>
         </li>
     </ul>
+    }
 
     @if (_cargando)
     {
@@ -108,237 +114,280 @@
     }
     else if (_tab == "resumen")
     {
-        <!-- BARRA DE FILTROS POR FECHA Y BÚSQUEDA -->
-        <div class="card border-0 shadow-sm mb-3">
-            <div class="card-body p-3">
-                <div class="row g-2 align-items-end">
-                    <div class="col-md-2 col-6">
-                        <label class="form-label small fw-semibold text-muted mb-1">
-                            <i class="bi bi-calendar3 me-1"></i>Fecha Desde:
-                        </label>
-                        <input type="date" class="form-control form-control-sm" @bind="_filtroDesde" />
-                    </div>
-                    <div class="col-md-2 col-6">
-                        <label class="form-label small fw-semibold text-muted mb-1">
-                            <i class="bi bi-calendar3 me-1"></i>Fecha Hasta:
-                        </label>
-                        <input type="date" class="form-control form-control-sm" @bind="_filtroHasta" />
-                    </div>
-                    <div class="col-md-3 col-12">
-                        <label class="form-label small fw-semibold text-muted mb-1">
-                            <i class="bi bi-search me-1"></i>Buscar en historial:
-                        </label>
-                        <div class="input-group input-group-sm">
-                            <input type="text" class="form-control" placeholder="Buscar medicamento, diagnóstico..." @bind="_filtroTexto" @bind:event="oninput" />
-                            @if (!string.IsNullOrWhiteSpace(_filtroTexto))
-                            {
-                                <button class="btn btn-outline-secondary" type="button" @onclick='() => _filtroTexto = ""'>
-                                    <i class="bi bi-x"></i>
-                                </button>
-                            }
-                        </div>
-                    </div>
-                    <div class="col-md-3 col-12">
-                        <label class="form-label small fw-semibold text-muted mb-1">Filtros rápidos:</label>
-                        <div class="btn-group btn-group-sm w-100" role="group">
-                            <button type="button" class="btn btn-outline-secondary py-1 @(!_filtroDesde.HasValue && !_filtroHasta.HasValue ? "active fw-semibold" : "")" @onclick='() => FiltrarRangoRapido("todos")'>
-                                Todos
+        var filtradosLista = HistorialFiltrado.ToList();
+        var categoriasMostradas = CategoriasDisponibles
+            .Select(cat => new { Nombre = cat, Items = filtradosLista.Where(x => x.Categoria == cat).ToList() })
+            .Where(g => !_ocultarCategoriasVacias || g.Items.Count > 0)
+            .OrderByDescending(g => g.Items.Count > 0)
+            .ToList();
+
+        <!-- BARRA DE FILTROS MODERNA -->
+        <div class="rc-toolbar">
+            <div class="rc-toolbar-row">
+                <div class="rc-field-search">
+                    <label class="rc-label"><i class="bi bi-search me-1"></i>Buscar en historial</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" placeholder="Buscar medicamento, diagnóstico, código..." @bind="_filtroTexto" @bind:event="oninput" />
+                        @if (!string.IsNullOrWhiteSpace(_filtroTexto))
+                        {
+                            <button class="btn btn-outline-secondary" type="button" @onclick='() => _filtroTexto = ""' title="Limpiar búsqueda">
+                                <i class="bi bi-x"></i>
                             </button>
-                            <button type="button" class="btn btn-outline-secondary py-1" @onclick='() => FiltrarRangoRapido("ano")'>
-                                Este año
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary py-1" @onclick='() => FiltrarRangoRapido("6meses")'>
-                                6 meses
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary py-1" @onclick='() => FiltrarRangoRapido("mes")'>
-                                Este mes
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-2 col-12 text-md-end">
-                        <label class="form-label small fw-semibold text-muted mb-1 d-none d-md-block">Vista:</label>
-                        <div class="btn-group btn-group-sm w-100" role="group">
-                            <button type="button" class="btn @(_modoVistaResumen == "categorias" ? "btn-primary" : "btn-outline-primary") py-1" @onclick='() => _modoVistaResumen = "categorias"' title="Vista agrupada por tarjetas de categorías">
-                                <i class="bi bi-grid-fill me-1"></i>Categorías
-                            </button>
-                            <button type="button" class="btn @(_modoVistaResumen == "cronologico" ? "btn-primary" : "btn-outline-primary") py-1" @onclick='() => _modoVistaResumen = "cronologico"' title="Vista cronológica día por día">
-                                <i class="bi bi-clock-history me-1"></i>Cronológico
-                            </button>
-                        </div>
+                        }
                     </div>
                 </div>
 
-                @if (_filtroDesde.HasValue || _filtroHasta.HasValue || !string.IsNullOrWhiteSpace(_filtroTexto))
-                {
-                    <div class="mt-2 pt-2 border-top d-flex flex-wrap justify-content-between align-items-center small text-muted">
-                        <span>
-                            <i class="bi bi-funnel-fill text-primary me-1"></i>
-                            Filtro aplicado:
-                            @if (_filtroDesde.HasValue && _filtroHasta.HasValue)
-                            {
-                                <span class="badge bg-primary-subtle text-primary border me-1">@_filtroDesde.Value.ToString("yyyy-MM-dd") al @_filtroHasta.Value.ToString("yyyy-MM-dd")</span>
-                            }
-                            else if (_filtroDesde.HasValue)
-                            {
-                                <span class="badge bg-primary-subtle text-primary border me-1">Desde @_filtroDesde.Value.ToString("yyyy-MM-dd")</span>
-                            }
-                            else if (_filtroHasta.HasValue)
-                            {
-                                <span class="badge bg-primary-subtle text-primary border me-1">Hasta @_filtroHasta.Value.ToString("yyyy-MM-dd")</span>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(_filtroTexto))
-                            {
-                                <span class="badge bg-secondary-subtle text-secondary border me-1">Texto: "@_filtroTexto"</span>
-                            }
-                            — <strong>@HistorialFiltrado.Count()</strong> registros en este período
-                        </span>
-                        <button class="btn btn-link btn-sm text-decoration-none p-0 text-danger" @onclick='() => FiltrarRangoRapido("todos")'>
-                            <i class="bi bi-x-circle me-1"></i>Restablecer filtros
+                <div class="rc-field-date">
+                    <label class="rc-label"><i class="bi bi-calendar3 me-1"></i>Desde</label>
+                    <input type="date" class="form-control form-control-sm" @bind="_filtroDesde" />
+                </div>
+
+                <div class="rc-field-date">
+                    <label class="rc-label"><i class="bi bi-calendar3 me-1"></i>Hasta</label>
+                    <input type="date" class="form-control form-control-sm" @bind="_filtroHasta" />
+                </div>
+
+                <div class="rc-field-view">
+                    <label class="rc-label">Vista</label>
+                    <div class="rc-segmented" role="group" aria-label="Modo de visualización">
+                        <button type="button" class="rc-seg-btn @(_modoVistaResumen == "categorias" ? "active" : "")" @onclick='() => _modoVistaResumen = "categorias"'>
+                            <i class="bi bi-grid-1x2-fill me-1"></i>Categorías
+                        </button>
+                        <button type="button" class="rc-seg-btn @(_modoVistaResumen == "cronologico" ? "active" : "")" @onclick='() => _modoVistaResumen = "cronologico"'>
+                            <i class="bi bi-clock-history me-1"></i>Cronológico
                         </button>
                     </div>
-                }
+                </div>
+            </div>
+
+            <div class="rc-toolbar-footer">
+                <div class="rc-pills">
+                    <span class="small text-muted fw-semibold me-1">Período:</span>
+                    <button type="button" class="rc-pill-btn @(_rangoRapidoActivo == "todos" ? "active" : "")" @onclick='() => FiltrarRangoRapido("todos")'>Todos</button>
+                    <button type="button" class="rc-pill-btn @(_rangoRapidoActivo == "mes" ? "active" : "")" @onclick='() => FiltrarRangoRapido("mes")'>Este mes</button>
+                    <button type="button" class="rc-pill-btn @(_rangoRapidoActivo == "6meses" ? "active" : "")" @onclick='() => FiltrarRangoRapido("6meses")'>6 meses</button>
+                    <button type="button" class="rc-pill-btn @(_rangoRapidoActivo == "ano" ? "active" : "")" @onclick='() => FiltrarRangoRapido("ano")'>Este año</button>
+                    @if (_filtroDesde.HasValue || _filtroHasta.HasValue || !string.IsNullOrWhiteSpace(_filtroTexto))
+                    {
+                        <button type="button" class="btn btn-link btn-sm text-danger text-decoration-none py-0 px-1 small" @onclick='() => FiltrarRangoRapido("todos")'>
+                            <i class="bi bi-x-circle me-1"></i>Limpiar
+                        </button>
+                    }
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    @if (_modoVistaResumen == "categorias")
+                    {
+                        <div class="form-check form-switch mb-0 small">
+                            <input class="form-check-input" type="checkbox" id="chkOcultarVaciasRc" @bind="_ocultarCategoriasVacias" />
+                            <label class="form-check-label text-muted fw-semibold" for="chkOcultarVaciasRc">Ocultar vacías</label>
+                        </div>
+                    }
+                    <span class="rc-count-badge @(filtradosLista.Count > 0 ? "has-items" : "no-items")">
+                        <i class="bi bi-layers me-1"></i>@filtradosLista.Count registro(s)
+                    </span>
+                </div>
             </div>
         </div>
 
         @if (_modoVistaResumen == "categorias")
         {
-            <div class="row g-3">
-                @foreach (var grupo in CategoriasDisponibles)
-                {
-                    var itemsGrupo = HistorialFiltrado.Where(x => x.Categoria == grupo).ToList();
-                    var itemsAgrupados = itemsGrupo
-                        .GroupBy(x => new { x.Codigo, x.Descripcion })
-                        .Select(g => new {
-                            Codigo = g.Key.Codigo,
-                            Descripcion = g.Key.Descripcion,
-                            NumeroVeces = g.Count(),
-                            UltimaFecha = g.Max(x => x.Fecha),
-                            Fechas = g.Select(x => x.Fecha).OrderByDescending(f => f).Distinct().ToList(),
-                            Ordenes = g.Select(x => x.IdOrden).Where(o => o > 0).Distinct().ToList()
-                        })
-                        .OrderByDescending(x => x.UltimaFecha)
-                        .ThenByDescending(x => x.NumeroVeces)
-                        .ToList();
+            @if (categoriasMostradas.Count == 0)
+            {
+                <div class="rc-cat-card">
+                    <div class="rc-empty-state py-5">
+                        <i class="bi bi-inbox fs-4"></i>
+                        <span>No hay registros clínicos en el período seleccionado.</span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="row g-3">
+                    @foreach (var cat in categoriasMostradas)
+                    {
+                        var grupo = cat.Nombre;
+                        var itemsGrupo = cat.Items;
+                        var itemsAgrupados = itemsGrupo
+                            .GroupBy(x => new { x.Codigo, x.Descripcion })
+                            .Select(g => new {
+                                Codigo = g.Key.Codigo,
+                                Descripcion = g.Key.Descripcion,
+                                NumeroVeces = g.Count(),
+                                UltimaFecha = g.Max(x => x.Fecha),
+                                Fechas = g.Select(x => x.Fecha).OrderByDescending(f => f).Distinct().ToList(),
+                                Ordenes = g.Select(x => x.IdOrden).Where(o => o > 0).Distinct().ToList()
+                            })
+                            .OrderByDescending(x => x.UltimaFecha)
+                            .ThenByDescending(x => x.NumeroVeces)
+                            .ToList();
 
-                    <div class="col-lg-6">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                                <span>
-                                    @ObtenerIconoCategoria(grupo) @grupo
-                                </span>
-                                <span class="badge bg-light text-muted border">
-                                    @itemsGrupo.Count registros
-                                </span>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-sm table-hover mb-0 align-middle">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Descripción</th>
-                                            <th style="width: 140px;">Fecha</th>
-                                            <th style="width: 80px;" class="text-end">Veces</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @if (!itemsAgrupados.Any())
-                                        {
-                                            <tr>
-                                                <td colspan="3" class="text-center text-muted py-3 small">
-                                                    No se registran @grupo.ToLower() en el rango de fechas seleccionado.
-                                                </td>
-                                            </tr>
-                                        }
-                                        else
-                                        {
-                                            @foreach (var x in itemsAgrupados)
-                                            {
+                        <div class="col-lg-6">
+                            <div class="rc-cat-card @(itemsAgrupados.Count == 0 ? "rc-cat-empty" : "")">
+                                <div class="rc-cat-header">
+                                    <div class="rc-cat-title">
+                                        <span class="rc-icon-bubble @ObtenerTonoCategoria(grupo)">
+                                            <i class="bi @ObtenerBiIconoCategoria(grupo)"></i>
+                                        </span>
+                                        <span>@grupo</span>
+                                    </div>
+                                    <span class="rc-count-badge @(itemsGrupo.Count > 0 ? "has-items" : "no-items")">
+                                        @itemsGrupo.Count @(itemsGrupo.Count == 1 ? "registro" : "registros")
+                                    </span>
+                                </div>
+
+                                @if (itemsAgrupados.Count == 0)
+                                {
+                                    <div class="rc-empty-state">
+                                        <i class="bi bi-dash-circle"></i>
+                                        <span>Sin @grupo.ToLower() en este período</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="table-responsive">
+                                        <table class="rc-table">
+                                            <thead>
                                                 <tr>
-                                                    <td>
-                                                        @if (!string.IsNullOrWhiteSpace(x.Codigo))
-                                                        {
-                                                            <code class="me-1 text-danger">@x.Codigo</code>
-                                                        }
-                                                        <span class="fw-semibold text-dark">@x.Descripcion</span>
-                                                        @if (x.Ordenes.Any())
-                                                        {
-                                                            <span class="text-muted d-block small" style="font-size: 0.75rem;">
-                                                                Ord: @string.Join(", ", x.Ordenes.Select(o => $"#{o}"))
-                                                            </span>
-                                                        }
-                                                    </td>
-                                                    <td>
-                                                        <span class="badge bg-light text-dark border">
-                                                            <i class="bi bi-calendar-event me-1 text-primary"></i>@x.UltimaFecha.ToString("yyyy-MM-dd")
-                                                        </span>
-                                                        @if (x.Fechas.Count > 1)
-                                                        {
-                                                            <span class="badge bg-info-subtle text-info border ms-1" title="@string.Join(", ", x.Fechas.Select(f => f.ToString("yyyy-MM-dd")))">
-                                                                +@(x.Fechas.Count - 1)
-                                                            </span>
-                                                        }
-                                                    </td>
-                                                    <td class="text-end fw-bold text-primary">@x.NumeroVeces</td>
+                                                    <th>Descripción</th>
+                                                    <th style="width: 145px;">Última fecha</th>
+                                                    <th style="width: 72px; text-align: right;">Veces</th>
                                                 </tr>
-                                            }
-                                        }
-                                    </tbody>
-                                </table>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var x in itemsAgrupados)
+                                                {
+                                                    <tr>
+                                                        <td>
+                                                            <div>
+                                                                @if (!string.IsNullOrWhiteSpace(x.Codigo))
+                                                                {
+                                                                    <span class="rc-code-chip">@x.Codigo</span>
+                                                                }
+                                                                <span class="rc-item-name">@x.Descripcion</span>
+                                                            </div>
+                                                            @if (x.Ordenes.Any())
+                                                            {
+                                                                <div class="rc-orders-row">
+                                                                    @foreach (var ordNum in x.Ordenes.Take(5))
+                                                                    {
+                                                                        @if (OnAbrirOrden.HasDelegate)
+                                                                        {
+                                                                            <button type="button"
+                                                                                    class="rc-order-chip rc-order-chip-link"
+                                                                                    title="Ver expediente de la Orden #@ordNum"
+                                                                                    @onclick="() => OnAbrirOrden.InvokeAsync(ordNum)">
+                                                                                Ord #@ordNum
+                                                                            </button>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span class="rc-order-chip">Ord #@ordNum</span>
+                                                                        }
+                                                                    }
+                                                                    @if (x.Ordenes.Count > 5)
+                                                                    {
+                                                                        <span class="rc-order-chip">+@(x.Ordenes.Count - 5)</span>
+                                                                    }
+                                                                </div>
+                                                            }
+                                                        </td>
+                                                        <td>
+                                                            <span class="rc-date-pill">
+                                                                <i class="bi bi-calendar3 text-primary"></i>@x.UltimaFecha.ToString("dd/MM/yyyy")
+                                                            </span>
+                                                            @if (x.Fechas.Count > 1)
+                                                            {
+                                                                <span class="rc-extra-dates" title="@string.Join(", ", x.Fechas.Select(f => f.ToString("dd/MM/yyyy")))">
+                                                                    +@(x.Fechas.Count - 1)
+                                                                </span>
+                                                            }
+                                                        </td>
+                                                        <td style="text-align: right;">
+                                                            <span class="rc-times-pill">@x.NumeroVeces</span>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
                             </div>
                         </div>
-                    </div>
-                }
-            </div>
+                    }
+                </div>
+            }
         }
         else
         {
             <!-- VISTA CRONOLÓGICA DÍA POR DÍA -->
-            @if (!HistorialFiltrado.Any())
+            @if (filtradosLista.Count == 0)
             {
-                <div class="alert alert-light border text-center py-4 my-2">
-                    <i class="bi bi-calendar-x fs-3 text-muted d-block mb-1"></i>
-                    <h6 class="text-muted fw-semibold">No se encontraron atenciones ni procedimientos en este período.</h6>
+                <div class="rc-cat-card">
+                    <div class="rc-empty-state py-5">
+                        <i class="bi bi-calendar-x fs-4"></i>
+                        <span>No se encontraron atenciones ni procedimientos en este período.</span>
+                    </div>
                 </div>
             }
             else
             {
                 <div class="d-flex flex-column gap-3">
-                    @foreach (var fechaGrupo in HistorialFiltrado.GroupBy(x => x.Fecha.Date).OrderByDescending(g => g.Key))
+                    @foreach (var fechaGrupo in filtradosLista.GroupBy(x => x.Fecha.Date).OrderByDescending(g => g.Key))
                     {
-                        <div class="card border-0 shadow-sm">
-                            <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center py-2">
-                                <span class="fw-bold text-dark">
-                                    <i class="bi bi-calendar2-check-fill text-primary me-2"></i>@fechaGrupo.Key.ToString("dddd, dd 'de' MMMM 'de' yyyy", new System.Globalization.CultureInfo("es-ES")).ToUpperInvariant()
-                                </span>
-                                <span class="badge bg-light text-dark border">
-                                    @fechaGrupo.Count() @(fechaGrupo.Count() == 1 ? "registro realizado" : "registros realizados") este día
+                        <div class="rc-timeline-card">
+                            <div class="rc-timeline-header">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="rc-icon-bubble rc-tone-primary" style="width: 28px; height: 28px; font-size: 0.85rem;">
+                                        <i class="bi bi-calendar2-check-fill"></i>
+                                    </span>
+                                    <span class="fw-bold text-dark small text-capitalize">
+                                        @fechaGrupo.Key.ToString("dddd, dd 'de' MMMM 'de' yyyy", new System.Globalization.CultureInfo("es-ES"))
+                                    </span>
+                                </div>
+                                <span class="rc-count-badge has-items">
+                                    @fechaGrupo.Count() @(fechaGrupo.Count() == 1 ? "registro" : "registros")
                                 </span>
                             </div>
-                            <div class="card-body p-2">
+                            <div class="p-3">
                                 <div class="row g-2">
                                     @foreach (var subGrupo in fechaGrupo.GroupBy(x => x.Categoria))
                                     {
                                         <div class="col-md-6">
-                                            <div class="p-2 border rounded bg-light h-100">
-                                                <div class="d-flex align-items-center gap-1 mb-2 pb-1 border-bottom">
-                                                    <span class="badge @ObtenerBadgeColorCategoria(subGrupo.Key)">
-                                                        @ObtenerIconoCategoria(subGrupo.Key) @subGrupo.Key
+                                            <div class="rc-timeline-subcard">
+                                                <div class="d-flex align-items-center gap-2 mb-2 pb-2 border-bottom">
+                                                    <span class="rc-icon-bubble @ObtenerTonoCategoria(subGrupo.Key)" style="width: 26px; height: 26px; font-size: 0.8rem;">
+                                                        <i class="bi @ObtenerBiIconoCategoria(subGrupo.Key)"></i>
                                                     </span>
+                                                    <strong class="small text-dark">@subGrupo.Key</strong>
                                                     <small class="text-muted ms-auto">@subGrupo.Count() @(subGrupo.Count() == 1 ? "ítem" : "ítems")</small>
                                                 </div>
                                                 <ul class="list-unstyled mb-0 small">
                                                     @foreach (var item in subGrupo)
                                                     {
-                                                        <li class="py-1 border-bottom border-light-subtle d-flex justify-content-between align-items-center">
+                                                        <li class="py-1 border-bottom border-light-subtle d-flex justify-content-between align-items-center gap-2">
                                                             <div>
                                                                 @if (!string.IsNullOrWhiteSpace(item.Codigo))
                                                                 {
-                                                                    <code class="me-1">@item.Codigo</code>
+                                                                    <span class="rc-code-chip">@item.Codigo</span>
                                                                 }
-                                                                <span>@item.Descripcion</span>
+                                                                <span class="fw-medium text-dark">@item.Descripcion</span>
                                                             </div>
                                                             @if (item.IdOrden > 0)
                                                             {
-                                                                <span class="badge bg-white text-muted border ms-2">Ord #@item.IdOrden</span>
+                                                                @if (OnAbrirOrden.HasDelegate)
+                                                                {
+                                                                    <button type="button"
+                                                                            class="rc-order-chip rc-order-chip-link text-nowrap"
+                                                                            title="Ver expediente de la Orden #@item.IdOrden"
+                                                                            @onclick="() => OnAbrirOrden.InvokeAsync(item.IdOrden)">
+                                                                        Ord #@item.IdOrden
+                                                                    </button>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="rc-order-chip text-nowrap">Ord #@item.IdOrden</span>
+                                                                }
                                                             }
                                                         </li>
                                                     }
@@ -366,16 +415,24 @@
                     </div>
 
                     <!-- SELECTOR DE CONSTANTE (PESO, FC, FR) -->
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn @(_metricaActiva == "peso" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarMetrica("peso")'>
-                            ⚖️ Peso (kg) — Crecimiento
-                        </button>
-                        <button type="button" class="btn @(_metricaActiva == "fc" ? "btn-danger" : "btn-outline-danger")" @onclick='() => CambiarMetrica("fc")'>
-                            ❤️ Frecuencia Cardíaca (lpm)
-                        </button>
-                        <button type="button" class="btn @(_metricaActiva == "fr" ? "btn-success" : "btn-outline-success")" @onclick='() => CambiarMetrica("fr")'>
-                            🫁 Frecuencia Respiratoria (rpm)
-                        </button>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn @(_metricaActiva == "peso" ? "btn-primary" : "btn-outline-primary")" @onclick='() => CambiarMetrica("peso")'>
+                                ⚖️ Peso (kg) — Crecimiento
+                            </button>
+                            <button type="button" class="btn @(_metricaActiva == "fc" ? "btn-danger" : "btn-outline-danger")" @onclick='() => CambiarMetrica("fc")'>
+                                ❤️ Frecuencia Cardíaca (lpm)
+                            </button>
+                            <button type="button" class="btn @(_metricaActiva == "fr" ? "btn-success" : "btn-outline-success")" @onclick='() => CambiarMetrica("fr")'>
+                                🫁 Frecuencia Respiratoria (rpm)
+                            </button>
+                        </div>
+                        @if (ModoModal)
+                        {
+                            <button type="button" class="btn btn-outline-secondary btn-sm app-doc-action app-doc-print" @onclick="ImprimirGraficoAsync">
+                                <i class="bi bi-printer" aria-hidden="true"></i>Imprimir Curva
+                            </button>
+                        }
                     </div>
                 </div>
 
@@ -940,6 +997,17 @@
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int Nhcl { get; set; }
     [Parameter] public string? TabInicial { get; set; }
+    [Parameter] public bool ModoModal { get; set; }
+    [Parameter] public string? TabActivaModal { get; set; }
+    [Parameter] public EventCallback<int> OnAbrirOrden { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (ModoModal && !string.IsNullOrWhiteSpace(TabActivaModal))
+        {
+            _tab = TabActivaModal;
+        }
+    }
 
     private bool _autorizado, _cargando = true;
     private string _tab = "resumen", _error = "", _mensaje = "";
@@ -954,6 +1022,8 @@
     private DateTime? _filtroHasta;
     private string _filtroTexto = string.Empty;
     private string _modoVistaResumen = "categorias"; // "categorias" o "cronologico"
+    private string _rangoRapidoActivo = "todos";
+    private bool _ocultarCategoriasVacias;
 
     private static readonly string[] CategoriasDisponibles = new[]
     {
@@ -985,6 +1055,7 @@
 
     private void FiltrarRangoRapido(string opcion)
     {
+        _rangoRapidoActivo = opcion;
         var hoy = DateTime.Today;
         switch (opcion)
         {
@@ -1008,28 +1079,28 @@
         }
     }
 
-    private static string ObtenerIconoCategoria(string cat) => cat switch
+    private static string ObtenerBiIconoCategoria(string cat) => cat switch
     {
-        "Diagnósticos" => "🩺",
-        "Medicamentos" => "💊",
-        "Insumos" => "📦",
-        "Fisioterapia" => "🩹",
-        "Imagenología" => "🩻",
-        "Procedimientos" => "🔬",
-        "Laboratorio" => "🧪",
-        _ => "📋"
+        "Diagnósticos" => "bi-clipboard2-pulse-fill",
+        "Medicamentos" => "bi-capsule-pill",
+        "Insumos" => "bi-box-seam-fill",
+        "Fisioterapia" => "bi-heart-pulse-fill",
+        "Imagenología" => "bi-image-fill",
+        "Procedimientos" => "bi-scissors",
+        "Laboratorio" => "bi-eyedropper",
+        _ => "bi-card-list"
     };
 
-    private static string ObtenerBadgeColorCategoria(string cat) => cat switch
+    private static string ObtenerTonoCategoria(string cat) => cat switch
     {
-        "Diagnósticos" => "bg-danger",
-        "Medicamentos" => "bg-primary",
-        "Insumos" => "bg-info text-dark",
-        "Fisioterapia" => "bg-success",
-        "Imagenología" => "bg-warning text-dark",
-        "Procedimientos" => "bg-dark",
-        "Laboratorio" => "bg-secondary",
-        _ => "bg-secondary"
+        "Diagnósticos" => "rc-tone-danger",
+        "Medicamentos" => "rc-tone-primary",
+        "Insumos" => "rc-tone-info",
+        "Fisioterapia" => "rc-tone-success",
+        "Imagenología" => "rc-tone-warning",
+        "Procedimientos" => "rc-tone-violet",
+        "Laboratorio" => "rc-tone-slate",
+        _ => "rc-tone-slate"
     };
     private List<MedicionCrecimientoDto> _mediciones = [];
     private List<ArchivoPaciente> _archivos = [];

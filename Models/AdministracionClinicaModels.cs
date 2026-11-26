@@ -159,3 +159,58 @@ public sealed class EspecialidadAdministrativaDto
     public bool RequiereTriaje { get; set; }
 }
 
+public sealed class OrdenHistorialClinicoResumenDto
+{
+    public int IdOrden { get; set; }
+    public int Nhcl { get; set; }
+    public DateTime Fecha { get; set; }
+    public string Hora { get; set; } = string.Empty;
+    public string Estado { get; set; } = string.Empty;
+    public string Etapa { get; set; } = string.Empty;
+    public bool EsProcedimiento { get; set; }
+    public string Medico { get; set; } = string.Empty;
+    public string Especialidad { get; set; } = string.Empty;
+    public string Motivo { get; set; } = string.Empty;
+    public string Diagnosticos { get; set; } = string.Empty;
+    public bool TieneSoap { get; set; }
+    public bool TieneTriaje { get; set; }
+    public bool TieneVacunas { get; set; }
+    public bool TieneEvoluciones { get; set; }
+    public bool TieneReceta { get; set; }
+    public bool TieneDiagnosticosComplementarios { get; set; }
+    public bool TieneHospitalizacion { get; set; }
+    public bool TieneCirugia { get; set; }
+    public bool TieneConsentimientos { get; set; }
+    public int? IdOrdenOrigenCirugia { get; set; }
+
+    public bool TieneAlgunModulo =>
+        TieneSoap || TieneTriaje || TieneVacunas || TieneEvoluciones || TieneReceta
+        || TieneDiagnosticosComplementarios || TieneHospitalizacion || TieneCirugia || TieneConsentimientos;
+
+    public string ModalidadAtencion => (TieneCirugia, TieneHospitalizacion, TieneSoap, EsProcedimiento, TieneTriaje, TieneVacunas, TieneDiagnosticosComplementarios) switch
+    {
+        (true, true, _, _, _, _, _) => "Cirugía + Hospitalización",
+        (true, false, false, _, _, _, _) => "Cirugía ambulatoria",
+        (true, false, true, _, _, _, _) => "Consulta + Cirugía",
+        (false, true, _, _, _, _, _) => "Hospitalización",
+        (false, false, true, _, _, _, _) => "Consulta SOAP",
+        (false, false, false, true, true, _, _) => "Procedimiento con triaje",
+        (false, false, false, true, false, _, _) => "Procedimiento",
+        (false, false, false, false, true, _, _) => "Triaje / Atención directa",
+        (false, false, false, false, false, true, _) => "Vacunación",
+        (false, false, false, false, false, false, true) => "Diagnóstico / Procedimientos",
+        _ => "Atención clínica"
+    };
+}
+
+public sealed class ProcedimientoOrdenResumenDto
+{
+    public int IdProducto { get; set; }
+    public string Codigo { get; set; } = string.Empty;
+    public string Descripcion { get; set; } = string.Empty;
+    public decimal Cantidad { get; set; } = 1;
+    public string Observaciones { get; set; } = string.Empty;
+    public string Estado { get; set; } = string.Empty;
+    public DateTime Fecha { get; set; }
+}
+
