@@ -79,9 +79,17 @@
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label fw-semibold small text-secondary mb-1">
-                    <i class="bi bi-person-badge me-1 text-primary"></i>Médico cirujano *
-                </label>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label fw-semibold small text-secondary mb-0">
+                        <i class="bi bi-person-badge me-1 text-primary"></i>Médico cirujano *
+                    </label>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-semibold"
+                            style="font-size: .75rem;"
+                            @onclick="AgregarCirujanoAdicional"
+                            disabled="@(_cirugia.IdLocalidad <= 0 || !MedicosCirugiaSelector.Any())">
+                        <i class="bi bi-plus-circle me-1"></i>Agregar otro cirujano
+                    </button>
+                </div>
                 <select class="form-select" value="@_cirugia.IdMedico" @onchange="OnMedicoCirugiaChangedAsync" disabled="@(_cirugia.IdLocalidad <= 0)">
                     <option value="0">@(_cirugia.IdLocalidad <= 0 ? "Primero seleccione una sucursal" : (MedicosCirugiaSelector.Any() ? "Seleccione un médico..." : "Sin médicos asignados a esta sucursal"))</option>
                     @foreach(var x in MedicosCirugiaSelector)
@@ -100,6 +108,43 @@
                     @foreach(var x in AnestesiologosDisponibles){<option value="@x.Id">@x.Descripcion</option>}
                 </select>
             </div>
+            @if (_cirugia.IdsCirujanosAdicionales.Count > 0)
+            {
+                <div class="col-12">
+                    <div class="p-3 bg-light border rounded-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small fw-semibold text-secondary">
+                                <i class="bi bi-people-fill me-1 text-primary"></i>Cirujanos adicionales (@_cirugia.IdsCirujanosAdicionales.Count)
+                            </span>
+                            <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" @onclick="AgregarCirujanoAdicional">
+                                <i class="bi bi-plus-lg me-1"></i>Agregar otro
+                            </button>
+                        </div>
+                        <div class="row g-2">
+                            @for (int idx = 0; idx < _cirugia.IdsCirujanosAdicionales.Count; idx++)
+                            {
+                                var indice = idx;
+                                var valorActual = _cirugia.IdsCirujanosAdicionales[indice];
+                                <div class="col-md-4">
+                                    <div class="input-group input-group-sm">
+                                        <select class="form-select" value="@valorActual" @onchange="e => ActualizarCirujanoAdicional(indice, e)">
+                                            <option value="0">Seleccione cirujano adicional...</option>
+                                            @foreach (var m in CirujanosAdicionalesDisponibles(indice))
+                                            {
+                                                var libres = ContarSlotsLibresMedico(m.Id);
+                                                <option value="@m.Id">@m.Descripcion @(libres > 0 ? $"({libres} libres)" : "(sin horas en esta fecha)")</option>
+                                            }
+                                        </select>
+                                        <button type="button" class="btn btn-outline-danger" title="Quitar cirujano" @onclick="() => QuitarCirujanoAdicional(indice)">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
 
             <div class="col-md-6 position-relative">
                 <label class="form-label fw-semibold small text-secondary mb-1">
@@ -195,7 +240,7 @@ var cirugiasVisiblesModal = _cirugias.Where(x =>
     x.Estado == "A" &&
     _cirugia.IdMedico > 0 &&
     x.Fecha.Date >= DateTime.Today &&
-    (x.IdMedico == _cirugia.IdMedico || x.IdAnestesiologo == _cirugia.IdMedico)).ToList();
+    x.IncluyeMedico(_cirugia.IdMedico)).ToList();
 <div class="card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
         <div class="fw-bold text-primary">
@@ -234,7 +279,13 @@ var cirugiasVisiblesModal = _cirugias.Where(x =>
                     {
                         <tr>
                             <td class="ps-4 fw-semibold">@x.Fecha.ToString("yyyy-MM-dd")</td>
-                            <td>@x.Medico</td>
+                            <td>
+                                <div>@x.Medico</div>
+                                @if (!string.IsNullOrWhiteSpace(x.CirujanosAdicionalesNombres))
+                                {
+                                    <small class="text-primary d-block">+ @x.CirujanosAdicionalesNombres</small>
+                                }
+                            </td>
                             <td>@(string.IsNullOrWhiteSpace(x.Anestesiologo) ? "-" : x.Anestesiologo)</td>
                             <td class="fw-semibold">@x.Paciente</td>
                             <td>@x.Procedimiento</td>
@@ -249,8 +300,48 @@ var cirugiasVisiblesModal = _cirugias.Where(x =>
 </div>
 }else{
 <div class="card mb-3"><div class="card-body row g-2">
-<div class="col-md-3"><label>Médico</label><select class="form-select" value="@_cirugia.IdMedico" @onchange="OnMedicoCirugiaChangedAsync"><option value="0">@(MedicosCirugiaDisponibles.Any() ? "Seleccione" : "Sin médicos disponibles en esta fecha")</option>@foreach(var x in MedicosCirugiaDisponibles){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+<div class="col-md-3">
+    <div class="d-flex justify-content-between align-items-center">
+        <label>Médico</label>
+        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size:.75rem;" @onclick="AgregarCirujanoAdicional" disabled="@(!MedicosSoloCirugia.Any())">
+            <i class="bi bi-plus-circle me-1"></i>Otro cirujano
+        </button>
+    </div>
+    <select class="form-select" value="@_cirugia.IdMedico" @onchange="OnMedicoCirugiaChangedAsync"><option value="0">@(MedicosCirugiaDisponibles.Any() ? "Seleccione" : "Sin médicos disponibles en esta fecha")</option>@foreach(var x in MedicosCirugiaDisponibles){<option value="@x.Id">@x.Descripcion</option>}</select>
+</div>
 <div class="col-md-3"><label>Anestesiólogo <small class="text-muted">(opcional)</small></label><select class="form-select" @bind="_cirugia.IdAnestesiologo"><option value="">Sin asignar</option>@foreach(var x in AnestesiologosDisponibles){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+@if (_cirugia.IdsCirujanosAdicionales.Count > 0)
+{
+    <div class="col-12">
+        <div class="p-2 bg-light border rounded">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <small class="fw-semibold text-secondary"><i class="bi bi-people-fill me-1 text-primary"></i>Cirujanos adicionales (@_cirugia.IdsCirujanosAdicionales.Count)</small>
+                <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" @onclick="AgregarCirujanoAdicional"><i class="bi bi-plus-lg me-1"></i>Agregar otro</button>
+            </div>
+            <div class="row g-2">
+                @for (int idx = 0; idx < _cirugia.IdsCirujanosAdicionales.Count; idx++)
+                {
+                    var indice = idx;
+                    var valorActual = _cirugia.IdsCirujanosAdicionales[indice];
+                    <div class="col-md-4">
+                        <div class="input-group input-group-sm">
+                            <select class="form-select" value="@valorActual" @onchange="e => ActualizarCirujanoAdicional(indice, e)">
+                                <option value="0">Seleccione cirujano adicional...</option>
+                                @foreach (var m in CirujanosAdicionalesDisponibles(indice))
+                                {
+                                    <option value="@m.Id">@m.Descripcion</option>
+                                }
+                            </select>
+                            <button type="button" class="btn btn-outline-danger" title="Quitar cirujano" @onclick="() => QuitarCirujanoAdicional(indice)">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
 @if(!ModoModal || MostrarSelectorPacienteEnModal){
 <div class="col-md-3 position-relative"><label>Paciente</label><input class="form-control" autocomplete="off" placeholder="Escriba para buscar paciente..." @bind="_filtroPaciente" @bind:event="oninput" @bind:after="BuscarPacientesAutoAsync" @onfocus="() => _mostrarPacientesSugeridos = !string.IsNullOrWhiteSpace(_filtroPaciente)" @onblur="CerrarPacientesSugeridosAsync" />@if(_mostrarPacientesSugeridos && _pacientes.Count > 0 && !string.IsNullOrWhiteSpace(_filtroPaciente)){<div class="list-group position-absolute bg-white border rounded shadow-sm mt-1 w-100" style="z-index:1050;max-height:200px;overflow-y:auto;">@foreach(var x in _pacientes){<button type="button" class="list-group-item list-group-item-action py-1 px-2 small text-start" @onmousedown="() => SeleccionarPacienteCirugia(x)">@x.Descripcion</button>}</div>}<select class="form-select mt-1" @bind="_cirugia.Nhcl">@foreach(var x in _pacientes){<option value="@x.Id">@x.Descripcion</option>}</select></div>
 }
@@ -305,7 +396,7 @@ else if (ModoModal && FiltrarPorMedicoEnModal && cirugiasVisibles.Count == 0)
 }
 else
 {
-    @foreach(var x in cirugiasVisibles){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td>@x.Medico</td><td>@(string.IsNullOrWhiteSpace(x.Anestesiologo) ? "-" : x.Anestesiologo)</td><td>@x.Paciente</td><td>@x.Procedimiento</td><td>@x.HoraInicio - @x.HoraFin</td><td><button class="btn btn-sm btn-outline-danger" @onclick="()=>CancelarCirugia(x.Id)">Cancelar</button></td></tr>}
+    @foreach(var x in cirugiasVisibles){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td><div>@x.Medico</div>@if(!string.IsNullOrWhiteSpace(x.CirujanosAdicionalesNombres)){<small class="text-primary d-block">+ @x.CirujanosAdicionalesNombres</small>}</td><td>@(string.IsNullOrWhiteSpace(x.Anestesiologo) ? "-" : x.Anestesiologo)</td><td>@x.Paciente</td><td>@x.Procedimiento</td><td>@x.HoraInicio - @x.HoraFin</td><td><button class="btn btn-sm btn-outline-danger" @onclick="()=>CancelarCirugia(x.Id)">Cancelar</button></td></tr>}
 }
 </tbody></table>
 }</div>}
@@ -324,7 +415,46 @@ IEnumerable<SelectorClinicoDto> MedicosSoloCirugia => _medicos.Where(m => !EsPro
     && (LocalidadActivaCirugia <= 0 || (_localidadesAsignadas.TryGetValue(m.Id, out var locs) && locs.Contains(LocalidadActivaCirugia))));
 IEnumerable<SelectorClinicoDto> MedicosCirugiaSelector => MedicosSoloCirugia;
 IEnumerable<SelectorClinicoDto> MedicosCirugiaDisponibles => MedicosSoloCirugia.Where(m => TieneAlMenosUnSlotLibre(m.Id));
-IEnumerable<SelectorClinicoDto> AnestesiologosDisponibles => MedicosSoloCirugia.Where(m => m.Id != _cirugia.IdMedico && EstaDisponibleEnRangoCirugia(m.Id, _cirugia.HoraInicio, _cirugia.HoraFin));
+IEnumerable<SelectorClinicoDto> AnestesiologosDisponibles => MedicosSoloCirugia.Where(m => m.Id != _cirugia.IdMedico && !_cirugia.IdsCirujanosAdicionales.Contains(m.Id) && EstaDisponibleEnRangoCirugia(m.Id, _cirugia.HoraInicio, _cirugia.HoraFin));
+
+IEnumerable<SelectorClinicoDto> CirujanosAdicionalesDisponibles(int indice)
+{
+    var valorActual = indice >= 0 && indice < _cirugia.IdsCirujanosAdicionales.Count ? _cirugia.IdsCirujanosAdicionales[indice] : 0;
+    var seleccionadosOtros = _cirugia.IdsCirujanosAdicionales
+        .Where((id, i) => i != indice && id > 0)
+        .ToHashSet();
+    return MedicosSoloCirugia.Where(m =>
+        m.Id != _cirugia.IdMedico &&
+        m.Id != _cirugia.IdAnestesiologo &&
+        !seleccionadosOtros.Contains(m.Id) &&
+        (m.Id == valorActual || PermitirElegirSucursalEnModal || FiltrarPorMedicoEnModal || EstaDisponibleEnRangoCirugia(m.Id, _cirugia.HoraInicio, _cirugia.HoraFin)));
+}
+
+void AgregarCirujanoAdicional() => _cirugia.IdsCirujanosAdicionales.Add(0);
+
+void QuitarCirujanoAdicional(int indice)
+{
+    if (indice >= 0 && indice < _cirugia.IdsCirujanosAdicionales.Count)
+        _cirugia.IdsCirujanosAdicionales.RemoveAt(indice);
+}
+
+void ActualizarCirujanoAdicional(int indice, ChangeEventArgs e)
+{
+    if (indice < 0 || indice >= _cirugia.IdsCirujanosAdicionales.Count) return;
+    _cirugia.IdsCirujanosAdicionales[indice] = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+    ValidarAnestesiologoDisponible();
+}
+
+void LimpiarCirujanosAdicionalesInvalidos()
+{
+    var validos = MedicosSoloCirugia.Select(m => m.Id).ToHashSet();
+    for (int i = 0; i < _cirugia.IdsCirujanosAdicionales.Count; i++)
+    {
+        var id = _cirugia.IdsCirujanosAdicionales[i];
+        if (id > 0 && (id == _cirugia.IdMedico || id == _cirugia.IdAnestesiologo || !validos.Contains(id)))
+            _cirugia.IdsCirujanosAdicionales[i] = 0;
+    }
+}
 IEnumerable<SelectorClinicoDto> LocalidadesCirugiaDisponibles =>
     PermitirElegirSucursalEnModal
         ? _localidades
@@ -499,8 +629,8 @@ async Task CargarDisponibilidadMedicosCirugiaAsync()
     ValidarAnestesiologoDisponible();
 }
 
-async Task OnMedicoCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdMedico=int.TryParse(e.Value?.ToString(),out var id)?id:0;AsegurarLocalidadCirugia();await CargarSlotsDisponiblesCirugiaAsync();ValidarAnestesiologoDisponible();}
-async Task OnLocalidadCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdLocalidad=int.TryParse(e.Value?.ToString(),out var id)?id:0;if((PermitirElegirSucursalEnModal || FiltrarPorMedicoEnModal) && _cirugia.IdMedico>0 && !MedicosSoloCirugia.Any(m=>m.Id==_cirugia.IdMedico))_cirugia.IdMedico=0;await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}
+async Task OnMedicoCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdMedico=int.TryParse(e.Value?.ToString(),out var id)?id:0;AsegurarLocalidadCirugia();LimpiarCirujanosAdicionalesInvalidos();await CargarSlotsDisponiblesCirugiaAsync();ValidarAnestesiologoDisponible();}
+async Task OnLocalidadCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdLocalidad=int.TryParse(e.Value?.ToString(),out var id)?id:0;if((PermitirElegirSucursalEnModal || FiltrarPorMedicoEnModal) && _cirugia.IdMedico>0 && !MedicosSoloCirugia.Any(m=>m.Id==_cirugia.IdMedico))_cirugia.IdMedico=0;LimpiarCirujanosAdicionalesInvalidos();await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}
 async Task OnFechaCirugiaChangedAsync(ChangeEventArgs e){if(DateTime.TryParse(e.Value?.ToString(),out var f))_cirugia.Fecha=f.Date;await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}
 void OnHoraInicioCirugiaChanged(ChangeEventArgs e){_cirugia.HoraInicio=e.Value?.ToString()??"";RecalcularHorasFinDisponibles();ValidarAnestesiologoDisponible();}
 void OnHoraFinCirugiaChanged(ChangeEventArgs e){_cirugia.HoraFin=e.Value?.ToString()??"";ValidarAnestesiologoDisponible();}

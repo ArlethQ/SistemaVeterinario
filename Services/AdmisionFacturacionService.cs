@@ -2284,12 +2284,14 @@ public class AdmisionFacturacionService : IAdmisionFacturacionService
         if (tieneTablaCirugias == 1)
         {
             var tieneColAnest = await _db.ExecuteScalarAsync<int>("SELECT CASE WHEN COL_LENGTH('dbo.qvt_calendario_cirugias', 'codanestesiologo') IS NOT NULL THEN 1 ELSE 0 END");
+            var tieneColAdic = await _db.ExecuteScalarAsync<int>("SELECT CASE WHEN COL_LENGTH('dbo.qvt_calendario_cirugias', 'cirujanos_adicionales_ids') IS NOT NULL THEN 1 ELSE 0 END");
             var filtroAnest = tieneColAnest == 1 ? " OR ISNULL(codanestesiologo, 0) = @IdMedico" : "";
+            var filtroAdic = tieneColAdic == 1 ? " OR (',' + ISNULL(cirujanos_adicionales_ids, '') + ',' LIKE '%,' + CAST(@IdMedico AS VARCHAR(20)) + ',%')" : "";
             cirugias = (await _db.QueryAsync<(DateTime Fecha, string Inicio, string Fin)>($@"
                 SELECT CAST(fechacirugia AS date), RTRIM(horainicio), RTRIM(horafinalizacion)
                 FROM qvt_calendario_cirugias
                 WHERE ISNULL(estado, 'A') = 'A'
-                  AND (codmed = @IdMedico{filtroAnest})
+                  AND (codmed = @IdMedico{filtroAnest}{filtroAdic})
                   AND fechacirugia >= @Desde AND fechacirugia < DATEADD(day, 1, @Hasta)", parametros)).ToList();
         }
         var cirugiasPorDia = cirugias.ToLookup(c => c.Fecha);
