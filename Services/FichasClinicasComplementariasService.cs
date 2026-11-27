@@ -74,7 +74,43 @@ BEGIN
   accion_tomada nvarchar(max) NULL, responsable nvarchar(150) NULL,
   CONSTRAINT FK_clin_transfusion_monitoreo FOREIGN KEY(id_transfusion) REFERENCES dbo.clin_transfusion(id) ON DELETE CASCADE);
  CREATE INDEX IX_clin_transfusion_monitoreo_transfusion ON dbo.clin_transfusion_monitoreo(id_transfusion, fecha_hora);
-END;";
+END;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'conservacion') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD conservacion nvarchar(20) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'crossmatching') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD crossmatching nvarchar(100) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'numero_historial') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD numero_historial nvarchar(50) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'vga_inicio') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD vga_inicio decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'vga_final') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD vga_final decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'proteinas_inicio') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD proteinas_inicio decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'proteinas_final') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD proteinas_final decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'albumina_inicio') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD albumina_inicio decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'albumina_final') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD albumina_final decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'ficha_donante') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD ficha_donante nvarchar(50) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'telefono_donante') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD telefono_donante nvarchar(50) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'fecha_recoleccion') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD fecha_recoleccion datetime2 NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'ml_recolectados') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD ml_recolectados decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'vga_donante') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD vga_donante decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'pt_donante') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD pt_donante decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion', N'albumina_donante') IS NULL
+ ALTER TABLE dbo.clin_transfusion ADD albumina_donante decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion_monitoreo', N'tllc') IS NULL
+ ALTER TABLE dbo.clin_transfusion_monitoreo ADD tllc decimal(12,3) NULL;
+IF COL_LENGTH(N'dbo.clin_transfusion_monitoreo', N'otros') IS NULL
+ ALTER TABLE dbo.clin_transfusion_monitoreo ADD otros nvarchar(max) NULL;";
         await _db.ExecuteAsync(sql);
         _inicializado = true;
     }
@@ -137,9 +173,9 @@ VALUES(@IdOrden,@Nhcl,@Fecha,@Turno,@Subjetivo,@Objetivo,@Analisis,@Plan,@Examen
     public async Task<List<TransfusionDto>> ObtenerTransfusionesAsync(int idOrden, int nhcl)
     {
         await ValidarPacienteAsync(idOrden, nhcl);
-        var lista = (await _db.QueryAsync<TransfusionDto>(@"SELECT id Id,id_orden IdOrden,nhcl Nhcl,fecha Fecha,producto Producto,identificador_unidad IdentificadorUnidad,fecha_vencimiento FechaVencimiento,grupo_receptor GrupoReceptor,grupo_donante GrupoDonante,tipificacion_verificada TipificacionVerificada,crossmatch_mayor CrossmatchMayor,crossmatch_menor CrossmatchMenor,consentimiento_confirmado ConsentimientoConfirmado,volumen_prescrito_ml VolumenPrescritoMl,volumen_administrado_ml VolumenAdministradoMl,velocidad_ml_hora VelocidadMlHora,hora_inicio HoraInicio,hora_fin HoraFin,diagnostico_indicacion DiagnosticoIndicacion,medico_responsable MedicoResponsable,doble_verificacion DobleVerificacion,estado Estado,observaciones Observaciones,id_usuario IdUsuario FROM clin_transfusion WHERE id_orden=@IdOrden AND nhcl=@Nhcl ORDER BY fecha DESC", new { IdOrden=idOrden, Nhcl=nhcl })).ToList();
+        var lista = (await _db.QueryAsync<TransfusionDto>(@"SELECT id Id,id_orden IdOrden,nhcl Nhcl,fecha Fecha,producto Producto,identificador_unidad IdentificadorUnidad,fecha_vencimiento FechaVencimiento,grupo_receptor GrupoReceptor,grupo_donante GrupoDonante,tipificacion_verificada TipificacionVerificada,crossmatch_mayor CrossmatchMayor,crossmatch_menor CrossmatchMenor,consentimiento_confirmado ConsentimientoConfirmado,volumen_prescrito_ml VolumenPrescritoMl,volumen_administrado_ml VolumenAdministradoMl,velocidad_ml_hora VelocidadMlHora,hora_inicio HoraInicio,hora_fin HoraFin,diagnostico_indicacion DiagnosticoIndicacion,medico_responsable MedicoResponsable,doble_verificacion DobleVerificacion,estado Estado,observaciones Observaciones,id_usuario IdUsuario,conservacion Conservacion,crossmatching Crossmatching,numero_historial NumeroHistorial,vga_inicio VgaInicio,vga_final VgaFinal,proteinas_inicio ProteinasInicio,proteinas_final ProteinasFinal,albumina_inicio AlbuminaInicio,albumina_final AlbuminaFinal,ficha_donante FichaDonante,telefono_donante TelefonoDonante,fecha_recoleccion FechaRecoleccion,ml_recolectados MlRecolectados,vga_donante VgaDonante,pt_donante PtDonante,albumina_donante AlbuminaDonante FROM clin_transfusion WHERE id_orden=@IdOrden AND nhcl=@Nhcl ORDER BY fecha DESC", new { IdOrden=idOrden, Nhcl=nhcl })).ToList();
         foreach (var t in lista)
-            t.Monitoreos = (await _db.QueryAsync<TransfusionMonitoreoDto>(@"SELECT id Id,id_transfusion IdTransfusion,fecha_hora FechaHora,momento Momento,temperatura Temperatura,frecuencia_cardiaca FrecuenciaCardiaca,frecuencia_respiratoria FrecuenciaRespiratoria,pas Pas,pad Pad,pam Pam,mucosas Mucosas,estado_conciencia EstadoConciencia,reacciones_adversas ReaccionesAdversas,accion_tomada AccionTomada,responsable Responsable FROM clin_transfusion_monitoreo WHERE id_transfusion=@Id ORDER BY fecha_hora", new { t.Id })).ToList();
+            t.Monitoreos = (await _db.QueryAsync<TransfusionMonitoreoDto>(@"SELECT id Id,id_transfusion IdTransfusion,fecha_hora FechaHora,momento Momento,temperatura Temperatura,frecuencia_cardiaca FrecuenciaCardiaca,frecuencia_respiratoria FrecuenciaRespiratoria,pas Pas,pad Pad,pam Pam,mucosas Mucosas,estado_conciencia EstadoConciencia,reacciones_adversas ReaccionesAdversas,accion_tomada AccionTomada,responsable Responsable,tllc Tllc,otros Otros FROM clin_transfusion_monitoreo WHERE id_transfusion=@Id ORDER BY fecha_hora", new { t.Id })).ToList();
         return lista;
     }
 
@@ -151,9 +187,9 @@ VALUES(@IdOrden,@Nhcl,@Fecha,@Turno,@Subjetivo,@Objetivo,@Analisis,@Plan,@Examen
         if (!d.ConsentimientoConfirmado || !d.TipificacionVerificada)
             throw new InvalidOperationException("Confirme consentimiento y tipificación antes de guardar la transfusión.");
         if (d.Id == 0)
-            d.Id = await _db.ExecuteScalarAsync<int>(@"INSERT INTO clin_transfusion(id_orden,nhcl,fecha,producto,identificador_unidad,fecha_vencimiento,grupo_receptor,grupo_donante,tipificacion_verificada,crossmatch_mayor,crossmatch_menor,consentimiento_confirmado,volumen_prescrito_ml,volumen_administrado_ml,velocidad_ml_hora,hora_inicio,hora_fin,diagnostico_indicacion,medico_responsable,doble_verificacion,estado,observaciones,id_usuario) OUTPUT INSERTED.id VALUES(@IdOrden,@Nhcl,@Fecha,@Producto,@IdentificadorUnidad,@FechaVencimiento,@GrupoReceptor,@GrupoDonante,@TipificacionVerificada,@CrossmatchMayor,@CrossmatchMenor,@ConsentimientoConfirmado,@VolumenPrescritoMl,@VolumenAdministradoMl,@VelocidadMlHora,@HoraInicio,@HoraFin,@DiagnosticoIndicacion,@MedicoResponsable,@DobleVerificacion,@Estado,@Observaciones,@IdUsuario)", new { d.IdOrden,d.Nhcl,d.Fecha,d.Producto,d.IdentificadorUnidad,d.FechaVencimiento,d.GrupoReceptor,d.GrupoDonante,d.TipificacionVerificada,d.CrossmatchMayor,d.CrossmatchMenor,d.ConsentimientoConfirmado,d.VolumenPrescritoMl,d.VolumenAdministradoMl,d.VelocidadMlHora,d.HoraInicio,d.HoraFin,d.DiagnosticoIndicacion,d.MedicoResponsable,d.DobleVerificacion,d.Estado,d.Observaciones,IdUsuario=idUsuario });
+            d.Id = await _db.ExecuteScalarAsync<int>(@"INSERT INTO clin_transfusion(id_orden,nhcl,fecha,producto,identificador_unidad,fecha_vencimiento,grupo_receptor,grupo_donante,tipificacion_verificada,crossmatch_mayor,crossmatch_menor,consentimiento_confirmado,volumen_prescrito_ml,volumen_administrado_ml,velocidad_ml_hora,hora_inicio,hora_fin,diagnostico_indicacion,medico_responsable,doble_verificacion,estado,observaciones,id_usuario,conservacion,crossmatching,numero_historial,vga_inicio,vga_final,proteinas_inicio,proteinas_final,albumina_inicio,albumina_final,ficha_donante,telefono_donante,fecha_recoleccion,ml_recolectados,vga_donante,pt_donante,albumina_donante) OUTPUT INSERTED.id VALUES(@IdOrden,@Nhcl,@Fecha,@Producto,@IdentificadorUnidad,@FechaVencimiento,@GrupoReceptor,@GrupoDonante,@TipificacionVerificada,@CrossmatchMayor,@CrossmatchMenor,@ConsentimientoConfirmado,@VolumenPrescritoMl,@VolumenAdministradoMl,@VelocidadMlHora,@HoraInicio,@HoraFin,@DiagnosticoIndicacion,@MedicoResponsable,@DobleVerificacion,@Estado,@Observaciones,@IdUsuario,@Conservacion,@Crossmatching,@NumeroHistorial,@VgaInicio,@VgaFinal,@ProteinasInicio,@ProteinasFinal,@AlbuminaInicio,@AlbuminaFinal,@FichaDonante,@TelefonoDonante,@FechaRecoleccion,@MlRecolectados,@VgaDonante,@PtDonante,@AlbuminaDonante)", new { d.IdOrden,d.Nhcl,d.Fecha,d.Producto,d.IdentificadorUnidad,d.FechaVencimiento,d.GrupoReceptor,d.GrupoDonante,d.TipificacionVerificada,d.CrossmatchMayor,d.CrossmatchMenor,d.ConsentimientoConfirmado,d.VolumenPrescritoMl,d.VolumenAdministradoMl,d.VelocidadMlHora,d.HoraInicio,d.HoraFin,d.DiagnosticoIndicacion,d.MedicoResponsable,d.DobleVerificacion,d.Estado,d.Observaciones,d.Conservacion,d.Crossmatching,d.NumeroHistorial,d.VgaInicio,d.VgaFinal,d.ProteinasInicio,d.ProteinasFinal,d.AlbuminaInicio,d.AlbuminaFinal,d.FichaDonante,d.TelefonoDonante,d.FechaRecoleccion,d.MlRecolectados,d.VgaDonante,d.PtDonante,d.AlbuminaDonante,IdUsuario=idUsuario });
         else
-            await _db.ExecuteAsync(@"UPDATE clin_transfusion SET producto=@Producto,identificador_unidad=@IdentificadorUnidad,fecha_vencimiento=@FechaVencimiento,grupo_receptor=@GrupoReceptor,grupo_donante=@GrupoDonante,tipificacion_verificada=@TipificacionVerificada,crossmatch_mayor=@CrossmatchMayor,crossmatch_menor=@CrossmatchMenor,consentimiento_confirmado=@ConsentimientoConfirmado,volumen_prescrito_ml=@VolumenPrescritoMl,volumen_administrado_ml=@VolumenAdministradoMl,velocidad_ml_hora=@VelocidadMlHora,hora_inicio=@HoraInicio,hora_fin=@HoraFin,diagnostico_indicacion=@DiagnosticoIndicacion,medico_responsable=@MedicoResponsable,doble_verificacion=@DobleVerificacion,estado=@Estado,observaciones=@Observaciones,id_usuario=@IdUsuario WHERE id=@Id AND id_orden=@IdOrden", new { d.Id,d.IdOrden,d.Producto,d.IdentificadorUnidad,d.FechaVencimiento,d.GrupoReceptor,d.GrupoDonante,d.TipificacionVerificada,d.CrossmatchMayor,d.CrossmatchMenor,d.ConsentimientoConfirmado,d.VolumenPrescritoMl,d.VolumenAdministradoMl,d.VelocidadMlHora,d.HoraInicio,d.HoraFin,d.DiagnosticoIndicacion,d.MedicoResponsable,d.DobleVerificacion,d.Estado,d.Observaciones,IdUsuario=idUsuario });
+            await _db.ExecuteAsync(@"UPDATE clin_transfusion SET fecha=@Fecha,conservacion=@Conservacion,crossmatching=@Crossmatching,numero_historial=@NumeroHistorial,vga_inicio=@VgaInicio,vga_final=@VgaFinal,proteinas_inicio=@ProteinasInicio,proteinas_final=@ProteinasFinal,albumina_inicio=@AlbuminaInicio,albumina_final=@AlbuminaFinal,ficha_donante=@FichaDonante,telefono_donante=@TelefonoDonante,fecha_recoleccion=@FechaRecoleccion,ml_recolectados=@MlRecolectados,vga_donante=@VgaDonante,pt_donante=@PtDonante,albumina_donante=@AlbuminaDonante,producto=@Producto,identificador_unidad=@IdentificadorUnidad,fecha_vencimiento=@FechaVencimiento,grupo_receptor=@GrupoReceptor,grupo_donante=@GrupoDonante,tipificacion_verificada=@TipificacionVerificada,crossmatch_mayor=@CrossmatchMayor,crossmatch_menor=@CrossmatchMenor,consentimiento_confirmado=@ConsentimientoConfirmado,volumen_prescrito_ml=@VolumenPrescritoMl,volumen_administrado_ml=@VolumenAdministradoMl,velocidad_ml_hora=@VelocidadMlHora,hora_inicio=@HoraInicio,hora_fin=@HoraFin,diagnostico_indicacion=@DiagnosticoIndicacion,medico_responsable=@MedicoResponsable,doble_verificacion=@DobleVerificacion,estado=@Estado,observaciones=@Observaciones,id_usuario=@IdUsuario WHERE id=@Id AND id_orden=@IdOrden", new { d.Id,d.IdOrden,d.Fecha,d.Producto,d.IdentificadorUnidad,d.FechaVencimiento,d.GrupoReceptor,d.GrupoDonante,d.TipificacionVerificada,d.CrossmatchMayor,d.CrossmatchMenor,d.ConsentimientoConfirmado,d.VolumenPrescritoMl,d.VolumenAdministradoMl,d.VelocidadMlHora,d.HoraInicio,d.HoraFin,d.DiagnosticoIndicacion,d.MedicoResponsable,d.DobleVerificacion,d.Estado,d.Observaciones,d.Conservacion,d.Crossmatching,d.NumeroHistorial,d.VgaInicio,d.VgaFinal,d.ProteinasInicio,d.ProteinasFinal,d.AlbuminaInicio,d.AlbuminaFinal,d.FichaDonante,d.TelefonoDonante,d.FechaRecoleccion,d.MlRecolectados,d.VgaDonante,d.PtDonante,d.AlbuminaDonante,IdUsuario=idUsuario });
         await _db.RegistrarBitacoraAsync($"Transfusión guardada Orden #{d.IdOrden}, ficha #{d.Id}", idUsuario);
         return d.Id;
     }
@@ -162,7 +198,7 @@ VALUES(@IdOrden,@Nhcl,@Fecha,@Turno,@Subjetivo,@Objetivo,@Analisis,@Plan,@Examen
     {
         var pertenece = await _db.ExecuteScalarAsync<int>("SELECT COUNT(1) FROM clin_transfusion WHERE id=@Id AND id_orden=@IdOrden", new { Id=d.IdTransfusion, IdOrden=idOrden });
         if (pertenece == 0) throw new InvalidOperationException("La transfusión no pertenece a la orden activa.");
-        await _db.ExecuteAsync(@"INSERT INTO clin_transfusion_monitoreo(id_transfusion,fecha_hora,momento,temperatura,frecuencia_cardiaca,frecuencia_respiratoria,pas,pad,pam,mucosas,estado_conciencia,reacciones_adversas,accion_tomada,responsable) VALUES(@IdTransfusion,@FechaHora,@Momento,@Temperatura,@FrecuenciaCardiaca,@FrecuenciaRespiratoria,@Pas,@Pad,@Pam,@Mucosas,@EstadoConciencia,@ReaccionesAdversas,@AccionTomada,@Responsable)", d);
+        await _db.ExecuteAsync(@"INSERT INTO clin_transfusion_monitoreo(id_transfusion,fecha_hora,momento,temperatura,frecuencia_cardiaca,frecuencia_respiratoria,pas,pad,pam,mucosas,estado_conciencia,reacciones_adversas,accion_tomada,responsable,tllc,otros) VALUES(@IdTransfusion,@FechaHora,@Momento,@Temperatura,@FrecuenciaCardiaca,@FrecuenciaRespiratoria,@Pas,@Pad,@Pam,@Mucosas,@EstadoConciencia,@ReaccionesAdversas,@AccionTomada,@Responsable,@Tllc,@Otros)", d);
         await _db.RegistrarBitacoraAsync($"Monitoreo de transfusión #{d.IdTransfusion}", idUsuario);
     }
 

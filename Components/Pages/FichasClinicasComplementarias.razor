@@ -96,7 +96,8 @@
 
     <fieldset disabled="@(_paciente is null)">
         <div class="alert alert-warning small"><strong>Seguridad:</strong> verifique identidad del paciente, unidad, vencimiento, consentimiento, tipificación y compatibilidad conforme al protocolo institucional antes de iniciar.</div>
-        <div class="card border-0 shadow-sm clinical-card"><div class="card-header section-header section-transfusion"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i><span><strong>FICHA DE TRANSFUSIÓN DE HEMODERIVADOS</strong><small>Identificación de unidad, compatibilidad, administración y cierre.</small></span></div><div class="card-body"><div class="row g-2">
+        <div class="card border-0 shadow-sm clinical-card"><div class="card-header section-header section-transfusion"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i><span><strong>Ficha de monitoreo transfusional de hemoderivados</strong></span></div><div class="card-body hoja-transfusion"><div class="row g-2">
+            <h2 class="col-12 banda-transfusion">Producto sanguíneo</h2>
             <div class="col-md-3"><label class="form-label" for="producto-transfusion">Producto *</label><InputSelect id="producto-transfusion" class="form-select" @bind-Value="_trans.Producto">
                     <option value="">Selecciona un producto</option>
                     @if (_trans.Id > 0 && !_productos.Contains(_trans.Producto, StringComparer.Ordinal))
@@ -108,33 +109,148 @@
                         <option value="@producto">@producto</option>
                     }
                 </InputSelect></div>
+            <div class="col-md-3">
+                <label for="trans-conservacion" class="form-label">Conservación</label>
+                <InputSelect id="trans-conservacion" class="form-select" @bind-Value="_trans.Conservacion">
+                    <option value="">Selecciona</option>
+                    <option>Fresco</option>
+                    <option>Congelado</option>
+                </InputSelect>
+            </div>
+            <div class="col-md-3">
+                <label for="trans-fecha" class="form-label">Fecha de transfusión</label>
+                <InputDate id="trans-fecha" class="form-control" @bind-Value="_trans.Fecha" />
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label for="trans-Crossmatching" class="form-label">Resultado de crossmatching</label>
+                <InputText id="trans-Crossmatching" class="form-control form-control-sm" maxlength="100" @bind-Value="_trans.Crossmatching" />
+            </div>
             <div class="col-md-3"><label class="form-label">Identificador de unidad *</label><InputText class="form-control" @bind-Value="_trans.IdentificadorUnidad" /></div>
             <div class="col-md-3"><label class="form-label">Vencimiento</label><InputDate class="form-control" @bind-Value="_trans.FechaVencimiento" /></div>
             <div class="col-md-3"><label class="form-label">Estado</label><InputSelect class="form-select" @bind-Value="_trans.Estado"><option>En preparación</option><option>En curso</option><option>Completada</option><option>Suspendida</option><option>Reacción adversa</option></InputSelect></div>
-            <div class="col-md-3"><label class="form-label">Grupo receptor</label><InputText class="form-control" @bind-Value="_trans.GrupoReceptor" /></div>
-            <div class="col-md-3"><label class="form-label">Grupo donante</label><InputText class="form-control" @bind-Value="_trans.GrupoDonante" /></div>
+
+
             <div class="col-md-2"><label class="form-label">Vol. prescrito (ml)</label><InputNumber class="form-control" @bind-Value="_trans.VolumenPrescritoMl" /></div>
             <div class="col-md-2"><label class="form-label">Administrado (ml)</label><InputNumber class="form-control" @bind-Value="_trans.VolumenAdministradoMl" /></div>
             <div class="col-md-2"><label class="form-label">Velocidad (ml/h)</label><InputNumber class="form-control" @bind-Value="_trans.VelocidadMlHora" /></div>
             <div class="col-md-3"><label class="form-label">Inicio</label><InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_trans.HoraInicio" /></div>
             <div class="col-md-3"><label class="form-label">Fin</label><InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_trans.HoraFin" /></div>
-            <div class="col-md-6"><label class="form-label">Diagnóstico/indicación</label><InputTextArea class="form-control" rows="2" @bind-Value="_trans.DiagnosticoIndicacion" /></div>
+
             <div class="col-md-3"><label class="form-label">Médico responsable</label><InputText class="form-control" @bind-Value="_trans.MedicoResponsable" /></div>
             <div class="col-md-3"><label class="form-label">Doble verificación (dos responsables)</label><InputText class="form-control" @bind-Value="_trans.DobleVerificacion" /></div>
             <div class="col-md-12 d-flex flex-wrap gap-4"><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.ConsentimientoConfirmado" />Consentimiento confirmado *</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.TipificacionVerificada" />Tipificación verificada *</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.CrossmatchMayor" />Crossmatch mayor</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.CrossmatchMenor" />Crossmatch menor</label></div>
             <div class="col-12"><label class="form-label">Observaciones</label><InputTextArea class="form-control" rows="2" @bind-Value="_trans.Observaciones" /></div>
+            <h2 class="col-12 banda-transfusion">Datos del receptor</h2>
+            <div class="col-md-3"><span class="form-label d-block">N.º de ficha</span><strong>@_paciente?.Nhcl</strong></div>
+            <div class="col-md-3"><span class="form-label d-block">Especie</span><strong>@_paciente?.Especie</strong></div>
+            <div class="col-md-3"><span class="form-label d-block">Médico tratante</span><strong>@_paciente?.MedicoResponsable</strong></div>
+            <div class="col-md-3"><label class="form-label">Grupo sanguíneo</label><InputText class="form-control" @bind-Value="_trans.GrupoReceptor" /></div>
+            <div class="col-md-6"><label class="form-label">Diagnóstico/indicación</label><InputTextArea class="form-control" rows="2" @bind-Value="_trans.DiagnosticoIndicacion" /></div>
+            <div class="col-sm-6 col-lg-3">
+                <label for="trans-NumeroHistorial" class="form-label">N.º de transfusión / historial</label>
+                <InputText id="trans-NumeroHistorial" class="form-control form-control-sm" maxlength="50" @bind-Value="_trans.NumeroHistorial" />
+            </div>
+            <div class="col-12">
+                <table class="table table-sm align-middle mb-0 parametros-receptor">
+                    <thead><tr><th scope="col">Parámetros</th><th scope="col">VGA</th><th scope="col">Proteínas totales</th><th scope="col">Albúmina</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <th scope="row">Inicio</th>
+                            <td><InputNumber aria-label="VGA al inicio" class="form-control form-control-sm" step="any" @bind-Value="_trans.VgaInicio" /></td>
+                            <td><InputNumber aria-label="Proteínas totales al inicio" class="form-control form-control-sm" step="any" @bind-Value="_trans.ProteinasInicio" /></td>
+                            <td><InputNumber aria-label="Albúmina al inicio" class="form-control form-control-sm" step="any" @bind-Value="_trans.AlbuminaInicio" /></td>
+                        </tr>
+                        <tr>
+                            <th scope="row">Final</th>
+                            <td><InputNumber aria-label="VGA al final" class="form-control form-control-sm" step="any" @bind-Value="_trans.VgaFinal" /></td>
+                            <td><InputNumber aria-label="Proteínas totales al final" class="form-control form-control-sm" step="any" @bind-Value="_trans.ProteinasFinal" /></td>
+                            <td><InputNumber aria-label="Albúmina al final" class="form-control form-control-sm" step="any" @bind-Value="_trans.AlbuminaFinal" /></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <h2 class="col-12 banda-transfusion">Datos del donante</h2>
+            <div class="col-md-3"><label class="form-label">Grupo sanguíneo</label><InputText class="form-control" @bind-Value="_trans.GrupoDonante" /></div>
+            <div class="col-sm-6 col-lg-3">
+                <label for="trans-FichaDonante" class="form-label">N.º de ficha</label>
+                <InputText id="trans-FichaDonante" class="form-control form-control-sm" maxlength="50" @bind-Value="_trans.FichaDonante" />
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label for="trans-TelefonoDonante" class="form-label">Teléfono</label>
+                <InputText id="trans-TelefonoDonante" class="form-control form-control-sm" maxlength="50" @bind-Value="_trans.TelefonoDonante" />
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label for="trans-FechaRecoleccion" class="form-label">Fecha y hora de recolección</label>
+                <InputDate id="trans-FechaRecoleccion" class="form-control form-control-sm" Type="InputDateType.DateTimeLocal" @bind-Value="_trans.FechaRecoleccion" />
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label for="trans-MlRecolectados" class="form-label">Volumen recolectado (ml)</label>
+                <InputNumber id="trans-MlRecolectados" class="form-control form-control-sm" step="any" @bind-Value="_trans.MlRecolectados" />
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label for="trans-VgaDonante" class="form-label">VGA</label>
+                <InputNumber id="trans-VgaDonante" class="form-control form-control-sm" step="any" @bind-Value="_trans.VgaDonante" />
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label for="trans-PtDonante" class="form-label">Proteínas totales</label>
+                <InputNumber id="trans-PtDonante" class="form-control form-control-sm" step="any" @bind-Value="_trans.PtDonante" />
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label for="trans-AlbuminaDonante" class="form-label">Albúmina</label>
+                <InputNumber id="trans-AlbuminaDonante" class="form-control form-control-sm" step="any" @bind-Value="_trans.AlbuminaDonante" />
+            </div>
         </div><div class="mt-3 d-flex gap-2 justify-content-end"><SaveButton class="btn btn-primary" Disabled="@(_trans.Id == 0 && !_productos.Contains(_trans.Producto))" OnClick="GuardarTransAsync">Guardar transfusión</SaveButton><button class="btn btn-outline-secondary" @onclick="NuevaTrans">Nueva</button></div></div></div>
 
+        @{ var momentos = MomentosTransfusion.Concat(_trans.Monitoreos.Select(m => NormalizarMomento(m.Momento)))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(); }
+            <section class="history-panel mt-3"><h2 class="section-header">Monitorización de parámetros</h2><div class="table-responsive history-table">
+                <table class="table table-sm align-middle mb-0 matriz-transfusion">
+
+                    <thead>
+                        <tr><th scope="col">Parámetro</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <th scope="col">
+                                    @if (_trans.Id > 0)
+                                    {
+                                        <button type="button" class="momento-transfusion" @onclick="() => SeleccionarMomento(momento)">@momento</button>
+                                    }
+                                    else
+                                    {
+                                        @momento
+                                    }
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (etiqueta, obtener) in ParametrosTransfusion)
+                        {
+                            <tr><th scope="row">@etiqueta</th>
+                                @foreach (var momento in momentos)
+                                {
+                                    var valores = _trans.Monitoreos
+                                        .Where(m => string.Equals(NormalizarMomento(m.Momento), momento, StringComparison.OrdinalIgnoreCase))
+                                        .Select(obtener).Where(v => !string.IsNullOrWhiteSpace(v));
+                                    <td>@string.Join(" / ", valores)</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div></section>
         @if (_trans.Id > 0)
         {
-            <div class="card border-0 shadow-sm mt-3 clinical-card"><div class="card-header bg-dark text-white py-2 px-3 fw-bold">Monitoreo del receptor</div><div class="card-body"><div class="row g-2">
-                <div class="col-md-2"><label class="form-label">Momento</label><InputText class="form-control" @bind-Value="_mon.Momento" placeholder="T0, 15 min..." /></div>
+            <div id="trans-control" class="card border-0 shadow-sm mt-3 clinical-card"><div class="card-header bg-dark text-white py-2 px-3 fw-bold">Registrar control</div><div class="card-body"><div class="row g-2">
+                <div class="col-md-2"><label class="form-label">Momento</label><InputText class="form-control" @bind-Value="_mon.Momento" list="momentos-transfusion" /><datalist id="momentos-transfusion">@foreach (var momento in MomentosTransfusion) { <option value="@momento"></option> }</datalist></div>
                 <div class="col-md-2"><label class="form-label">Temperatura °C</label><InputNumber class="form-control" @bind-Value="_mon.Temperatura" /></div>
                 <div class="col-md-2"><label class="form-label">FC lpm</label><InputNumber class="form-control" @bind-Value="_mon.FrecuenciaCardiaca" /></div>
                 <div class="col-md-2"><label class="form-label">FR rpm</label><InputNumber class="form-control" @bind-Value="_mon.FrecuenciaRespiratoria" /></div>
                 <div class="col-md-1"><label class="form-label">PAS</label><InputNumber class="form-control" @bind-Value="_mon.Pas" /></div>
                 <div class="col-md-1"><label class="form-label">PAD</label><InputNumber class="form-control" @bind-Value="_mon.Pad" /></div>
                 <div class="col-md-1"><label class="form-label">PAM</label><InputNumber class="form-control" @bind-Value="_mon.Pam" /></div>
+                <div class="col-md-2"><label for="trans-tllc" class="form-label">TLLC</label><InputNumber id="trans-tllc" class="form-control" step="any" @bind-Value="_mon.Tllc" /></div>
+                <div class="col-md-3"><label for="trans-otros" class="form-label">Otros</label><InputText id="trans-otros" class="form-control" @bind-Value="_mon.Otros" /></div>
                 <div class="col-md-3"><label class="form-label">Mucosas</label><InputText class="form-control" @bind-Value="_mon.Mucosas" /></div>
                 <div class="col-md-3"><label class="form-label">Conciencia</label><InputText class="form-control" @bind-Value="_mon.EstadoConciencia" /></div>
                 <div class="col-md-3"><label class="form-label text-danger">Reacciones adversas</label><InputText class="form-control" @bind-Value="_mon.ReaccionesAdversas" /></div>
@@ -142,6 +258,13 @@
                 <div class="col-md-3"><label class="form-label">Responsable</label><InputText class="form-control" @bind-Value="_mon.Responsable" /></div>
             </div><SaveButton class="btn btn-primary mt-3" OnClick="AgregarMonAsync">Agregar control</SaveButton></div></div>
         }
+        <section class="history-panel mt-3">
+            <h2 class="section-header">Cálculo de volumen y ritmo de infusión</h2>
+            <div class="p-3">
+                <a href="https://chatgpt.com/library?file_id=libfile_05b0daf914088191b9fd1a4caad037b4&amp;account_id=personal"
+                   target="_blank" rel="noopener">Consultar las referencias para caninos y felinos en la ficha original</a>
+            </div>
+        </section>
         <section class="history-panel mt-3"><h2 class="section-header">Historial de transfusiones</h2><div class="table-responsive history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Fecha</th><th>Producto/unidad</th><th>Compatibilidad</th><th>Volumen</th><th>Estado</th><th>Controles</th><th>Acciones</th></tr></thead><tbody>
         @if (_transfusiones.Count == 0)
         {
@@ -159,6 +282,24 @@
     private string _filtro="", _mensaje=""; private bool _error;
     private List<OrdenActivaResumenDto> _ordenes=[]; private PacienteHeaderDto? _paciente;
     private PacienteHeaderDto _pacienteVista => _paciente ?? new();
+    private static readonly string[] MomentosTransfusion = ["T0", "15 min", "30 min", "45 min", "60 min", "1.5 h", "2 h", "2.5 h", "3 h", "3.5 h", "4 h", "4.5 h", "5 h", "5.5 h", "6 h"];
+    private static readonly (string Etiqueta, Func<TransfusionMonitoreoDto, string?> Obtener)[] ParametrosTransfusion =
+    [
+        ("Estado de conciencia", m => m.EstadoConciencia),
+        ("FC", m => m.FrecuenciaCardiaca?.ToString()),
+        ("FR", m => m.FrecuenciaRespiratoria?.ToString()),
+        ("PAS", m => m.Pas?.ToString()),
+        ("PAD", m => m.Pad?.ToString()),
+        ("PAM", m => m.Pam?.ToString()),
+        ("TLLC", m => m.Tllc?.ToString()),
+        ("Mucosas", m => m.Mucosas),
+        ("Temperatura", m => m.Temperatura?.ToString()),
+        ("Otros", m => m.Otros),
+    ];
+
+    private static string NormalizarMomento(string momento) =>
+        momento.Trim().Replace(" hr", " h", StringComparison.OrdinalIgnoreCase);
+
     private List<TransfusionDto> _transfusiones = [];
     private List<string> _productos = [];
     private TransfusionDto _trans = new(); private TransfusionMonitoreoDto _mon = new();
@@ -170,7 +311,8 @@
             _ordenes = await KardexService.ObtenerOrdenesActivasAsync();
             if (IdOrden > 0)
                 await CargarAsync();
-            _productos = await Catalogo.ObtenerProductosTransfusionAsync();
+            _productos = (await Catalogo.ObtenerProductosTransfusionAsync())
+                .Concat(new[] { "Sangre entera", "Plasma", "Albúmina" }).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
         catch (Exception ex)
         {
@@ -244,6 +386,7 @@
         };
         _mon = new();
     }
+    private void SeleccionarMomento(string momento) => _mon.Momento = momento;
     private void EditarTrans(TransfusionDto x){_trans=x;_mon=new(){IdTransfusion=x.Id,FechaHora=DateTime.Now};}
     private async Task GuardarTransAsync()=>await EjecutarAsync(async()=>{_trans.Id=await FichasService.GuardarTransfusionAsync(_trans,Session.IdUser);await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Transfusión guardada.");
     private async Task AgregarMonAsync()=>await EjecutarAsync(async()=>{_mon.IdTransfusion=_trans.Id;await FichasService.AgregarMonitoreoAsync(_mon,IdOrden,Session.IdUser);await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Control agregado.");

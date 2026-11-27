@@ -63,6 +63,22 @@ public sealed class TransfusionDto
     public string Estado { get; set; } = "En preparación";
     public string Observaciones { get; set; } = string.Empty;
     public int IdUsuario { get; set; }
+    public string Conservacion { get; set; } = string.Empty;
+    public string Crossmatching { get; set; } = string.Empty;
+    public string NumeroHistorial { get; set; } = string.Empty;
+    public decimal? VgaInicio { get; set; }
+    public decimal? VgaFinal { get; set; }
+    public decimal? ProteinasInicio { get; set; }
+    public decimal? ProteinasFinal { get; set; }
+    public decimal? AlbuminaInicio { get; set; }
+    public decimal? AlbuminaFinal { get; set; }
+    public string FichaDonante { get; set; } = string.Empty;
+    public string TelefonoDonante { get; set; } = string.Empty;
+    public DateTime? FechaRecoleccion { get; set; }
+    public decimal? MlRecolectados { get; set; }
+    public decimal? VgaDonante { get; set; }
+    public decimal? PtDonante { get; set; }
+    public decimal? AlbuminaDonante { get; set; }
     public List<TransfusionMonitoreoDto> Monitoreos { get; set; } = [];
 }
 
@@ -82,5 +98,7 @@ public sealed class TransfusionMonitoreoDto
     public string EstadoConciencia { get; set; } = string.Empty;
     public string ReaccionesAdversas { get; set; } = string.Empty;
     public string AccionTomada { get; set; } = string.Empty;
+    public decimal? Tllc { get; set; }
+    public string Otros { get; set; } = string.Empty;
     public string Responsable { get; set; } = string.Empty;
 }
