@@ -224,49 +224,67 @@
 
         @{ var momentos = MomentosTransfusion.Concat(_trans.Monitoreos.Select(m => NormalizarMomento(m.Momento)))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(); }
-            <section class="history-panel mt-3"><h2 class="section-header">Monitorización de parámetros</h2>            <div class="trans-curva">
-                <label class="form-label" for="parametro-curva">Curva de monitoreo</label>
-                <select id="parametro-curva" class="form-select form-select-sm" @bind="_parametroCurva">
-                    @for (int indice = 0; indice < SeriesCurva.Length; indice++)
+        <section class="history-panel mt-3">
+            <header class="section-header trans-monitor-header">
+                <h2>Curva y registro de monitorización transfusional</h2>
+                <div class="trans-leyenda">
+                    @foreach (var serie in SeriesCurva)
                     {
-                        <option value="@indice">@SeriesCurva[indice].Etiqueta</option>
+                        <span><strong style="color:@serie.Color">@serie.Simbolo</strong> @serie.Etiqueta</span>
                     }
-                </select>
-                @{ var puntosCurva = ObtenerPuntosCurva(); }
-                @if (puntosCurva.Count == 0)
-                {
-                    <p class="text-muted small mb-0">Registra un control con este parámetro para ver su curva.</p>
+                </div>
+            </header>
+            <div class="table-responsive history-table trans-monitor-cuadricula">
+                @{
+                    var curvas = SeriesCurva.Select(serie => momentos.Select(momento => _trans.Monitoreos
+                        .Where(m => string.Equals(NormalizarMomento(m.Momento), momento, StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(m => m.FechaHora).ThenBy(m => m.Id)
+                        .Select(serie.Valor).LastOrDefault(v => v.HasValue)).ToArray()).ToArray();
+                    var maximo = Math.Max(200, Math.Ceiling(curvas.SelectMany(c => c).Max() ?? 0) / 20 * 20);
+                    maximo = Math.Ceiling(maximo / 20) * 20;
+                    var anchoColumna = 1020d / momentos.Length;
                 }
-                else
-                {
-                    var minimo = puntosCurva.Min(p => p.Valor);
-                    var maximo = puntosCurva.Max(p => p.Valor);
-                    var amplitud = Math.Max(maximo - minimo, 1);
-                    var coordenadas = puntosCurva.Select(p => (p.Minuto, p.Valor,
-                        X: 50 + 720 * p.Minuto / 360d,
-                        Y: 145 - 115 * (p.Valor - minimo) / amplitud)).ToArray();
-                    <svg viewBox="0 0 800 175" role="img" aria-label="@($"Curva de {SeriesCurva[_parametroCurva].Etiqueta}")">
-                        <path d="M50 25 V145 H770 M50 85 H770 M50 25 H770" fill="none" stroke="#c9d9e9" />
-                        <g class="texto-curva">
-                            <text x="45" y="30" text-anchor="end">@(maximo.ToString("0.##"))</text>
-                            <text x="45" y="147" text-anchor="end">@(minimo.ToString("0.##"))</text>
-                            <text x="50" y="164">T0</text>
-                            <text x="410" y="164" text-anchor="middle">3 h</text>
-                            <text x="770" y="164" text-anchor="end">6 h</text>
-                        </g>
-                        <polyline points="@string.Join(" ", coordenadas.Select(p => $"{SvgNumero(p.X)},{SvgNumero(p.Y)}"))"
-                                  fill="none" stroke="#0677aa" stroke-width="2.5" />
-                        @foreach (var punto in coordenadas)
+                <svg class="trans-trazado" viewBox="0 0 1200 340" preserveAspectRatio="none" role="img"
+                     aria-label="Curvas de los parámetros registrados por momento de la transfusión">
+                    <rect x="180" y="20" width="1020" height="280" fill="#fff" stroke="#334f80" />
+                    @for (int marca = 0; marca <= 10; marca++)
+                    {
+                        var y = 300 - marca * 28;
+                        <line x1="180" x2="1200" y1="@y" y2="@y" stroke="#c4d3e2" />
+                        <g><text x="172" y="@(y + 4)" text-anchor="end">@(maximo * marca / 10)</text></g>
+                    }
+                    @for (int columna = 0; columna < momentos.Length; columna++)
+                    {
+                        var borde = SvgNumero(180 + columna * anchoColumna);
+                        var centro = SvgNumero(180 + (columna + .5) * anchoColumna);
+                        <line x1="@borde" x2="@borde" y1="20" y2="300"
+                              stroke="@(columna % 3 == 0 ? "#334f80" : "#d6e1ec")" />
+                        <g><text x="@centro" y="324" text-anchor="middle">@momentos[columna]</text></g>
+                    }
+                    @for (int serie = 0; serie < SeriesCurva.Length; serie++)
+                    {
+                        var configuracion = SeriesCurva[serie];
+                        for (int columna = 0; columna < momentos.Length; columna++)
                         {
-                            <circle cx="@SvgNumero(punto.X)" cy="@SvgNumero(punto.Y)" r="4" fill="#0677aa">
-                                <title>@punto.Minuto min · @punto.Valor</title>
-                            </circle>
+                            if (curvas[serie][columna] is not double valor) continue;
+                            var x = 180 + (columna + .5) * anchoColumna;
+                            var y = 300 - 280 * valor / maximo;
+                            if (columna > 0 && curvas[serie][columna - 1] is double previo)
+                            {
+                                <line x1="@SvgNumero(x - anchoColumna)" x2="@SvgNumero(x)"
+                                      y1="@SvgNumero(300 - 280 * previo / maximo)" y2="@SvgNumero(y)"
+                                      stroke="@configuracion.Color" stroke-width="2" />
+                            }
+                            <g><text x="@SvgNumero(x)" y="@SvgNumero(y + 5)" text-anchor="middle"
+                                     class="trans-marca" fill="@configuracion.Color">@configuracion.Simbolo</text>
+                                <title>@configuracion.Etiqueta · @momentos[columna] · @valor</title>
+                            </g>
                         }
-                    </svg>
-                }
-            </div>
-<div class="table-responsive history-table">
+                    }
+                </svg>
+
                 <table class="table table-sm align-middle mb-0 matriz-transfusion">
+                    <colgroup><col class="trans-parametro" /><col span="@momentos.Length" /></colgroup>
 
                     <thead>
                         <tr><th scope="col">Parámetro</th>
@@ -344,31 +362,16 @@
     private string _filtro="", _mensaje=""; private bool _error;
     private List<OrdenActivaResumenDto> _ordenes=[]; private PacienteHeaderDto? _paciente;
     private PacienteHeaderDto _pacienteVista => _paciente ?? new();
-    private int _parametroCurva;
-    private static readonly (string Etiqueta, Func<TransfusionMonitoreoDto, double?> Valor)[] SeriesCurva =
+    private static readonly (string Etiqueta, string Color, string Simbolo, Func<TransfusionMonitoreoDto, double?> Valor)[] SeriesCurva =
     [
-        ("Frecuencia cardíaca", m => m.FrecuenciaCardiaca),
-        ("Frecuencia respiratoria", m => m.FrecuenciaRespiratoria),
-        ("PAS", m => m.Pas), ("PAD", m => m.Pad), ("PAM", m => m.Pam),
-        ("Temperatura", m => (double?)m.Temperatura), ("TLLC", m => (double?)m.Tllc)
+        ("FC (lpm)", "#b71c1c", "●", m => m.FrecuenciaCardiaca),
+        ("FR (rpm)", "#1565c0", "◆", m => m.FrecuenciaRespiratoria),
+        ("PAS (mmHg)", "#18754e", "▼", m => m.Pas),
+        ("PAD (mmHg)", "#7935b0", "▲", m => m.Pad),
+        ("PAM (mmHg)", "#006b78", "■", m => m.Pam),
+        ("Temperatura (°C)", "#a04b00", "✚", m => (double?)m.Temperatura),
+        ("TLLC (s)", "#9d235e", "×", m => (double?)m.Tllc)
     ];
-    private static readonly int[] MinutosCurva = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360];
-
-    private List<(int Minuto, double Valor)> ObtenerPuntosCurva()
-    {
-        var puntos = new List<(int, double)>();
-        for (int i = 0; i < MomentosTransfusion.Length; i++)
-        {
-            var momento = MomentosTransfusion[i];
-            var valor = _trans.Monitoreos
-                .Where(m => string.Equals(NormalizarMomento(m.Momento), momento, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(m => m.FechaHora).ThenBy(m => m.Id)
-                .Select(SeriesCurva[_parametroCurva].Valor).LastOrDefault(v => v.HasValue);
-            if (valor is double registrado)
-                puntos.Add((MinutosCurva[i], registrado));
-        }
-        return puntos;
-    }
 
     private static string SvgNumero(double valor) => valor.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
