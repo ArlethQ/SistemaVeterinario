@@ -4,10 +4,10 @@
 
 <PageTitle>Salas de quirófano | e-ForVets</PageTitle>
 
-<div class="clinical-kardex">
-    <header class="clinical-kardex-header">
+<div class="container-fluid py-3 salas-quirofano">
+    <header class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
         <div>
-            <h1>Salas de quirófano</h1>
+            <h1 class="h2 mb-1">Salas de quirófano</h1>
             <small class="text-muted">Disponibilidad y reservas por sucursal y piso</small>
         </div>
         <div class="d-flex flex-wrap gap-2">
@@ -15,28 +15,114 @@
             {
                 <a class="btn btn-outline-primary" href="/programacion/clinica">Programación clínica</a>
             }
-            <button class="btn btn-primary" disabled="@(_pisos.Count == 0)" @onclick="NuevaSala">
-                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Nueva sala
-            </button>
         </div>
     </header>
 
-    <div class="row g-3 mb-3">
-        <div class="col-sm-5 col-lg-4">
-            <label class="form-label" for="filtro-sucursal">Sucursal</label>
-            <select class="form-select" id="filtro-sucursal" @bind="_idLocalidad">
-                <option value="0">Todas las sucursales</option>
-                @foreach (var sucursal in _localidades)
-                {
-                    <option value="@sucursal.Id">@sucursal.Descripcion</option>
-                }
-            </select>
+    <section class="card shadow-sm mb-3" aria-labelledby="registro-sala" id="formulario-sala">
+        <div class="card-header bg-white">
+            <h2 class="h5 fw-bold mb-0" id="registro-sala">
+                <i class="bi bi-door-closed me-2" aria-hidden="true"></i>@(_edicion.Id == 0 ? "Registrar sala" : $"Editar sala · {_edicion.Codigo}")
+            </h2>
         </div>
-        <div class="col-sm-4 col-lg-3">
-            <label class="form-label" for="filtro-fecha">Fecha de programación</label>
-            <input id="filtro-fecha" type="date" class="form-control" @bind="_fecha" @bind:after="CargarReservasAsync" />
+        <div class="card-body">
+            @if (_errorFormulario is not null)
+            {
+                <div class="alert alert-danger" role="alert">@_errorFormulario</div>
+            }
+            <fieldset disabled="@(_guardando || _cargandoCatalogos)">
+                <div class="row g-3">
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label fw-semibold" for="sucursal-sala">Sucursal *</label>
+                        <select id="sucursal-sala" class="form-select" disabled="@(_edicion.Id > 0)"
+                                @bind="_sucursalEdicion" @bind:after="CambiarSucursalEdicion">
+                            <option value="0">Selecciona una sucursal</option>
+                            @foreach (var sucursal in _localidades)
+                            {
+                                <option value="@sucursal.Id">@sucursal.Descripcion</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label fw-semibold" for="piso-sala">Piso *</label>
+                        @if (_edicion.Id > 0)
+                        {
+                            <input id="piso-sala" class="form-control" value="@_edicion.Piso" readonly />
+                        }
+                        else
+                        {
+                            <select id="piso-sala" class="form-select" disabled="@(!PisosEdicion.Any())" @bind="_edicion.IdPiso">
+                                <option value="0">Selecciona un piso</option>
+                                @foreach (var piso in PisosEdicion)
+                                {
+                                    <option value="@piso.Id">@piso.Nombre</option>
+                                }
+                            </select>
+                            @if (_sucursalEdicion > 0 && !PisosEdicion.Any())
+                            {
+                                <small class="text-muted">Esta sucursal no tiene pisos activos.</small>
+                            }
+                        }
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label fw-semibold" for="codigo-sala">Código o nombre *</label>
+                        <input id="codigo-sala" class="form-control" maxlength="50" required
+                               placeholder="Ej. Quirófano 1" @ref="_campoCodigo" @bind="_edicion.Codigo" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label fw-semibold" for="observacion-sala">Observación <span class="fw-normal text-muted">(opcional)</span></label>
+                        <input id="observacion-sala" class="form-control" maxlength="200" @bind="_edicion.Observacion" />
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+                    <div class="form-check form-switch mb-0">
+                        <input id="sala-activa" type="checkbox" class="form-check-input" role="switch" @bind="_edicion.Activa" />
+                        <label class="form-check-label" for="sala-activa">Sala activa</label>
+                    </div>
+                    <div class="d-flex ms-auto gap-2">
+                        @if (_edicion.Id > 0)
+                        {
+                            <button type="button" class="btn btn-outline-secondary" @onclick="NuevaSala">Cancelar edición</button>
+                        }
+                        <SaveButton class="btn btn-primary" OnClick="GuardarAsync" Disabled="@(_guardando || _cargandoCatalogos || _pisos.Count == 0)">
+                            <i class="bi bi-floppy me-1" aria-hidden="true"></i>@(_edicion.Id == 0 ? "Guardar sala" : "Guardar cambios")
+                        </SaveButton>
+                    </div>
+                </div>
+            </fieldset>
         </div>
-    </div>
+    </section>
+
+    <section class="card shadow-sm mb-3" aria-label="Filtros de salas">
+        <div class="card-body row g-2">
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label" for="filtro-sucursal">Sucursal</label>
+                <select class="form-select" id="filtro-sucursal" @bind="_idLocalidad">
+                    <option value="0">Todas las sucursales</option>
+                    @foreach (var sucursal in _localidades)
+                    {
+                        <option value="@sucursal.Id">@sucursal.Descripcion</option>
+                    }
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label" for="filtro-fecha">Fecha de programación</label>
+                <input id="filtro-fecha" type="date" class="form-control" @bind="_fecha" @bind:after="CargarReservasAsync" />
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label" for="filtro-estado">Disponibilidad</label>
+                <select class="form-select" id="filtro-estado" @bind="_estadoFiltro">
+                    <option value="">Todas</option>
+                    <option value="libre">Sin reservas</option>
+                    <option value="reservada">Con reservas</option>
+                    <option value="inactiva">Inactivas</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label" for="filtro-codigo">Buscar código o nombre</label>
+                <input class="form-control" id="filtro-codigo" @bind="_busqueda" @bind:event="oninput" />
+            </div>
+        </div>
+    </section>
 
     @if (_confirmacion is not null)
     {
@@ -53,21 +139,23 @@
     }
     else if (!SalasVisibles.Any())
     {
-        <p class="text-muted">No hay salas registradas para la sucursal seleccionada.</p>
+        <p class="text-muted">No hay salas que coincidan con los filtros.</p>
     }
     else
     {
         @foreach (var piso in SalasVisibles.GroupBy(s => new { s.IdPiso, s.Piso, s.Localidad }))
         {
-            <section class="mb-4">
-                <h2 class="h5 mb-3">@piso.Key.Localidad <span class="text-muted">· @piso.Key.Piso</span></h2>
-                <div class="row g-3">
+            <section class="card shadow-sm mb-3">
+                <h2 class="card-header bg-white h6 mb-0 d-flex align-items-center gap-2">
+                    <span class="badge text-bg-primary">@piso.Key.Localidad</span>@piso.Key.Piso
+                </h2>
+                <div class="card-body sala-mapa">
                     @foreach (var sala in piso)
                     {
-                        var reservas = _reservas.Where(r => r.IdSala == sala.Id || (r.IdSala is null && r.IdLocalidad == sala.IdLocalidad)).ToList();
-                        <div class="col-sm-6 col-xl-4" @key="sala.Id">
-                            <article class="card h-100">
-                                <div class="card-header bg-white d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        var reservas = ReservasSala(sala).ToList();
+                        <div class="sala-espacio" @key="sala.Id">
+                            <article class="card h-100 sala-tarjeta @EstadoSala(sala)">
+                                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                                     <h3 class="h6 fw-bold mb-0"><i class="bi bi-door-closed me-2" aria-hidden="true"></i>@sala.Codigo</h3>
                                     @if (!sala.Activa)
                                     {
@@ -100,8 +188,8 @@
                                         </ul>
                                     }
                                 </div>
-                                <div class="card-footer bg-white text-end">
-                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => EditarSala(sala)">Editar</button>
+                                <div class="card-footer text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_guardando" @onclick="() => EditarSalaAsync(sala)">Editar</button>
                                 </div>
                             </article>
                         </div>
@@ -111,85 +199,6 @@
         }
     }
 </div>
-
-@if (_edicion is { } salaEditada)
-{
-    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="titulo-sala-quirofano"
-         style="background:rgba(0,0,0,.45)">
-        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-            <div class="modal-content sala-formulario">
-                <div class="modal-header">
-                    <h2 class="modal-title h5" id="titulo-sala-quirofano">@(salaEditada.Id == 0 ? "Nueva sala" : "Editar sala")</h2>
-                    <button class="btn-close" type="button" aria-label="Cerrar" disabled="@_guardando" @onclick="CerrarModal"></button>
-                </div>
-                <div class="modal-body">
-                    @if (_errorModal is not null)
-                    {
-                        <div class="alert alert-danger" role="alert">@_errorModal</div>
-                    }
-                    <fieldset disabled="@_guardando">
-                        <div class="row g-3">
-                            <div class="col-12">
-                                <label class="form-label fw-semibold" for="codigo-sala">Código o nombre de la sala <span class="text-danger">*</span></label>
-                                <input id="codigo-sala" class="form-control" maxlength="50" required placeholder="Ej. Quirófano 1"
-                                       @bind="salaEditada.Codigo" />
-                            </div>
-                            <div class="col-sm-6">
-                                <label class="form-label fw-semibold" for="sucursal-sala">Sucursal <span class="text-danger">*</span></label>
-                                <select id="sucursal-sala" class="form-select" disabled="@(salaEditada.Id > 0)"
-                                        @bind="_sucursalEdicion" @bind:after="CambiarSucursalEdicion">
-                                    <option value="0">Selecciona una sucursal</option>
-                                    @foreach (var sucursal in _localidades)
-                                    {
-                                        <option value="@sucursal.Id">@sucursal.Descripcion</option>
-                                    }
-                                </select>
-                            </div>
-                            <div class="col-sm-6">
-                                <label class="form-label fw-semibold" for="piso-sala">Piso <span class="text-danger">*</span></label>
-                                @if (salaEditada.Id > 0)
-                                {
-                                    <input id="piso-sala" class="form-control" value="@salaEditada.Piso" readonly />
-                                }
-                                else
-                                {
-                                    <select id="piso-sala" class="form-select" disabled="@(!PisosEdicion.Any())" @bind="salaEditada.IdPiso">
-                                        <option value="0">Selecciona un piso</option>
-                                        @foreach (var piso in PisosEdicion)
-                                        {
-                                            <option value="@piso.Id">@piso.Nombre</option>
-                                        }
-                                    </select>
-                                    @if (_sucursalEdicion > 0 && !PisosEdicion.Any())
-                                    {
-                                        <small class="text-muted">Esta sucursal no tiene pisos activos.</small>
-                                    }
-                                }
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label fw-semibold" for="observacion-sala">Observación <span class="text-muted fw-normal">(opcional)</span></label>
-                                <textarea id="observacion-sala" class="form-control" rows="2" maxlength="200"
-                                          placeholder="Ej. Acceso junto a recuperación" @bind="salaEditada.Observacion"></textarea>
-                            </div>
-                            <div class="col-12">
-                                <div class="sala-estado form-check form-switch">
-                                    <input id="sala-activa" type="checkbox" class="form-check-input" role="switch"
-                                           aria-describedby="estado-sala-ayuda" @bind="salaEditada.Activa" />
-                                    <label class="form-check-label fw-semibold" for="sala-activa">Sala activa</label>
-                                    <small id="estado-sala-ayuda" class="d-block text-muted">Las salas activas aparecen al programar una cirugía.</small>
-                                </div>
-                            </div>
-                        </div>
-                    </fieldset>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-outline-secondary" disabled="@_guardando" @onclick="CerrarModal">Cancelar</button>
-                    <SaveButton class="btn btn-primary" OnClick="GuardarAsync" Disabled="@_guardando">Guardar sala</SaveButton>
-                </div>
-            </div>
-        </div>
-    </div>
-}
 
 @code {
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
@@ -206,13 +215,25 @@
     private bool _cargando = true;
     private bool _guardando;
     private string? _errorCarga;
-    private string? _errorModal;
-    private SalaQuirofanoDto? _edicion;
+    private bool _cargandoCatalogos = true;
+    private string _busqueda = "";
+    private string _estadoFiltro = "";
+    private string? _errorFormulario;
+    private SalaQuirofanoDto _edicion = new();
+    private ElementReference _campoCodigo;
 
     private IEnumerable<PisoClinicoDto> PisosEdicion => _pisos.Where(p => p.IdLocalidad == _sucursalEdicion);
 
     private IEnumerable<SalaQuirofanoDto> SalasVisibles =>
-        _salas.Where(s => _idLocalidad == 0 || s.IdLocalidad == _idLocalidad);
+        _salas.Where(s => (_idLocalidad == 0 || s.IdLocalidad == _idLocalidad)
+            && s.Codigo.Contains(_busqueda.Trim(), StringComparison.OrdinalIgnoreCase)
+            && (_estadoFiltro.Length == 0 || EstadoSala(s) == _estadoFiltro));
+
+    private IEnumerable<CirugiaProgramadaDto> ReservasSala(SalaQuirofanoDto sala) =>
+        _reservas.Where(r => r.IdSala == sala.Id || (r.IdSala is null && r.IdLocalidad == sala.IdLocalidad));
+
+    private string EstadoSala(SalaQuirofanoDto sala) =>
+        !sala.Activa ? "inactiva" : ReservasSala(sala).Any() ? "reservada" : "libre";
 
     protected override async Task OnInitializedAsync()
     {
@@ -221,6 +242,8 @@
             _idLocalidad = Session.Localidad;
             _localidades = await Service.ObtenerLocalidadesSelectorAsync();
             _pisos = await Service.ObtenerPisosAsync(true);
+            NuevaSala();
+            _cargandoCatalogos = false;
             _salas = await Service.ObtenerSalasQuirofanoAsync();
             await CargarReservasAsync();
         }
@@ -256,7 +279,7 @@
 
     private void NuevaSala()
     {
-        _errorModal = null;
+        _errorFormulario = null;
         _confirmacion = null;
         _sucursalEdicion = _idLocalidad > 0 ? _idLocalidad : Session.Localidad;
         _edicion = new();
@@ -265,14 +288,14 @@
 
     private void CambiarSucursalEdicion()
     {
-        if (_edicion is null) return;
         var pisos = PisosEdicion.ToList();
         _edicion.IdPiso = pisos.Count == 1 ? pisos[0].Id : 0;
     }
 
-    private void EditarSala(SalaQuirofanoDto sala)
+    private async Task EditarSalaAsync(SalaQuirofanoDto sala)
     {
-        _errorModal = null;
+        if (_guardando) return;
+        _errorFormulario = null;
         _confirmacion = null;
         _sucursalEdicion = sala.IdLocalidad;
         _edicion = new()
@@ -284,44 +307,47 @@
             Observacion = sala.Observacion,
             Activa = sala.Activa
         };
+        await _campoCodigo.FocusAsync();
     }
-
-    private void CerrarModal() => _edicion = null;
 
     private async Task GuardarAsync()
     {
-        if (_guardando || _edicion is null) return;
+        if (_guardando || _cargandoCatalogos) return;
         if (string.IsNullOrWhiteSpace(_edicion.Codigo))
         {
-            _errorModal = "Ingresa el código o nombre de la sala.";
+            _errorFormulario = "Ingresa el código o nombre de la sala.";
             return;
         }
 
         if (_edicion.IdPiso <= 0)
         {
-            _errorModal = "Selecciona la sucursal y un piso activo.";
+            _errorFormulario = "Selecciona la sucursal y un piso activo.";
             return;
         }
 
         _guardando = true;
-        _errorModal = null;
+        _errorFormulario = null;
         try
         {
             if (!await Service.GuardarSalaQuirofanoAsync(_edicion, Session.IdUser))
             {
-                _errorModal = "Verifica que el piso esté activo, que el nombre esté disponible y que no haya reservas pendientes si vas a desactivar la sala.";
+                _errorFormulario = "Verifica que el piso esté activo, que el nombre esté disponible y que no haya reservas pendientes si vas a desactivar la sala.";
                 return;
             }
             if (_idLocalidad > 0) _idLocalidad = _sucursalEdicion;
-            _confirmacion = _edicion.Id == 0 ? "Sala registrada." : "Cambios guardados.";
-            CerrarModal();
+            var confirmacion = _edicion.Id == 0 ? "Sala registrada." : "Cambios guardados.";
+            var sucursalGuardada = _sucursalEdicion;
+            NuevaSala();
+            _sucursalEdicion = sucursalGuardada;
+            CambiarSucursalEdicion();
+            _confirmacion = confirmacion;
             _salas = await Service.ObtenerSalasQuirofanoAsync();
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "No se pudo guardar o recargar una sala de quirófano");
-            if (_edicion is null) _errorCarga = "La sala se guardó. No se pudo actualizar el listado.";
-            else _errorModal = "No se pudo guardar la sala.";
+            if (_confirmacion is not null) _errorCarga = "La sala se guardó. No se pudo actualizar el listado.";
+            else _errorFormulario = "No se pudo guardar la sala.";
         }
         finally
         {
