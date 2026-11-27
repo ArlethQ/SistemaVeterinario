@@ -9,14 +9,16 @@
 
 <PageTitle>Receta sin orden - e-ForVets</PageTitle>
 
-<div class="container-fluid py-3">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-        <div>
-            <small class="text-success fw-bold text-uppercase">Prescripción externa</small>
-            <h2 class="mb-1 fw-bold">Receta médica sin orden</h2>
-            <p class="text-muted mb-0">Emite una receta directamente desde la historia del paciente, sin crear una orden de atención.</p>
+<div class="container-fluid py-3 consulta-clinica">
+    <header class="consulta-encabezado mb-3">
+        <div class="consulta-titulo">
+            <i class="bi bi-prescription2" aria-hidden="true"></i>
+            <div>
+                <h1>Receta médica sin orden</h1>
+                <p>Emite una receta desde la historia del paciente.</p>
+            </div>
         </div>
-        <div class="d-flex flex-wrap gap-2">
+        <div class="consulta-acciones">
             @if (Permisos.Permite("consulta/recetario"))
             {
                 <a class="btn btn-sm btn-outline-primary" href="/consulta/recetario">Recetas con orden</a>
@@ -24,7 +26,7 @@
             <button class="btn btn-sm btn-outline-success" @onclick="NuevaRecetaAsync">Nueva receta</button>
             <button class="btn btn-sm btn-danger app-doc-action app-doc-pdf" disabled="@(cabecera.IdFicha <= 0 || medicamentos.Count == 0 || diagnosticos.Count == 0)" @onclick="DescargarPdfAsync"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Descargar PDF</button>
         </div>
-    </div>
+    </header>
 
     @if (!string.IsNullOrWhiteSpace(mensaje))
     {
@@ -88,21 +90,15 @@
 
         @if (paciente is not null || cabecera.Nhcl > 0)
         {
-            <div class="card shadow-sm border-0 mb-3 bg-primary-subtle">
-                <div class="card-body py-2">
-                    <div class="row g-2 small">
-                        <div class="col-md-2"><span class="text-muted">NHCL</span><strong class="d-block text-primary">#@cabecera.Nhcl</strong></div>
-                        <div class="col-md-2"><span class="text-muted">Paciente</span><strong class="d-block">@cabecera.Paciente</strong></div>
-                        <div class="col-md-3"><span class="text-muted">Propietario</span><strong class="d-block">@cabecera.Cliente</strong></div>
-                        <div class="col-md-2"><span class="text-muted">Cédula</span><strong class="d-block">@cabecera.Cedula</strong></div>
-                        <div class="col-md-2"><span class="text-muted">Teléfono</span><strong class="d-block">@cabecera.Telefonos</strong></div>
-                        <div class="col-md-1"><span class="text-muted">Origen</span><strong class="d-block">@(paciente?.Tipo ?? "")</strong></div>
-                    </div>
-                </div>
-            </div>
+            <ResumenPacienteClinico Nhcl="@cabecera.Nhcl" EtiquetaHistoria="Historia (NHCL)"
+                                   Propietario="@cabecera.Cliente" Paciente="@cabecera.Paciente" Especie="@paciente?.Especie"
+                                   EtiquetaEstado="Origen" IconoEstado="bi-info-circle">
+                <DetallePropietario><small>Cédula: @cabecera.Cedula · Tel.: @cabecera.Telefonos</small></DetallePropietario>
+                <Estado><strong>@(paciente?.Tipo ?? "Sin registrar")</strong></Estado>
+            </ResumenPacienteClinico>
 
             <div class="card shadow-sm border-0 mb-3">
-                <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">2. Encabezado de la receta</h6></div>
+                <div class="card-header consulta-seccion-datos"><h6 class="mb-0 fw-bold text-primary">2. Encabezado de la receta</h6></div>
                 <div class="card-body row g-3">
                     <div class="col-md-3"><label class="form-label fw-semibold">Fecha de emisión *</label><input type="date" class="form-control" @bind="cabecera.Fecha" /></div>
                     <div class="col-md-9"><label class="form-label fw-semibold">Motivo de la receta *</label><input class="form-control" maxlength="500" @bind="cabecera.Motivo" /></div>
@@ -116,7 +112,7 @@
                 <div class="row g-3">
                     <div class="col-lg-5">
                         <div class="card shadow-sm border-0 h-100">
-                            <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">3. Diagnósticos *</h6></div>
+                            <div class="card-header consulta-seccion-diagnosticos"><h6 class="mb-0 fw-bold text-primary">3. Diagnósticos *</h6></div>
                             <div class="card-body">
                                 <div class="input-group input-group-sm mb-2">
                                     <input class="form-control" autocomplete="off" placeholder="Buscar CIE-10" @bind="filtroDiagnostico" @bind:event="oninput" @bind:after="BuscarDiagnosticosAutoAsync" @onkeydown="BuscarDiagnosticoConEnterAsync" />
@@ -153,7 +149,7 @@
 
                     <div class="col-lg-7">
                         <div class="card shadow-sm border-0 h-100">
-                            <div class="card-header bg-white"><h6 class="mb-0 fw-bold text-primary">4. Medicamentos *</h6></div>
+                            <div class="card-header consulta-seccion-medicamentos"><h6 class="mb-0 fw-bold text-primary">4. Medicamentos *</h6></div>
                             <div class="card-body">
                                 <div class="row g-2 p-2 bg-light rounded border mb-3">
                                     <div class="col-md-7"><label class="form-label small fw-semibold">Medicamento del catálogo u otro</label><BuscadorMedicamentos Value="@nuevoMedicamento.Descripcionamento" ValueChanged="@(texto => { nuevoMedicamento.Descripcionamento = texto; nuevoMedicamento.CodigoProd = string.Empty; })" Productos="@catalogoProductos" Selected="@(producto => nuevoMedicamento.CodigoProd = producto.Id.ToString())" /></div>

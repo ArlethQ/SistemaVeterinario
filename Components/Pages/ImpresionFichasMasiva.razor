@@ -12,18 +12,20 @@
 
 @if (_autorizado)
 {
-    <div class="@(ModoModal ? "py-1" : "container-fluid py-3")">
+    <div class="consulta-clinica @(ModoModal ? "consulta-clinica-modal py-1" : "container-fluid py-3")">
         <!-- ENCABEZADO -->
-        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-            <div>
-                <small class="text-primary fw-bold text-uppercase">Expediente Clínico &amp; Reclamo de Seguros</small>
-                <h3 class="@(ModoModal ? "h5 fw-bold mb-0 text-dark" : "fw-bold mb-0 text-dark")">Expediente de Fichas Médicas</h3>
-                <small class="text-muted">@(ModoModal ? "Filtre por orden o fecha para generar el expediente consolidado en PDF" : "Elija el animal en el dropbox y filtre por orden o fecha para generar el expediente consolidado en PDF")</small>
+        <header class="consulta-encabezado mb-3">
+            <div class="consulta-titulo">
+                <i class="bi bi-folder2-open" aria-hidden="true"></i>
+                <div>
+                    <h2>Expediente de fichas médicas</h2>
+                    <p>Filtra por orden o fecha para generar el expediente consolidado en PDF.</p>
+                </div>
             </div>
-            <div class="d-flex gap-2">
+            <div class="consulta-acciones">
                 @if (AtencionesFiltradas.Any(x => x.Seleccionado))
                 {
-                    <button class="btn btn-danger btn-sm fw-semibold d-flex align-items-center gap-2 shadow-sm"
+                    <button class="btn btn-danger btn-sm app-doc-action app-doc-pdf"
                             disabled="@_generandoPdf"
                             @onclick="GenerarExpedienteConsolidadoPdfAsync">
                         @if (_generandoPdf)
@@ -46,7 +48,7 @@
                     </a>
                 }
             </div>
-        </div>
+        </header>
 
         @if (!string.IsNullOrWhiteSpace(_mensaje))
         {
@@ -117,64 +119,32 @@
         <!-- TARJETA INFORMATIVA DEL ANIMAL SELECCIONADO -->
         @if (_paciente != null)
         {
-            <div class="card border-0 shadow-sm mb-3 bg-white border-start border-4 border-primary">
-                <div class="card-body py-2 px-3">
-                    <div class="row align-items-center g-2">
-                        <div class="col-md-5">
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold shadow-sm" style="width: 44px; height: 44px; font-size: 1.1rem;">
-                                    @Iniciales(_paciente.PacienteNombre)
-                                </div>
-                                <div>
-                                    <h4 class="mb-0 fw-bold text-dark">@_paciente.PacienteNombre</h4>
-                                    <span class="badge bg-primary me-1">@_paciente.Especie</span>
-                                    <span class="badge bg-secondary">@_paciente.Raza</span>
-                                    <small class="text-muted ms-1">(@_paciente.Sexo · @_paciente.EdadTexto)</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <small class="text-muted d-block">Tutor / Propietario:</small>
-                            <span class="fw-semibold text-dark">@_paciente.PropietarioNombre</span>
-                            <small class="text-muted ms-1">C.I.: @_paciente.ClienteCedula</small>
-                        </div>
-                        <div class="col-md-3 text-md-end">
-                            <div class="badge bg-dark py-1 px-3 fs-6 shadow-sm">NHCL: #@_paciente.Nhcl</div>
-                            @if (_ordenFiltro > 0)
-                            {
-                                <div class="mt-1">
-                                    <span class="badge bg-primary-subtle text-primary border border-primary">
-                                        <i class="bi bi-funnel-fill me-1"></i> Filtrada por Orden #@_ordenFiltro
-                                    </span>
-                                    <button class="btn btn-xs btn-link text-decoration-none py-0 text-muted" @onclick="() => _ordenFiltro = 0" title="Ver todas las órdenes">
-                                        (Ver todas)
-                                    </button>
-                                </div>
-                            }
-                            else if (_filtroFechaEspecifica.HasValue)
-                            {
-                                <div class="mt-1">
-                                    <span class="badge bg-info-subtle text-dark border">
-                                        <i class="bi bi-calendar-date me-1"></i> Día: @_filtroFechaEspecifica.Value.ToString("dd/MM/yyyy")
-                                    </span>
-                                    <button class="btn btn-xs btn-link text-decoration-none py-0 text-muted" @onclick="() => _filtroFechaEspecifica = null">
-                                        (Ver todas)
-                                    </button>
-                                </div>
-                            }
-                            else
-                            {
-                                <small class="d-block text-primary fw-bold mt-1">@_atenciones.Count orden(es) registradas en total</small>
-                            }
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <ResumenPacienteClinico Orden="@_ordenFiltro" Nhcl="@_paciente.Nhcl" EtiquetaHistoria="@(_ordenFiltro > 0 ? "Orden / Historia (NHCL)" : "Historia (NHCL)")"
+                                   Propietario="@_paciente.PropietarioNombre" Paciente="@_paciente.PacienteNombre" Especie="@_paciente.Especie">
+                <DetalleHistoria>
+                    @if (_ordenFiltro > 0)
+                    {
+                        <button class="btn btn-sm btn-link p-0 d-block" @onclick="() => _ordenFiltro = 0">Ver todas las órdenes</button>
+                    }
+                    else if (_filtroFechaEspecifica.HasValue)
+                    {
+                        <small>Día: @_filtroFechaEspecifica.Value.ToString("dd/MM/yyyy")</small>
+                        <button class="btn btn-sm btn-link p-0" @onclick="() => _filtroFechaEspecifica = null">Ver todas las fechas</button>
+                    }
+                    else
+                    {
+                        <small>@_atenciones.Count orden(es) registradas</small>
+                    }
+                </DetalleHistoria>
+                <DetallePropietario><small>C.I.: @_paciente.ClienteCedula</small></DetallePropietario>
+                <DetallePaciente><small>@_paciente.Raza · Edad: @_paciente.EdadTexto</small></DetallePaciente>
+                <Estado><strong>@_paciente.Sexo</strong></Estado>
+            </ResumenPacienteClinico>
         }
 
         <!-- TABLA DE ÓRDENES Y ATENCIONES CON BUSCADOR POR PALABRAS CLAVE -->
         <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white py-2">
+            <div class="card-header consulta-registros py-2">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                     <div class="d-flex align-items-center gap-2">
                         <span class="fw-bold text-dark fs-6">
@@ -762,11 +732,4 @@
         }
     }
 
-    private static string Iniciales(string? nombre)
-    {
-        if (string.IsNullOrWhiteSpace(nombre)) return "P";
-        var parts = nombre.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 1) return parts[0].Substring(0, Math.Min(2, parts[0].Length)).ToUpper();
-        return $"{parts[0][0]}{parts[1][0]}".ToUpper();
-    }
 }

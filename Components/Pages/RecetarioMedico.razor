@@ -10,21 +10,30 @@
 
 <PageTitle>e-ForVets - Recetario Médico e Indicaciones</PageTitle>
 
-<div class="container-fluid py-3">
+<div class="container-fluid py-3 consulta-clinica">
     <!-- Encabezado -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-white p-3 rounded shadow-sm border-start border-4 border-success">
-        <div>
-            <h4 class="mb-0 text-primary fw-bold">
-                <i class="bi bi-prescription2 me-2"></i>Recetario Médico Veterinario & Buscador de Recetas
-            </h4>
-            <small class="text-muted">Emisión de recetas médicas veterinarias, posología e indicaciones generales para el propietario.</small>
+    <header class="consulta-encabezado mb-3">
+        <div class="consulta-titulo">
+            <i class="bi bi-prescription2" aria-hidden="true"></i>
+            <div>
+                <h1>Recetario médico</h1>
+                <p>Recetas e indicaciones asociadas a una orden.</p>
+            </div>
         </div>
-        <div class="d-flex gap-2 align-items-center mt-2 mt-md-0">
+        <div class="consulta-acciones">
             @if (Permisos.Permite("consulta/recetario/sin-orden"))
             {
                 <a class="btn btn-sm btn-outline-success" href="/consulta/recetario/sin-orden">Receta sin orden</a>
             }
-            <select class="form-select form-select-sm" style="width: 280px;" value="@IdOrden" @onchange="SeleccionarOrdenActivaAsync">
+            <button class="btn btn-sm btn-danger app-doc-action app-doc-pdf" @onclick="ExportarRecetaPdfAsync" disabled="@(!ItemsReceta.Any())">
+                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Descargar receta PDF
+            </button>
+        </div>
+    </header>
+    <section class="card mb-3" aria-label="Buscar orden clínica">
+        <div class="card-header fw-bold">Buscar orden clínica</div>
+        <div class="card-body consulta-busqueda">
+            <select class="form-select form-select-sm" aria-label="Paciente u orden activa" value="@IdOrden" @onchange="SeleccionarOrdenActivaAsync">
                 <option value="0">-- Seleccionar paciente / orden --</option>
                 @foreach (var orden in OrdenesActivas)
                 {
@@ -32,11 +41,8 @@
                 }
             </select>
             <BuscadorOrdenClinica @bind-Orden="IdOrdenInput" @bind-Nhcl="NhclInput" OnBuscar="CargarPorInputAsync" MostrarTextoBoton="false" />
-            <button class="btn btn-sm btn-danger app-doc-action app-doc-pdf" @onclick="ExportarRecetaPdfAsync" disabled="@(!ItemsReceta.Any())">
-                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Descargar Receta PDF (Doble Columna + QR)
-            </button>
         </div>
-    </div>
+    </section>
 
     @if (!string.IsNullOrEmpty(MensajeAlerta))
     {
@@ -54,11 +60,31 @@
         </div>
     }
 
+    @if (Paciente != null)
+    {
+        <ResumenPacienteClinico Orden="@IdOrden" Nhcl="@Paciente.Nhcl"
+                               Propietario="@Paciente.PropietarioNombre" Paciente="@Paciente.PacienteNombre" Especie="@Paciente.Especie">
+            <DetallePaciente>
+                <small>@Paciente.Raza@if (Paciente.FechaNacimiento.HasValue)
+                    {
+                        <text> · Edad: @Paciente.EdadTexto</text>
+                    }</small>
+            </DetallePaciente>
+            <Estado>
+                <strong>@Paciente.Sexo</strong>
+                @if (Paciente.Cierre == "S")
+                {
+                    <span class="badge bg-danger ms-1">Ficha cerrada</span>
+                }
+            </Estado>
+        </ResumenPacienteClinico>
+    }
+
     <div class="row g-3">
         <!-- Columna Izquierda: Buscador Histórico de Recetas Emitidas -->
         <div class="col-lg-4">
             <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-white fw-bold text-primary">
+                <div class="card-header consulta-registros fw-bold">
                     <i class="bi bi-search me-1"></i>Buscador de Recetas por Fechas
                 </div>
                 <div class="card-body">
@@ -119,10 +145,6 @@
                 <div class="card-header bg-white fw-bold text-primary d-flex justify-content-between align-items-center">
                     <span>
                         <i class="bi bi-capsule-pill me-1"></i>Prescripción Activa — Orden #@IdOrden
-                        @if (Paciente != null)
-                        {
-                            <span class="text-dark ms-2">(@Paciente.PacienteNombre — Propietario: @Paciente.PropietarioNombre)</span>
-                        }
                     </span>
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-success">@ItemsReceta.Count medicamento(s)</span>

@@ -156,47 +156,20 @@
 
     @if (Paciente != null && !CargandoInicial)
     {
-        <section class="card soap-patient mb-3" aria-label="Datos del paciente">
-            <div class="card-body py-2 px-3">
-                <div class="soap-patient-grid">
-                    <div class="soap-patient-detail">
-                        <i class="bi bi-heart-pulse" aria-hidden="true"></i>
-                        <div>
-                            <span class="text-muted d-block">PACIENTE / NHCL</span>
-                            <strong class="soap-patient-name">@Paciente.PacienteNombre</strong>
-                            <span class="badge soap-patient-chip ms-1">NHCL #@Paciente.Nhcl</span>
-                            <span class="badge soap-patient-chip ms-1">Orden #@Ficha.MedOrden</span>
-                        </div>
-                    </div>
-                    <div class="soap-patient-detail">
-                        <i class="bi bi-gender-ambiguous" aria-hidden="true"></i>
-                        <div>
-                            <span class="text-muted d-block">ESPECIE / RAZA / SEXO / EDAD</span>
-                            <strong>@Paciente.Especie — @Paciente.Raza (@Paciente.Sexo) | @Paciente.EdadTexto</strong>
-                        </div>
-                    </div>
-                    <div class="soap-patient-detail">
-                        <i class="bi bi-person" aria-hidden="true"></i>
-                        <div>
-                            <span class="text-muted d-block">PROPIETARIO / CONTACTO</span>
-                            <strong>@Paciente.PropietarioNombre (@Paciente.ClienteCedula)</strong>
-                        </div>
-                    </div>
-                    <div class="soap-patient-detail">
-                        <i class="bi bi-shield-plus" aria-hidden="true"></i>
-                        <div>
-                            <span class="text-muted d-block">TRIAJE TEMPERAMENTO / ESTERILIZADO</span>
-                            <span class="badge @ObtenerClaseBadgeTemperamento(Ficha.Temperamento)">
-                                <i class="bi bi-shield-fill-exclamation me-1"></i>@ObtenerTextoTemperamento(Ficha.Temperamento)
-                            </span>
-                            <span class="badge @(Ficha.Esterilizado == "S" ? "bg-info text-dark" : "bg-light text-dark border") ms-1">
-                                @(Ficha.Esterilizado == "S" ? "Esterilizado: SÍ" : "Esterilizado: NO")
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
+        <ResumenPacienteClinico Orden="@Ficha.MedOrden" Nhcl="@Paciente.Nhcl"
+                               Propietario="@Paciente.PropietarioNombre" Paciente="@Paciente.PacienteNombre" Especie="@Paciente.Especie">
+            <DetallePropietario><small>C.I.: @Paciente.ClienteCedula</small></DetallePropietario>
+            <DetallePaciente><small>@Paciente.Raza · Edad: @Paciente.EdadTexto</small></DetallePaciente>
+            <Estado>
+                <strong class="d-block">@Paciente.Sexo</strong>
+                <span class="badge @ObtenerClaseBadgeTemperamento(Ficha.Temperamento)">
+                    <i class="bi bi-shield-fill-exclamation me-1"></i>@ObtenerTextoTemperamento(Ficha.Temperamento)
+                </span>
+                <span class="badge @(Ficha.Esterilizado == "S" ? "bg-info text-dark" : "bg-light text-dark border")">
+                    @(Ficha.Esterilizado == "S" ? "Esterilizado: SÍ" : "Esterilizado: NO")
+                </span>
+            </Estado>
+        </ResumenPacienteClinico>
 
     }
 

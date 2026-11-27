@@ -1,0 +1,61 @@
+<section class="resumen-paciente mb-3" aria-label="Datos del paciente">
+    <div class="resumen-paciente-bloque">
+        <i class="bi bi-clipboard" aria-hidden="true"></i>
+        <div>
+            <span class="resumen-paciente-etiqueta">@EtiquetaHistoria</span>
+            <div class="resumen-paciente-identificadores">
+                @if (Orden > 0)
+                {
+                    <span>Ord:</span><strong>@Orden</strong>
+                }
+                <span>NHCL:</span><strong>@Nhcl</strong>
+            </div>
+            @DetalleHistoria
+        </div>
+    </div>
+    <div class="resumen-paciente-bloque">
+        <i class="bi bi-person" aria-hidden="true"></i>
+        <div>
+            <span class="resumen-paciente-etiqueta">Propietario (Cliente)</span>
+            <strong>@Propietario</strong>
+            @DetallePropietario
+        </div>
+    </div>
+    <div class="resumen-paciente-bloque">
+        <i class="bi bi-heart-pulse" aria-hidden="true"></i>
+        <div>
+            <span class="resumen-paciente-etiqueta">Paciente / Especie</span>
+            <strong class="resumen-paciente-nombre">@Paciente</strong>
+            @if (!string.IsNullOrWhiteSpace(Especie))
+            {
+                <span class="resumen-paciente-especie">@Especie</span>
+            }
+            @DetallePaciente
+        </div>
+    </div>
+    @if (Estado is not null)
+    {
+        <div class="resumen-paciente-bloque">
+            <i class="bi @IconoEstado" aria-hidden="true"></i>
+            <div>
+                <span class="resumen-paciente-etiqueta">@EtiquetaEstado</span>
+                @Estado
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public int Orden { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+    [Parameter] public string EtiquetaHistoria { get; set; } = "Orden / Historia (NHCL)";
+    [Parameter] public string? Propietario { get; set; }
+    [Parameter] public string? Paciente { get; set; }
+    [Parameter] public string? Especie { get; set; }
+    [Parameter] public string EtiquetaEstado { get; set; } = "Sexo / Estado";
+    [Parameter] public string IconoEstado { get; set; } = "bi-gender-ambiguous";
+    [Parameter] public RenderFragment? DetalleHistoria { get; set; }
+    [Parameter] public RenderFragment? DetallePropietario { get; set; }
+    [Parameter] public RenderFragment? DetallePaciente { get; set; }
+    [Parameter] public RenderFragment? Estado { get; set; }
+}
