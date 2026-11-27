@@ -5,13 +5,16 @@
 
 <PageTitle>Jaulas y espacios de hospitalización | e-ForVets</PageTitle>
 
-<div class="container-fluid py-3">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <div>
-            <h2 class="mb-0">Jaulas de hospitalización</h2>
-            <small class="text-muted">Administración por sede, piso y cuarto/consultorio con mapa visual de disponibilidad.</small>
+<div class="container-fluid py-3 clinical-kardex organizacion-kardex">
+    <header class="clinical-kardex-header">
+        <div class="organizacion-heading">
+            <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i>
+            <div>
+                <h1>Jaulas de hospitalización</h1>
+                <small class="text-muted">Administración por sede, piso y cuarto/consultorio con mapa visual de disponibilidad.</small>
+            </div>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
             @if (Permisos.Permite("programacion/consultorios") || Permisos.Permite("programacion/clinica"))
             {
                 <a class="btn btn-outline-secondary btn-sm" href="/programacion/consultorios">
@@ -25,7 +28,7 @@
                 </a>
             }
         </div>
-    </div>
+    </header>
 
     @if (!string.IsNullOrWhiteSpace(_mensaje))
     {
@@ -134,7 +137,7 @@
     </div>
 
     <!-- Filtros y leyenda -->
-    <div class="card shadow-sm mb-3">
+    <div class="card shadow-sm mb-3 organizacion-filtros">
         <div class="card-body py-2">
             <div class="row g-2 align-items-end">
                 <div class="col-md-2">
@@ -204,7 +207,7 @@
         @foreach (var grupo in JaulasFiltradas.GroupBy(j => new { j.Localidad, j.Piso, j.Consultorio }))
         {
             <div class="card shadow-sm mb-3">
-                <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="card-header bg-white organizacion-secundaria d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <div class="fw-bold">
                         <span class="badge bg-primary me-1">@grupo.Key.Localidad</span>
                         <span class="text-muted">@grupo.Key.Piso</span>

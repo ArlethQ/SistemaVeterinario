@@ -4,11 +4,14 @@
 
 <PageTitle>Salas de quirófano | e-ForVets</PageTitle>
 
-<div class="container-fluid py-3 salas-quirofano">
-    <header class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-        <div>
-            <h1 class="h2 mb-1">Salas de quirófano</h1>
-            <small class="text-muted">Disponibilidad y reservas por sucursal y piso</small>
+<div class="container-fluid py-3 clinical-kardex organizacion-kardex salas-quirofano">
+    <header class="clinical-kardex-header">
+        <div class="organizacion-heading">
+            <i class="bi bi-door-closed" aria-hidden="true"></i>
+            <div>
+                <h1>Salas de quirófano</h1>
+                <small class="text-muted">Disponibilidad y reservas por sucursal y piso</small>
+            </div>
         </div>
         <div class="d-flex flex-wrap gap-2">
             @if (Permisos.Permite("programacion/clinica"))
@@ -92,7 +95,7 @@
         </div>
     </section>
 
-    <section class="card shadow-sm mb-3" aria-label="Filtros de salas">
+    <section class="card shadow-sm mb-3 organizacion-filtros" aria-label="Filtros de salas">
         <div class="card-body row g-2">
             <div class="col-sm-6 col-lg-3">
                 <label class="form-label" for="filtro-sucursal">Sucursal</label>
@@ -146,7 +149,7 @@
         @foreach (var piso in SalasVisibles.GroupBy(s => new { s.IdPiso, s.Piso, s.Localidad }))
         {
             <section class="card shadow-sm mb-3">
-                <h2 class="card-header bg-white h6 mb-0 d-flex align-items-center gap-2">
+                <h2 class="card-header bg-white organizacion-secundaria h6 mb-0 d-flex align-items-center gap-2">
                     <span class="badge text-bg-primary">@piso.Key.Localidad</span>@piso.Key.Piso
                 </h2>
                 <div class="card-body sala-mapa">

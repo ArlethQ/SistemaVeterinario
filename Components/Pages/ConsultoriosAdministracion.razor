@@ -5,14 +5,20 @@
 
 <PageTitle>Pisos y consultorios | e-ForVets</PageTitle>
 
-<div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div><h2 class="mb-0">Pisos y consultorios</h2><small class="text-muted">Catálogo de espacios utilizados en la programación médica.</small></div>
+<div class="container-fluid py-3 clinical-kardex organizacion-kardex">
+    <header class="clinical-kardex-header">
+        <div class="organizacion-heading">
+            <i class="bi bi-building" aria-hidden="true"></i>
+            <div>
+                <h1>Pisos y consultorios</h1>
+                <small class="text-muted">Catálogo de espacios utilizados en la programación médica.</small>
+            </div>
+        </div>
         @if (Permisos.Permite("programacion/clinica"))
         {
             <a class="btn btn-outline-primary" href="/programacion/clinica">Volver a programación clínica</a>
         }
-    </div>
+    </header>
 
     @if (!string.IsNullOrWhiteSpace(_mensaje))
     {
@@ -20,28 +26,28 @@
     }
 
     <div class="row g-3">
-        <div class="col-lg-6">
-            <div class="card shadow-sm"><div class="card-header fw-bold">Pisos</div><div class="card-body">
-                <div class="row g-2 mb-3">
-                    <div class="col-md-5"><label class="form-label">Nombre</label><input class="form-control" placeholder="Ej. Planta baja, Piso 2" @bind="_piso.Nombre" /></div>
-                    <div class="col-md-5"><label class="form-label">Localidad</label><select class="form-select" @bind="_piso.IdLocalidad"><option value="0">Seleccione</option>@foreach(var x in _localidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
-                    <div class="col-md-2 align-self-end"><SaveButton class="btn btn-primary w-100" OnClick="GuardarPisoAsync">Guardar</SaveButton></div>
+        <div class="col-12 col-lg-6">
+            <div class="card shadow-sm"><div class="card-header bg-white fw-bold">Pisos</div><div class="card-body">
+                <div class="row g-3 mb-3 align-items-end">
+                    <div class="col-sm-6"><label class="form-label" for="nombre-piso">Nombre</label><input id="nombre-piso" class="form-control" placeholder="Ej. Planta baja, Piso 2" @bind="_piso.Nombre" /></div>
+                    <div class="col-sm-6"><label class="form-label" for="localidad-piso">Localidad</label><select id="localidad-piso" class="form-select" @bind="_piso.IdLocalidad"><option value="0">Seleccione</option>@foreach(var x in _localidades){<option value="@x.Id">@x.Descripcion</option>}</select></div>
+                    <div class="col-12 d-flex justify-content-end"><SaveButton class="btn btn-primary" OnClick="GuardarPisoAsync">Guardar piso</SaveButton></div>
                 </div>
-                <div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Piso</th><th>Localidad</th><th>Estado</th><th></th></tr></thead><tbody>
-                    @foreach(var x in _pisos){<tr><td>@x.Nombre</td><td>@x.Localidad</td><td><span class="badge @(x.Estado=="A"?"bg-success":"bg-secondary")">@(x.Estado=="A"?"Activo":"Inactivo")</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" @onclick="()=>EditarPiso(x)">Editar</button> <button class="btn btn-sm btn-outline-secondary" @onclick="()=>CambiarEstadoPisoAsync(x)">@(x.Estado=="A"?"Desactivar":"Activar")</button></td></tr>}
+                <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Piso</th><th>Localidad</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody>
+                    @foreach(var x in _pisos){<tr><td>@x.Nombre</td><td>@x.Localidad</td><td><span class="badge @(x.Estado=="A"?"bg-success":"bg-secondary")">@(x.Estado=="A"?"Activo":"Inactivo")</span></td><td><div class="d-flex justify-content-end flex-wrap gap-2"><button class="btn btn-sm btn-outline-primary" @onclick="()=>EditarPiso(x)">Editar</button> <button class="btn btn-sm btn-outline-secondary" @onclick="()=>CambiarEstadoPisoAsync(x)">@(x.Estado=="A"?"Desactivar":"Activar")</button></div></td></tr>}
                 </tbody></table></div>
             </div></div>
         </div>
 
-        <div class="col-lg-6">
-            <div class="card shadow-sm"><div class="card-header fw-bold">Consultorios</div><div class="card-body">
-                <div class="row g-2 mb-3">
-                    <div class="col-md-5"><label class="form-label">Nombre</label><input class="form-control" placeholder="Ej. Consultorio 101" @bind="_consultorio.Nombre" /></div>
-                    <div class="col-md-5"><label class="form-label">Piso</label><select class="form-select" @bind="_consultorio.IdPiso"><option value="0">Seleccione</option>@foreach(var x in _pisos.Where(p=>p.Estado=="A")){<option value="@x.Id">@x.Localidad · @x.Nombre</option>}</select></div>
-                    <div class="col-md-2 align-self-end"><SaveButton class="btn btn-primary w-100" OnClick="GuardarConsultorioAsync">Guardar</SaveButton></div>
+        <div class="col-12 col-lg-6">
+            <div class="card shadow-sm"><div class="card-header bg-white organizacion-secundaria fw-bold">Consultorios</div><div class="card-body">
+                <div class="row g-3 mb-3 align-items-end">
+                    <div class="col-sm-6"><label class="form-label" for="nombre-consultorio">Nombre</label><input id="nombre-consultorio" class="form-control" placeholder="Ej. Consultorio 101" @bind="_consultorio.Nombre" /></div>
+                    <div class="col-sm-6"><label class="form-label" for="piso-consultorio">Piso</label><select id="piso-consultorio" class="form-select" @bind="_consultorio.IdPiso"><option value="0">Seleccione</option>@foreach(var x in _pisos.Where(p=>p.Estado=="A")){<option value="@x.Id">@x.Localidad · @x.Nombre</option>}</select></div>
+                    <div class="col-12 d-flex justify-content-end"><SaveButton class="btn btn-primary" OnClick="GuardarConsultorioAsync">Guardar consultorio</SaveButton></div>
                 </div>
-                <div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Consultorio</th><th>Piso</th><th>Estado</th><th></th></tr></thead><tbody>
-                    @foreach(var x in _consultorios){<tr><td>@x.Nombre</td><td>@x.Piso</td><td><span class="badge @(x.Estado=="A"?"bg-success":"bg-secondary")">@(x.Estado=="A"?"Activo":"Inactivo")</span></td><td class="text-end"><button class="btn btn-sm btn-outline-primary" @onclick="()=>EditarConsultorio(x)">Editar</button> <button class="btn btn-sm btn-outline-secondary" @onclick="()=>CambiarEstadoConsultorioAsync(x)">@(x.Estado=="A"?"Desactivar":"Activar")</button></td></tr>}
+                <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Consultorio</th><th>Piso</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody>
+                    @foreach(var x in _consultorios){<tr><td>@x.Nombre</td><td>@x.Piso</td><td><span class="badge @(x.Estado=="A"?"bg-success":"bg-secondary")">@(x.Estado=="A"?"Activo":"Inactivo")</span></td><td><div class="d-flex justify-content-end flex-wrap gap-2"><button class="btn btn-sm btn-outline-primary" @onclick="()=>EditarConsultorio(x)">Editar</button> <button class="btn btn-sm btn-outline-secondary" @onclick="()=>CambiarEstadoConsultorioAsync(x)">@(x.Estado=="A"?"Desactivar":"Activar")</button></div></td></tr>}
                 </tbody></table></div>
             </div></div>
         </div>
