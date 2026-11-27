@@ -129,10 +129,6 @@
                     <details>
                         <summary><MenuIcon Name="surgery" /><span>Quirófano y anestesia</span><i>⌄</i></summary>
                         <div class="submenu">
-                            @if (TienePermiso("programacion/salas-quirofano"))
-                            {
-                                <NavLink href="programacion/salas-quirofano">Salas de quirófano</NavLink>
-                            }
                             @if (TienePermiso("quirofano/preanestesia"))
                             {
                                 <NavLink href="quirofano/preanestesia">Pre-anestesia</NavLink>
@@ -635,6 +631,10 @@
                             {
                                 <NavLink href="programacion/consultorios">Pisos y consultorios</NavLink>
                             }
+                            @if (TienePermiso("programacion/salas-quirofano"))
+                            {
+                                <NavLink href="programacion/salas-quirofano">Salas de quirófano</NavLink>
+                            }
                             @if (TienePermiso("programacion/jaulas") || TienePermiso("programacion/consultorios") || TienePermiso("programacion/clinica"))
                             {
                                 <NavLink href="programacion/jaulas">Jaulas</NavLink>
@@ -715,7 +715,6 @@
 
     private static readonly string[] RutasQuirofano =
     [
-        "programacion/salas-quirofano",
         "quirofano/preanestesia",
         "quirofano/preanestesia/checklist",
         "quirofano/pausa-seguridad",
@@ -841,6 +840,7 @@
     [
         "programacion/consultorios",
         "programacion/jaulas",
+        "programacion/salas-quirofano",
         "programacion/clinica"
     ];
 

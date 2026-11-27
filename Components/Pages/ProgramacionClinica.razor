@@ -216,8 +216,9 @@
                     @if(_horasFinDisponibles.Count == 0){<option value="">--</option>}else{@foreach(var hf in _horasFinDisponibles){<option value="@hf.Hora">@hf.Etiqueta</option>}}
                 </select>
             </div>
+            @SelectorSala
             <div class="col-md-3 d-flex align-items-end">
-                <SaveButton class="btn btn-primary w-100 fw-semibold py-2" OnClick="GuardarCirugia" Disabled="@(_cirugia.IdMedico <= 0 || _cirugia.IdLocalidad <= 0 || _slotsLibresCirugia.Count == 0 || string.IsNullOrWhiteSpace(_cirugia.HoraInicio) || string.IsNullOrWhiteSpace(_cirugia.HoraFin) || HayConflictoCirujanosAdicionales)">
+                <SaveButton class="btn btn-primary w-100 fw-semibold py-2" OnClick="GuardarCirugia" Disabled="@(_cirugia.IdMedico <= 0 || _cirugia.IdLocalidad <= 0 || _slotsLibresCirugia.Count == 0 || string.IsNullOrWhiteSpace(_cirugia.HoraInicio) || string.IsNullOrWhiteSpace(_cirugia.HoraFin) || HayConflictoCirujanosAdicionales || SalaPendiente)">
                     <i class="bi bi-check2-circle me-1"></i>Guardar cirugía
                 </SaveButton>
             </div>
@@ -305,7 +306,7 @@ var cirugiasVisiblesModal = _cirugias.Where(x =>
                             <td>@(string.IsNullOrWhiteSpace(x.Anestesiologo) ? "-" : x.Anestesiologo)</td>
                             <td class="fw-semibold">@x.Paciente</td>
                             <td>@x.Procedimiento</td>
-                            <td><span class="badge text-bg-light border text-dark">@x.HoraInicio - @x.HoraFin</span></td>
+                            <td><span class="badge text-bg-light border text-dark">@x.HoraInicio - @x.HoraFin</span><small class="d-block text-muted">@x.Sala</small></td>
                             <td class="text-end pe-4"><button class="btn btn-sm btn-outline-danger" @onclick="()=>CancelarCirugia(x.Id)">Cancelar</button></td>
                         </tr>
                     }
@@ -382,7 +383,8 @@ var cirugiasVisiblesModal = _cirugias.Where(x =>
 <div class="col-md-2"><label>Fecha</label><input type="date" class="form-control" value="@_cirugia.Fecha.ToString("yyyy-MM-dd")" @onchange="OnFechaCirugiaChangedAsync" min="@DateTime.Today.ToString("yyyy-MM-dd")"/></div>
 <div class="col-md-2"><label>Hora inicio (libre)</label><select class="form-select" value="@_cirugia.HoraInicio" @onchange="OnHoraInicioCirugiaChanged" disabled="@(_slotsLibresCirugia.Count == 0)">@if(_slotsLibresCirugia.Count == 0){<option value="">Sin horas libres</option>}else{<option value="">Seleccione</option>@foreach(var s in _slotsLibresCirugia){<option value="@s.Hora">@s.Hora</option>}}</select></div>
 <div class="col-md-2"><label>Hora fin / duración</label><select class="form-select" value="@_cirugia.HoraFin" @onchange="OnHoraFinCirugiaChanged" disabled="@(_horasFinDisponibles.Count == 0)">@if(_horasFinDisponibles.Count == 0){<option value="">--</option>}else{@foreach(var hf in _horasFinDisponibles){<option value="@hf.Hora">@hf.Etiqueta</option>}}</select></div>
-<div class="col-md-2 align-self-end"><SaveButton class="btn btn-primary" OnClick="GuardarCirugia" Disabled="@(_slotsLibresCirugia.Count == 0 || string.IsNullOrWhiteSpace(_cirugia.HoraInicio) || string.IsNullOrWhiteSpace(_cirugia.HoraFin) || HayConflictoCirujanosAdicionales)">Guardar cirugía</SaveButton></div>
+@SelectorSala
+<div class="col-md-2 align-self-end"><SaveButton class="btn btn-primary" OnClick="GuardarCirugia" Disabled="@(_slotsLibresCirugia.Count == 0 || string.IsNullOrWhiteSpace(_cirugia.HoraInicio) || string.IsNullOrWhiteSpace(_cirugia.HoraFin) || HayConflictoCirujanosAdicionales || SalaPendiente)">Guardar cirugía</SaveButton></div>
 @if(_cirugia.IdMedico > 0 && _cirugia.IdLocalidad > 0 && !_cargandoSlotsCirugia){
     var citasDia = _slotsTodosCirugia.Count(s => s.CitaExistente != null);
     var bloqueosDia = _slotsTodosCirugia.Count(s => s.Bloqueado);
@@ -428,11 +430,47 @@ else if (ModoModal && FiltrarPorMedicoEnModal && cirugiasVisibles.Count == 0)
 }
 else
 {
-    @foreach(var x in cirugiasVisibles){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td><div>@x.Medico</div>@if(!string.IsNullOrWhiteSpace(x.CirujanosAdicionalesNombres)){<small class="text-primary d-block">+ @x.CirujanosAdicionalesNombres</small>}</td><td>@(string.IsNullOrWhiteSpace(x.Anestesiologo) ? "-" : x.Anestesiologo)</td><td>@x.Paciente</td><td>@x.Procedimiento</td><td>@x.HoraInicio - @x.HoraFin</td><td><button class="btn btn-sm btn-outline-danger" @onclick="()=>CancelarCirugia(x.Id)">Cancelar</button></td></tr>}
+    @foreach(var x in cirugiasVisibles){<tr><td>@x.Fecha.ToString("yyyy-MM-dd")</td><td><div>@x.Medico</div>@if(!string.IsNullOrWhiteSpace(x.CirujanosAdicionalesNombres)){<small class="text-primary d-block">+ @x.CirujanosAdicionalesNombres</small>}</td><td>@(string.IsNullOrWhiteSpace(x.Anestesiologo) ? "-" : x.Anestesiologo)</td><td>@x.Paciente</td><td>@x.Procedimiento</td><td>@x.HoraInicio - @x.HoraFin<small class="d-block text-muted">@x.Sala</small></td><td><button class="btn btn-sm btn-outline-danger" @onclick="()=>CancelarCirugia(x.Id)">Cancelar</button></td></tr>}
 }
 </tbody></table>
 }</div>}
-@code{
+@code {
+    private RenderFragment SelectorSala => @<div class="col-md-3">
+        <label class="form-label" for="sala-cirugia">Sala de quirófano</label>
+        <select id="sala-cirugia" class="form-select" @bind="_cirugia.IdSala" disabled="@(!SalasCirugia.Any())">
+            <option value="">@(SalasCirugia.Any() ? "Seleccione una sala" : "Sin salas activas en la sucursal")</option>
+            @foreach (var sala in SalasCirugia)
+            {
+                var disponible = SalaDisponible(sala.Id);
+                <option value="@sala.Id" disabled="@(!disponible)">@sala.Codigo · @sala.Piso @(!disponible ? "(reservada)" : "")</option>
+            }
+        </select>
+        @if (_cirugia.IdSala is int idSala && !SalaDisponible(idSala))
+        {
+            <small class="text-danger">La sala ya tiene una reserva en ese horario.</small>
+        }
+    </div>;
+
+    private List<SalaQuirofanoDto> _salasQuirofano = [];
+    private IEnumerable<SalaQuirofanoDto> SalasCirugia => _salasQuirofano
+        .Where(s => s.Activa && s.IdLocalidad == _cirugia.IdLocalidad);
+
+    private bool SalaDisponible(int idSala)
+    {
+        if (!TimeSpan.TryParse(_cirugia.HoraInicio, out var inicio) ||
+            !TimeSpan.TryParse(_cirugia.HoraFin, out var fin)) return true;
+
+        return !_cirugias.Any(c => c.Estado == "A" && c.Id != _cirugia.Id
+            && c.IdLocalidad == _cirugia.IdLocalidad && c.Fecha.Date == _cirugia.Fecha.Date
+            && (c.IdSala == idSala || c.IdSala is null)
+            && TimeSpan.TryParse(c.HoraInicio, out var entrada) && entrada < fin
+            && TimeSpan.TryParse(c.HoraFin, out var salida) && salida > inicio);
+    }
+
+    private bool SalaPendiente => SalasCirugia.Any()
+        && (!_cirugia.IdSala.HasValue || !SalasCirugia.Any(s => s.Id == _cirugia.IdSala)
+            || !SalaDisponible(_cirugia.IdSala.Value));
+
 [Parameter] public bool ModoModal { get; set; }
 [Parameter] public bool MostrarSelectorPacienteEnModal { get; set; }
 [Parameter] public bool FiltrarPorMedicoEnModal { get; set; }
@@ -676,7 +714,7 @@ async Task CargarDisponibilidadMedicosCirugiaAsync()
 }
 
 async Task OnMedicoCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdMedico=int.TryParse(e.Value?.ToString(),out var id)?id:0;AsegurarLocalidadCirugia();LimpiarCirujanosAdicionalesInvalidos();await CargarSlotsDisponiblesCirugiaAsync();ValidarAnestesiologoDisponible();}
-async Task OnLocalidadCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdLocalidad=int.TryParse(e.Value?.ToString(),out var id)?id:0;if((PermitirElegirSucursalEnModal || FiltrarPorMedicoEnModal) && _cirugia.IdMedico>0 && !MedicosSoloCirugia.Any(m=>m.Id==_cirugia.IdMedico))_cirugia.IdMedico=0;LimpiarCirujanosAdicionalesInvalidos();await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}
+async Task OnLocalidadCirugiaChangedAsync(ChangeEventArgs e){_cirugia.IdSala=null;_cirugia.IdLocalidad=int.TryParse(e.Value?.ToString(),out var id)?id:0;if((PermitirElegirSucursalEnModal || FiltrarPorMedicoEnModal) && _cirugia.IdMedico>0 && !MedicosSoloCirugia.Any(m=>m.Id==_cirugia.IdMedico))_cirugia.IdMedico=0;LimpiarCirujanosAdicionalesInvalidos();await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}
 async Task OnFechaCirugiaChangedAsync(ChangeEventArgs e){if(DateTime.TryParse(e.Value?.ToString(),out var f))_cirugia.Fecha=f.Date;await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}
 void OnHoraInicioCirugiaChanged(ChangeEventArgs e){_cirugia.HoraInicio=e.Value?.ToString()??"";RecalcularHorasFinDisponibles();ValidarAnestesiologoDisponible();}
 void OnHoraFinCirugiaChanged(ChangeEventArgs e){_cirugia.HoraFin=e.Value?.ToString()??"";ValidarAnestesiologoDisponible();}
@@ -766,9 +804,48 @@ void RecalcularHorasFinDisponibles()
         }
     }
     if(_horasFinDisponibles.Count>0)_cirugia.HoraFin=_horasFinDisponibles[0].Hora;
-}async Task Cargar(){try{if(_tab=="horarios")_horarios=await Service.ObtenerHorariosAsync();else if(_tab=="excepciones")_excepciones=await Service.ObtenerExcepcionesAsync(DateTime.Today,DateTime.Today.AddMonths(6));else{_cirugias=await Service.ObtenerCirugiasAsync(ModoModal?DateTime.Today.AddMonths(-6):DateTime.Today.AddDays(-30),DateTime.Today.AddMonths(6));if(MostrarSelectorPacienteEnModal)_ordenesCirugiaPendientes=await ConsultaService.ObtenerOrdenesCirugiaPendientesAsync();}}catch(Exception ex){Mensaje(false,ex.Message);}}
+}async Task Cargar(){try{if(_tab=="horarios")_horarios=await Service.ObtenerHorariosAsync();else if(_tab=="excepciones")_excepciones=await Service.ObtenerExcepcionesAsync(DateTime.Today,DateTime.Today.AddMonths(6));else{_salasQuirofano=await Service.ObtenerSalasQuirofanoAsync();_cirugias=await Service.ObtenerCirugiasAsync(ModoModal?DateTime.Today.AddMonths(-6):DateTime.Today.AddDays(-30),DateTime.Today.AddMonths(6));if(MostrarSelectorPacienteEnModal)_ordenesCirugiaPendientes=await ConsultaService.ObtenerOrdenesCirugiaPendientesAsync();}}catch(Exception ex){Mensaje(false,ex.Message);}}
 void CambiarLocalidad(ChangeEventArgs e){_horario.IdLocalidad=int.TryParse(e.Value?.ToString(),out var id)?id:0;if(!EsProfesionalEnfermero(_horario.IdMedico)){_consultorioId=0;_horario.Piso=_horario.Consultorio="";}}void SeleccionarConsultorio(ChangeEventArgs e){_consultorioId=int.TryParse(e.Value?.ToString(),out var id)?id:0;var c=_consultorios.FirstOrDefault(x=>x.Id==_consultorioId);_horario.Piso=c?.Piso??"";_horario.Consultorio=c?.Nombre??"";}
 void Editar(HorarioMedicoDto x){_horario=new(){Id=x.Id,IdMedico=x.IdMedico,Dia=x.Dia,DiaIngles=x.DiaIngles,Desde=x.Desde,Hasta=x.Hasta,Intervalo=x.Intervalo,IdLocalidad=x.IdLocalidad,Piso=x.Piso,Consultorio=x.Consultorio,VigenciaDesde=x.VigenciaDesde,VigenciaHasta=x.VigenciaHasta};if(EsProfesionalEnfermero(x.IdMedico)){_consultorioId=0;_horario.Piso="General";_horario.Consultorio="Área General";}else{_consultorioId=_consultorios.FirstOrDefault(c=>c.Nombre.Equals(x.Consultorio,StringComparison.OrdinalIgnoreCase)&&c.Piso.Equals(x.Piso,StringComparison.OrdinalIgnoreCase))?.Id??0;}_mensaje="";}void CancelarHorario(){_horario=new();_consultorioId=0;_mensaje="";}
 async Task GuardarHorario(){try{if(_horario.IdMedico<=0){Mensaje(false,"Seleccione un profesional.");return;}var disponibles=LocalidadesDisponibles.ToList();if(disponibles.Count==0){Mensaje(false,"El profesional no tiene ninguna sucursal asignada en Usuarios.");return;}if(_horario.IdLocalidad<=0||!disponibles.Any(l=>l.Id==_horario.IdLocalidad)){Mensaje(false,"Seleccione una sucursal asignada al profesional.");return;}bool esEnf=EsProfesionalEnfermero(_horario.IdMedico);if(!esEnf&&_consultorioId<=0){Mensaje(false,"Seleccione un consultorio del catálogo.");return;}if(esEnf){_horario.Piso="General";_horario.Consultorio="Área General";}_horario.DiaIngles=Dias[_horario.Dia];var ok=await Service.GuardarHorarioAsync(_horario,Session.IdUser);Mensaje(ok,ok?"Horario guardado.":"El horario se cruza con otro registro del médico o contiene datos inválidos.");if(ok){_horario.Id=0;await Cargar();}}catch(Exception ex){Mensaje(false,$"No se pudo guardar el horario: {ex.Message}");}}async Task EliminarHorario(int id){await Service.EliminarHorarioAsync(id,Session.IdUser);await Cargar();}
-async Task BuscarPacientes()=>_pacientes=await Service.BuscarPacientesAsync(_filtroPaciente);async Task BuscarProcedimientos()=>_procedimientos=await Service.BuscarProcedimientosAsync(_filtroProcedimiento);async Task BuscarPacientesAutoAsync(){await BuscarPacientes();_mostrarPacientesSugeridos=!string.IsNullOrWhiteSpace(_filtroPaciente)&&_pacientes.Count>0;if(_pacientes.Count>0){_cirugia.Nhcl=_pacientes[0].Id;PreseleccionarProcedimientoOrdenSoap(_cirugia.Nhcl);}}async Task BuscarProcedimientosAutoAsync(){await BuscarProcedimientos();_mostrarProcedimientosSugeridos=!string.IsNullOrWhiteSpace(_filtroProcedimiento)&&_procedimientos.Count>0;if(_procedimientos.Count>0)_cirugia.IdProcedimiento=_procedimientos[0].Id;}void SeleccionarPacienteCirugia(SelectorClinicoDto x){_cirugia.Nhcl=x.Id;_filtroPaciente=x.Descripcion;_mostrarPacientesSugeridos=false;PreseleccionarProcedimientoOrdenSoap(x.Id);}void PreseleccionarProcedimientoOrdenSoap(int nhcl){var pend=_ordenesCirugiaPendientes.FirstOrDefault(o=>o.Nhcl==nhcl&&o.IdProducto>0);if(pend!=null){if(!_procedimientos.Any(p=>p.Id==pend.IdProducto))_procedimientos.Insert(0,new(){Id=pend.IdProducto,Descripcion=pend.DescripcionCirugia});_cirugia.IdProcedimiento=pend.IdProducto;_filtroProcedimiento=pend.DescripcionCirugia;}}async Task AplicarOrdenCirugiaPendiente(OrdenCirugiaItemDto ord){if(!_pacientes.Any(p=>p.Id==ord.Nhcl)){var buscados=await Service.BuscarPacientesAsync(ord.Nhcl.ToString());foreach(var b in buscados)if(!_pacientes.Any(p=>p.Id==b.Id))_pacientes.Insert(0,b);if(!_pacientes.Any(p=>p.Id==ord.Nhcl))_pacientes.Insert(0,new(){Id=ord.Nhcl,Descripcion=$"{ord.PacienteNombre} · NHCL {ord.Nhcl}"});}_cirugia.Nhcl=ord.Nhcl;_filtroPaciente=$"{ord.PacienteNombre} · NHCL {ord.Nhcl}";_mostrarPacientesSugeridos=false;if(ord.IdProducto>0){if(!_procedimientos.Any(p=>p.Id==ord.IdProducto))_procedimientos.Insert(0,new(){Id=ord.IdProducto,Descripcion=ord.DescripcionCirugia});_cirugia.IdProcedimiento=ord.IdProducto;_filtroProcedimiento=ord.DescripcionCirugia;}_mostrarProcedimientosSugeridos=false;}void SeleccionarProcedimientoCirugia(SelectorClinicoDto x){_cirugia.IdProcedimiento=x.Id;_filtroProcedimiento=x.Descripcion;_mostrarProcedimientosSugeridos=false;}async Task CerrarPacientesSugeridosAsync(){await Task.Delay(180);_mostrarPacientesSugeridos=false;}async Task CerrarProcedimientosSugeridosAsync(){await Task.Delay(180);_mostrarProcedimientosSugeridos=false;}async Task GuardarExcepcion(){if(_excepcion.IdMedico>0){var disp=LocalidadesExcepcionDisponibles.ToList();if(disp.Count==0){Mensaje(false,"El profesional no tiene ninguna sucursal asignada en Usuarios.");return;}if(_excepcion.IdLocalidad>0&&!disp.Any(l=>l.Id==_excepcion.IdLocalidad)){Mensaje(false,"Seleccione una sucursal asignada al profesional.");return;}}var ok=await Service.GuardarExcepcionAsync(_excepcion,Session.IdUser);Mensaje(ok,ok?"Bloqueo guardado.":"Datos inválidos o bloqueo superpuesto.");if(ok){_excepcion=new();await Cargar();}}async Task DesactivarExcepcion(int id){await Service.DesactivarExcepcionAsync(id,Session.IdUser);await Cargar();}async Task GuardarCirugia(){if(ModoModal&&IdOrden>0)_cirugia.IdOrden=IdOrden;var ok=await Service.GuardarCirugiaAsync(_cirugia,Session.IdUser);Mensaje(ok,ok?"Cirugía programada y enviada a Bandeja de Órdenes.":"Datos inválidos o cruce de agenda con cita, bloqueo u otra cirugía.");if(ok){var med=_cirugia.IdMedico;var loc=_cirugia.IdLocalidad;var fec=_cirugia.Fecha;_cirugia=new(){IdMedico=med,IdLocalidad=loc,Fecha=fec,Nhcl=ModoModal&&!MostrarSelectorPacienteEnModal?Nhcl:0,IdOrden=ModoModal&&IdOrden>0?IdOrden:null};if(MostrarSelectorPacienteEnModal){_filtroPaciente="";_filtroProcedimiento="";}await Cargar();await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}}async Task CancelarCirugia(int id){await Service.CancelarCirugiaAsync(id,Session.IdUser);await Cargar();await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}void Mensaje(bool ok,string t){_error=!ok;_mensaje=t;}
+async Task BuscarPacientes()=>_pacientes=await Service.BuscarPacientesAsync(_filtroPaciente);async Task BuscarProcedimientos()=>_procedimientos=await Service.BuscarProcedimientosAsync(_filtroProcedimiento);async Task BuscarPacientesAutoAsync(){await BuscarPacientes();_mostrarPacientesSugeridos=!string.IsNullOrWhiteSpace(_filtroPaciente)&&_pacientes.Count>0;if(_pacientes.Count>0){_cirugia.Nhcl=_pacientes[0].Id;PreseleccionarProcedimientoOrdenSoap(_cirugia.Nhcl);}}async Task BuscarProcedimientosAutoAsync(){await BuscarProcedimientos();_mostrarProcedimientosSugeridos=!string.IsNullOrWhiteSpace(_filtroProcedimiento)&&_procedimientos.Count>0;if(_procedimientos.Count>0)_cirugia.IdProcedimiento=_procedimientos[0].Id;}void SeleccionarPacienteCirugia(SelectorClinicoDto x){_cirugia.Nhcl=x.Id;_filtroPaciente=x.Descripcion;_mostrarPacientesSugeridos=false;PreseleccionarProcedimientoOrdenSoap(x.Id);}void PreseleccionarProcedimientoOrdenSoap(int nhcl){var pend=_ordenesCirugiaPendientes.FirstOrDefault(o=>o.Nhcl==nhcl&&o.IdProducto>0);if(pend!=null){if(!_procedimientos.Any(p=>p.Id==pend.IdProducto))_procedimientos.Insert(0,new(){Id=pend.IdProducto,Descripcion=pend.DescripcionCirugia});_cirugia.IdProcedimiento=pend.IdProducto;_filtroProcedimiento=pend.DescripcionCirugia;}}async Task AplicarOrdenCirugiaPendiente(OrdenCirugiaItemDto ord){if(!_pacientes.Any(p=>p.Id==ord.Nhcl)){var buscados=await Service.BuscarPacientesAsync(ord.Nhcl.ToString());foreach(var b in buscados)if(!_pacientes.Any(p=>p.Id==b.Id))_pacientes.Insert(0,b);if(!_pacientes.Any(p=>p.Id==ord.Nhcl))_pacientes.Insert(0,new(){Id=ord.Nhcl,Descripcion=$"{ord.PacienteNombre} · NHCL {ord.Nhcl}"});}_cirugia.Nhcl=ord.Nhcl;_filtroPaciente=$"{ord.PacienteNombre} · NHCL {ord.Nhcl}";_mostrarPacientesSugeridos=false;if(ord.IdProducto>0){if(!_procedimientos.Any(p=>p.Id==ord.IdProducto))_procedimientos.Insert(0,new(){Id=ord.IdProducto,Descripcion=ord.DescripcionCirugia});_cirugia.IdProcedimiento=ord.IdProducto;_filtroProcedimiento=ord.DescripcionCirugia;}_mostrarProcedimientosSugeridos=false;}void SeleccionarProcedimientoCirugia(SelectorClinicoDto x){_cirugia.IdProcedimiento=x.Id;_filtroProcedimiento=x.Descripcion;_mostrarProcedimientosSugeridos=false;}async Task CerrarPacientesSugeridosAsync(){await Task.Delay(180);_mostrarPacientesSugeridos=false;}async Task CerrarProcedimientosSugeridosAsync(){await Task.Delay(180);_mostrarProcedimientosSugeridos=false;}async Task GuardarExcepcion(){if(_excepcion.IdMedico>0){var disp=LocalidadesExcepcionDisponibles.ToList();if(disp.Count==0){Mensaje(false,"El profesional no tiene ninguna sucursal asignada en Usuarios.");return;}if(_excepcion.IdLocalidad>0&&!disp.Any(l=>l.Id==_excepcion.IdLocalidad)){Mensaje(false,"Seleccione una sucursal asignada al profesional.");return;}}var ok=await Service.GuardarExcepcionAsync(_excepcion,Session.IdUser);Mensaje(ok,ok?"Bloqueo guardado.":"Datos inválidos o bloqueo superpuesto.");if(ok){_excepcion=new();await Cargar();}}async Task DesactivarExcepcion(int id){await Service.DesactivarExcepcionAsync(id,Session.IdUser);await Cargar();}
+async Task GuardarCirugia()
+{
+    if (ModoModal && IdOrden > 0) _cirugia.IdOrden = IdOrden;
+    if (!SalasCirugia.Any()) _cirugia.IdSala = null;
+
+    try
+    {
+        var ok = await Service.GuardarCirugiaAsync(_cirugia, Session.IdUser);
+        if (!ok)
+        {
+            await Cargar();
+            Mensaje(false, "Revisa el horario del equipo y la disponibilidad de la sala.");
+            return;
+        }
+
+        _cirugia = new()
+        {
+            IdMedico = _cirugia.IdMedico,
+            IdLocalidad = _cirugia.IdLocalidad,
+            Fecha = _cirugia.Fecha,
+            Nhcl = ModoModal && !MostrarSelectorPacienteEnModal ? Nhcl : 0,
+            IdOrden = ModoModal && IdOrden > 0 ? IdOrden : null
+        };
+        if (MostrarSelectorPacienteEnModal)
+        {
+            _filtroPaciente = "";
+            _filtroProcedimiento = "";
+        }
+        Mensaje(true, "Cirugía programada y enviada a Bandeja de órdenes.");
+        await Cargar();
+        await CargarDisponibilidadMedicosCirugiaAsync();
+        await CargarSlotsDisponiblesCirugiaAsync();
+    }
+    catch (Exception ex)
+    {
+        Mensaje(false, $"No se pudo completar la programación. {ex.Message}");
+    }
+}
+async Task CancelarCirugia(int id){await Service.CancelarCirugiaAsync(id,Session.IdUser);await Cargar();await CargarDisponibilidadMedicosCirugiaAsync();await CargarSlotsDisponiblesCirugiaAsync();}void Mensaje(bool ok,string t){_error=!ok;_mensaje=t;}
 }
