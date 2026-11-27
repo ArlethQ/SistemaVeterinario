@@ -79,8 +79,16 @@ public sealed class TransfusionDto
     public decimal? VgaDonante { get; set; }
     public decimal? PtDonante { get; set; }
     public decimal? AlbuminaDonante { get; set; }
+    public string? ConsentimientoNombre { get; set; }
+    public string? TipificacionNombre { get; set; }
+    public string? PruebaMayorNombre { get; set; }
+    public string? PruebaMenorNombre { get; set; }
+    public Dictionary<string, AdjuntoTransfusionDto> AdjuntosPendientes { get; } = [];
+
     public List<TransfusionMonitoreoDto> Monitoreos { get; set; } = [];
 }
+
+public sealed record AdjuntoTransfusionDto(string Nombre, byte[] Contenido);
 
 public sealed class TransfusionMonitoreoDto
 {

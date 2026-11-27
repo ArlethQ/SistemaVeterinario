@@ -1,3 +1,4 @@
+@inject IJSRuntime ArchivosJS
 @page "/hospitalizacion/fichas-complementarias"
 @page "/hospitalizacion/fichas-complementarias/{IdOrden:int}/{Nhcl:int}"
 @inject IKardexService KardexService
@@ -138,7 +139,27 @@
 
             <div class="col-md-3"><label class="form-label">Médico responsable</label><InputText class="form-control" @bind-Value="_trans.MedicoResponsable" /></div>
             <div class="col-md-3"><label class="form-label">Doble verificación (dos responsables)</label><InputText class="form-control" @bind-Value="_trans.DobleVerificacion" /></div>
-            <div class="col-md-12 d-flex flex-wrap gap-4"><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.ConsentimientoConfirmado" />Consentimiento confirmado *</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.TipificacionVerificada" />Tipificación verificada *</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.CrossmatchMayor" />Crossmatch mayor</label><label><InputCheckbox class="form-check-input me-1" @bind-Value="_trans.CrossmatchMenor" />Crossmatch menor</label></div>
+            <h2 class="col-12 banda-transfusion">Documentos de compatibilidad</h2>
+            @foreach (var (tipo, titulo, nombreGuardado) in AdjuntosTransfusion())
+            {
+                var pendiente = _trans.AdjuntosPendientes.GetValueOrDefault(tipo);
+                <div class="col-sm-6 col-xl-3">
+                    <div class="trans-adjunto h-100">
+                        <label class="form-label" for="@($"adjunto-{tipo}")">@titulo</label>
+                        <InputFile id="@($"adjunto-{tipo}")" class="form-control form-control-sm"
+                                   accept=".pdf,.png,.jpg,.jpeg" OnChange="e => SeleccionarAdjuntoAsync(e, tipo)" />
+                        @if (pendiente is not null)
+                        {
+                            <span class="small text-break">Pendiente de guardar: @pendiente.Nombre</span>
+                        }
+                        else if (nombreGuardado is not null)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-primary text-break"
+                                    @onclick="() => DescargarAdjuntoAsync(tipo)">@nombreGuardado</button>
+                        }
+                    </div>
+                </div>
+            }
             <div class="col-12"><label class="form-label">Observaciones</label><InputTextArea class="form-control" rows="2" @bind-Value="_trans.Observaciones" /></div>
             <h2 class="col-12 banda-transfusion">Datos del receptor</h2>
             <div class="col-md-3"><span class="form-label d-block">N.º de ficha</span><strong>@_paciente?.Nhcl</strong></div>
@@ -203,7 +224,48 @@
 
         @{ var momentos = MomentosTransfusion.Concat(_trans.Monitoreos.Select(m => NormalizarMomento(m.Momento)))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(); }
-            <section class="history-panel mt-3"><h2 class="section-header">Monitorización de parámetros</h2><div class="table-responsive history-table">
+            <section class="history-panel mt-3"><h2 class="section-header">Monitorización de parámetros</h2>            <div class="trans-curva">
+                <label class="form-label" for="parametro-curva">Curva de monitoreo</label>
+                <select id="parametro-curva" class="form-select form-select-sm" @bind="_parametroCurva">
+                    @for (int indice = 0; indice < SeriesCurva.Length; indice++)
+                    {
+                        <option value="@indice">@SeriesCurva[indice].Etiqueta</option>
+                    }
+                </select>
+                @{ var puntosCurva = ObtenerPuntosCurva(); }
+                @if (puntosCurva.Count == 0)
+                {
+                    <p class="text-muted small mb-0">Registra un control con este parámetro para ver su curva.</p>
+                }
+                else
+                {
+                    var minimo = puntosCurva.Min(p => p.Valor);
+                    var maximo = puntosCurva.Max(p => p.Valor);
+                    var amplitud = Math.Max(maximo - minimo, 1);
+                    var coordenadas = puntosCurva.Select(p => (p.Minuto, p.Valor,
+                        X: 50 + 720 * p.Minuto / 360d,
+                        Y: 145 - 115 * (p.Valor - minimo) / amplitud)).ToArray();
+                    <svg viewBox="0 0 800 175" role="img" aria-label="@($"Curva de {SeriesCurva[_parametroCurva].Etiqueta}")">
+                        <path d="M50 25 V145 H770 M50 85 H770 M50 25 H770" fill="none" stroke="#c9d9e9" />
+                        <g class="texto-curva">
+                            <text x="45" y="30" text-anchor="end">@(maximo.ToString("0.##"))</text>
+                            <text x="45" y="147" text-anchor="end">@(minimo.ToString("0.##"))</text>
+                            <text x="50" y="164">T0</text>
+                            <text x="410" y="164" text-anchor="middle">3 h</text>
+                            <text x="770" y="164" text-anchor="end">6 h</text>
+                        </g>
+                        <polyline points="@string.Join(" ", coordenadas.Select(p => $"{SvgNumero(p.X)},{SvgNumero(p.Y)}"))"
+                                  fill="none" stroke="#0677aa" stroke-width="2.5" />
+                        @foreach (var punto in coordenadas)
+                        {
+                            <circle cx="@SvgNumero(punto.X)" cy="@SvgNumero(punto.Y)" r="4" fill="#0677aa">
+                                <title>@punto.Minuto min · @punto.Valor</title>
+                            </circle>
+                        }
+                    </svg>
+                }
+            </div>
+<div class="table-responsive history-table">
                 <table class="table table-sm align-middle mb-0 matriz-transfusion">
 
                     <thead>
@@ -282,6 +344,89 @@
     private string _filtro="", _mensaje=""; private bool _error;
     private List<OrdenActivaResumenDto> _ordenes=[]; private PacienteHeaderDto? _paciente;
     private PacienteHeaderDto _pacienteVista => _paciente ?? new();
+    private int _parametroCurva;
+    private static readonly (string Etiqueta, Func<TransfusionMonitoreoDto, double?> Valor)[] SeriesCurva =
+    [
+        ("Frecuencia cardíaca", m => m.FrecuenciaCardiaca),
+        ("Frecuencia respiratoria", m => m.FrecuenciaRespiratoria),
+        ("PAS", m => m.Pas), ("PAD", m => m.Pad), ("PAM", m => m.Pam),
+        ("Temperatura", m => (double?)m.Temperatura), ("TLLC", m => (double?)m.Tllc)
+    ];
+    private static readonly int[] MinutosCurva = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360];
+
+    private List<(int Minuto, double Valor)> ObtenerPuntosCurva()
+    {
+        var puntos = new List<(int, double)>();
+        for (int i = 0; i < MomentosTransfusion.Length; i++)
+        {
+            var momento = MomentosTransfusion[i];
+            var valor = _trans.Monitoreos
+                .Where(m => string.Equals(NormalizarMomento(m.Momento), momento, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(m => m.FechaHora).ThenBy(m => m.Id)
+                .Select(SeriesCurva[_parametroCurva].Valor).LastOrDefault(v => v.HasValue);
+            if (valor is double registrado)
+                puntos.Add((MinutosCurva[i], registrado));
+        }
+        return puntos;
+    }
+
+    private static string SvgNumero(double valor) => valor.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+
+    private (string Tipo, string Titulo, string? Nombre)[] AdjuntosTransfusion() =>
+    [
+        ("Consentimiento", "Consentimiento *", _trans.ConsentimientoNombre),
+        ("Tipificacion", "Tipificación *", _trans.TipificacionNombre),
+        ("PruebaMayor", "Crossmatch mayor", _trans.PruebaMayorNombre),
+        ("PruebaMenor", "Crossmatch menor", _trans.PruebaMenorNombre)
+    ];
+
+    private async Task SeleccionarAdjuntoAsync(InputFileChangeEventArgs e, string tipo)
+    {
+        var ficha = _trans;
+        try
+        {
+            var archivo = e.File;
+            var nombre = System.IO.Path.GetFileName(archivo.Name);
+            if (nombre.Length is 0 or > 200)
+                throw new InvalidOperationException("El nombre del archivo debe tener entre 1 y 200 caracteres.");
+
+            await using var entrada = archivo.OpenReadStream(5 * 1024 * 1024);
+            using var memoria = new MemoryStream();
+            await entrada.CopyToAsync(memoria);
+            var bytes = memoria.ToArray();
+            bool valido = System.IO.Path.GetExtension(nombre).ToLowerInvariant() switch
+            {
+                ".pdf" => bytes.AsSpan().StartsWith("%PDF-"u8),
+                ".png" => bytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }),
+                ".jpg" or ".jpeg" => bytes.AsSpan().StartsWith(new byte[] { 255, 216, 255 }),
+                _ => false
+            };
+            if (!valido)
+                throw new InvalidOperationException("Selecciona un archivo PDF, PNG o JPEG válido.");
+
+            if (!ReferenceEquals(ficha, _trans)) return;
+            ficha.AdjuntosPendientes[tipo] = new AdjuntoTransfusionDto(nombre, bytes);
+            _error = false;
+            _mensaje = "";
+        }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(ficha, _trans)) Error(ex);
+        }
+    }
+
+    private async Task DescargarAdjuntoAsync(string tipo)
+    {
+        try
+        {
+            var adjunto = await FichasService.ObtenerAdjuntoTransfusionAsync(_trans.Id, IdOrden, tipo);
+            if (adjunto is not null)
+                await ArchivosJS.InvokeVoidAsync("hosvetDownloadFile", adjunto.Nombre, "application/octet-stream",
+                    Convert.ToBase64String(adjunto.Contenido));
+        }
+        catch (Exception ex) { Error(ex); }
+    }
+
     private static readonly string[] MomentosTransfusion = ["T0", "15 min", "30 min", "45 min", "60 min", "1.5 h", "2 h", "2.5 h", "3 h", "3.5 h", "4 h", "4.5 h", "5 h", "5.5 h", "6 h"];
     private static readonly (string Etiqueta, Func<TransfusionMonitoreoDto, string?> Obtener)[] ParametrosTransfusion =
     [
