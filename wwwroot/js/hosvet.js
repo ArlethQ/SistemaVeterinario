@@ -1134,3 +1134,19 @@ window.hosvetNotificaciones = (() => {
 })();
 
 
+
+window.hosvetTransfusionAdjunto = {
+    abrir(dialog) {
+        dialog.oncancel = event => event.preventDefault();
+        if (!dialog.open) dialog.showModal();
+    },
+    cerrar(dialog) {
+        dialog.close();
+    },
+    async url(stream, mime) {
+        return URL.createObjectURL(new Blob([await stream.arrayBuffer()], { type: mime }));
+    },
+    liberar(url) {
+        if (url) URL.revokeObjectURL(url);
+    }
+};

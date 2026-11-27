@@ -15,6 +15,7 @@ public interface IFichasClinicasComplementariasService
     Task<List<TransfusionDto>> ObtenerTransfusionesAsync(int idOrden, int nhcl);
     Task<int> GuardarTransfusionAsync(TransfusionDto dto, int idUsuario);
     Task<AdjuntoTransfusionDto?> ObtenerAdjuntoTransfusionAsync(int id, int idOrden, string tipo);
+    Task GuardarAdjuntoTransfusionAsync(int id, int idOrden, string tipo, AdjuntoTransfusionDto adjunto);
     Task GuardarControlCuadriculaAsync(TransfusionMonitoreoDto dto, int idOrden);
     Task AgregarMonitoreoAsync(TransfusionMonitoreoDto dto, int idOrden, int idUsuario);
     Task EliminarTransfusionAsync(int id, int idOrden);
@@ -216,7 +217,24 @@ VALUES(@IdOrden,@Nhcl,@Fecha,@Turno,@Subjetivo,@Objetivo,@Analisis,@Plan,@Examen
     public async Task<AdjuntoTransfusionDto?> ObtenerAdjuntoTransfusionAsync(int id, int idOrden, string tipo)
     {
         await InicializarAsync();
-        var columna = tipo switch
+        var columna = ColumnaAdjunto(tipo);
+        return (await _db.QueryAsync<AdjuntoTransfusionDto>(
+            $"SELECT {columna}Nombre Nombre, {columna}Contenido Contenido FROM clin_transfusion WHERE id=@Id AND id_orden=@IdOrden AND {columna}Contenido IS NOT NULL",
+            new { Id = id, IdOrden = idOrden })).SingleOrDefault();
+    }
+
+    public async Task GuardarAdjuntoTransfusionAsync(int id, int idOrden, string tipo, AdjuntoTransfusionDto adjunto)
+    {
+        await InicializarAsync();
+        var columna = ColumnaAdjunto(tipo);
+        var filas = await _db.ExecuteAsync(
+            $"UPDATE dbo.clin_transfusion SET {columna}Nombre=@Nombre, {columna}Contenido=@Contenido WHERE id=@Id AND id_orden=@IdOrden",
+            new { Id = id, IdOrden = idOrden, adjunto.Nombre, adjunto.Contenido });
+        if (filas == 0)
+            throw new InvalidOperationException("La transfusión ya no está disponible en esta orden.");
+    }
+
+    private static string ColumnaAdjunto(string tipo) => tipo switch
         {
             "Consentimiento" => "Consentimiento",
             "Tipificacion" => "Tipificacion",
@@ -224,10 +242,6 @@ VALUES(@IdOrden,@Nhcl,@Fecha,@Turno,@Subjetivo,@Objetivo,@Analisis,@Plan,@Examen
             "PruebaMenor" => "PruebaMenor",
             _ => throw new ArgumentException("Tipo de adjunto inválido.", nameof(tipo))
         };
-        return (await _db.QueryAsync<AdjuntoTransfusionDto>(
-            $"SELECT {columna}Nombre Nombre, {columna}Contenido Contenido FROM clin_transfusion WHERE id=@Id AND id_orden=@IdOrden AND {columna}Contenido IS NOT NULL",
-            new { Id = id, IdOrden = idOrden })).SingleOrDefault();
-    }
 
     public async Task GuardarControlCuadriculaAsync(TransfusionMonitoreoDto d, int idOrden)
     {

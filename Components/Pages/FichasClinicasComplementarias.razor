@@ -1,3 +1,4 @@
+@implements IAsyncDisposable
 @inject IJSRuntime ArchivosJS
 @page "/hospitalizacion/fichas-complementarias"
 @page "/hospitalizacion/fichas-complementarias/{IdOrden:int}/{Nhcl:int}"
@@ -106,7 +107,7 @@
     <fieldset disabled="@(_paciente is null || _guardandoCuadricula)">
         <div id="panel-trans-ficha" hidden="@_mostrarHistorial">
         <div class="alert alert-warning small"><strong>Seguridad:</strong> verifique identidad del paciente, unidad, vencimiento, consentimiento, tipificación y compatibilidad conforme al protocolo institucional antes de iniciar.</div>
-        <div class="card border-0 shadow-sm clinical-card"><div class="card-header section-header section-transfusion"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i><span><strong>Ficha de monitoreo transfusional de hemoderivados</strong></span></div><div class="card-body hoja-transfusion"><div class="row g-2">
+        <div class="card border-0 shadow-sm clinical-card"><div class="card-header section-header section-transfusion"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i><span><strong>Ficha de monitoreo transfusional de hemoderivados</strong></span></div><div class="card-body hoja-transfusion"><div class="row g-2 trans-formulario">
             <h2 class="col-12 banda-transfusion">Producto sanguíneo</h2>
             <div class="col-md-3"><label class="form-label" for="producto-transfusion">Producto *</label><InputSelect id="producto-transfusion" class="form-select" @bind-Value="_trans.Producto">
                     <option value="">Selecciona un producto</option>
@@ -140,6 +141,7 @@
             <div class="col-md-3"><label class="form-label">Estado</label><InputSelect class="form-select" @bind-Value="_trans.Estado"><option>En preparación</option><option>En curso</option><option>Completada</option><option>Suspendida</option><option>Reacción adversa</option></InputSelect></div>
 
 
+            <h2 class="col-12 banda-transfusion">Administración</h2>
             <div class="col-md-2"><label class="form-label">Vol. prescrito (ml)</label><InputNumber class="form-control" @bind-Value="_trans.VolumenPrescritoMl" /></div>
             <div class="col-md-2"><label class="form-label">Administrado (ml)</label><InputNumber class="form-control" @bind-Value="_trans.VolumenAdministradoMl" /></div>
             <div class="col-md-2"><label class="form-label">Velocidad (ml/h)</label><InputNumber class="form-control" @bind-Value="_trans.VelocidadMlHora" /></div>
@@ -148,28 +150,42 @@
 
             <div class="col-md-3"><label class="form-label">Médico responsable</label><InputText class="form-control" @bind-Value="_trans.MedicoResponsable" /></div>
             <div class="col-md-3"><label class="form-label">Doble verificación (dos responsables)</label><InputText class="form-control" @bind-Value="_trans.DobleVerificacion" /></div>
-            <h2 class="col-12 banda-transfusion">Documentos de compatibilidad</h2>
-            @foreach (var (tipo, titulo, nombreGuardado) in AdjuntosTransfusion())
-            {
-                var pendiente = _trans.AdjuntosPendientes.GetValueOrDefault(tipo);
-                <div class="col-sm-6 col-xl-3">
-                    <div class="trans-adjunto h-100">
-                        <label class="form-label" for="@($"adjunto-{tipo}")">@titulo</label>
-                        <InputFile id="@($"adjunto-{tipo}")" class="form-control form-control-sm"
-                                   accept=".pdf,.png,.jpg,.jpeg" OnChange="e => SeleccionarAdjuntoAsync(e, tipo)" />
-                        @if (pendiente is not null)
-                        {
-                            <span class="small text-break">Pendiente de guardar: @pendiente.Nombre</span>
-                        }
-                        else if (nombreGuardado is not null)
-                        {
-                            <button type="button" class="btn btn-sm btn-outline-primary text-break"
-                                    @onclick="() => DescargarAdjuntoAsync(tipo)">@nombreGuardado</button>
-                        }
-                    </div>
-                </div>
-            }
             <div class="col-12"><label class="form-label">Observaciones</label><InputTextArea class="form-control" rows="2" @bind-Value="_trans.Observaciones" /></div>
+            <div class="col-12">
+                <section class="trans-documentos" aria-labelledby="trans-documentos-titulo">
+                    <h2 id="trans-documentos-titulo"><i class="bi bi-paperclip" aria-hidden="true"></i> Documentos de compatibilidad</h2>
+                    <ul class="list-unstyled mb-0">
+                        @foreach (var (tipo, titulo, nombreGuardado) in AdjuntosTransfusion(_trans))
+                        {
+                            var pendiente = _trans.AdjuntosPendientes.GetValueOrDefault(tipo);
+                            var nombre = pendiente?.Nombre ?? nombreGuardado;
+                            <li class="trans-documento-fila">
+                                <strong>@titulo</strong>
+                                <span class="text-truncate" title="@nombre">
+                                    @(nombre ?? "Sin archivo")
+                                    @if (pendiente is not null)
+                                    {
+                                        <span class="badge text-bg-warning ms-1">Pendiente</span>
+                                    }
+                                </span>
+                                <div class="trans-documento-botones">
+                                    @if (nombre is not null)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AbrirAdjuntosAsync(_trans, tipo)">
+                                            <i class="bi bi-eye" aria-hidden="true"></i> Ver
+                                        </button>
+                                    }
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => AbrirAdjuntosAsync(_trans, tipo, editar: true)">
+                                        <i class="bi @(nombre is null ? "bi-paperclip" : "bi-pencil")" aria-hidden="true"></i>
+                                        @(nombre is null ? "Adjuntar" : "Editar")
+                                    </button>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            </div>
+
             <h2 class="col-12 banda-transfusion">Datos del receptor</h2>
             <div class="col-md-3"><span class="form-label d-block">N.º de ficha</span><strong>@_paciente?.Nhcl</strong></div>
             <div class="col-md-3"><span class="form-label d-block">Especie</span><strong>@_paciente?.Especie</strong></div>
@@ -247,49 +263,53 @@
                 @{
                     var curvas = SeriesCurva.Select(serie => momentos.Select(momento => serie.Valor(ControlVisible(momento))).ToArray()).ToArray();
                     var maximo = Math.Max(200, Math.Ceiling((curvas.SelectMany(c => c).Max() ?? 0) / 20) * 20);
+                    var primeraMarcaAlta = maximo / 10;
+                    const double pasoVertical = 280d / 15;
                     double PosicionY(double valor) => valor <= 10
-                        ? 300 - valor * 9.2
-                        : 208 - (valor - 10) * 188 / (maximo - 10);
+                        ? 300 - valor / 2 * pasoVertical
+                        : valor <= primeraMarcaAlta
+                            ? 300 - (5 + (valor - 10) / (primeraMarcaAlta - 10)) * pasoVertical
+                            : 300 - (5 + valor / primeraMarcaAlta) * pasoVertical;
                     var marcas = new[] { 2d, 4, 6, 8, 10 }.Concat(
                         Enumerable.Range(1, 10).Select(paso => maximo * paso / 10));
-                    var anchoColumna = 1020d / momentos.Length;
+                    var anchoColumna = 1050d / momentos.Length;
                 }
                 <div class="trans-hoja-grafica">
                 <svg class="trans-trazado" viewBox="0 0 1200 340" role="img"
                      aria-label="Curvas de los parámetros registrados por momento de la transfusión">
-                    <rect x="180" y="20" width="1020" height="280" fill="#fff" />
+                    <rect x="150" y="20" width="1050" height="280" fill="#fff" />
                     @foreach (var marca in marcas)
                     {
                         var y = SvgNumero(PosicionY(marca));
-                        <line x1="180" x2="1200" y1="@y" y2="@y" stroke="#c4d3e2" />
-                        <g><text x="172" y="@SvgNumero(PosicionY(marca) + 4)" text-anchor="end">@marca</text></g>
+                        <line x1="150" x2="1200" y1="@y" y2="@y" stroke="#c4d3e2" />
+                        <g><text x="142" y="@SvgNumero(PosicionY(marca) + 4)" text-anchor="end">@marca</text></g>
                     }
                     @for (int columna = 0; columna < momentos.Length; columna++)
                     {
-                        var borde = SvgNumero(180 + columna * anchoColumna);
+                        var borde = SvgNumero(150 + columna * anchoColumna);
                         if (columna % 3 == 2)
                         {
                             <rect x="@borde" y="20" width="@SvgNumero(anchoColumna)" height="280" fill="#6482a4" opacity=".06" />
                         }
-                        var centro = SvgNumero(180 + (columna + .5) * anchoColumna);
+                        var centro = SvgNumero(150 + (columna + .5) * anchoColumna);
                         <line x1="@borde" x2="@borde" y1="20" y2="300"
                               stroke="@(columna % 3 == 0 ? "#203b60" : "#c4d3e2")" stroke-width="@(columna % 3 == 0 ? 2 : 1)" />
                         <g><text x="@centro" y="324" text-anchor="middle">@momentos[columna]</text></g>
                     }
-                    <rect x="180" y="20" width="1019" height="280" fill="none" stroke="#203b60" stroke-width="2" />
+                    <rect x="150" y="20" width="1049" height="280" fill="none" stroke="#203b60" stroke-width="2" />
                     @for (int serie = 0; serie < SeriesCurva.Length; serie++)
                     {
                         var configuracion = SeriesCurva[serie];
                         for (int columna = 0; columna < momentos.Length; columna++)
                         {
                             if (curvas[serie][columna] is not double valor) continue;
-                            var x = 180 + (columna + .5) * anchoColumna;
+                            var x = 150 + (columna + .5) * anchoColumna;
                             var y = PosicionY(valor);
                             if (columna > 0 && curvas[serie][columna - 1] is double previo)
                             {
                                 <line x1="@SvgNumero(x - anchoColumna)" x2="@SvgNumero(x)"
                                       y1="@SvgNumero(PosicionY(previo))" y2="@SvgNumero(y)"
-                                      stroke="@configuracion.Color" stroke-width="2" />
+                                      stroke="@configuracion.Color" stroke-width="2" stroke-dasharray="@(configuracion.Simbolo == "◦" ? "4,2" : null)" />
                             }
                             <g><text x="@SvgNumero(x)" y="@SvgNumero(y + 5)" text-anchor="middle"
                                      class="trans-marca" fill="@configuracion.Color">@configuracion.Simbolo</text>
@@ -487,16 +507,86 @@
         }
         </div>
         <div id="panel-trans-historial" hidden="@(!_mostrarHistorial)">
-        <section class="history-panel mt-3"><h2 class="section-header">Historial de transfusiones</h2><div class="table-responsive history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Fecha</th><th>Producto/unidad</th><th>Compatibilidad</th><th>Volumen</th><th>Estado</th><th>Controles</th><th>Acciones</th></tr></thead><tbody>
+        <section class="history-panel mt-3"><h2 class="section-header">Historial de transfusiones</h2><div class="table-responsive history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Fecha</th><th>Producto/unidad</th><th>Compatibilidad</th><th>Volumen</th><th>Estado</th><th>Controles</th><th>Documentos</th><th>Acciones</th></tr></thead><tbody>
         @if (_transfusiones.Count == 0)
         {
-            <tr><td colspan="7" class="text-center text-muted">@(_paciente is null ? "Selecciona una orden para consultar sus transfusiones." : "Esta orden aún no tiene transfusiones registradas.")</td></tr>
+            <tr><td colspan="8" class="text-center text-muted">@(_paciente is null ? "Selecciona una orden para consultar sus transfusiones." : "Esta orden aún no tiene transfusiones registradas.")</td></tr>
         }
-        @foreach (var x in _transfusiones) { <tr><td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Producto / @x.IdentificadorUnidad</td><td>@x.GrupoReceptor → @x.GrupoDonante</td><td>@x.VolumenAdministradoMl / @x.VolumenPrescritoMl ml</td><td>@x.Estado</td><td>@x.Monitoreos.Count</td><td class="text-end text-nowrap"><button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditarTrans(x)">Abrir</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarTransAsync(x.Id)">Eliminar</button></td></tr> }
+        @foreach (var x in _transfusiones) { <tr><td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Producto / @x.IdentificadorUnidad</td><td>@x.GrupoReceptor → @x.GrupoDonante</td><td>@x.VolumenAdministradoMl / @x.VolumenPrescritoMl ml</td><td>@x.Estado</td><td>@x.Monitoreos.Count</td><td><button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AbrirAdjuntosAsync(x, desdeHistorial: true)">Documentos (@AdjuntosTransfusion(x).Count(a => a.Nombre is not null))</button></td><td class="text-end text-nowrap"><button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditarTrans(x)">Abrir</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarTransAsync(x.Id)">Eliminar</button></td></tr> }
         </tbody></table></div></section>
         </div>
     </fieldset>
 </div>
+
+<dialog @ref="_dialogoAdjunto" class="trans-dialogo" aria-labelledby="trans-documento-titulo"
+        @onkeydown="CerrarAdjuntoConTeclaAsync">
+    @if (_fichaAdjunto is { } ficha)
+    {
+        <header class="trans-dialogo-cabecera">
+            <h2 id="trans-documento-titulo">Documentos de transfusión</h2>
+            <button type="button" class="btn-close btn-close-white" aria-label="Cerrar" @onclick="CerrarAdjuntoAsync"></button>
+        </header>
+        <div class="trans-dialogo-cuerpo">
+            <div class="d-flex align-items-end flex-wrap gap-2 mb-3">
+                <div>
+                    <label for="trans-documento-tipo" class="form-label">Documento</label>
+                    <select id="trans-documento-tipo" class="form-select form-select-sm" value="@_tipoAdjunto"
+                            disabled="@_cargandoAdjunto" @onchange="CambiarTipoAdjuntoAsync">
+                        @foreach (var adjunto in AdjuntosTransfusion(ficha))
+                        {
+                            <option value="@adjunto.Tipo">@adjunto.Titulo</option>
+                        }
+                    </select>
+                </div>
+                @if (!_editandoAdjunto)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_cargandoAdjunto"
+                            @onclick="() => _editandoAdjunto = true">@(_archivoAdjunto is null ? "Adjuntar" : "Editar")</button>
+                }
+            </div>
+            @if (_errorAdjunto is not null)
+            {
+                <div class="alert alert-danger py-2" role="alert">@_errorAdjunto</div>
+            }
+            @if (_editandoAdjunto)
+            {
+                <label for="trans-documento-archivo" class="form-label">@(_archivoAdjunto is null ? "Seleccionar archivo" : "Reemplazar archivo")</label>
+                <InputFile id="trans-documento-archivo" class="form-control form-control-sm mb-3"
+                           disabled="@_cargandoAdjunto" accept=".pdf,.png,.jpg,.jpeg" OnChange="SeleccionarAdjuntoAsync" />
+            }
+            @if (_cargandoAdjunto)
+            {
+                <p class="small" role="status">Cargando documento…</p>
+            }
+            else if (_urlAdjunto is not null && _archivoAdjunto is not null)
+            {
+                <p class="small text-break mb-2">@_archivoAdjunto.Nombre</p>
+                @if (_mimeAdjunto == "application/pdf")
+                {
+                    <iframe class="trans-vista-pdf" src="@_urlAdjunto" title="@_archivoAdjunto.Nombre"></iframe>
+                }
+                else
+                {
+                    <img class="trans-vista-imagen" src="@_urlAdjunto" alt="@_archivoAdjunto.Nombre" />
+                }
+                <a class="btn btn-sm btn-outline-secondary mt-2" href="@_urlAdjunto" download="@_archivoAdjunto.Nombre">Descargar</a>
+            }
+            else if (!_editandoAdjunto && _errorAdjunto is null)
+            {
+                <p class="small text-muted mb-0">Este documento todavía no tiene un archivo adjunto.</p>
+            }
+        </div>
+        <footer class="trans-dialogo-acciones">
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CerrarAdjuntoAsync">Cerrar</button>
+            @if (_reemplazoAdjunto is not null)
+            {
+                <SaveButton class="btn btn-sm btn-primary" Disabled="@_cargandoAdjunto" OnClick="AplicarAdjuntoAsync">
+                    @(_adjuntoDesdeHistorial ? "Guardar documento" : "Usar archivo")
+                </SaveButton>
+            }
+        </footer>
+    }
+</dialog>
 
 @code {
     [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
@@ -507,71 +597,166 @@
     private PacienteHeaderDto _pacienteVista => _paciente ?? new();
     private static readonly (string Etiqueta, string Color, string Simbolo, Func<TransfusionMonitoreoDto, double?> Valor)[] SeriesCurva =
     [
-        ("FC (lpm)", "#b71c1c", "●", m => m.FrecuenciaCardiaca),
-        ("FR (rpm)", "#1565c0", "◆", m => m.FrecuenciaRespiratoria),
-        ("PAS (mmHg)", "#18754e", "▼", m => m.Pas),
-        ("PAD (mmHg)", "#7935b0", "▲", m => m.Pad),
-        ("PAM (mmHg)", "#006b78", "■", m => m.Pam),
+        ("FC (lpm)", "#dc2626", "●", m => m.FrecuenciaCardiaca),
+        ("FR (rpm)", "#2563eb", "◦", m => m.FrecuenciaRespiratoria),
+        ("PAS (mmHg)", "#15803d", "˅", m => m.Pas),
+        ("PAD (mmHg)", "#16a34a", "˄", m => m.Pad),
+        ("PAM (mmHg)", "#0369a1", "–", m => m.Pam),
         ("Temperatura (°C)", "#a04b00", "✚", m => (double?)m.Temperatura),
         ("TLLC (s)", "#9d235e", "×", m => (double?)m.Tllc)
     ];
 
     private static string SvgNumero(double valor) => valor.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
-    private (string Tipo, string Titulo, string? Nombre)[] AdjuntosTransfusion() =>
+    private ElementReference _dialogoAdjunto;
+    private TransfusionDto? _fichaAdjunto;
+    private string _tipoAdjunto = "Consentimiento";
+    private string? _urlAdjunto, _mimeAdjunto, _errorAdjunto;
+    private AdjuntoTransfusionDto? _archivoAdjunto, _reemplazoAdjunto;
+    private bool _editandoAdjunto, _adjuntoDesdeHistorial, _cargandoAdjunto;
+
+    private static (string Tipo, string Titulo, string? Nombre)[] AdjuntosTransfusion(TransfusionDto ficha) =>
     [
-        ("Consentimiento", "Consentimiento *", _trans.ConsentimientoNombre),
-        ("Tipificacion", "Tipificación *", _trans.TipificacionNombre),
-        ("PruebaMayor", "Crossmatch mayor", _trans.PruebaMayorNombre),
-        ("PruebaMenor", "Crossmatch menor", _trans.PruebaMenorNombre)
+        ("Consentimiento", "Consentimiento", ficha.ConsentimientoNombre),
+        ("Tipificacion", "Tipificación", ficha.TipificacionNombre),
+        ("PruebaMayor", "Crossmatch mayor", ficha.PruebaMayorNombre),
+        ("PruebaMenor", "Crossmatch menor", ficha.PruebaMenorNombre)
     ];
 
-    private async Task SeleccionarAdjuntoAsync(InputFileChangeEventArgs e, string tipo)
+    private async Task AbrirAdjuntosAsync(TransfusionDto ficha, string? tipo = null, bool editar = false, bool desdeHistorial = false)
     {
-        var ficha = _trans;
-        try
-        {
-            var archivo = e.File;
-            var nombre = System.IO.Path.GetFileName(archivo.Name);
-            if (nombre.Length is 0 or > 200)
-                throw new InvalidOperationException("El nombre del archivo debe tener entre 1 y 200 caracteres.");
+        _fichaAdjunto = ficha;
+        _adjuntoDesdeHistorial = desdeHistorial;
+        _editandoAdjunto = editar;
+        _tipoAdjunto = tipo ?? AdjuntosTransfusion(ficha).FirstOrDefault(a => a.Nombre is not null).Tipo ?? "Consentimiento";
+        await ArchivosJS.InvokeVoidAsync("hosvetTransfusionAdjunto.abrir", _dialogoAdjunto);
+        await CargarAdjuntoAsync();
+    }
 
-            await using var entrada = archivo.OpenReadStream(5 * 1024 * 1024);
-            using var memoria = new MemoryStream();
-            await entrada.CopyToAsync(memoria);
-            var bytes = memoria.ToArray();
-            bool valido = System.IO.Path.GetExtension(nombre).ToLowerInvariant() switch
+    private async Task CambiarTipoAdjuntoAsync(ChangeEventArgs e)
+    {
+        _tipoAdjunto = e.Value?.ToString() ?? "Consentimiento";
+        _editandoAdjunto = false;
+        await CargarAdjuntoAsync();
+    }
+
+    private async Task CargarAdjuntoAsync()
+    {
+        if (_fichaAdjunto is not { } ficha) return;
+        await EjecutarAdjuntoAsync(async () =>
+        {
+            _archivoAdjunto = null;
+            _reemplazoAdjunto = null;
+            var archivo = _adjuntoDesdeHistorial ? null : ficha.AdjuntosPendientes.GetValueOrDefault(_tipoAdjunto);
+            if (archivo is null && ficha.Id > 0)
+                archivo = await FichasService.ObtenerAdjuntoTransfusionAsync(ficha.Id, ficha.IdOrden, _tipoAdjunto);
+            await MostrarAdjuntoAsync(archivo);
+        });
+    }
+
+    private async Task SeleccionarAdjuntoAsync(InputFileChangeEventArgs e) => await EjecutarAdjuntoAsync(async () =>
+    {
+        var archivo = e.File;
+        var nombre = System.IO.Path.GetFileName(archivo.Name);
+        if (nombre.Length is 0 or > 200)
+            throw new InvalidOperationException("El nombre del archivo debe tener entre 1 y 200 caracteres.");
+        if (archivo.Size > 5 * 1024 * 1024)
+            throw new InvalidOperationException("El archivo debe pesar como máximo 5 MB.");
+
+        await using var entrada = archivo.OpenReadStream(5 * 1024 * 1024);
+        using var memoria = new MemoryStream();
+        await entrada.CopyToAsync(memoria);
+        var bytes = memoria.ToArray();
+        bool valido = System.IO.Path.GetExtension(nombre).ToLowerInvariant() switch
+        {
+            ".pdf" => bytes.AsSpan().StartsWith("%PDF-"u8),
+            ".png" => bytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }),
+            ".jpg" or ".jpeg" => bytes.AsSpan().StartsWith(new byte[] { 255, 216, 255 }),
+            _ => false
+        };
+        if (!valido)
+            throw new InvalidOperationException("Selecciona un archivo PDF, PNG o JPEG válido.");
+
+        var reemplazo = new AdjuntoTransfusionDto(nombre, bytes);
+        await MostrarAdjuntoAsync(reemplazo);
+        _reemplazoAdjunto = reemplazo;
+    });
+
+    private async Task AplicarAdjuntoAsync()
+    {
+        if (_fichaAdjunto is not { } ficha || _reemplazoAdjunto is not { } reemplazo) return;
+        await EjecutarAdjuntoAsync(async () =>
+        {
+            if (_adjuntoDesdeHistorial)
             {
-                ".pdf" => bytes.AsSpan().StartsWith("%PDF-"u8),
-                ".png" => bytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }),
-                ".jpg" or ".jpeg" => bytes.AsSpan().StartsWith(new byte[] { 255, 216, 255 }),
-                _ => false
-            };
-            if (!valido)
-                throw new InvalidOperationException("Selecciona un archivo PDF, PNG o JPEG válido.");
+                await FichasService.GuardarAdjuntoTransfusionAsync(ficha.Id, ficha.IdOrden, _tipoAdjunto, reemplazo);
+                switch (_tipoAdjunto)
+                {
+                    case "Consentimiento": ficha.ConsentimientoNombre = reemplazo.Nombre; break;
+                    case "Tipificacion": ficha.TipificacionNombre = reemplazo.Nombre; break;
+                    case "PruebaMayor": ficha.PruebaMayorNombre = reemplazo.Nombre; break;
+                    case "PruebaMenor": ficha.PruebaMenorNombre = reemplazo.Nombre; break;
+                }
+            }
+            else
+            {
+                ficha.AdjuntosPendientes[_tipoAdjunto] = reemplazo;
+            }
 
-            if (!ReferenceEquals(ficha, _trans)) return;
-            ficha.AdjuntosPendientes[tipo] = new AdjuntoTransfusionDto(nombre, bytes);
-            _error = false;
-            _mensaje = "";
-        }
-        catch (Exception ex)
-        {
-            if (ReferenceEquals(ficha, _trans)) Error(ex);
-        }
+            _reemplazoAdjunto = null;
+            _editandoAdjunto = false;
+        });
     }
 
-    private async Task DescargarAdjuntoAsync(string tipo)
+    private async Task MostrarAdjuntoAsync(AdjuntoTransfusionDto? archivo)
     {
-        try
+        await LiberarAdjuntoAsync();
+        _archivoAdjunto = archivo;
+        if (archivo is null) return;
+
+        _mimeAdjunto = System.IO.Path.GetExtension(archivo.Nombre).ToLowerInvariant() switch
         {
-            var adjunto = await FichasService.ObtenerAdjuntoTransfusionAsync(_trans.Id, IdOrden, tipo);
-            if (adjunto is not null)
-                await ArchivosJS.InvokeVoidAsync("hosvetDownloadFile", adjunto.Nombre, "application/octet-stream",
-                    Convert.ToBase64String(adjunto.Contenido));
-        }
-        catch (Exception ex) { Error(ex); }
+            ".pdf" => "application/pdf",
+            ".png" => "image/png",
+            _ => "image/jpeg"
+        };
+        using var stream = new DotNetStreamReference(new MemoryStream(archivo.Contenido));
+        _urlAdjunto = await ArchivosJS.InvokeAsync<string>("hosvetTransfusionAdjunto.url", stream, _mimeAdjunto);
     }
+
+    private async Task EjecutarAdjuntoAsync(Func<Task> accion)
+    {
+        if (_cargandoAdjunto) return;
+        _cargandoAdjunto = true;
+        _errorAdjunto = null;
+        try { await accion(); }
+        catch (Exception ex) { _errorAdjunto = ex.GetBaseException().Message; }
+        finally { _cargandoAdjunto = false; }
+    }
+
+    private async Task CerrarAdjuntoAsync()
+    {
+        if (_cargandoAdjunto) return;
+        await ArchivosJS.InvokeVoidAsync("hosvetTransfusionAdjunto.cerrar", _dialogoAdjunto);
+        await LiberarAdjuntoAsync();
+        _fichaAdjunto = null;
+        _archivoAdjunto = null;
+        _reemplazoAdjunto = null;
+        _errorAdjunto = null;
+    }
+
+    private Task CerrarAdjuntoConTeclaAsync(KeyboardEventArgs e) =>
+        e.Key == "Escape" ? CerrarAdjuntoAsync() : Task.CompletedTask;
+
+    private async Task LiberarAdjuntoAsync()
+    {
+        if (_urlAdjunto is null) return;
+        try { await ArchivosJS.InvokeVoidAsync("hosvetTransfusionAdjunto.liberar", _urlAdjunto); }
+        catch (JSDisconnectedException) { }
+        _urlAdjunto = null;
+    }
+
+    public async ValueTask DisposeAsync() => await LiberarAdjuntoAsync();
 
     private static readonly string[] MomentosTransfusion = ["T0", "15 min", "30 min", "45 min", "60 min", "1.5 h", "2 h", "2.5 h", "3 h", "3.5 h", "4 h", "4.5 h", "5 h", "5.5 h", "6 h"];
     private readonly Dictionary<string, TransfusionMonitoreoDto> _controlesEditados = new(StringComparer.OrdinalIgnoreCase);

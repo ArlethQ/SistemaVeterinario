@@ -117,15 +117,6 @@
     text-underline-offset: .2em;
 }
 
-.trans-adjunto {
-    display: grid;
-    align-content: start;
-    gap: .35rem;
-    padding: .7rem;
-    border: 1px solid var(--transfusion-border);
-    border-radius: 8px;
-    background: #fff;
-}
 
 
 .trans-monitor-header { display: block; }
@@ -137,7 +128,7 @@
 .trans-trazado text { font: 12px system-ui; }
 .trans-trazado .trans-marca { font-size: 17px; font-weight: 800; }
 .trans-monitor-cuadricula .matriz-transfusion { min-width: 1000px; table-layout: fixed; }
-.trans-parametro { width: 15%; }
+.trans-parametro { width: 12.5%; }
 .trans-monitor-cuadricula .matriz-transfusion td { white-space: normal; overflow-wrap: anywhere; }
 .trans-monitor-cuadricula .table > tbody > tr > td { padding: 0; }
 .trans-celda-control {
@@ -199,4 +190,68 @@
     box-sizing: border-box;
     min-height: 1.8rem;
     border-radius: 5px;
+}
+
+.trans-formulario ::deep :is(.form-control, .form-select) {
+    min-height: 2rem;
+    padding-block: .25rem;
+    font-size: .86rem;
+}
+
+.trans-formulario .banda-transfusion { margin-top: .65rem; }
+
+.trans-dialogo {
+    width: min(760px, calc(100vw - 2rem));
+    max-height: 90vh;
+    padding: 0;
+    border: 1px solid #c5d9ee;
+    border-radius: 12px;
+    color: #102952;
+}
+
+.trans-dialogo::backdrop { background: #10295299; }
+.trans-dialogo-cabecera, .trans-dialogo-acciones {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .75rem 1rem;
+}
+.trans-dialogo-cabecera { background: #064369; color: #fff; }
+.trans-dialogo-cabecera h2 { margin: 0; font-size: 1.05rem; }
+.trans-dialogo-cuerpo { padding: 1rem; }
+.trans-dialogo-acciones { justify-content: flex-end; border-top: 1px solid #dce7f1; }
+.trans-vista-pdf { display: block; width: 100%; height: min(52vh, 560px); border: 1px solid #dce7f1; }
+.trans-vista-imagen { display: block; max-width: 100%; max-height: 52vh; margin-inline: auto; }
+
+.trans-documentos {
+    margin-block: .4rem;
+    overflow: hidden;
+    border: 1px solid #d1e0ee;
+    border-radius: 8px;
+    background: #fff;
+}
+.trans-documentos h2 {
+    margin: 0;
+    padding: .55rem .75rem;
+    background: #e8f2fa;
+    font-size: .9rem;
+    font-weight: 700;
+}
+.trans-documento-fila {
+    display: grid;
+    grid-template-columns: minmax(9rem, 1fr) minmax(0, 2fr) auto;
+    align-items: center;
+    gap: .5rem .85rem;
+    padding: .4rem .75rem;
+    font-size: .82rem;
+}
+.trans-documento-fila + .trans-documento-fila { border-top: 1px solid #e2eaf2; }
+.trans-documento-fila > span { color: #49647e; }
+.trans-documento-botones { display: flex; justify-content: flex-end; gap: .35rem; }
+
+@media (max-width: 575.98px) {
+    .trans-documento-fila { grid-template-columns: minmax(0, 1fr) auto; }
+    .trans-documento-fila > span { grid-row: 2; }
+    .trans-documento-botones { grid-column: 2; grid-row: 1 / span 2; }
 }
