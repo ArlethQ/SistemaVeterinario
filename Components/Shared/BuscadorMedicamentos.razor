@@ -1,6 +1,6 @@
 <div class="med-search" @onfocusout="Cerrar">
     <input type="text" class="form-control form-control-sm" autocomplete="off"
-           value="@Value" @oninput="CambiarAsync" @onfocus="Abrir" @onkeydown="TeclaAsync"
+           @bind:get="Value" @bind:set="CambiarAsync" @bind:event="oninput" @onfocus="Abrir" @onkeydown="TeclaAsync"
            placeholder="Buscar por nombre o código..." aria-label="Buscar medicamento por nombre o código"
            role="combobox" aria-autocomplete="list" aria-expanded="@_abierto" aria-controls="@_listaId" />
     @if (_abierto && !string.IsNullOrWhiteSpace(Value))
@@ -36,9 +36,9 @@
 
     private void Abrir() => _abierto = true;
     private void Cerrar() => _abierto = false;
-    private async Task CambiarAsync(ChangeEventArgs args)
+    private async Task CambiarAsync(string? value)
     {
-        Value = args.Value?.ToString() ?? string.Empty;
+        Value = value ?? string.Empty;
         _abierto = true;
         await ValueChanged.InvokeAsync(Value);
     }

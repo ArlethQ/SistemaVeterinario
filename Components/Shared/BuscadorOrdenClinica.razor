@@ -6,13 +6,13 @@
         <span class="input-group-text bg-light fw-semibold text-secondary">Ord:</span>
         <input type="text" autocomplete="off"
                class="form-control text-center fw-bold" style="width: 105px; min-width: 90px;"
-               placeholder="Orden / Pac." value="@_textoOrden"
-               @oninput="OnOrdenInputAsync" @onfocus="OnFocusOrdenAsync" @onblur="CerrarConRetrasoAsync" @onkeydown="OnKeyDownAsync" />
+               placeholder="Orden / Pac." @bind:get="_textoOrden" @bind:set="OnOrdenInputAsync" @bind:event="oninput"
+               @onfocus="OnFocusOrdenAsync" @onblur="CerrarConRetrasoAsync" @onkeydown="OnKeyDownAsync" />
         <span class="input-group-text bg-light fw-semibold text-secondary">NHCL:</span>
         <input type="text" autocomplete="off"
                class="form-control text-center fw-bold" style="width: 105px; min-width: 90px;"
-               placeholder="NHCL / Pac." value="@_textoNhcl"
-               @oninput="OnNhclInputAsync" @onfocus="OnFocusNhclAsync" @onblur="CerrarConRetrasoAsync" @onkeydown="OnKeyDownAsync" />
+               placeholder="NHCL / Pac." @bind:get="_textoNhcl" @bind:set="OnNhclInputAsync" @bind:event="oninput"
+               @onfocus="OnFocusNhclAsync" @onblur="CerrarConRetrasoAsync" @onkeydown="OnKeyDownAsync" />
     </div>
 
     @if (_mostrarSugerencias && _sugerencias.Count > 0)
@@ -76,9 +76,9 @@
         }
     }
 
-    private async Task OnOrdenInputAsync(ChangeEventArgs e)
+    private async Task OnOrdenInputAsync(string? texto)
     {
-        _textoOrden = e.Value?.ToString()?.Trim() ?? string.Empty;
+        _textoOrden = texto ?? string.Empty;
         if (int.TryParse(_textoOrden, out int ordenVal))
         {
             _ultimoOrdenParam = ordenVal;
@@ -93,9 +93,9 @@
         await BuscarSugerenciasAsync(_textoOrden);
     }
 
-    private async Task OnNhclInputAsync(ChangeEventArgs e)
+    private async Task OnNhclInputAsync(string? texto)
     {
-        _textoNhcl = e.Value?.ToString()?.Trim() ?? string.Empty;
+        _textoNhcl = texto ?? string.Empty;
         if (int.TryParse(_textoNhcl, out int nhclVal))
         {
             _ultimoNhclParam = nhclVal;

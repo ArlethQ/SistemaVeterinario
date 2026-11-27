@@ -65,7 +65,7 @@
             <div class="d-flex gap-2">
                 <div class="input-group"><span class="input-group-text bg-white border-end-0"><i class="bi bi-search"></i></span><input type="text" class="form-control border-start-0"
                        placeholder="Buscar por nombre del animal, dueño o Cédula/RUC..."
-                       value="@_filtroClientes" @oninput="BuscarMientrasEscribeAsync" @onkeydown="OnBuscarKeyDown" /></div>
+                       @bind:get="_filtroClientes" @bind:set="BuscarMientrasEscribeAsync" @bind:event="oninput" @onkeydown="OnBuscarKeyDown" /></div>
                 <button class="btn btn-secondary px-3 text-nowrap" @onclick="VerTodosAsync">Ver todos</button>
             </div>
             @if (!string.IsNullOrWhiteSpace(_filtroClientes))
@@ -865,9 +865,9 @@
         await BuscarClientesAsync();
     }
 
-    private async Task BuscarMientrasEscribeAsync(ChangeEventArgs e)
+    private async Task BuscarMientrasEscribeAsync(string? filtro)
     {
-        _filtroClientes = e.Value?.ToString() ?? string.Empty;
+        _filtroClientes = filtro ?? string.Empty;
         int versionActual = ++_versionBusqueda;
         _buscandoCoincidencias = true;
         await Task.Delay(300);
@@ -1102,9 +1102,9 @@
         ValidarDocumentoEnVivo(_clienteEditando.PaCedula);
     }
 
-    private async Task OnInputDocumento(ChangeEventArgs e)
+    private async Task OnCambiarDocumento(string? texto)
     {
-        string raw = e.Value?.ToString() ?? string.Empty;
+        string raw = texto ?? string.Empty;
         if (_clienteEditando.PaDocumento == "PASAPORTE")
         {
             raw = EcuadorDocumentoValidador.LimpiarPasaporte(raw);
@@ -1124,7 +1124,10 @@
     private async Task VerificarDuplicadoDocumentoAsync()
     {
         if (!_esDocValido) return;
-        int id = await AdmisionService.BuscarDuplicadoClienteAsync("DOCUMENTO", _clienteEditando.PaCedula, _clienteEditando.PaCodigo);
+        var cliente = _clienteEditando;
+        var valorConsultado = _clienteEditando.PaCedula;
+        int id = await AdmisionService.BuscarDuplicadoClienteAsync("DOCUMENTO", valorConsultado, cliente.PaCodigo);
+        if (!ReferenceEquals(cliente, _clienteEditando) || valorConsultado != cliente.PaCedula) return;
         if (id > 0)
         {
             _errorDocumento = $"El documento {_clienteEditando.PaCedula} ya está registrado en el propietario #{id}.";
@@ -1135,7 +1138,10 @@
     private async Task VerificarDuplicadoMovilAsync()
     {
         if (!_esMovilValido) return;
-        int id = await AdmisionService.BuscarDuplicadoClienteAsync("MOVIL", _clienteEditando.PaMovil, _clienteEditando.PaCodigo);
+        var cliente = _clienteEditando;
+        var valorConsultado = _clienteEditando.PaMovil;
+        int id = await AdmisionService.BuscarDuplicadoClienteAsync("MOVIL", valorConsultado, cliente.PaCodigo);
+        if (!ReferenceEquals(cliente, _clienteEditando) || valorConsultado != cliente.PaMovil) return;
         if (id > 0)
         {
             _errorMovil = $"El celular {_clienteEditando.PaMovil} ya está registrado en el propietario #{id}.";
@@ -1145,13 +1151,16 @@
 
     private string ClaseEmail => _errorEmail != null ? "form-control form-control-sm is-invalid border-danger" : "form-control form-control-sm";
 
-    private async Task OnInputEmailAsync(ChangeEventArgs e)
+    private async Task OnCambiarEmailAsync(string? texto)
     {
-        _clienteEditando.PaEmail = e.Value?.ToString() ?? string.Empty;
+        _clienteEditando.PaEmail = texto ?? string.Empty;
         string email = _clienteEditando.PaEmail?.Trim() ?? string.Empty;
         _errorEmail = null;
         if (email.Length == 0) return;
-        int id = await AdmisionService.BuscarDuplicadoClienteAsync("EMAIL", email, _clienteEditando.PaCodigo);
+        var cliente = _clienteEditando;
+        var valorConsultado = email;
+        int id = await AdmisionService.BuscarDuplicadoClienteAsync("EMAIL", valorConsultado, cliente.PaCodigo);
+        if (!ReferenceEquals(cliente, _clienteEditando) || valorConsultado != cliente.PaEmail?.Trim()) return;
         if (id > 0)
             _errorEmail = $"El correo {email} ya está registrado en el propietario #{id}.";
     }
@@ -1170,9 +1179,9 @@
         _errorDocumento = res.Mensaje;
     }
 
-    private void OnInputApellidos(ChangeEventArgs e)
+    private void OnCambiarApellidos(string? texto)
     {
-        string val = e.Value?.ToString() ?? string.Empty;
+        string val = texto ?? string.Empty;
         _clienteEditando.PaApellidos = val;
         ValidarApellidosEnVivo(val);
     }
@@ -1194,9 +1203,9 @@
         _errorApellidos = res.MensajeError;
     }
 
-    private void OnInputNombres(ChangeEventArgs e)
+    private void OnCambiarNombres(string? texto)
     {
-        string val = e.Value?.ToString() ?? string.Empty;
+        string val = texto ?? string.Empty;
         _clienteEditando.PaNombres = val;
         ValidarNombresEnVivo(val);
     }
@@ -1217,9 +1226,9 @@
         var res = NombreValidador.Validar(val, "Los nombres");
         _errorNombres = res.MensajeError;
     }
-    private async Task OnInputMovil(ChangeEventArgs e)
+    private async Task OnCambiarMovil(string? texto)
     {
-        string raw = e.Value?.ToString() ?? string.Empty;
+        string raw = texto ?? string.Empty;
         raw = new string(raw.Where(char.IsDigit).ToArray());
         if (raw.Length > 10) raw = raw[..10];
         _clienteEditando.PaMovil = raw;
@@ -1248,9 +1257,9 @@
         }
     }
 
-    private void OnInputTelefono(ChangeEventArgs e)
+    private void OnCambiarTelefono(string? texto)
     {
-        string raw = e.Value?.ToString() ?? string.Empty;
+        string raw = texto ?? string.Empty;
         raw = new string(raw.Where(char.IsDigit).ToArray());
         if (raw.Length > 7) raw = raw[..7];
         _clienteEditando.PaTelefono = raw;
@@ -1888,14 +1897,12 @@
                                     <div class="input-group input-group-sm">
                                         <input type="text"
                                                class="form-control form-control-sm @(_errorDocumento != null ? (_esDocValido ? "is-valid border-success" : "is-invalid border-danger") : "")"
-                                               value="@_clienteEditando.PaCedula"
+                                               @bind:get="_clienteEditando.PaCedula" @bind:set="OnCambiarDocumento"
                                                inputmode="@InputModeDocumento"
                                                data-doc-type="@_clienteEditando.PaDocumento"
                                                data-numeric="@EsDocumentoNumerico"
-                                               onkeypress="if (this.dataset.docType !== 'PASAPORTE' && (event.which < 48 || event.which > 57)) return false;"
                                                maxlength="@ObtenerMaximoDocumento()"
-                                               placeholder="@ObtenerPlaceholderDocumento()"
-                                               @oninput="OnInputDocumento" />
+                                               placeholder="@ObtenerPlaceholderDocumento()" />
                                         @if (_esDocValido)
                                         {
                                             <span class="input-group-text bg-success text-white py-0 px-2" title="Documento válido">
@@ -1915,10 +1922,8 @@
                                     <label class="form-label small fw-bold">Apellidos *</label>
                                     <input type="text"
                                            class="form-control form-control-sm @(_errorApellidos != null ? "is-invalid border-danger" : (!string.IsNullOrWhiteSpace(_clienteEditando.PaApellidos) ? "is-valid border-success" : ""))"
-                                           value="@_clienteEditando.PaApellidos"
+                                           @bind:get="_clienteEditando.PaApellidos" @bind:set="OnCambiarApellidos"
                                            placeholder="Ej: Pérez-Gómez, De la Cruz"
-                                           onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'-]/.test(event.key);"
-                                           @oninput="OnInputApellidos"
                                            @onblur="OnBlurApellidos" />
                                     @if (!string.IsNullOrEmpty(_errorApellidos))
                                     {
@@ -1931,10 +1936,8 @@
                                     <label class="form-label small fw-bold">Nombres *</label>
                                     <input type="text"
                                            class="form-control form-control-sm @(_errorNombres != null ? "is-invalid border-danger" : (!string.IsNullOrWhiteSpace(_clienteEditando.PaNombres) ? "is-valid border-success" : ""))"
-                                           value="@_clienteEditando.PaNombres"
+                                           @bind:get="_clienteEditando.PaNombres" @bind:set="OnCambiarNombres"
                                            placeholder="Ej: Juan Carlos, D'Angelo"
-                                           onkeypress="return /[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'-]/.test(event.key);"
-                                           @oninput="OnInputNombres"
                                            @onblur="OnBlurNombres" />
                                     @if (!string.IsNullOrEmpty(_errorNombres))
                                     {
@@ -1950,12 +1953,10 @@
                                         <span class="input-group-text bg-light text-muted fw-bold border-end-0">+593</span>
                                         <input type="text"
                                                class="form-control form-control-sm @(_errorMovil != null ? "is-invalid border-danger" : (_esMovilValido ? "is-valid border-success" : ""))"
-                                               value="@_clienteEditando.PaMovil"
+                                               @bind:get="_clienteEditando.PaMovil" @bind:set="OnCambiarMovil"
                                                maxlength="10"
                                                inputmode="numeric"
-                                               placeholder="09XXXXXXXX (10 dígitos)"
-                                               onkeypress="if (event.which < 48 || event.which > 57) return false;"
-                                               @oninput="OnInputMovil" />
+                                               placeholder="09XXXXXXXX (10 dígitos)" />
                                         @if (_esMovilValido)
                                         {
                                             <span class="input-group-text bg-success text-white py-0 px-2" title="Móvil válido">
@@ -1975,12 +1976,10 @@
                                     <div class="input-group input-group-sm">
                                         <input type="text"
                                                class="form-control form-control-sm @(_errorTelefono != null ? "is-invalid border-danger" : (_esTelefonoValido ? "is-valid border-success" : ""))"
-                                               value="@_clienteEditando.PaTelefono"
+                                               @bind:get="_clienteEditando.PaTelefono" @bind:set="OnCambiarTelefono"
                                                maxlength="7"
                                                inputmode="numeric"
-                                               placeholder="7 dígitos (no iniciar en 0)"
-                                               onkeypress="if (event.which < 48 || event.which > 57) return false;"
-                                               @oninput="OnInputTelefono" />
+                                               placeholder="7 dígitos (no iniciar en 0)" />
                                         @if (_esTelefonoValido)
                                         {
                                             <span class="input-group-text bg-success text-white py-0 px-2" title="Teléfono válido">
@@ -1997,7 +1996,7 @@
                                 </div>
                                 <div class="col-md-12">
                                     <label class="form-label small fw-bold">Correo Electrónico</label>
-                                    <input type="text" class="@ClaseEmail" value="@_clienteEditando.PaEmail" @oninput="OnInputEmailAsync" />
+                                    <input type="text" class="@ClaseEmail" @bind:get="_clienteEditando.PaEmail" @bind:set="OnCambiarEmailAsync" />
                                     @if (!string.IsNullOrEmpty(_errorEmail))
                                     {
                                         <div class="text-danger small mt-1 fw-semibold">
