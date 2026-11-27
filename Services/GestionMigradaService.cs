@@ -27,9 +27,9 @@ public interface IGestionMigradaService
     Task<List<ExcepcionHorarioDto>> ObtenerExcepcionesAsync(DateTime desde, DateTime hasta);
     Task<bool> GuardarExcepcionAsync(ExcepcionHorarioDto item, int idUsuario);
     Task<bool> DesactivarExcepcionAsync(int id, int idUsuario);
-    Task<List<SalaQuirofanoDto>> ObtenerSalasQuirofanoAsync();
+    Task<List<SalaQuirofanoDto>> ObtenerSalasQuirofanoAsync(bool limitarASucursal = false);
     Task<bool> GuardarSalaQuirofanoAsync(SalaQuirofanoDto sala, int idUsuario);
-    Task<List<CirugiaProgramadaDto>> ObtenerCirugiasAsync(DateTime desde, DateTime hasta);
+    Task<List<CirugiaProgramadaDto>> ObtenerCirugiasAsync(DateTime desde, DateTime hasta, bool limitarASucursal = false);
     Task<bool> GuardarCirugiaAsync(CirugiaProgramadaDto item, int idUsuario);
     Task<bool> CancelarCirugiaAsync(int id, int idUsuario);
     Task<List<SelectorClinicoDto>> ObtenerMedicosAsync();
@@ -468,7 +468,7 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         COMMIT TRANSACTION;
         """);
 
-    public async Task<List<SalaQuirofanoDto>> ObtenerSalasQuirofanoAsync()
+    public async Task<List<SalaQuirofanoDto>> ObtenerSalasQuirofanoAsync(bool limitarASucursal = false)
     {
         await AsegurarSalasQuirofanoAsync();
         return (await db.QueryAsync<SalaQuirofanoDto>("""
@@ -479,8 +479,9 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
             FROM dbo.qvt_salas_quirofano s
             JOIN dbo.vt_pisos p ON p.piso_id=s.id_piso
             LEFT JOIN dbo.vt_localidades l ON l.loc_id=p.piso_localidad
+            WHERE @Sucursal IS NULL OR p.piso_localidad=@Sucursal
             ORDER BY Localidad, Piso, Codigo
-            """)).ToList();
+            """, new { Sucursal = limitarASucursal && !session.EsAdministrador ? (int?)session.Localidad : null })).ToList();
     }
 
     public async Task<bool> GuardarSalaQuirofanoAsync(SalaQuirofanoDto sala, int idUsuario)
@@ -503,7 +504,8 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
             IF @Resultado < 0 THROW 50002, 'La agenda de quirofano esta ocupada.', 1;
 
             DECLARE @Guardada int=0;
-            IF EXISTS (SELECT 1 FROM dbo.vt_pisos WHERE piso_id=@IdPiso AND ISNULL(piso_estado,'A')='A')
+            IF EXISTS (SELECT 1 FROM dbo.vt_pisos WHERE piso_id=@IdPiso AND ISNULL(piso_estado,'A')='A'
+                       AND (@Sucursal IS NULL OR piso_localidad=@Sucursal))
                AND NOT EXISTS (SELECT 1 FROM dbo.qvt_salas_quirofano WHERE id_piso=@IdPiso AND codigo=@Codigo AND id<>@Id)
             BEGIN
                 IF @Id=0
@@ -529,12 +531,13 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
             COMMIT TRANSACTION;
             SELECT @Guardada;
             """, new { sala.Id, sala.IdPiso, Codigo = codigo, Observacion = observacion, sala.Activa,
+                Sucursal = session.EsAdministrador ? (int?)null : session.Localidad,
                 Ahora = DateTime.UtcNow.AddHours(-5) });
         if (guardada > 0) await db.RegistrarBitacoraAsync($"Sala de quirófano: {codigo}", idUsuario);
         return guardada > 0;
     }
 
-    public async Task<List<CirugiaProgramadaDto>> ObtenerCirugiasAsync(DateTime desde,DateTime hasta)
+    public async Task<List<CirugiaProgramadaDto>> ObtenerCirugiasAsync(DateTime desde, DateTime hasta, bool limitarASucursal = false)
     {
         await VerificarColumnasAsync("qvt_calendario_cirugias", "sec", "codmed", "nhcl", "codprocedimiento", "fechacirugia", "horainicio", "horafinalizacion", "localidad", "estado");
         await AsegurarColumnasAnestesiologoCirugiaAsync();
@@ -547,7 +550,10 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         nhcl Nhcl,RTRIM(ISNULL(nompaciente,'')) Paciente,
         codprocedimiento IdProcedimiento,RTRIM(ISNULL(nomprocedimiento,'')) Procedimiento,fechacirugia Fecha,RTRIM(horainicio) HoraInicio,
         RTRIM(horafinalizacion) HoraFin,localidad IdLocalidad,estado Estado FROM qvt_calendario_cirugias c LEFT JOIN dbo.qvt_salas_quirofano s ON s.id=c.id_sala
-        WHERE fechacirugia>=@Desde AND fechacirugia<DATEADD(day,1,@Hasta) ORDER BY fechacirugia,horainicio",new{Desde=desde.Date,Hasta=hasta.Date})).ToList();
+        WHERE fechacirugia>=@Desde AND fechacirugia<DATEADD(day,1,@Hasta)
+          AND (@Sucursal IS NULL OR c.localidad=@Sucursal)
+        ORDER BY fechacirugia,horainicio", new { Desde = desde.Date, Hasta = hasta.Date,
+            Sucursal = limitarASucursal && !session.EsAdministrador ? (int?)session.Localidad : null })).ToList();
     }
 
     public async Task<bool> GuardarCirugiaAsync(CirugiaProgramadaDto x,int idUsuario)

@@ -36,9 +36,12 @@
                 <div class="row g-3">
                     <div class="col-sm-6 col-lg-3">
                         <label class="form-label fw-semibold" for="sucursal-sala">Sucursal *</label>
-                        <select id="sucursal-sala" class="form-select" disabled="@(_edicion.Id > 0)"
+                        <select id="sucursal-sala" class="form-select" disabled="@(_edicion.Id > 0 || !Session.EsAdministrador)"
                                 @bind="_sucursalEdicion" @bind:after="CambiarSucursalEdicion">
-                            <option value="0">Selecciona una sucursal</option>
+                            @if (Session.EsAdministrador)
+                            {
+                                <option value="0">Selecciona una sucursal</option>
+                            }
                             @foreach (var sucursal in _localidades)
                             {
                                 <option value="@sucursal.Id">@sucursal.Descripcion</option>
@@ -99,8 +102,11 @@
         <div class="card-body row g-2">
             <div class="col-sm-6 col-lg-3">
                 <label class="form-label" for="filtro-sucursal">Sucursal</label>
-                <select class="form-select" id="filtro-sucursal" @bind="_idLocalidad">
+                <select class="form-select" id="filtro-sucursal" disabled="@(!Session.EsAdministrador)" @bind="_idLocalidad">
+                    @if (Session.EsAdministrador)
+                {
                     <option value="0">Todas las sucursales</option>
+                }
                     @foreach (var sucursal in _localidades)
                     {
                         <option value="@sucursal.Id">@sucursal.Descripcion</option>
@@ -146,61 +152,50 @@
     }
     else
     {
-        @foreach (var piso in SalasVisibles.GroupBy(s => new { s.IdPiso, s.Piso, s.Localidad }))
+        @foreach (var piso in SalasVisibles.GroupBy(s => new { s.IdLocalidad, s.Localidad, s.IdPiso, s.Piso }))
         {
-            <section class="card shadow-sm mb-3">
-                <h2 class="card-header bg-white organizacion-secundaria h6 mb-0 d-flex align-items-center gap-2">
-                    <span class="badge text-bg-primary">@piso.Key.Localidad</span>@piso.Key.Piso
+            <section class="card shadow-sm mb-3" @key="(piso.Key.IdLocalidad, piso.Key.IdPiso)">
+                <h2 class="card-header bg-white organizacion-secundaria h6 mb-0 d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge text-bg-primary">@piso.Key.Localidad</span>
+                    <span>@piso.Key.Piso</span>
                 </h2>
                 <div class="card-body sala-mapa">
                     @foreach (var sala in piso)
                     {
                         var reservas = ReservasSala(sala).ToList();
-                        <div class="sala-espacio" @key="sala.Id">
-                            <article class="card h-100 sala-tarjeta @EstadoSala(sala)">
-                                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                                    <h3 class="h6 fw-bold mb-0"><i class="bi bi-door-closed me-2" aria-hidden="true"></i>@sala.Codigo</h3>
-                                    @if (!sala.Activa)
+                        var estado = EstadoSala(sala);
+                        <article class="sala-tarjeta @estado" @key="sala.Id">
+                            <span class="sala-estado">@(estado == "libre" ? "Libre" : estado == "reservada" ? "Reservada" : "Inactiva")</span>
+                            <h3 class="sala-codigo">@sala.Codigo</h3>
+                            @if (!string.IsNullOrWhiteSpace(sala.Observacion))
+                            {
+                                <p class="small text-muted mb-0">@sala.Observacion</p>
+                            }
+                            @if (reservas.Count > 0)
+                            {
+                                <ul class="list-unstyled small mb-0">
+                                    @foreach (var reserva in reservas)
                                     {
-                                        <span class="badge text-bg-secondary">Inactiva</span>
+                                        <li>
+                                            <strong>@(reserva.HoraInicio)–@reserva.HoraFin</strong>
+                                            <span class="d-block">@(reserva.IdSala.HasValue ? reserva.Procedimiento : "Cirugía sin sala asignada")</span>
+                                        </li>
                                     }
-                                    else if (reservas.Count > 0)
-                                    {
-                                        <span class="badge text-bg-warning">@reservas.Count reserva(s)</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge text-bg-success">Sin reservas</span>
-                                    }
-                                </div>
-                                <div class="card-body">
-                                    @if (!string.IsNullOrWhiteSpace(sala.Observacion))
-                                    {
-                                        <p class="small text-muted mb-2">@sala.Observacion</p>
-                                    }
-                                    @if (reservas.Count > 0)
-                                    {
-                                        <ul class="list-group list-group-flush">
-                                            @foreach (var reserva in reservas)
-                                            {
-                                                <li class="list-group-item px-0 small">
-                                                    <strong>@reserva.HoraInicio–@reserva.HoraFin</strong>
-                                                    <span class="ms-2">@(reserva.IdSala.HasValue ? reserva.Procedimiento : "Cirugía sin sala asignada")</span>
-                                                </li>
-                                            }
-                                        </ul>
-                                    }
-                                </div>
-                                <div class="card-footer text-end">
-                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_guardando" @onclick="() => EditarSalaAsync(sala)">Editar</button>
-                                </div>
-                            </article>
-                        </div>
+                                </ul>
+                            }
+                            <div class="mt-auto pt-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                        aria-label="@($"Editar {sala.Codigo}")" disabled="@_guardando" @onclick="() => EditarSalaAsync(sala)">
+                                    <i class="bi bi-pencil" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </article>
                     }
                 </div>
             </section>
         }
     }
+
 </div>
 
 @code {
@@ -242,12 +237,14 @@
     {
         try
         {
-            _idLocalidad = Session.Localidad;
-            _localidades = await Service.ObtenerLocalidadesSelectorAsync();
-            _pisos = await Service.ObtenerPisosAsync(true);
+            _idLocalidad = Session.EsAdministrador ? 0 : Session.Localidad;
+            _localidades = (await Service.ObtenerLocalidadesSelectorAsync())
+                .Where(s => Session.EsAdministrador || s.Id == Session.Localidad).ToList();
+            _pisos = (await Service.ObtenerPisosAsync(true))
+                .Where(p => Session.EsAdministrador || p.IdLocalidad == Session.Localidad).ToList();
             NuevaSala();
             _cargandoCatalogos = false;
-            _salas = await Service.ObtenerSalasQuirofanoAsync();
+            _salas = await Service.ObtenerSalasQuirofanoAsync(limitarASucursal: true);
             await CargarReservasAsync();
         }
         catch (Exception ex)
@@ -265,7 +262,7 @@
         _errorCarga = null;
         try
         {
-            var reservas = await Service.ObtenerCirugiasAsync(fecha, fecha);
+            var reservas = await Service.ObtenerCirugiasAsync(fecha, fecha, limitarASucursal: true);
             if (fecha == _fecha)
                 _reservas = reservas.Where(r => r.Estado == "A").ToList();
         }
@@ -337,14 +334,13 @@
                 _errorFormulario = "Verifica que el piso esté activo, que el nombre esté disponible y que no haya reservas pendientes si vas a desactivar la sala.";
                 return;
             }
-            if (_idLocalidad > 0) _idLocalidad = _sucursalEdicion;
             var confirmacion = _edicion.Id == 0 ? "Sala registrada." : "Cambios guardados.";
             var sucursalGuardada = _sucursalEdicion;
             NuevaSala();
             _sucursalEdicion = sucursalGuardada;
             CambiarSucursalEdicion();
             _confirmacion = confirmacion;
-            _salas = await Service.ObtenerSalasQuirofanoAsync();
+            _salas = await Service.ObtenerSalasQuirofanoAsync(limitarASucursal: true);
         }
         catch (Exception ex)
         {
