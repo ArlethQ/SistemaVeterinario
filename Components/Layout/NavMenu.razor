@@ -174,13 +174,9 @@
                             {
                                 <NavLink href="consulta/historial/apuntes">Apuntes a historias</NavLink>
                             }
-                            @if (TienePermiso("consulta/recetario"))
+                            @if (TienePermiso("consulta/recetario") || TienePermiso("consulta/recetario/sin-orden"))
                             {
-                                <NavLink href="consulta/recetario">Recetario médico</NavLink>
-                            }
-                            @if (TienePermiso("consulta/recetario/sin-orden"))
-                            {
-                                <NavLink href="consulta/recetario/sin-orden">Recetas sin orden</NavLink>
+                                <NavLink href="@(TienePermiso("consulta/recetario") ? "consulta/recetario" : "consulta/recetario/sin-orden")">Recetario médico</NavLink>
                             }
                             @if (TienePermiso("consulta/autorizaciones"))
                             {

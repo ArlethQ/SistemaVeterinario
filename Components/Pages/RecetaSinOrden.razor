@@ -1,5 +1,3 @@
-@page "/consulta/recetario/sin-orden"
-@page "/consulta/recetario/sin-orden/{IdFicha:int}/{Nhcl:int}"
 @inject IConsultaExternaService ConsultaService
 @inject IReportExportService ReportService
 @inject IEFactCatalogService EFactCatalog
@@ -19,10 +17,6 @@
             </div>
         </div>
         <div class="consulta-acciones">
-            @if (Permisos.Permite("consulta/recetario"))
-            {
-                <a class="btn btn-sm btn-outline-primary" href="/consulta/recetario">Recetas con orden</a>
-            }
             <button class="btn btn-sm btn-outline-success" @onclick="NuevaRecetaAsync">Nueva receta</button>
             <button class="btn btn-sm btn-danger app-doc-action app-doc-pdf" disabled="@(cabecera.IdFicha <= 0 || medicamentos.Count == 0 || diagnosticos.Count == 0)" @onclick="DescargarPdfAsync"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Descargar PDF</button>
         </div>

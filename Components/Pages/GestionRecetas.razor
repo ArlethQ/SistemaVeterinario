@@ -1,0 +1,42 @@
+@page "/consulta/recetario"
+@page "/consulta/recetario/{IdOrden:int}/{Nhcl:int}"
+@page "/consulta/recetario/sin-orden"
+@page "/consulta/recetario/sin-orden/{IdFicha:int}/{Nhcl:int}"
+@inject NavigationManager Navigation
+
+@if (PuedeRecetarConOrden && PuedeRecetarSinOrden)
+{
+    <div class="container-fluid consulta-clinica pt-3">
+        <nav class="nav nav-tabs" aria-label="Tipo de receta">
+            <a class="nav-link @(!SinOrden ? "active" : null)"
+               aria-current="@(!SinOrden ? "page" : null)" href="/consulta/recetario">
+                <i class="bi bi-clipboard-check me-1" aria-hidden="true"></i>Recetas con orden
+            </a>
+            <a class="nav-link @(SinOrden ? "active" : null)"
+               aria-current="@(SinOrden ? "page" : null)" href="/consulta/recetario/sin-orden">
+                <i class="bi bi-prescription2 me-1" aria-hidden="true"></i>Recetas sin orden
+            </a>
+        </nav>
+    </div>
+}
+
+@if (SinOrden && PuedeRecetarSinOrden)
+{
+    <RecetaSinOrden IdFicha="IdFicha" Nhcl="Nhcl" />
+}
+else if (!SinOrden && PuedeRecetarConOrden)
+{
+    <RecetarioMedico IdOrden="IdOrden" Nhcl="Nhcl" />
+}
+
+@code {
+    [Parameter] public int IdOrden { get; set; }
+    [Parameter] public int IdFicha { get; set; }
+    [Parameter] public int Nhcl { get; set; }
+    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
+
+    private bool PuedeRecetarConOrden => Permisos.Permite("consulta/recetario");
+    private bool PuedeRecetarSinOrden => Permisos.Permite("consulta/recetario/sin-orden");
+    private bool SinOrden => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].TrimEnd('/')
+        .Split('/').ElementAtOrDefault(2)?.Equals("sin-orden", StringComparison.OrdinalIgnoreCase) == true;
+}

@@ -1,5 +1,3 @@
-@page "/consulta/recetario"
-@page "/consulta/recetario/{IdOrden:int}/{Nhcl:int}"
 @inject IConsultaExternaService ConsultaService
 @inject IKardexService KardexService
 @inject IReportExportService ReportService
@@ -21,10 +19,6 @@
             </div>
         </div>
         <div class="consulta-acciones">
-            @if (Permisos.Permite("consulta/recetario/sin-orden"))
-            {
-                <a class="btn btn-sm btn-outline-success" href="/consulta/recetario/sin-orden">Receta sin orden</a>
-            }
             <button class="btn btn-sm btn-danger app-doc-action app-doc-pdf" @onclick="ExportarRecetaPdfAsync" disabled="@(!ItemsReceta.Any())">
                 <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Descargar receta PDF
             </button>
@@ -447,7 +441,6 @@
     private bool EsRecetaHistorica =>
         ItemsReceta.Count > 0 && ItemsReceta.All(item => item.Fecha.Date < HoyClinica);
 
-    [CascadingParameter] private PermisosNavegacion Permisos { get; set; } = new(0, []);
     [Parameter] public int IdOrden { get; set; }
     [Parameter] public int Nhcl { get; set; }
 
