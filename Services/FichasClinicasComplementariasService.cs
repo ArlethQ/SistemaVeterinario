@@ -15,6 +15,7 @@ public interface IFichasClinicasComplementariasService
     Task<List<TransfusionDto>> ObtenerTransfusionesAsync(int idOrden, int nhcl);
     Task<int> GuardarTransfusionAsync(TransfusionDto dto, int idUsuario);
     Task<AdjuntoTransfusionDto?> ObtenerAdjuntoTransfusionAsync(int id, int idOrden, string tipo);
+    Task GuardarControlCuadriculaAsync(TransfusionMonitoreoDto dto, int idOrden);
     Task AgregarMonitoreoAsync(TransfusionMonitoreoDto dto, int idOrden, int idUsuario);
     Task EliminarTransfusionAsync(int id, int idOrden);
 }
@@ -226,6 +227,39 @@ VALUES(@IdOrden,@Nhcl,@Fecha,@Turno,@Subjetivo,@Objetivo,@Analisis,@Plan,@Examen
         return (await _db.QueryAsync<AdjuntoTransfusionDto>(
             $"SELECT {columna}Nombre Nombre, {columna}Contenido Contenido FROM clin_transfusion WHERE id=@Id AND id_orden=@IdOrden AND {columna}Contenido IS NOT NULL",
             new { Id = id, IdOrden = idOrden })).SingleOrDefault();
+    }
+
+    public async Task GuardarControlCuadriculaAsync(TransfusionMonitoreoDto d, int idOrden)
+    {
+        if (d.Id == 0)
+        {
+            d.Id = await _db.ExecuteScalarAsync<int>(@"
+INSERT INTO dbo.clin_transfusion_monitoreo(id_transfusion,fecha_hora,momento,temperatura,frecuencia_cardiaca,
+ frecuencia_respiratoria,pas,pad,pam,mucosas,estado_conciencia,tllc,otros)
+OUTPUT INSERTED.id
+SELECT id,@FechaHora,@Momento,@Temperatura,@FrecuenciaCardiaca,@FrecuenciaRespiratoria,
+ @Pas,@Pad,@Pam,@Mucosas,@EstadoConciencia,@Tllc,@Otros
+FROM dbo.clin_transfusion WHERE id=@IdTransfusion AND id_orden=@IdOrden", new
+            {
+                d.IdTransfusion, IdOrden = idOrden, d.FechaHora, d.Momento, d.Temperatura, d.FrecuenciaCardiaca,
+                d.FrecuenciaRespiratoria, d.Pas, d.Pad, d.Pam, d.Mucosas, d.EstadoConciencia, d.Tllc, d.Otros
+            });
+            if (d.Id == 0) throw new InvalidOperationException("No se encontró la transfusión en la orden.");
+            return;
+        }
+
+        var filas = await _db.ExecuteAsync(@"
+UPDATE m SET temperatura=@Temperatura, frecuencia_cardiaca=@FrecuenciaCardiaca,
+ frecuencia_respiratoria=@FrecuenciaRespiratoria, pas=@Pas, pad=@Pad, pam=@Pam,
+ mucosas=@Mucosas, estado_conciencia=@EstadoConciencia, tllc=@Tllc, otros=@Otros
+FROM dbo.clin_transfusion_monitoreo m
+JOIN dbo.clin_transfusion t ON t.id=m.id_transfusion
+WHERE m.id=@Id AND t.id=@IdTransfusion AND t.id_orden=@IdOrden", new
+        {
+            d.Id, d.IdTransfusion, IdOrden = idOrden, d.Temperatura, d.FrecuenciaCardiaca,
+            d.FrecuenciaRespiratoria, d.Pas, d.Pad, d.Pam, d.Mucosas, d.EstadoConciencia, d.Tllc, d.Otros
+        });
+        if (filas == 0) throw new InvalidOperationException("El control ya no está disponible en esta orden.");
     }
 
     public async Task AgregarMonitoreoAsync(TransfusionMonitoreoDto d, int idOrden, int idUsuario)

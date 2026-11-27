@@ -95,7 +95,16 @@
         <div class="alert @(_error ? "alert-danger" : "alert-success") py-2">@_mensaje</div>
     }
 
-    <fieldset disabled="@(_paciente is null)">
+    <nav class="nav nav-tabs trans-pestanas" aria-label="Secciones de transfusiones">
+        <button type="button" class="nav-link @(!_mostrarHistorial ? "active" : "")"
+                aria-pressed="@(!_mostrarHistorial ? "true" : "false")" aria-controls="panel-trans-ficha"
+                @onclick="() => _mostrarHistorial = false">Ficha de transfusión</button>
+        <button type="button" class="nav-link @(_mostrarHistorial ? "active" : "")"
+                aria-pressed="@(_mostrarHistorial ? "true" : "false")" aria-controls="panel-trans-historial"
+                @onclick="() => _mostrarHistorial = true">Historial</button>
+    </nav>
+    <fieldset disabled="@(_paciente is null || _guardandoCuadricula)">
+        <div id="panel-trans-ficha" hidden="@_mostrarHistorial">
         <div class="alert alert-warning small"><strong>Seguridad:</strong> verifique identidad del paciente, unidad, vencimiento, consentimiento, tipificación y compatibilidad conforme al protocolo institucional antes de iniciar.</div>
         <div class="card border-0 shadow-sm clinical-card"><div class="card-header section-header section-transfusion"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i><span><strong>Ficha de monitoreo transfusional de hemoderivados</strong></span></div><div class="card-body hoja-transfusion"><div class="row g-2">
             <h2 class="col-12 banda-transfusion">Producto sanguíneo</h2>
@@ -236,31 +245,38 @@
             </header>
             <div class="table-responsive history-table trans-monitor-cuadricula">
                 @{
-                    var curvas = SeriesCurva.Select(serie => momentos.Select(momento => _trans.Monitoreos
-                        .Where(m => string.Equals(NormalizarMomento(m.Momento), momento, StringComparison.OrdinalIgnoreCase))
-                        .OrderBy(m => m.FechaHora).ThenBy(m => m.Id)
-                        .Select(serie.Valor).LastOrDefault(v => v.HasValue)).ToArray()).ToArray();
-                    var maximo = Math.Max(200, Math.Ceiling(curvas.SelectMany(c => c).Max() ?? 0) / 20 * 20);
-                    maximo = Math.Ceiling(maximo / 20) * 20;
+                    var curvas = SeriesCurva.Select(serie => momentos.Select(momento => serie.Valor(ControlVisible(momento))).ToArray()).ToArray();
+                    var maximo = Math.Max(200, Math.Ceiling((curvas.SelectMany(c => c).Max() ?? 0) / 20) * 20);
+                    double PosicionY(double valor) => valor <= 10
+                        ? 300 - valor * 9.2
+                        : 208 - (valor - 10) * 188 / (maximo - 10);
+                    var marcas = new[] { 2d, 4, 6, 8, 10 }.Concat(
+                        Enumerable.Range(1, 10).Select(paso => maximo * paso / 10));
                     var anchoColumna = 1020d / momentos.Length;
                 }
-                <svg class="trans-trazado" viewBox="0 0 1200 340" preserveAspectRatio="none" role="img"
+                <div class="trans-hoja-grafica">
+                <svg class="trans-trazado" viewBox="0 0 1200 340" role="img"
                      aria-label="Curvas de los parámetros registrados por momento de la transfusión">
-                    <rect x="180" y="20" width="1020" height="280" fill="#fff" stroke="#334f80" />
-                    @for (int marca = 0; marca <= 10; marca++)
+                    <rect x="180" y="20" width="1020" height="280" fill="#fff" />
+                    @foreach (var marca in marcas)
                     {
-                        var y = 300 - marca * 28;
+                        var y = SvgNumero(PosicionY(marca));
                         <line x1="180" x2="1200" y1="@y" y2="@y" stroke="#c4d3e2" />
-                        <g><text x="172" y="@(y + 4)" text-anchor="end">@(maximo * marca / 10)</text></g>
+                        <g><text x="172" y="@SvgNumero(PosicionY(marca) + 4)" text-anchor="end">@marca</text></g>
                     }
                     @for (int columna = 0; columna < momentos.Length; columna++)
                     {
                         var borde = SvgNumero(180 + columna * anchoColumna);
+                        if (columna % 3 == 2)
+                        {
+                            <rect x="@borde" y="20" width="@SvgNumero(anchoColumna)" height="280" fill="#6482a4" opacity=".06" />
+                        }
                         var centro = SvgNumero(180 + (columna + .5) * anchoColumna);
                         <line x1="@borde" x2="@borde" y1="20" y2="300"
-                              stroke="@(columna % 3 == 0 ? "#334f80" : "#d6e1ec")" />
+                              stroke="@(columna % 3 == 0 ? "#203b60" : "#c4d3e2")" stroke-width="@(columna % 3 == 0 ? 2 : 1)" />
                         <g><text x="@centro" y="324" text-anchor="middle">@momentos[columna]</text></g>
                     }
+                    <rect x="180" y="20" width="1019" height="280" fill="none" stroke="#203b60" stroke-width="2" />
                     @for (int serie = 0; serie < SeriesCurva.Length; serie++)
                     {
                         var configuracion = SeriesCurva[serie];
@@ -268,11 +284,11 @@
                         {
                             if (curvas[serie][columna] is not double valor) continue;
                             var x = 180 + (columna + .5) * anchoColumna;
-                            var y = 300 - 280 * valor / maximo;
+                            var y = PosicionY(valor);
                             if (columna > 0 && curvas[serie][columna - 1] is double previo)
                             {
                                 <line x1="@SvgNumero(x - anchoColumna)" x2="@SvgNumero(x)"
-                                      y1="@SvgNumero(300 - 280 * previo / maximo)" y2="@SvgNumero(y)"
+                                      y1="@SvgNumero(PosicionY(previo))" y2="@SvgNumero(y)"
                                       stroke="@configuracion.Color" stroke-width="2" />
                             }
                             <g><text x="@SvgNumero(x)" y="@SvgNumero(y + 5)" text-anchor="middle"
@@ -282,6 +298,7 @@
                         }
                     }
                 </svg>
+                </div>
 
                 <table class="table table-sm align-middle mb-0 matriz-transfusion">
                     <colgroup><col class="trans-parametro" /><col span="@momentos.Length" /></colgroup>
@@ -304,21 +321,151 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var (etiqueta, obtener) in ParametrosTransfusion)
-                        {
-                            <tr><th scope="row">@etiqueta</th>
-                                @foreach (var momento in momentos)
-                                {
-                                    var valores = _trans.Monitoreos
-                                        .Where(m => string.Equals(NormalizarMomento(m.Momento), momento, StringComparison.OrdinalIgnoreCase))
-                                        .Select(obtener).Where(v => !string.IsNullOrWhiteSpace(v));
-                                    <td>@string.Join(" / ", valores)</td>
-                                }
-                            </tr>
-                        }
+                        <tr>
+                            <th scope="row">Estado de conciencia</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <td>
+                                    <input type="text" maxlength="100" class="trans-celda-control"
+                                           aria-label="@($"Estado de conciencia, {momento}")"
+                                           @bind:get="ControlVisible(momento).EstadoConciencia"
+                                           @bind:set="valor => EditarControl(momento).EstadoConciencia = valor"
+                                           @bind:event="oninput" />
+                                </td>
+                            }
+                        </tr>
+                        <tr>
+                            <th scope="row"><strong style="color:@SeriesCurva[0].Color">@SeriesCurva[0].Simbolo</strong> @SeriesCurva[0].Etiqueta</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <td>
+                                    <input type="number" min="0" step="1" class="trans-celda-control"
+                                           aria-label="@($"FC, {momento}")"
+                                           @bind:get="ControlVisible(momento).FrecuenciaCardiaca"
+                                           @bind:set="valor => EditarControl(momento).FrecuenciaCardiaca = valor"
+                                           @bind:event="oninput" />
+                                </td>
+                            }
+                        </tr>
+                        <tr>
+                            <th scope="row"><strong style="color:@SeriesCurva[1].Color">@SeriesCurva[1].Simbolo</strong> @SeriesCurva[1].Etiqueta</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <td>
+                                    <input type="number" min="0" step="1" class="trans-celda-control"
+                                           aria-label="@($"FR, {momento}")"
+                                           @bind:get="ControlVisible(momento).FrecuenciaRespiratoria"
+                                           @bind:set="valor => EditarControl(momento).FrecuenciaRespiratoria = valor"
+                                           @bind:event="oninput" />
+                                </td>
+                            }
+                        </tr>
+                        <tr>
+                            <th scope="row"><strong style="color:@SeriesCurva[2].Color">@SeriesCurva[2].Simbolo</strong> @SeriesCurva[2].Etiqueta</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <td>
+                                    <input type="number" min="0" step="1" class="trans-celda-control"
+                                           aria-label="@($"PAS, {momento}")"
+                                           @bind:get="ControlVisible(momento).Pas"
+                                           @bind:set="valor => EditarControl(momento).Pas = valor"
+                                           @bind:event="oninput" />
+                                </td>
+                            }
+                        </tr>
+                        <tr>
+                            <th scope="row"><strong style="color:@SeriesCurva[3].Color">@SeriesCurva[3].Simbolo</strong> @SeriesCurva[3].Etiqueta</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <td>
+                                    <input type="number" min="0" step="1" class="trans-celda-control"
+                                           aria-label="@($"PAD, {momento}")"
+                                           @bind:get="ControlVisible(momento).Pad"
+                                           @bind:set="valor => EditarControl(momento).Pad = valor"
+                                           @bind:event="oninput" />
+                                </td>
+                            }
+                        </tr>
+                        <tr>
+                            <th scope="row"><strong style="color:@SeriesCurva[4].Color">@SeriesCurva[4].Simbolo</strong> @SeriesCurva[4].Etiqueta</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <td>
+                                    <input type="number" min="0" step="1" class="trans-celda-control"
+                                           aria-label="@($"PAM, {momento}")"
+                                           @bind:get="ControlVisible(momento).Pam"
+                                           @bind:set="valor => EditarControl(momento).Pam = valor"
+                                           @bind:event="oninput" />
+                                </td>
+                            }
+                        </tr>
+                        <tr>
+                            <th scope="row"><strong style="color:@SeriesCurva[6].Color">@SeriesCurva[6].Simbolo</strong> @SeriesCurva[6].Etiqueta</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <td>
+                                    <input type="number" min="0" step="any" class="trans-celda-control"
+                                           aria-label="@($"TLLC, {momento}")"
+                                           @bind:get="ControlVisible(momento).Tllc"
+                                           @bind:set="valor => EditarControl(momento).Tllc = valor"
+                                           @bind:event="oninput" />
+                                </td>
+                            }
+                        </tr>
+                        <tr>
+                            <th scope="row">Mucosas</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <td>
+                                    <input type="text" maxlength="100" class="trans-celda-control"
+                                           aria-label="@($"Mucosas, {momento}")"
+                                           @bind:get="ControlVisible(momento).Mucosas"
+                                           @bind:set="valor => EditarControl(momento).Mucosas = valor"
+                                           @bind:event="oninput" />
+                                </td>
+                            }
+                        </tr>
+                        <tr>
+                            <th scope="row"><strong style="color:@SeriesCurva[5].Color">@SeriesCurva[5].Simbolo</strong> @SeriesCurva[5].Etiqueta</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <td>
+                                    <input type="number" min="0" step="any" class="trans-celda-control"
+                                           aria-label="@($"Temperatura, {momento}")"
+                                           @bind:get="ControlVisible(momento).Temperatura"
+                                           @bind:set="valor => EditarControl(momento).Temperatura = valor"
+                                           @bind:event="oninput" />
+                                </td>
+                            }
+                        </tr>
+                        <tr>
+                            <th scope="row">Otros</th>
+                            @foreach (var momento in momentos)
+                            {
+                                <td>
+                                    <input type="text" maxlength="2000" class="trans-celda-control"
+                                           aria-label="@($"Otros, {momento}")"
+                                           @bind:get="ControlVisible(momento).Otros"
+                                           @bind:set="valor => EditarControl(momento).Otros = valor"
+                                           @bind:event="oninput" />
+                                </td>
+                            }
+                        </tr>
                     </tbody>
                 </table>
-            </div></section>
+            </div>
+            <div class="d-flex justify-content-end p-2">
+                @if (_trans.Id == 0)
+                {
+                    <small class="text-muted">Los controles se guardan con la transfusión.</small>
+                }
+                else
+                {
+                    <SaveButton class="btn btn-sm btn-primary" Disabled="@(_controlesEditados.Count == 0 || _guardandoCuadricula)"
+                                OnClick="GuardarCuadriculaAsync">Guardar monitoreo</SaveButton>
+                }
+            </div>
+        </section>
         @if (_trans.Id > 0)
         {
             <div id="trans-control" class="card border-0 shadow-sm mt-3 clinical-card"><div class="card-header bg-dark text-white py-2 px-3 fw-bold">Registrar control</div><div class="card-body"><div class="row g-2">
@@ -338,13 +485,8 @@
                 <div class="col-md-3"><label class="form-label">Responsable</label><InputText class="form-control" @bind-Value="_mon.Responsable" /></div>
             </div><SaveButton class="btn btn-primary mt-3" OnClick="AgregarMonAsync">Agregar control</SaveButton></div></div>
         }
-        <section class="history-panel mt-3">
-            <h2 class="section-header">Cálculo de volumen y ritmo de infusión</h2>
-            <div class="p-3">
-                <a href="https://chatgpt.com/library?file_id=libfile_05b0daf914088191b9fd1a4caad037b4&amp;account_id=personal"
-                   target="_blank" rel="noopener">Consultar las referencias para caninos y felinos en la ficha original</a>
-            </div>
-        </section>
+        </div>
+        <div id="panel-trans-historial" hidden="@(!_mostrarHistorial)">
         <section class="history-panel mt-3"><h2 class="section-header">Historial de transfusiones</h2><div class="table-responsive history-table"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Fecha</th><th>Producto/unidad</th><th>Compatibilidad</th><th>Volumen</th><th>Estado</th><th>Controles</th><th>Acciones</th></tr></thead><tbody>
         @if (_transfusiones.Count == 0)
         {
@@ -352,6 +494,7 @@
         }
         @foreach (var x in _transfusiones) { <tr><td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Producto / @x.IdentificadorUnidad</td><td>@x.GrupoReceptor → @x.GrupoDonante</td><td>@x.VolumenAdministradoMl / @x.VolumenPrescritoMl ml</td><td>@x.Estado</td><td>@x.Monitoreos.Count</td><td class="text-end text-nowrap"><button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditarTrans(x)">Abrir</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarTransAsync(x.Id)">Eliminar</button></td></tr> }
         </tbody></table></div></section>
+        </div>
     </fieldset>
 </div>
 
@@ -431,19 +574,51 @@
     }
 
     private static readonly string[] MomentosTransfusion = ["T0", "15 min", "30 min", "45 min", "60 min", "1.5 h", "2 h", "2.5 h", "3 h", "3.5 h", "4 h", "4.5 h", "5 h", "5.5 h", "6 h"];
-    private static readonly (string Etiqueta, Func<TransfusionMonitoreoDto, string?> Obtener)[] ParametrosTransfusion =
-    [
-        ("Estado de conciencia", m => m.EstadoConciencia),
-        ("FC", m => m.FrecuenciaCardiaca?.ToString()),
-        ("FR", m => m.FrecuenciaRespiratoria?.ToString()),
-        ("PAS", m => m.Pas?.ToString()),
-        ("PAD", m => m.Pad?.ToString()),
-        ("PAM", m => m.Pam?.ToString()),
-        ("TLLC", m => m.Tllc?.ToString()),
-        ("Mucosas", m => m.Mucosas),
-        ("Temperatura", m => m.Temperatura?.ToString()),
-        ("Otros", m => m.Otros),
-    ];
+    private readonly Dictionary<string, TransfusionMonitoreoDto> _controlesEditados = new(StringComparer.OrdinalIgnoreCase);
+    private bool _guardandoCuadricula;
+    private bool _mostrarHistorial;
+
+    private TransfusionMonitoreoDto ControlVisible(string momento) =>
+        _controlesEditados.GetValueOrDefault(momento)
+        ?? _trans.Monitoreos.Where(m => string.Equals(NormalizarMomento(m.Momento), momento, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(m => m.FechaHora).ThenBy(m => m.Id).LastOrDefault()
+        ?? new() { Momento = momento };
+
+    private TransfusionMonitoreoDto EditarControl(string momento)
+    {
+        if (!_controlesEditados.TryGetValue(momento, out var control))
+        {
+            control = ControlVisible(momento).Copiar();
+            _controlesEditados.Add(momento, control);
+        }
+        return control;
+    }
+
+    private async Task GuardarCuadriculaAsync()
+    {
+        if (_trans.Id <= 0 || _guardandoCuadricula) return;
+        _guardandoCuadricula = true;
+        try
+        {
+            await EjecutarAsync(GuardarControlesPendientesAsync, "Monitoreo guardado.");
+        }
+        finally { _guardandoCuadricula = false; }
+    }
+
+    private async Task GuardarControlesPendientesAsync()
+    {
+        var ficha = _trans;
+        foreach (var (momento, control) in _controlesEditados.ToArray())
+        {
+            if (!ReferenceEquals(ficha, _trans)) return;
+            control.IdTransfusion = ficha.Id;
+            await FichasService.GuardarControlCuadriculaAsync(control, ficha.IdOrden);
+            if (!ReferenceEquals(ficha, _trans)) return;
+            ficha.Monitoreos.RemoveAll(m => m.Id == control.Id);
+            ficha.Monitoreos.Add(control);
+            _controlesEditados.Remove(momento);
+        }
+    }
 
     private static string NormalizarMomento(string momento) =>
         momento.Trim().Replace(" hr", " h", StringComparison.OrdinalIgnoreCase);
@@ -525,6 +700,7 @@
     private async Task RecargarAsync() => _transfusiones = await FichasService.ObtenerTransfusionesAsync(IdOrden, Nhcl);
     private void NuevaTrans()
     {
+        _controlesEditados.Clear();
         _trans = new()
         {
             IdOrden = IdOrden,
@@ -535,8 +711,8 @@
         _mon = new();
     }
     private void SeleccionarMomento(string momento) => _mon.Momento = momento;
-    private void EditarTrans(TransfusionDto x){_trans=x;_mon=new(){IdTransfusion=x.Id,FechaHora=DateTime.Now};}
-    private async Task GuardarTransAsync()=>await EjecutarAsync(async()=>{_trans.Id=await FichasService.GuardarTransfusionAsync(_trans,Session.IdUser);await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Transfusión guardada.");
+    private void EditarTrans(TransfusionDto x){_mostrarHistorial=false;_controlesEditados.Clear();_trans=x;_mon=new(){IdTransfusion=x.Id,FechaHora=DateTime.Now};}
+    private async Task GuardarTransAsync()=>await EjecutarAsync(async()=>{_trans.Id=await FichasService.GuardarTransfusionAsync(_trans,Session.IdUser);await GuardarControlesPendientesAsync();await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Transfusión guardada.");
     private async Task AgregarMonAsync()=>await EjecutarAsync(async()=>{_mon.IdTransfusion=_trans.Id;await FichasService.AgregarMonitoreoAsync(_mon,IdOrden,Session.IdUser);await RecargarAsync();_trans=_transfusiones.First(x=>x.Id==_trans.Id);_mon=new(){IdTransfusion=_trans.Id,FechaHora=DateTime.Now};},"Control agregado.");
     private async Task EliminarTransAsync(int id)=>await EjecutarAsync(async()=>{await FichasService.EliminarTransfusionAsync(id,IdOrden);await RecargarAsync();NuevaTrans();},"Registro eliminado.");
     private async Task EjecutarAsync(Func<Task> accion,string ok){try{await accion();_error=false;_mensaje=ok;}catch(Exception ex){Error(ex);}}

@@ -92,6 +92,7 @@ public sealed record AdjuntoTransfusionDto(string Nombre, byte[] Contenido);
 
 public sealed class TransfusionMonitoreoDto
 {
+    public TransfusionMonitoreoDto Copiar() => (TransfusionMonitoreoDto)MemberwiseClone();
     public int Id { get; set; }
     public int IdTransfusion { get; set; }
     public DateTime FechaHora { get; set; } = DateTime.Now;
