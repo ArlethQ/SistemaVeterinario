@@ -23,10 +23,24 @@ public sealed class JaulaClinicaDto
     public string PacienteActual { get; set; } = "";
     public string Estado { get; set; } = "A";
 }
+public sealed class SalaQuirofanoDto
+{
+    public int Id { get; set; }
+    public int IdPiso { get; set; }
+    public int IdLocalidad { get; set; }
+    public string Codigo { get; set; } = "";
+    public string Observacion { get; set; } = "";
+    public string Piso { get; set; } = "";
+    public string Localidad { get; set; } = "";
+    public bool Activa { get; set; } = true;
+}
+
 public sealed class CirugiaProgramadaDto
 {
     public int Id { get; set; }
     public int? IdOrden { get; set; }
+    public int? IdSala { get; set; }
+    public string Sala { get; set; } = "";
     public int IdMedico { get; set; }
     public string Medico { get; set; } = "";
     public int? IdAnestesiologo { get; set; }

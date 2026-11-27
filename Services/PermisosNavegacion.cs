@@ -36,6 +36,7 @@ public sealed class PermisosNavegacion(int rol, IEnumerable<MenuItemModel> menus
         var clave = ruta.Split('?', '#')[0].Trim().Replace('\\', '/').TrimStart('~').Trim('/').ToLowerInvariant();
         return clave switch
         {
+            "programacion/salas-quirofano" => "programacion/consultorios",
             "hospitalizacion/ficha-actualizada" => "hospitalizacion/ficha",
             "contabilidad/dashboard" => "contabilidad",
             "contabilidad/inventarios/kardex" => "contabilidad/inventarios",

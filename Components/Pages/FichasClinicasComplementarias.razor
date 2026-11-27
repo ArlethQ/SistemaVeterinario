@@ -169,16 +169,14 @@
                                     }
                                 </span>
                                 <div class="trans-documento-botones">
-                                    @if (nombre is not null)
-                                    {
-                                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AbrirAdjuntosAsync(_trans, tipo)">
-                                            <i class="bi bi-eye" aria-hidden="true"></i> Ver
-                                        </button>
-                                    }
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => AbrirAdjuntosAsync(_trans, tipo, editar: true)">
-                                        <i class="bi @(nombre is null ? "bi-paperclip" : "bi-pencil")" aria-hidden="true"></i>
-                                        @(nombre is null ? "Adjuntar" : "Editar")
-                                    </button>
+                                    <InputFile @key="(_trans, tipo)" id="@($"trans-carga-{tipo}")"
+                                               class="visually-hidden trans-carga-directa"
+                                               accept=".pdf,.png,.jpg,.jpeg" OnChange="e => AdjuntarEnFichaAsync(e, tipo)" />
+                                    <label class="btn btn-sm btn-outline-primary" for="@($"trans-carga-{tipo}")"
+                                           aria-label="@($"{(nombre is null ? "Adjuntar" : "Reemplazar")} {titulo}")">
+                                        <i class="bi bi-paperclip" aria-hidden="true"></i>
+                                        @(nombre is null ? "Adjuntar" : "Reemplazar")
+                                    </label>
                                 </div>
                             </li>
                         }
@@ -245,7 +243,7 @@
                 <label for="trans-AlbuminaDonante" class="form-label">Albúmina</label>
                 <InputNumber id="trans-AlbuminaDonante" class="form-control form-control-sm" step="any" @bind-Value="_trans.AlbuminaDonante" />
             </div>
-        </div><div class="mt-3 d-flex gap-2 justify-content-end"><SaveButton class="btn btn-primary" Disabled="@(_trans.Id == 0 && !_productos.Contains(_trans.Producto))" OnClick="GuardarTransAsync">Guardar transfusión</SaveButton><button class="btn btn-outline-secondary" @onclick="NuevaTrans">Nueva</button></div></div></div>
+        </div><div class="mt-3 d-flex gap-2 justify-content-end"><SaveButton class="btn btn-primary" Disabled="@(_cargasAdjuntos > 0 || (_trans.Id == 0 && !_productos.Contains(_trans.Producto)))" OnClick="GuardarTransAsync">Guardar transfusión</SaveButton><button class="btn btn-outline-secondary" @onclick="NuevaTrans">Nueva</button></div></div></div>
 
         @{ var momentos = MomentosTransfusion.Concat(_trans.Monitoreos.Select(m => NormalizarMomento(m.Momento)))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(); }
@@ -512,7 +510,7 @@
         {
             <tr><td colspan="8" class="text-center text-muted">@(_paciente is null ? "Selecciona una orden para consultar sus transfusiones." : "Esta orden aún no tiene transfusiones registradas.")</td></tr>
         }
-        @foreach (var x in _transfusiones) { <tr><td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Producto / @x.IdentificadorUnidad</td><td>@x.GrupoReceptor → @x.GrupoDonante</td><td>@x.VolumenAdministradoMl / @x.VolumenPrescritoMl ml</td><td>@x.Estado</td><td>@x.Monitoreos.Count</td><td><button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AbrirAdjuntosAsync(x, desdeHistorial: true)">Documentos (@AdjuntosTransfusion(x).Count(a => a.Nombre is not null))</button></td><td class="text-end text-nowrap"><button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditarTrans(x)">Abrir</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarTransAsync(x.Id)">Eliminar</button></td></tr> }
+        @foreach (var x in _transfusiones) { <tr><td>@x.Fecha.ToString("yyyy-MM-dd HH:mm")</td><td>@x.Producto / @x.IdentificadorUnidad</td><td>@x.GrupoReceptor → @x.GrupoDonante</td><td>@x.VolumenAdministradoMl / @x.VolumenPrescritoMl ml</td><td>@x.Estado</td><td>@x.Monitoreos.Count</td><td><button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AbrirAdjuntosAsync(x)">Documentos (@AdjuntosTransfusion(x).Count(a => a.Nombre is not null))</button></td><td class="text-end text-nowrap"><button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditarTrans(x)">Abrir</button> <button class="btn btn-xs btn-outline-danger" @onclick="() => EliminarTransAsync(x.Id)">Eliminar</button></td></tr> }
         </tbody></table></div></section>
         </div>
     </fieldset>
@@ -581,7 +579,7 @@
             @if (_reemplazoAdjunto is not null)
             {
                 <SaveButton class="btn btn-sm btn-primary" Disabled="@_cargandoAdjunto" OnClick="AplicarAdjuntoAsync">
-                    @(_adjuntoDesdeHistorial ? "Guardar documento" : "Usar archivo")
+                    Guardar documento
                 </SaveButton>
             }
         </footer>
@@ -613,7 +611,7 @@
     private string _tipoAdjunto = "Consentimiento";
     private string? _urlAdjunto, _mimeAdjunto, _errorAdjunto;
     private AdjuntoTransfusionDto? _archivoAdjunto, _reemplazoAdjunto;
-    private bool _editandoAdjunto, _adjuntoDesdeHistorial, _cargandoAdjunto;
+    private bool _editandoAdjunto, _cargandoAdjunto;
 
     private static (string Tipo, string Titulo, string? Nombre)[] AdjuntosTransfusion(TransfusionDto ficha) =>
     [
@@ -623,12 +621,11 @@
         ("PruebaMenor", "Crossmatch menor", ficha.PruebaMenorNombre)
     ];
 
-    private async Task AbrirAdjuntosAsync(TransfusionDto ficha, string? tipo = null, bool editar = false, bool desdeHistorial = false)
+    private async Task AbrirAdjuntosAsync(TransfusionDto ficha)
     {
         _fichaAdjunto = ficha;
-        _adjuntoDesdeHistorial = desdeHistorial;
-        _editandoAdjunto = editar;
-        _tipoAdjunto = tipo ?? AdjuntosTransfusion(ficha).FirstOrDefault(a => a.Nombre is not null).Tipo ?? "Consentimiento";
+        _editandoAdjunto = false;
+        _tipoAdjunto = AdjuntosTransfusion(ficha).FirstOrDefault(a => a.Nombre is not null).Tipo ?? "Consentimiento";
         await ArchivosJS.InvokeVoidAsync("hosvetTransfusionAdjunto.abrir", _dialogoAdjunto);
         await CargarAdjuntoAsync();
     }
@@ -647,16 +644,40 @@
         {
             _archivoAdjunto = null;
             _reemplazoAdjunto = null;
-            var archivo = _adjuntoDesdeHistorial ? null : ficha.AdjuntosPendientes.GetValueOrDefault(_tipoAdjunto);
-            if (archivo is null && ficha.Id > 0)
-                archivo = await FichasService.ObtenerAdjuntoTransfusionAsync(ficha.Id, ficha.IdOrden, _tipoAdjunto);
+            var archivo = await FichasService.ObtenerAdjuntoTransfusionAsync(ficha.Id, ficha.IdOrden, _tipoAdjunto);
             await MostrarAdjuntoAsync(archivo);
         });
     }
 
+    private async Task AdjuntarEnFichaAsync(InputFileChangeEventArgs e, string tipo)
+    {
+        var ficha = _trans;
+        _cargasAdjuntos++;
+        try
+        {
+            var archivo = await LeerAdjuntoAsync(e.File);
+            if (ReferenceEquals(ficha, _trans))
+                ficha.AdjuntosPendientes[tipo] = archivo;
+        }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(ficha, _trans)) Error(ex);
+        }
+        finally { _cargasAdjuntos--; }
+    }
+
     private async Task SeleccionarAdjuntoAsync(InputFileChangeEventArgs e) => await EjecutarAdjuntoAsync(async () =>
     {
-        var archivo = e.File;
+        _reemplazoAdjunto = null;
+        var reemplazo = await LeerAdjuntoAsync(e.File);
+        await MostrarAdjuntoAsync(reemplazo);
+        _reemplazoAdjunto = reemplazo;
+    });
+
+    private int _cargasAdjuntos;
+
+    private static async Task<AdjuntoTransfusionDto> LeerAdjuntoAsync(IBrowserFile archivo)
+    {
         var nombre = System.IO.Path.GetFileName(archivo.Name);
         if (nombre.Length is 0 or > 200)
             throw new InvalidOperationException("El nombre del archivo debe tener entre 1 y 200 caracteres.");
@@ -677,30 +698,21 @@
         if (!valido)
             throw new InvalidOperationException("Selecciona un archivo PDF, PNG o JPEG válido.");
 
-        var reemplazo = new AdjuntoTransfusionDto(nombre, bytes);
-        await MostrarAdjuntoAsync(reemplazo);
-        _reemplazoAdjunto = reemplazo;
-    });
+        return new AdjuntoTransfusionDto(nombre, bytes);
+    }
 
     private async Task AplicarAdjuntoAsync()
     {
         if (_fichaAdjunto is not { } ficha || _reemplazoAdjunto is not { } reemplazo) return;
         await EjecutarAdjuntoAsync(async () =>
         {
-            if (_adjuntoDesdeHistorial)
+            await FichasService.GuardarAdjuntoTransfusionAsync(ficha.Id, ficha.IdOrden, _tipoAdjunto, reemplazo);
+            switch (_tipoAdjunto)
             {
-                await FichasService.GuardarAdjuntoTransfusionAsync(ficha.Id, ficha.IdOrden, _tipoAdjunto, reemplazo);
-                switch (_tipoAdjunto)
-                {
-                    case "Consentimiento": ficha.ConsentimientoNombre = reemplazo.Nombre; break;
-                    case "Tipificacion": ficha.TipificacionNombre = reemplazo.Nombre; break;
-                    case "PruebaMayor": ficha.PruebaMayorNombre = reemplazo.Nombre; break;
-                    case "PruebaMenor": ficha.PruebaMenorNombre = reemplazo.Nombre; break;
-                }
-            }
-            else
-            {
-                ficha.AdjuntosPendientes[_tipoAdjunto] = reemplazo;
+                case "Consentimiento": ficha.ConsentimientoNombre = reemplazo.Nombre; break;
+                case "Tipificacion": ficha.TipificacionNombre = reemplazo.Nombre; break;
+                case "PruebaMayor": ficha.PruebaMayorNombre = reemplazo.Nombre; break;
+                case "PruebaMenor": ficha.PruebaMenorNombre = reemplazo.Nombre; break;
             }
 
             _reemplazoAdjunto = null;

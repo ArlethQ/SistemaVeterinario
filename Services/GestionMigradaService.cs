@@ -1,3 +1,5 @@
+using Dapper;
+using Microsoft.Data.SqlClient;
 using HosvetKardex.Web.Data;
 using HosvetKardex.Web.Models;
 
@@ -25,6 +27,8 @@ public interface IGestionMigradaService
     Task<List<ExcepcionHorarioDto>> ObtenerExcepcionesAsync(DateTime desde, DateTime hasta);
     Task<bool> GuardarExcepcionAsync(ExcepcionHorarioDto item, int idUsuario);
     Task<bool> DesactivarExcepcionAsync(int id, int idUsuario);
+    Task<List<SalaQuirofanoDto>> ObtenerSalasQuirofanoAsync();
+    Task<bool> GuardarSalaQuirofanoAsync(SalaQuirofanoDto sala, int idUsuario);
     Task<List<CirugiaProgramadaDto>> ObtenerCirugiasAsync(DateTime desde, DateTime hasta);
     Task<bool> GuardarCirugiaAsync(CirugiaProgramadaDto item, int idUsuario);
     Task<bool> CancelarCirugiaAsync(int id, int idUsuario);
@@ -42,7 +46,7 @@ public interface IGestionMigradaService
     Task<int> DepurarBitacoraAsync(DateTime fechaCorte, string etiquetaPeriodo, int idUsuario);
 }
 
-public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogService eFactCatalog, SessionStateService session) : IGestionMigradaService
+public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogService eFactCatalog, SessionStateService session, IAuthService auth) : IGestionMigradaService
 {
     private int UsuarioFacturacion => 1_000_000 + (session.Localidad > 0 ? session.Localidad : 1);
     private async Task VerificarColumnasAsync(string tabla, params string[] requeridas)
@@ -441,18 +445,108 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         await db.ExecuteAsync(ddl);
     }
 
+    private Task AsegurarSalasQuirofanoAsync() => db.ExecuteAsync("""
+        SET XACT_ABORT ON;
+        BEGIN TRANSACTION;
+        DECLARE @Resultado int;
+        EXEC @Resultado = sys.sp_getapplock @Resource='ForVets.SalasQuirofano.Esquema',
+            @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=5000;
+        IF @Resultado < 0 THROW 50001, 'No se pudo preparar el catalogo de quirofanos.', 1;
+
+        IF OBJECT_ID('dbo.qvt_salas_quirofano', 'U') IS NULL
+            CREATE TABLE dbo.qvt_salas_quirofano (
+                id int IDENTITY PRIMARY KEY,
+                id_piso int NOT NULL REFERENCES dbo.vt_pisos(piso_id),
+                codigo nvarchar(50) NOT NULL,
+                observacion nvarchar(200) NOT NULL,
+                activa bit NOT NULL,
+                CONSTRAINT UQ_qvt_salas_piso_codigo UNIQUE (id_piso, codigo)
+            );
+        IF COL_LENGTH('dbo.qvt_calendario_cirugias', 'id_sala') IS NULL
+            ALTER TABLE dbo.qvt_calendario_cirugias ADD id_sala int NULL
+                REFERENCES dbo.qvt_salas_quirofano(id);
+        COMMIT TRANSACTION;
+        """);
+
+    public async Task<List<SalaQuirofanoDto>> ObtenerSalasQuirofanoAsync()
+    {
+        await AsegurarSalasQuirofanoAsync();
+        return (await db.QueryAsync<SalaQuirofanoDto>("""
+            SELECT s.id Id, s.id_piso IdPiso, s.codigo Codigo, s.observacion Observacion,
+                   CAST(CASE WHEN s.activa=1 AND ISNULL(p.piso_estado,'A')='A' THEN 1 ELSE 0 END AS bit) Activa,
+                   p.piso_localidad IdLocalidad, RTRIM(p.piso_nombre) Piso,
+                   RTRIM(ISNULL(l.loc_descripcion,'')) Localidad
+            FROM dbo.qvt_salas_quirofano s
+            JOIN dbo.vt_pisos p ON p.piso_id=s.id_piso
+            LEFT JOIN dbo.vt_localidades l ON l.loc_id=p.piso_localidad
+            ORDER BY Localidad, Piso, Codigo
+            """)).ToList();
+    }
+
+    public async Task<bool> GuardarSalaQuirofanoAsync(SalaQuirofanoDto sala, int idUsuario)
+    {
+        if (!session.IsAuthenticated) return false;
+        var permisos = await auth.ObtenerPermisosNavegacionAsync("programacion/salas-quirofano");
+        if (!permisos.Permite("programacion/salas-quirofano")) return false;
+
+        var codigo = sala.Codigo.Trim();
+        var observacion = sala.Observacion.Trim();
+        if (codigo.Length is 0 or > 50 || observacion.Length > 200 || sala.IdPiso <= 0) return false;
+
+        await AsegurarSalasQuirofanoAsync();
+        var guardada = await db.ExecuteScalarAsync<int>("""
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+            DECLARE @Resultado int;
+            EXEC @Resultado = sys.sp_getapplock @Resource='ForVets.AgendaQuirofano',
+                @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=5000;
+            IF @Resultado < 0 THROW 50002, 'La agenda de quirofano esta ocupada.', 1;
+
+            DECLARE @Guardada int=0;
+            IF EXISTS (SELECT 1 FROM dbo.vt_pisos WHERE piso_id=@IdPiso AND ISNULL(piso_estado,'A')='A')
+               AND NOT EXISTS (SELECT 1 FROM dbo.qvt_salas_quirofano WHERE id_piso=@IdPiso AND codigo=@Codigo AND id<>@Id)
+            BEGIN
+                IF @Id=0
+                BEGIN
+                    INSERT dbo.qvt_salas_quirofano (id_piso,codigo,observacion,activa)
+                    VALUES (@IdPiso,@Codigo,@Observacion,@Activa);
+                    SET @Guardada=@@ROWCOUNT;
+                END
+                ELSE
+                BEGIN
+                    UPDATE dbo.qvt_salas_quirofano
+                    SET codigo=@Codigo,observacion=@Observacion,activa=@Activa
+                    WHERE id=@Id AND id_piso=@IdPiso
+                      AND (@Activa=1 OR NOT EXISTS (
+                          SELECT 1 FROM dbo.qvt_calendario_cirugias
+                          WHERE id_sala=@Id AND estado='A'
+                            AND (CAST(fechacirugia AS date)>CAST(@Ahora AS date)
+                              OR (CAST(fechacirugia AS date)=CAST(@Ahora AS date)
+                                AND TRY_CONVERT(time,horafinalizacion)>CAST(@Ahora AS time)))));
+                    SET @Guardada=@@ROWCOUNT;
+                END
+            END
+            COMMIT TRANSACTION;
+            SELECT @Guardada;
+            """, new { sala.Id, sala.IdPiso, Codigo = codigo, Observacion = observacion, sala.Activa,
+                Ahora = DateTime.UtcNow.AddHours(-5) });
+        if (guardada > 0) await db.RegistrarBitacoraAsync($"Sala de quirófano: {codigo}", idUsuario);
+        return guardada > 0;
+    }
+
     public async Task<List<CirugiaProgramadaDto>> ObtenerCirugiasAsync(DateTime desde,DateTime hasta)
     {
         await VerificarColumnasAsync("qvt_calendario_cirugias", "sec", "codmed", "nhcl", "codprocedimiento", "fechacirugia", "horainicio", "horafinalizacion", "localidad", "estado");
         await AsegurarColumnasAnestesiologoCirugiaAsync();
+        await AsegurarSalasQuirofanoAsync();
         return (await db.QueryAsync<CirugiaProgramadaDto>(@"
-        SELECT sec Id,id_orden IdOrden,codmed IdMedico,RTRIM(ISNULL(nommedico,'')) Medico,
+        SELECT sec Id,id_orden IdOrden,id_sala IdSala,ISNULL(s.codigo,'') Sala,codmed IdMedico,RTRIM(ISNULL(nommedico,'')) Medico,
         codanestesiologo IdAnestesiologo,RTRIM(ISNULL(nomanestesiologo,'')) Anestesiologo,
         RTRIM(ISNULL(cirujanos_adicionales_ids,'')) CirujanosAdicionalesIds,
         RTRIM(ISNULL(cirujanos_adicionales_nombres,'')) CirujanosAdicionalesNombres,
         nhcl Nhcl,RTRIM(ISNULL(nompaciente,'')) Paciente,
         codprocedimiento IdProcedimiento,RTRIM(ISNULL(nomprocedimiento,'')) Procedimiento,fechacirugia Fecha,RTRIM(horainicio) HoraInicio,
-        RTRIM(horafinalizacion) HoraFin,localidad IdLocalidad,estado Estado FROM qvt_calendario_cirugias
+        RTRIM(horafinalizacion) HoraFin,localidad IdLocalidad,estado Estado FROM qvt_calendario_cirugias c LEFT JOIN dbo.qvt_salas_quirofano s ON s.id=c.id_sala
         WHERE fechacirugia>=@Desde AND fechacirugia<DATEADD(day,1,@Hasta) ORDER BY fechacirugia,horainicio",new{Desde=desde.Date,Hasta=hasta.Date})).ToList();
     }
 
@@ -460,8 +554,36 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
     {
         await VerificarColumnasAsync("qvt_calendario_cirugias", "sec", "codmed", "nhcl", "codprocedimiento", "idcliente", "fechacirugia", "horainicio", "horafinalizacion", "usering", "localidad", "nommedico", "nompaciente", "nomprocedimiento", "estado");
         await AsegurarColumnasAnestesiologoCirugiaAsync();
+        await AsegurarSalasQuirofanoAsync();
         if(x.IdMedico<=0||x.Nhcl<=0||x.IdProcedimiento<=0||x.IdLocalidad<=0||x.Fecha.Date<DateTime.Today||!HoraValida(x.HoraInicio,x.HoraFin))return false;
         if(x.Fecha.Date==DateTime.Today&&TimeSpan.TryParse(x.HoraInicio,out var horaInicioTs)&&horaInicioTs<DateTime.Now.TimeOfDay)return false;
+        await using var connection = new SqlConnection(db.GetConnectionString());
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        var bloqueoAgenda = await connection.ExecuteScalarAsync<int>("""
+            DECLARE @Resultado int;
+            EXEC @Resultado = sys.sp_getapplock @Resource='ForVets.AgendaQuirofano',
+                @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=5000;
+            SELECT @Resultado;
+            """, transaction: transaction);
+        if (bloqueoAgenda < 0) return false;
+
+        if (x.IdSala.HasValue)
+        {
+            var salaValida = await connection.ExecuteScalarAsync<int>("""
+                SELECT COUNT(*) FROM dbo.qvt_salas_quirofano s
+                JOIN dbo.vt_pisos p ON p.piso_id=s.id_piso
+                WHERE s.id=@IdSala AND s.activa=1 AND p.piso_localidad=@IdLocalidad
+                  AND ISNULL(p.piso_estado,'A')='A';
+                """, new { x.IdSala, x.IdLocalidad }, transaction);
+            if (salaValida == 0) return false;
+        }
+        else if (await connection.ExecuteScalarAsync<int>("""
+            SELECT COUNT(*) FROM dbo.qvt_salas_quirofano s
+            JOIN dbo.vt_pisos p ON p.piso_id=s.id_piso
+            WHERE s.activa=1 AND p.piso_localidad=@IdLocalidad AND ISNULL(p.piso_estado,'A')='A';
+            """, new { x.IdLocalidad }, transaction) > 0) return false;
+
         int? idAnest = x.IdAnestesiologo is > 0 ? x.IdAnestesiologo : null;
         if (idAnest == x.IdMedico) idAnest = null;
         var idsAdicionales = (x.IdsCirujanosAdicionales ?? [])
@@ -475,26 +597,26 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
 
         foreach (var idMedCheck in todosMedicos)
         {
-            var pCheck = new { x.Id, IdMedico = idMedCheck, x.IdLocalidad, x.Fecha, x.HoraInicio, x.HoraFin };
-            var conflicto = await db.QueryFirstOrDefaultAsync<int>(@"
+            var pCheck = new { x.Id, IdMedico = idMedCheck, x.IdLocalidad, x.IdSala, x.Fecha, x.HoraInicio, x.HoraFin };
+            var conflicto = await connection.QueryFirstOrDefaultAsync<int>(@"
                 SELECT COUNT(1) FROM qvt_calendario_cirugias
                 WHERE estado='A' AND sec<>@Id AND CAST(fechacirugia AS date)=CAST(@Fecha AS date)
                   AND (
                       codmed=@IdMedico OR ISNULL(codanestesiologo,0)=@IdMedico
                       OR (',' + ISNULL(cirujanos_adicionales_ids,'') + ',' LIKE '%,' + CAST(@IdMedico AS VARCHAR(20)) + ',%')
-                      OR localidad=@IdLocalidad
+                      OR (localidad=@IdLocalidad AND (id_sala=@IdSala OR id_sala IS NULL OR @IdSala IS NULL))
                   )
                   AND CAST(horainicio AS time)<CAST(@HoraFin AS time)
-                  AND CAST(horafinalizacion AS time)>CAST(@HoraInicio AS time)", pCheck);
-            var bloqueo = await db.QueryFirstOrDefaultAsync<int>(@"
+                  AND CAST(horafinalizacion AS time)>CAST(@HoraInicio AS time)", pCheck, transaction);
+            var bloqueo = await connection.QueryFirstOrDefaultAsync<int>(@"
                 SELECT COUNT(1) FROM vt_calendarizacionHorariosMedicos
                 WHERE cal_estado='A'
                   AND cal_idMedico=@IdMedico
                   AND cal_localidad=@IdLocalidad
                   AND CAST(cal_fecha AS date)=CAST(@Fecha AS date)
                   AND TRY_CONVERT(time,cal_desde)<TRY_CONVERT(time,@HoraFin)
-                  AND TRY_CONVERT(time,CASE WHEN cal_hasta='24:00' THEN '23:59:59' ELSE cal_hasta END)>TRY_CONVERT(time,@HoraInicio)", pCheck);
-            var citaConflicto = await db.QueryFirstOrDefaultAsync<int>(@"
+                  AND TRY_CONVERT(time,CASE WHEN cal_hasta='24:00' THEN '23:59:59' ELSE cal_hasta END)>TRY_CONVERT(time,@HoraInicio)", pCheck, transaction);
+            var citaConflicto = await connection.QueryFirstOrDefaultAsync<int>(@"
                 SELECT COUNT(1) FROM vt_citas
                 WHERE ISNULL(ci_estado,'A')<>'I' AND ISNULL(ci_estadocita,'')<>'X'
                   AND ci_usuario=@IdMedico
@@ -502,7 +624,7 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
                   AND CAST(ci_fecha AS date)=CAST(@Fecha AS date)
                   AND TRY_CONVERT(time,ci_hora) IS NOT NULL
                   AND DATEADD(minute,30,TRY_CONVERT(time,ci_hora))>TRY_CONVERT(time,@HoraInicio)
-                  AND TRY_CONVERT(time,ci_hora)<TRY_CONVERT(time,@HoraFin)", pCheck);
+                  AND TRY_CONVERT(time,ci_hora)<TRY_CONVERT(time,@HoraFin)", pCheck, transaction);
             if (conflicto > 0 || bloqueo > 0 || citaConflicto > 0) return false;
         }
 
@@ -525,7 +647,7 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
         int? idOrdenVinculada = x.IdOrden is > 0 ? x.IdOrden : null;
         if (x.Id <= 0 && idOrdenVinculada is null)
         {
-            idOrdenVinculada = await db.QueryFirstOrDefaultAsync<int?>(@"
+            idOrdenVinculada = await connection.QueryFirstOrDefaultAsync<int?>(@"
                 DECLARE @IdCliente INT = 0;
                 DECLARE @NombreProp NVARCHAR(200) = '';
                 DECLARE @TipoOrigen VARCHAR(5) = 'M';
@@ -571,15 +693,14 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
                     0, 0, 3
                 );
                 SELECT CAST(SCOPE_IDENTITY() AS INT);",
-                new { x.Nhcl, x.IdMedico, x.Fecha, x.IdLocalidad, x.HoraInicio, Usuario = idUsuario });
-            x.IdOrden = idOrdenVinculada;
+                new { x.Nhcl, x.IdMedico, x.Fecha, x.IdLocalidad, x.HoraInicio, Usuario = idUsuario }, transaction);
         }
 
-        var sql=x.Id>0?@"UPDATE q SET id_orden=@IdOrden,codmed=@IdMedico,codanestesiologo=@IdAnestesiologo,nomanestesiologo=@NomAnestesiologo,cirujanos_adicionales_ids=@CirujanosAdicIds,cirujanos_adicionales_nombres=@CirujanosAdicNombres,nhcl=@Nhcl,codprocedimiento=@IdProcedimiento,fechacirugia=@Fecha,horainicio=@HoraInicio,horafinalizacion=@HoraFin,localidad=@IdLocalidad,nommedico=u.user_nombre,nompaciente=p.mas_nombre,nomprocedimiento=RTRIM(ISNULL(pr.NOMBRE,'')),idcliente=p.mas_idcliente FROM qvt_calendario_cirugias q INNER JOIN vt_usuarios u ON u.user_numero=@IdMedico INNER JOIN vt_pacientes p ON p.mas_nhcl=@Nhcl INNER JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO=@IdProcedimiento WHERE q.sec=@Id":@"INSERT INTO qvt_calendario_cirugias(id_orden,codmed,codanestesiologo,nomanestesiologo,cirujanos_adicionales_ids,cirujanos_adicionales_nombres,nhcl,codprocedimiento,idcliente,fechacirugia,horainicio,horafinalizacion,usering,localidad,nommedico,nompaciente,nomprocedimiento,estado) SELECT @IdOrden,@IdMedico,@IdAnestesiologo,@NomAnestesiologo,@CirujanosAdicIds,@CirujanosAdicNombres,@Nhcl,@IdProcedimiento,p.mas_idcliente,@Fecha,@HoraInicio,@HoraFin,@Usuario,@IdLocalidad,u.user_nombre,p.mas_nombre,RTRIM(ISNULL(pr.NOMBRE,'')),'A' FROM vt_pacientes p CROSS JOIN vt_usuarios u CROSS JOIN VeterinariaFacturacion.dbo.PRODUCTO pr WHERE p.mas_nhcl=@Nhcl AND u.user_numero=@IdMedico AND pr.CODIGO=@IdProcedimiento";
-        var ok=await db.ExecuteAsync(sql,new{x.Id,IdOrden=idOrdenVinculada,x.IdMedico,IdAnestesiologo=idAnest,NomAnestesiologo=nomAnest,CirujanosAdicIds=cirujanosAdicIds,CirujanosAdicNombres=cirujanosAdicNombres,x.Nhcl,x.IdProcedimiento,x.Fecha,x.HoraInicio,x.HoraFin,x.IdLocalidad,Usuario=idUsuario})>0;
+        var sql=x.Id>0?@"UPDATE q SET id_orden=@IdOrden,id_sala=@IdSala,codmed=@IdMedico,codanestesiologo=@IdAnestesiologo,nomanestesiologo=@NomAnestesiologo,cirujanos_adicionales_ids=@CirujanosAdicIds,cirujanos_adicionales_nombres=@CirujanosAdicNombres,nhcl=@Nhcl,codprocedimiento=@IdProcedimiento,fechacirugia=@Fecha,horainicio=@HoraInicio,horafinalizacion=@HoraFin,localidad=@IdLocalidad,nommedico=u.user_nombre,nompaciente=p.mas_nombre,nomprocedimiento=RTRIM(ISNULL(pr.NOMBRE,'')),idcliente=p.mas_idcliente FROM qvt_calendario_cirugias q INNER JOIN vt_usuarios u ON u.user_numero=@IdMedico INNER JOIN vt_pacientes p ON p.mas_nhcl=@Nhcl INNER JOIN VeterinariaFacturacion.dbo.PRODUCTO pr ON pr.CODIGO=@IdProcedimiento WHERE q.sec=@Id":@"INSERT INTO qvt_calendario_cirugias(id_orden,id_sala,codmed,codanestesiologo,nomanestesiologo,cirujanos_adicionales_ids,cirujanos_adicionales_nombres,nhcl,codprocedimiento,idcliente,fechacirugia,horainicio,horafinalizacion,usering,localidad,nommedico,nompaciente,nomprocedimiento,estado) SELECT @IdOrden,@IdSala,@IdMedico,@IdAnestesiologo,@NomAnestesiologo,@CirujanosAdicIds,@CirujanosAdicNombres,@Nhcl,@IdProcedimiento,p.mas_idcliente,@Fecha,@HoraInicio,@HoraFin,@Usuario,@IdLocalidad,u.user_nombre,p.mas_nombre,RTRIM(ISNULL(pr.NOMBRE,'')),'A' FROM vt_pacientes p CROSS JOIN vt_usuarios u CROSS JOIN VeterinariaFacturacion.dbo.PRODUCTO pr WHERE p.mas_nhcl=@Nhcl AND u.user_numero=@IdMedico AND pr.CODIGO=@IdProcedimiento";
+        var ok=await connection.ExecuteAsync(sql,new{x.Id,x.IdSala,IdOrden=idOrdenVinculada,x.IdMedico,IdAnestesiologo=idAnest,NomAnestesiologo=nomAnest,CirujanosAdicIds=cirujanosAdicIds,CirujanosAdicNombres=cirujanosAdicNombres,x.Nhcl,x.IdProcedimiento,x.Fecha,x.HoraInicio,x.HoraFin,x.IdLocalidad,Usuario=idUsuario}, transaction)>0;
         if(ok)
         {
-            await db.ExecuteAsync(@"
+            await connection.ExecuteAsync(@"
                 IF OBJECT_ID('dbo.vt_cirugia_ordenes', 'U') IS NOT NULL
                 BEGIN
                     UPDATE TOP (1) dbo.vt_cirugia_ordenes
@@ -587,7 +708,9 @@ public sealed class GestionMigradaService(ISqlDataService db, IEFactCatalogServi
                     WHERE cirO_nhcl = @Nhcl
                       AND cirO_estado = 'PENDIENTE_CITA'
                       AND (cirO_idProdu = @IdProcedimiento OR cirO_idProdu = 0);
-                END", new { x.Nhcl, x.IdProcedimiento });
+                END", new { x.Nhcl, x.IdProcedimiento }, transaction);
+            await transaction.CommitAsync();
+            x.IdOrden = idOrdenVinculada;
             await db.RegistrarBitacoraAsync($"Programación de cirugía NHCL {x.Nhcl} Orden #{idOrdenVinculada}",idUsuario);
         }
         return ok;

@@ -129,6 +129,10 @@
                     <details>
                         <summary><MenuIcon Name="surgery" /><span>Quirófano y anestesia</span><i>⌄</i></summary>
                         <div class="submenu">
+                            @if (TienePermiso("programacion/salas-quirofano"))
+                            {
+                                <NavLink href="programacion/salas-quirofano">Salas de quirófano</NavLink>
+                            }
                             @if (TienePermiso("quirofano/preanestesia"))
                             {
                                 <NavLink href="quirofano/preanestesia">Pre-anestesia</NavLink>
@@ -711,6 +715,7 @@
 
     private static readonly string[] RutasQuirofano =
     [
+        "programacion/salas-quirofano",
         "quirofano/preanestesia",
         "quirofano/preanestesia/checklist",
         "quirofano/pausa-seguridad",
